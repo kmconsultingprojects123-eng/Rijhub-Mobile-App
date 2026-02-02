@@ -1,0 +1,75 @@
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+// Force Kotlin artifacts to 1.8.22 to avoid mixed-version downloads (some transitive deps may request 1.8.20)
+subprojects {
+    configurations.all {
+        resolutionStrategy.eachDependency { details ->
+            if (details.requested.group == 'org.jetbrains.kotlin') {
+                details.useVersion '1.8.22'
+            }
+        }
+    }
+}
+
+// Increase HTTP timeouts for Gradle to reduce failures on slow networks
+gradle.projectsEvaluated {
+    // These properties are read by some Gradle networking layers
+    try {
+        project.ext.set('org.gradle.internal.http.socketTimeout', '600000')
+        project.ext.set('org.gradle.internal.http.connectionTimeout', '600000')
+    } catch (e) {
+        // ignore
+    }
+}
+
+rootProject.buildDir = '../build'
+
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty("kotlin")) {
+            project.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
+                kotlinOptions {
+                    jvmTarget = "1.8"
+                }
+            }
+        }
+    }
+}
+
+subprojects {
+    afterEvaluate { project ->
+        if (project.plugins.hasPlugin("com.android.application") ||
+                project.plugins.hasPlugin("com.android.library")) {
+            project.android {
+                compileSdkVersion 35
+                // Force a specific NDK version present on this machine to avoid probing a broken NDK install.
+                // Update this if you want to use a different NDK (check $ANDROID_SDK_ROOT/ndk)
+                ndkVersion = "25.1.8937393"
+            }
+        }
+        if (project.hasProperty('android')) {
+                project.android {
+                    if (namespace == null) {
+                        namespace project.group
+                    }
+                }
+            }
+    }
+}
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+// Commented out to avoid forced evaluation of :app which can trigger C/C++ (NDK)
+// probing during configuration on machines without a valid NDK installation.
+//subprojects {
+//    project.evaluationDependsOn(':app')
+//}
+
+tasks.register("clean", Delete) {
+    delete rootProject.layout.buildDirectory
+}

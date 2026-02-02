@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.mycompany.rijhub">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:theme="@style/NormalTheme">
+
+        <!-- Mapbox access token (provided) -->
+        <meta-data
+            android:name="com.mapbox.token"
+            android:value="pk.eyJ1IjoicmlqaHViIiwiYSI6ImNtamhkbW83NDFid3IzZXF4cDRyeDMwbDYifQ.BO-Hzrpl9ynt2rtURZEpUw" />
+
+        <!--
+          Google OAuth: add your Web client ID here (optional helper metadata).
+          Replace the value with your web client ID (e.g. 12345-abc.apps.googleusercontent.com)
+          The google_sign_in plugin usually handles required config, but placing the
+          web client id here can help for some flows.
+        -->
+        <meta-data
+            android:name="com.google.android.gms.client_id"
+            android:value="REPLACE_WITH_WEB_CLIENT_ID.apps.googleusercontent.com" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label=""
+            >
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+
+    </application>
+</manifest>

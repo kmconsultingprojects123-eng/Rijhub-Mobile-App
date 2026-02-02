@@ -1,0 +1,619 @@
+Analyzing rijhub 3...                                           
+
+   info • The variable name 'API_BASE_URL' isn't a lowerCamelCase identifier • lib/api_config.dart:11:14 • non_constant_identifier_names
+warning • Unused import: 'dart:typed_data' • lib/backend/api_requests/api_calls.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_util.dart' • lib/backend/api_requests/api_calls.dart:5:8 • unused_import
+warning • The declaration '_kPrivateApiFunctionName' isn't referenced • lib/backend/api_requests/api_calls.dart:10:7 • unused_element
+warning • The value of the local variable 'name' isn't used • lib/backend/api_requests/api_calls.dart:48:11 • unused_local_variable
+warning • The value of the local variable 'email' isn't used • lib/backend/api_requests/api_calls.dart:49:11 • unused_local_variable
+warning • The value of the local variable 'password' isn't used • lib/backend/api_requests/api_calls.dart:50:11 • unused_local_variable
+warning • The declaration '_serializeJson' isn't referenced • lib/backend/api_requests/api_calls.dart:111:8 • unused_element
+   info • The import of 'dart:async' is unnecessary because all of the used elements are also provided by the import of 'dart:core' • lib/backend/api_requests/api_manager.dart:3:8 • unnecessary_import
+   info • The constant name 'KYC_TOTAL_STEPS' isn't a lowerCamelCase identifier • lib/constants/kyc_steps.dart:2:11 • constant_identifier_names
+   info • The constant name 'KYC_SUCCESS_REDIRECT_SECONDS' isn't a lowerCamelCase identifier • lib/constants/kyc_steps.dart:4:11 • constant_identifier_names
+warning • Unused import: 'package:flutter/foundation.dart' • lib/flutter_flow/flutter_flow_choice_chips.dart:3:8 • unused_import
+   info • The import of 'package:flutter/foundation.dart' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/flutter_flow/flutter_flow_drop_down.dart:3:8 • unnecessary_import
+   info • Parameter 'key' could be a super parameter • lib/flutter_flow/flutter_flow_icon_button.dart:6:9 • use_super_parameters
+warning • Unused import: 'flutter_flow_util.dart' • lib/flutter_flow/flutter_flow_model.dart:5:8 • unused_import
+   info • Unnecessary use of getter and setter to wrap a field • lib/flutter_flow/flutter_flow_model.dart:54:10 • unnecessary_getters_setters
+   info • Unnecessary return type on a setter • lib/flutter_flow/flutter_flow_model.dart:55:3 • avoid_return_types_on_setters
+   info • Function literals shouldn't be passed to 'forEach' • lib/flutter_flow/flutter_flow_model.dart:133:44 • avoid_function_literals_in_foreach_calls
+   info • Use 'TypeName _' instead of a type literal • lib/flutter_flow/flutter_flow_model.dart:160:10 • type_literal_in_constant_pattern
+   info • Use 'TypeName _' instead of a type literal • lib/flutter_flow/flutter_flow_model.dart:162:10 • type_literal_in_constant_pattern
+   info • Use 'TypeName _' instead of a type literal • lib/flutter_flow/flutter_flow_model.dart:164:10 • type_literal_in_constant_pattern
+   info • Use 'TypeName _' instead of a type literal • lib/flutter_flow/flutter_flow_model.dart:166:10 • type_literal_in_constant_pattern
+warning • Unused import: 'lat_lng.dart' • lib/flutter_flow/flutter_flow_util.dart:17:8 • unused_import
+   info • Use 'TypeName _' instead of a type literal • lib/flutter_flow/flutter_flow_util.dart:168:10 • type_literal_in_constant_pattern
+   info • Use 'TypeName _' instead of a type literal • lib/flutter_flow/flutter_flow_util.dart:171:10 • type_literal_in_constant_pattern
+warning • Unused import: 'package:flutter/material.dart' • lib/flutter_flow/nav/ff_navigation_adapters.dart:1:8 • unused_import
+   info • The import of 'package:go_router/go_router.dart' is unnecessary because all of the used elements are also provided by the import of '/flutter_flow/flutter_flow_util.dart' • lib/flutter_flow/nav/nav.dart:4:8 • unnecessary_import
+   info • The import of 'package:page_transition/page_transition.dart' is unnecessary because all of the used elements are also provided by the import of '/flutter_flow/flutter_flow_util.dart' • lib/flutter_flow/nav/nav.dart:5:8 • unnecessary_import
+   info • The import of 'serialization_util.dart' is unnecessary because all of the used elements are also provided by the import of '/flutter_flow/flutter_flow_util.dart' • lib/flutter_flow/nav/nav.dart:10:8 • unnecessary_import
+   info • The import of '../../state/app_state_notifier.dart' is unnecessary because all of the used elements are also provided by the import of '/flutter_flow/flutter_flow_util.dart' • lib/flutter_flow/nav/nav.dart:11:8 • unnecessary_import
+warning • Duplicate import • lib/flutter_flow/nav/nav.dart:15:8 • duplicate_import
+warning • Unused import: '../../services/token_storage.dart' • lib/flutter_flow/nav/nav.dart:18:8 • unused_import
+warning • This default clause is covered by the previous cases • lib/flutter_flow/nav/serialization_util.dart:73:7 • unreachable_switch_default
+   info • Don't invoke 'print' in production code • lib/flutter_flow/nav/serialization_util.dart:78:5 • avoid_print
+   info • The constant name 'String' isn't a lowerCamelCase identifier • lib/flutter_flow/nav/serialization_util.dart:139:3 • constant_identifier_names
+   info • The constant name 'DateTime' isn't a lowerCamelCase identifier • lib/flutter_flow/nav/serialization_util.dart:141:3 • constant_identifier_names
+   info • The constant name 'DateTimeRange' isn't a lowerCamelCase identifier • lib/flutter_flow/nav/serialization_util.dart:142:3 • constant_identifier_names
+   info • The constant name 'LatLng' isn't a lowerCamelCase identifier • lib/flutter_flow/nav/serialization_util.dart:143:3 • constant_identifier_names
+   info • The constant name 'Color' isn't a lowerCamelCase identifier • lib/flutter_flow/nav/serialization_util.dart:144:3 • constant_identifier_names
+   info • The constant name 'FFPlace' isn't a lowerCamelCase identifier • lib/flutter_flow/nav/serialization_util.dart:145:3 • constant_identifier_names
+   info • The constant name 'FFUploadedFile' isn't a lowerCamelCase identifier • lib/flutter_flow/nav/serialization_util.dart:146:3 • constant_identifier_names
+   info • The constant name 'JSON' isn't a lowerCamelCase identifier • lib/flutter_flow/nav/serialization_util.dart:147:3 • constant_identifier_names
+   info • Use 'whereType' to select elements of a given type • lib/flutter_flow/nav/serialization_util.dart:165:12 • prefer_iterable_wheretype
+warning • This default clause is covered by the previous cases • lib/flutter_flow/nav/serialization_util.dart:199:7 • unreachable_switch_default
+   info • Don't invoke 'print' in production code • lib/flutter_flow/nav/serialization_util.dart:203:5 • avoid_print
+   info • The import of 'package:go_router/go_router.dart' is unnecessary because all of the used elements are also provided by the import of 'flutter_flow/flutter_flow_util.dart' • lib/main.dart:2:8 • unnecessary_import
+   info • The import of 'flutter_flow/nav/nav.dart' is unnecessary because all of the used elements are also provided by the import of 'flutter_flow/flutter_flow_util.dart' • lib/main.dart:10:8 • unnecessary_import
+   info • Constructors for public widgets should have a named 'key' parameter • lib/main.dart:27:7 • use_key_in_widget_constructors
+   info • Invalid use of a private type in a public API • lib/main.dart:32:10 • library_private_types_in_public_api
+   info • Don't invoke 'print' in production code • lib/main.dart:70:7 • avoid_print
+   info • Don't invoke 'print' in production code • lib/main.dart:74:9 • avoid_print
+   info • Constructors in '@immutable' classes should be declared as 'const' • lib/main.dart:110:3 • prefer_const_constructors_in_immutables
+   info • Parameter 'key' could be a super parameter • lib/main.dart:110:3 • use_super_parameters
+   info • Invalid use of a private type in a public API • lib/main.dart:122:3 • library_private_types_in_public_api
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/all_servicepage/all_servicepage_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/all_servicepage/all_servicepage_model.dart:3:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/all_servicepage/all_servicepage_model.dart:4:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/all_servicepage/all_servicepage_model.dart:7:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/all_servicepage/all_servicepage_model.dart:8:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/all_servicepage/all_servicepage_widget.dart:3:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/all_servicepage/all_servicepage_widget.dart:4:8 • unnecessary_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/all_servicepage/all_servicepage_widget.dart:7:8 • unused_import
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/all_servicepage/all_servicepage_widget.dart:103:26 • sized_box_for_whitespace
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/artisan_dashboard_page/artisan_dashboard_page_widget.dart:5:8 • unnecessary_import
+   info • The import of '/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart' is unnecessary because all of the used elements are also provided by the import of '/index.dart' • lib/pages/artisan_dashboard_page/artisan_dashboard_page_widget.dart:11:8 • unnecessary_import
+   info • The import of '/pages/artisan_info_page/artisan_info_page_widget.dart' is unnecessary because all of the used elements are also provided by the import of '/index.dart' • lib/pages/artisan_dashboard_page/artisan_dashboard_page_widget.dart:12:8 • unnecessary_import
+warning • Unused import: '/pages/info_page/info_page_widget.dart' • lib/pages/artisan_dashboard_page/artisan_dashboard_page_widget.dart:13:8 • unused_import
+   info • The import of 'dart:convert' is unnecessary because all of the used elements are also provided by the import of '/flutter_flow/flutter_flow_util.dart' • lib/pages/artisan_dashboard_page/artisan_dashboard_page_widget.dart:18:8 • unnecessary_import
+   info • Unnecessary use of '??' with 'null' • lib/pages/artisan_dashboard_page/artisan_dashboard_page_widget.dart:69:152 • unnecessary_null_in_if_null_operators
+   info • Statements in an if should be enclosed in a block • lib/pages/artisan_dashboard_page/artisan_dashboard_page_widget.dart:98:85 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block • lib/pages/artisan_dashboard_page/artisan_dashboard_page_widget.dart:99:59 • curly_braces_in_flow_control_structures
+   info • Don't use 'BuildContext's across async gaps • lib/pages/artisan_dashboard_page/artisan_dashboard_page_widget.dart:204:326 • use_build_context_synchronously
+   info • Unnecessary use of 'toList' in a spread • lib/pages/artisan_dashboard_page/artisan_dashboard_page_widget.dart:635:30 • unnecessary_to_list_in_spreads
+   info • Parameter 'key' could be a super parameter • lib/pages/artisan_info_page/artisan_info_page_widget.dart:5:9 • use_super_parameters
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/artisan_kyc_verification_successs/artisan_kyc_verification_successs_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/artisan_kyc_verification_successs/artisan_kyc_verification_successs_model.dart:3:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/artisan_kyc_verification_successs/artisan_kyc_verification_successs_model.dart:4:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/artisan_kyc_verification_successs/artisan_kyc_verification_successs_model.dart:9:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/artisan_kyc_verification_successs/artisan_kyc_verification_successs_model.dart:10:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/artisan_kyc_verification_successs/artisan_kyc_verification_successs_widget.dart:4:8 • unnecessary_import
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/artisan_profilepage/artisan_profilepage_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/artisan_profilepage/artisan_profilepage_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/artisan_profilepage/artisan_profilepage_model.dart:4:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/artisan_profilepage/artisan_profilepage_model.dart:5:8 • unused_import
+warning • Unused import: 'package:flutter_rating_bar/flutter_rating_bar.dart' • lib/pages/artisan_profilepage/artisan_profilepage_model.dart:9:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/artisan_profilepage/artisan_profilepage_model.dart:10:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/artisan_profilepage/artisan_profilepage_model.dart:11:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/artisan_profilepage/artisan_profilepage_widget.dart:4:8 • unnecessary_import
+   info • Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check • lib/pages/artisan_profilepage/artisan_profilepage_widget.dart:90:36 • use_build_context_synchronously
+warning • Unused import: '/flutter_flow/flutter_flow_choice_chips.dart' • lib/pages/artisan_profileupdate/artisan_profileupdate_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_drop_down.dart' • lib/pages/artisan_profileupdate/artisan_profileupdate_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/artisan_profileupdate/artisan_profileupdate_model.dart:3:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/artisan_profileupdate/artisan_profileupdate_model.dart:4:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/artisan_profileupdate/artisan_profileupdate_model.dart:6:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/artisan_profileupdate/artisan_profileupdate_model.dart:8:8 • unused_import
+warning • Unused import: 'package:font_awesome_flutter/font_awesome_flutter.dart' • lib/pages/artisan_profileupdate/artisan_profileupdate_model.dart:11:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/artisan_profileupdate/artisan_profileupdate_model.dart:12:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/artisan_profileupdate/artisan_profileupdate_model.dart:13:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/artisan_profileupdate/artisan_profileupdate_widget.dart:8:8 • unnecessary_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/artisan_profileupdate/artisan_profileupdate_widget.dart:12:8 • unused_import
+   info • Don't invoke 'print' in production code • lib/pages/artisan_profileupdate/artisan_profileupdate_widget.dart:118:19 • avoid_print
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/artisan_profileupdate/artisan_profileupdate_widget.dart:270:31 • sized_box_for_whitespace
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/artisan_profileupdate/artisan_profileupdate_widget.dart:396:31 • sized_box_for_whitespace
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/artisan_profileupdate/artisan_profileupdate_widget.dart:522:31 • sized_box_for_whitespace
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/artisan_profileupdate/artisan_profileupdate_widget.dart:648:31 • sized_box_for_whitespace
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/artisan_profileupdate/artisan_profileupdate_widget.dart:966:31 • sized_box_for_whitespace
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/artisan_profileupdate/artisan_profileupdate_widget.dart:1122:31 • sized_box_for_whitespace
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/artisan_profileupdate/artisan_profileupdate_widget.dart:1254:31 • sized_box_for_whitespace
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/artisan_profileupdate/artisan_profileupdate_widget.dart:1413:31 • sized_box_for_whitespace
+   info • 'moneyBillAlt' is deprecated and shouldn't be used. Use "moneyBill1" instead • lib/pages/artisan_profileupdate/artisan_profileupdate_widget.dart:1485:56 • deprecated_member_use
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:5:8 • unnecessary_import
+   info • The import of '../../state/app_state_notifier.dart' is unnecessary because all of the used elements are also provided by the import of '/flutter_flow/flutter_flow_util.dart' • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:19:8 • unnecessary_import
+warning • The value of the field '_statesLoadError' isn't used • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:50:11 • unused_field
+warning • The value of the field '_lgasLoadError' isn't used • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:51:11 • unused_field
+warning • The declaration '_performSubmitFromStep1' isn't referenced • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:80:16 • unused_element
+   info • Don't use 'BuildContext's across async gaps • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:115:9 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:127:26 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:155:20 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:165:11 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:176:11 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:191:13 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:197:13 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:204:20 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:206:9 • use_build_context_synchronously
+   info • The local variable '_context' starts with an underscore • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:303:53 • no_leading_underscores_for_local_identifiers
+   info • The local variable '_context' starts with an underscore • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:307:53 • no_leading_underscores_for_local_identifiers
+   info • The local variable '_context' starts with an underscore • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:313:53 • no_leading_underscores_for_local_identifiers
+   info • The local variable '_context' starts with an underscore • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:317:53 • no_leading_underscores_for_local_identifiers
+   info • The local variable '_context' starts with an underscore • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:321:53 • no_leading_underscores_for_local_identifiers
+   info • The local variable '_context' starts with an underscore • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:325:53 • no_leading_underscores_for_local_identifiers
+   info • The local variable '_context' starts with an underscore • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:329:53 • no_leading_underscores_for_local_identifiers
+   info • The local variable '_context' starts with an underscore • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:335:60 • no_leading_underscores_for_local_identifiers
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:601:35 • sized_box_for_whitespace
+   info • Don't invoke 'print' in production code • lib/pages/artisan_registration_page_k_y_c1/artisan_registration_page_k_y_c1_widget.dart:957:33 • avoid_print
+warning • Unused import: '/flutter_flow/flutter_flow_choice_chips.dart' • lib/pages/artisan_registration_page_k_y_c2/artisan_registration_page_k_y_c2_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/artisan_registration_page_k_y_c2/artisan_registration_page_k_y_c2_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/artisan_registration_page_k_y_c2/artisan_registration_page_k_y_c2_model.dart:3:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/artisan_registration_page_k_y_c2/artisan_registration_page_k_y_c2_model.dart:5:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/artisan_registration_page_k_y_c2/artisan_registration_page_k_y_c2_model.dart:7:8 • unused_import
+warning • Unused import: 'package:flutter/services.dart' • lib/pages/artisan_registration_page_k_y_c2/artisan_registration_page_k_y_c2_model.dart:12:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/artisan_registration_page_k_y_c2/artisan_registration_page_k_y_c2_model.dart:13:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/artisan_registration_page_k_y_c2/artisan_registration_page_k_y_c2_model.dart:14:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/artisan_registration_page_k_y_c2/artisan_registration_page_k_y_c2_widget.dart:7:8 • unnecessary_import
+   info • The import of 'package:flutter/services.dart' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/artisan_registration_page_k_y_c2/artisan_registration_page_k_y_c2_widget.dart:9:8 • unnecessary_import
+   info • Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check • lib/pages/artisan_registration_page_k_y_c2/artisan_registration_page_k_y_c2_widget.dart:818:35 • use_build_context_synchronously
+warning • Unused import: '/flutter_flow/flutter_flow_drop_down.dart' • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_model.dart:3:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_model.dart:5:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_model.dart:7:8 • unused_import
+warning • Unused import: 'package:flutter/gestures.dart' • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_model.dart:11:8 • unused_import
+warning • Unused import: 'package:flutter/services.dart' • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_model.dart:13:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_model.dart:14:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_model.dart:15:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_widget.dart:7:8 • unnecessary_import
+   info • Empty catch block • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_widget.dart:106:17 • empty_catches
+   info • The local variable '_context' starts with an underscore • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_widget.dart:123:55 • no_leading_underscores_for_local_identifiers
+   info • The local variable '_context' starts with an underscore • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_widget.dart:127:55 • no_leading_underscores_for_local_identifiers
+   info • The local variable '_context' starts with an underscore • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_widget.dart:132:55 • no_leading_underscores_for_local_identifiers
+   info • Unnecessary use of '??' with 'null' • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_widget.dart:148:90 • unnecessary_null_in_if_null_operators
+   info • Don't use 'BuildContext's across async gaps • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_widget.dart:237:9 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_widget.dart:253:32 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_widget.dart:257:32 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_widget.dart:261:26 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_widget.dart:265:20 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_widget.dart:275:22 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_widget.dart:284:13 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_widget.dart:290:13 • use_build_context_synchronously
+   info • Unnecessary braces in a string interpolation • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_widget.dart:292:57 • unnecessary_brace_in_string_interps
+   info • Don't use 'BuildContext's across async gaps • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_widget.dart:297:20 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_widget.dart:299:9 • use_build_context_synchronously
+   info • Don't invoke 'print' in production code • lib/pages/artisan_registration_page_k_y_c3/artisan_registration_page_k_y_c3_widget.dart:331:15 • avoid_print
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/booking_page/booking_page_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/booking_page/booking_page_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/booking_page/booking_page_model.dart:4:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/booking_page/booking_page_model.dart:5:8 • unused_import
+warning • Unused import: 'package:flutter/gestures.dart' • lib/pages/booking_page/booking_page_model.dart:8:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/booking_page/booking_page_model.dart:10:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/booking_page/booking_page_model.dart:11:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/booking_page/booking_page_widget.dart:5:8 • unnecessary_import
+warning • Unused import: 'package:flutter/gestures.dart' • lib/pages/booking_page/booking_page_widget.dart:7:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/booking_page/booking_page_widget.dart:10:8 • unused_import
+   info • Don't invoke 'print' in production code • lib/pages/booking_page/booking_page_widget.dart:109:23 • avoid_print
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/booking_page/booking_page_widget.dart:127:26 • sized_box_for_whitespace
+   info • Don't invoke 'print' in production code • lib/pages/booking_page/booking_page_widget.dart:818:49 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/booking_page/booking_page_widget.dart:824:51 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/booking_page/booking_page_widget.dart:1149:49 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/booking_page/booking_page_widget.dart:1155:51 • avoid_print
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/compelete_payment_page4/compelete_payment_page4_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/compelete_payment_page4/compelete_payment_page4_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/compelete_payment_page4/compelete_payment_page4_model.dart:4:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/compelete_payment_page4/compelete_payment_page4_model.dart:5:8 • unused_import
+warning • Unused import: 'package:flutter_svg/flutter_svg.dart' • lib/pages/compelete_payment_page4/compelete_payment_page4_model.dart:9:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/compelete_payment_page4/compelete_payment_page4_model.dart:10:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/compelete_payment_page4/compelete_payment_page4_model.dart:11:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/compelete_payment_page4/compelete_payment_page4_widget.dart:5:8 • unnecessary_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/compelete_payment_page4/compelete_payment_page4_widget.dart:10:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_drop_down.dart' • lib/pages/contact_us_page/contact_us_page_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/contact_us_page/contact_us_page_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/contact_us_page/contact_us_page_model.dart:3:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/contact_us_page/contact_us_page_model.dart:5:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/contact_us_page/contact_us_page_model.dart:7:8 • unused_import
+warning • Unused import: 'package:flutter/services.dart' • lib/pages/contact_us_page/contact_us_page_model.dart:10:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/contact_us_page/contact_us_page_model.dart:11:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/contact_us_page/contact_us_page_model.dart:12:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/contact_us_page/contact_us_page_widget.dart:7:8 • unnecessary_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/contact_us_page/contact_us_page_widget.dart:11:8 • unused_import
+   info • Don't invoke 'print' in production code • lib/pages/contact_us_page/contact_us_page_widget.dart:66:13 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/contact_us_page/contact_us_page_widget.dart:93:19 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/contact_us_page/contact_us_page_widget.dart:958:37 • avoid_print
+   info • The private field _hasNavigated could be 'final' • lib/pages/create_account2/create_account2_widget.dart:30:8 • prefer_final_fields
+warning • The value of the field '_hasNavigated' isn't used • lib/pages/create_account2/create_account2_widget.dart:30:8 • unused_field
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/create_account2/create_account2_widget.dart:269:46 • sized_box_for_whitespace
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/create_account2/create_account2_widget.dart:383:46 • sized_box_for_whitespace
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/create_account2/create_account2_widget.dart:499:46 • sized_box_for_whitespace
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/create_account2/create_account2_widget.dart:615:46 • sized_box_for_whitespace
+   info • Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check • lib/pages/create_account2/create_account2_widget.dart:775:57 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check • lib/pages/create_account2/create_account2_widget.dart:784:50 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check • lib/pages/create_account2/create_account2_widget.dart:824:48 • use_build_context_synchronously
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/create_account2/create_account2_widget.dart:877:46 • sized_box_for_whitespace
+   info • Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check • lib/pages/create_account2/create_account2_widget.dart:963:56 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check • lib/pages/create_account2/create_account2_widget.dart:977:47 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check • lib/pages/create_account2/create_account2_widget.dart:983:47 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check • lib/pages/create_account2/create_account2_widget.dart:995:47 • use_build_context_synchronously
+warning • Unused import: '/flutter_flow/flutter_flow_drop_down.dart' • lib/pages/create_job_page1/create_job_page1_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/create_job_page1/create_job_page1_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/create_job_page1/create_job_page1_model.dart:3:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/create_job_page1/create_job_page1_model.dart:5:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/create_job_page1/create_job_page1_model.dart:7:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/create_job_page1/create_job_page1_model.dart:10:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/create_job_page1/create_job_page1_model.dart:11:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/create_job_page1/create_job_page1_widget.dart:7:8 • unnecessary_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/create_job_page1/create_job_page1_widget.dart:10:8 • unused_import
+   info • Don't invoke 'print' in production code • lib/pages/create_job_page1/create_job_page1_widget.dart:1103:33 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/create_job_page1/create_job_page1_widget.dart:1147:33 • avoid_print
+warning • Unused import: '/flutter_flow/flutter_flow_drop_down.dart' • lib/pages/create_postpage/create_postpage_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/create_postpage/create_postpage_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/create_postpage/create_postpage_model.dart:3:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/create_postpage/create_postpage_model.dart:5:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/create_postpage/create_postpage_model.dart:7:8 • unused_import
+warning • Unused import: 'package:flutter/services.dart' • lib/pages/create_postpage/create_postpage_model.dart:10:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/create_postpage/create_postpage_model.dart:11:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/create_postpage/create_postpage_model.dart:12:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/create_postpage/create_postpage_widget.dart:7:8 • unnecessary_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/create_postpage/create_postpage_widget.dart:11:8 • unused_import
+   info • Don't invoke 'print' in production code • lib/pages/create_postpage/create_postpage_widget.dart:82:15 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/create_postpage/create_postpage_widget.dart:147:37 • avoid_print
+warning • The '!' will have no effect because the receiver can't be null • lib/pages/create_postpage/create_postpage_widget.dart:1181:59 • unnecessary_non_null_assertion
+warning • The '!' will have no effect because the receiver can't be null • lib/pages/create_postpage/create_postpage_widget.dart:1264:59 • unnecessary_non_null_assertion
+warning • The '!' will have no effect because the receiver can't be null • lib/pages/create_postpage/create_postpage_widget.dart:1347:59 • unnecessary_non_null_assertion
+   info • Don't invoke 'print' in production code • lib/pages/create_postpage/create_postpage_widget.dart:1423:31 • avoid_print
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/deposit_success_page/deposit_success_page_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/deposit_success_page/deposit_success_page_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/deposit_success_page/deposit_success_page_model.dart:4:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/deposit_success_page/deposit_success_page_model.dart:5:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/deposit_success_page/deposit_success_page_model.dart:9:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/deposit_success_page/deposit_success_page_model.dart:10:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/deposit_success_page/deposit_success_page_widget.dart:5:8 • unnecessary_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/deposit_success_page/deposit_success_page_widget.dart:9:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/discover_page/discover_page_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/discover_page/discover_page_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/discover_page/discover_page_model.dart:4:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/discover_page/discover_page_model.dart:5:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/discover_page/discover_page_model.dart:8:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/discover_page/discover_page_model.dart:9:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/discover_page/discover_page_widget.dart:5:8 • unnecessary_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/discover_page/discover_page_widget.dart:8:8 • unused_import
+   info • Don't invoke 'print' in production code • lib/pages/discover_page/discover_page_widget.dart:98:21 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/discover_page/discover_page_widget.dart:622:41 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/discover_page/discover_page_widget.dart:667:41 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/discover_page/discover_page_widget.dart:931:41 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/discover_page/discover_page_widget.dart:976:41 • avoid_print
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/edit_profile_user/edit_profile_user_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/edit_profile_user/edit_profile_user_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/edit_profile_user/edit_profile_user_model.dart:4:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/edit_profile_user/edit_profile_user_model.dart:5:8 • unused_import
+warning • Unused import: 'package:flutter/services.dart' • lib/pages/edit_profile_user/edit_profile_user_model.dart:8:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/edit_profile_user/edit_profile_user_model.dart:9:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/edit_profile_user/edit_profile_user_model.dart:10:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/edit_profile_user/edit_profile_user_widget.dart:5:8 • unnecessary_import
+   info • Don't invoke 'print' in production code • lib/pages/edit_profile_user/edit_profile_user_widget.dart:83:15 • avoid_print
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/edit_profile_user/edit_profile_user_widget.dart:152:28 • sized_box_for_whitespace
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/edit_profile_user/edit_profile_user_widget.dart:847:25 • sized_box_for_whitespace
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/forget_password/forget_password_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/forget_password/forget_password_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/forget_password/forget_password_model.dart:4:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/forget_password/forget_password_model.dart:5:8 • unused_import
+warning • Unused import: 'package:easy_debounce/easy_debounce.dart' • lib/pages/forget_password/forget_password_model.dart:7:8 • unused_import
+warning • Unused import: 'package:flutter/gestures.dart' • lib/pages/forget_password/forget_password_model.dart:8:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/forget_password/forget_password_model.dart:10:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/forget_password/forget_password_model.dart:11:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/forget_password/forget_password_widget.dart:5:8 • unnecessary_import
+warning • Unused import: 'package:flutter/gestures.dart' • lib/pages/forget_password/forget_password_widget.dart:7:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/forget_password/forget_password_widget.dart:10:8 • unused_import
+   info • Don't invoke 'print' in production code • lib/pages/forget_password/forget_password_widget.dart:67:15 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/forget_password/forget_password_widget.dart:296:35 • avoid_print
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/home_page/home_page_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/home_page/home_page_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/home_page/home_page_model.dart:4:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/home_page/home_page_model.dart:5:8 • unused_import
+warning • Unused import: 'package:badges/badges.dart' • lib/pages/home_page/home_page_model.dart:8:8 • unused_import
+warning • Unused import: 'package:font_awesome_flutter/font_awesome_flutter.dart' • lib/pages/home_page/home_page_model.dart:10:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/home_page/home_page_model.dart:11:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/home_page/home_page_model.dart:12:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/home_page/home_page_widget.dart:4:8 • unnecessary_import
+   info • Parameter 'key' could be a super parameter • lib/pages/info_page/info_page_widget.dart:6:9 • use_super_parameters
+   info • Don't use 'BuildContext's across async gaps • lib/pages/info_page/info_page_widget.dart:61:28 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/pages/info_page/info_page_widget.dart:68:28 • use_build_context_synchronously
+   info • Unnecessary use of 'toList' in a spread • lib/pages/info_page/info_page_widget.dart:117:214 • unnecessary_to_list_in_spreads
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/job_detail_page/job_detail_page_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/job_detail_page/job_detail_page_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/job_detail_page/job_detail_page_model.dart:4:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/job_detail_page/job_detail_page_model.dart:5:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/job_detail_page/job_detail_page_model.dart:8:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/job_detail_page/job_detail_page_model.dart:9:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/job_detail_page/job_detail_page_widget.dart:5:8 • unnecessary_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/job_detail_page/job_detail_page_widget.dart:8:8 • unused_import
+   info • Don't invoke 'print' in production code • lib/pages/job_detail_page/job_detail_page_widget.dart:1023:25 • avoid_print
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/job_post_page/job_post_page_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/job_post_page/job_post_page_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/job_post_page/job_post_page_model.dart:4:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/job_post_page/job_post_page_model.dart:5:8 • unused_import
+warning • Unused import: 'package:font_awesome_flutter/font_awesome_flutter.dart' • lib/pages/job_post_page/job_post_page_model.dart:8:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/job_post_page/job_post_page_model.dart:9:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/job_post_page/job_post_page_model.dart:10:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/job_post_page/job_post_page_widget.dart:5:8 • unnecessary_import
+warning • Unused import: 'package:font_awesome_flutter/font_awesome_flutter.dart' • lib/pages/job_post_page/job_post_page_widget.dart:7:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/job_post_page/job_post_page_widget.dart:9:8 • unused_import
+   info • Don't invoke 'print' in production code • lib/pages/job_post_page/job_post_page_widget.dart:85:19 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/job_post_page/job_post_page_widget.dart:419:39 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/job_post_page/job_post_page_widget.dart:674:39 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/job_post_page/job_post_page_widget.dart:929:39 • avoid_print
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/job_publishpage/job_publishpage_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/job_publishpage/job_publishpage_model.dart:3:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/job_publishpage/job_publishpage_model.dart:4:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/job_publishpage/job_publishpage_model.dart:7:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/job_publishpage/job_publishpage_model.dart:8:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/job_publishpage/job_publishpage_widget.dart:3:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/job_publishpage/job_publishpage_widget.dart:4:8 • unnecessary_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/job_publishpage/job_publishpage_widget.dart:7:8 • unused_import
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/job_publishpage/job_publishpage_widget.dart:88:26 • sized_box_for_whitespace
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/login_account/login_account_widget.dart:5:8 • unnecessary_import
+warning • Unused import: '../../services/token_storage.dart' • lib/pages/login_account/login_account_widget.dart:12:8 • unused_import
+   info • The import of '../../flutter_flow/nav/nav.dart' is unnecessary because all of the used elements are also provided by the import of '/flutter_flow/flutter_flow_util.dart' • lib/pages/login_account/login_account_widget.dart:13:8 • unnecessary_import
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/login_account/login_account_widget.dart:201:44 • sized_box_for_whitespace
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/login_account/login_account_widget.dart:316:44 • sized_box_for_whitespace
+   info • Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check • lib/pages/login_account/login_account_widget.dart:444:54 • use_build_context_synchronously
+   info • Don't invoke 'print' in production code • lib/pages/login_account/login_account_widget.dart:450:45 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/login_account/login_account_widget.dart:472:45 • avoid_print
+   info • Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check • lib/pages/login_account/login_account_widget.dart:477:45 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check • lib/pages/login_account/login_account_widget.dart:489:50 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check • lib/pages/login_account/login_account_widget.dart:491:50 • use_build_context_synchronously
+   info • Statements in an if should be enclosed in a block • lib/pages/login_account/login_account_widget.dart:498:86 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block • lib/pages/login_account/login_account_widget.dart:499:66 • curly_braces_in_flow_control_structures
+   info • Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check • lib/pages/login_account/login_account_widget.dart:501:46 • use_build_context_synchronously
+   info • Statements in an if should be enclosed in a block • lib/pages/login_account/login_account_widget.dart:564:70 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block • lib/pages/login_account/login_account_widget.dart:565:106 • curly_braces_in_flow_control_structures
+   info • Don't invoke 'print' in production code • lib/pages/login_account/login_account_widget.dart:571:50 • avoid_print
+   info • Don't use 'BuildContext's across async gaps • lib/pages/login_account/login_account_widget.dart:576:77 • use_build_context_synchronously
+   info • Statements in an if should be enclosed in a block • lib/pages/login_account/login_account_widget.dart:576:77 • curly_braces_in_flow_control_structures
+   info • Don't use 'BuildContext's across async gaps • lib/pages/login_account/login_account_widget.dart:577:49 • use_build_context_synchronously
+   info • Statements in an if should be enclosed in a block • lib/pages/login_account/login_account_widget.dart:577:49 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block • lib/pages/login_account/login_account_widget.dart:582:86 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block • lib/pages/login_account/login_account_widget.dart:583:66 • curly_braces_in_flow_control_structures
+   info • Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check • lib/pages/login_account/login_account_widget.dart:584:69 • use_build_context_synchronously
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/message_client/message_client_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/message_client/message_client_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/message_client/message_client_model.dart:4:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/message_client/message_client_model.dart:5:8 • unused_import
+warning • Unused import: 'package:cached_network_image/cached_network_image.dart' • lib/pages/message_client/message_client_model.dart:7:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/message_client/message_client_model.dart:9:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/message_client/message_client_model.dart:10:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/message_client/message_client_widget.dart:4:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/message_client/message_client_widget.dart:5:8 • unnecessary_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/message_client/message_client_widget.dart:9:8 • unused_import
+   info • Don't invoke 'print' in production code • lib/pages/message_client/message_client_widget.dart:71:15 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/message_client/message_client_widget.dart:841:31 • avoid_print
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/notification_page/notification_page_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/notification_page/notification_page_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/notification_page/notification_page_model.dart:4:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/notification_page/notification_page_model.dart:5:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/notification_page/notification_page_model.dart:8:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/notification_page/notification_page_model.dart:9:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/notification_page/notification_page_widget.dart:4:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/notification_page/notification_page_widget.dart:5:8 • unnecessary_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/notification_page/notification_page_widget.dart:8:8 • unused_import
+   info • Don't invoke 'print' in production code • lib/pages/notification_page/notification_page_widget.dart:89:21 • avoid_print
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/payment_screen_page3/payment_screen_page3_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/payment_screen_page3/payment_screen_page3_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/payment_screen_page3/payment_screen_page3_model.dart:4:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/payment_screen_page3/payment_screen_page3_model.dart:5:8 • unused_import
+warning • Unused import: 'package:flutter_svg/flutter_svg.dart' • lib/pages/payment_screen_page3/payment_screen_page3_model.dart:9:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/payment_screen_page3/payment_screen_page3_model.dart:10:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/payment_screen_page3/payment_screen_page3_model.dart:11:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/payment_screen_page3/payment_screen_page3_widget.dart:5:8 • unnecessary_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/payment_screen_page3/payment_screen_page3_widget.dart:10:8 • unused_import
+   info • Don't invoke 'print' in production code • lib/pages/payment_screen_page3/payment_screen_page3_widget.dart:83:15 • avoid_print
+   info • Parameter 'key' could be a super parameter • lib/pages/privacy_page/privacy_page_widget.dart:5:9 • use_super_parameters
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/profile/profile_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/profile/profile_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/profile/profile_model.dart:4:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/profile/profile_model.dart:5:8 • unused_import
+warning • Unused import: 'package:flutter_rating_bar/flutter_rating_bar.dart' • lib/pages/profile/profile_model.dart:9:8 • unused_import
+warning • Unused import: 'package:font_awesome_flutter/font_awesome_flutter.dart' • lib/pages/profile/profile_model.dart:10:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/profile/profile_model.dart:11:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/profile/profile_model.dart:12:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/profile/profile_widget.dart:4:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/profile/profile_widget.dart:5:8 • unnecessary_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/profile/profile_widget.dart:11:8 • unused_import
+   info • Don't invoke 'print' in production code • lib/pages/profile/profile_widget.dart:67:15 • avoid_print
+   info • 'solidUserCircle' is deprecated and shouldn't be used. Use "solidCircleUser" instead • lib/pages/profile/profile_widget.dart:368:52 • deprecated_member_use
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/quote_summary_page2/quote_summary_page2_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/quote_summary_page2/quote_summary_page2_model.dart:3:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/quote_summary_page2/quote_summary_page2_model.dart:4:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/quote_summary_page2/quote_summary_page2_model.dart:8:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/quote_summary_page2/quote_summary_page2_model.dart:9:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/quote_summary_page2/quote_summary_page2_widget.dart:4:8 • unnecessary_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/quote_summary_page2/quote_summary_page2_widget.dart:8:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_drop_down.dart' • lib/pages/request_artisan_page1/request_artisan_page1_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/request_artisan_page1/request_artisan_page1_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/request_artisan_page1/request_artisan_page1_model.dart:3:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/request_artisan_page1/request_artisan_page1_model.dart:5:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/request_artisan_page1/request_artisan_page1_model.dart:7:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/request_artisan_page1/request_artisan_page1_model.dart:11:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/request_artisan_page1/request_artisan_page1_model.dart:12:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/request_artisan_page1/request_artisan_page1_widget.dart:7:8 • unnecessary_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/request_artisan_page1/request_artisan_page1_widget.dart:11:8 • unused_import
+   info • Don't invoke 'print' in production code • lib/pages/request_artisan_page1/request_artisan_page1_widget.dart:91:15 • avoid_print
+warning • Unused import: '/flutter_flow/flutter_flow_choice_chips.dart' • lib/pages/request_quote_page/request_quote_page_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_drop_down.dart' • lib/pages/request_quote_page/request_quote_page_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/request_quote_page/request_quote_page_model.dart:3:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/request_quote_page/request_quote_page_model.dart:4:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/request_quote_page/request_quote_page_model.dart:6:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/request_quote_page/request_quote_page_model.dart:8:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/request_quote_page/request_quote_page_model.dart:11:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/request_quote_page/request_quote_page_model.dart:12:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/request_quote_page/request_quote_page_widget.dart:8:8 • unnecessary_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/request_quote_page/request_quote_page_widget.dart:11:8 • unused_import
+   info • Don't invoke 'print' in production code • lib/pages/request_quote_page/request_quote_page_widget.dart:83:15 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/request_quote_page/request_quote_page_widget.dart:928:25 • avoid_print
+warning • Unused import: '/flutter_flow/flutter_flow_choice_chips.dart' • lib/pages/review_ratings_page/review_ratings_page_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/review_ratings_page/review_ratings_page_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/review_ratings_page/review_ratings_page_model.dart:3:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/review_ratings_page/review_ratings_page_model.dart:5:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/review_ratings_page/review_ratings_page_model.dart:7:8 • unused_import
+warning • Unused import: 'package:flutter_rating_bar/flutter_rating_bar.dart' • lib/pages/review_ratings_page/review_ratings_page_model.dart:10:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/review_ratings_page/review_ratings_page_model.dart:11:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/review_ratings_page/review_ratings_page_model.dart:12:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/review_ratings_page/review_ratings_page_widget.dart:7:8 • unnecessary_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/review_ratings_page/review_ratings_page_widget.dart:11:8 • unused_import
+   info • Don't invoke 'print' in production code • lib/pages/review_ratings_page/review_ratings_page_widget.dart:73:15 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/review_ratings_page/review_ratings_page_widget.dart:533:27 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/review_ratings_page/review_ratings_page_widget.dart:567:27 • avoid_print
+warning • Unused import: '/flutter_flow/flutter_flow_choice_chips.dart' • lib/pages/search_page/search_page_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/search_page/search_page_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/search_page/search_page_model.dart:3:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/search_page/search_page_model.dart:5:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/search_page/search_page_model.dart:7:8 • unused_import
+warning • Unused import: 'package:easy_debounce/easy_debounce.dart' • lib/pages/search_page/search_page_model.dart:10:8 • unused_import
+warning • Unused import: 'package:font_awesome_flutter/font_awesome_flutter.dart' • lib/pages/search_page/search_page_model.dart:12:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/search_page/search_page_model.dart:13:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/search_page/search_page_model.dart:14:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/search_page/search_page_widget.dart:7:8 • unnecessary_import
+warning • Unused import: 'package:font_awesome_flutter/font_awesome_flutter.dart' • lib/pages/search_page/search_page_widget.dart:11:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/search_page/search_page_widget.dart:13:8 • unused_import
+   info • Don't invoke 'print' in production code • lib/pages/search_page/search_page_widget.dart:105:21 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/search_page/search_page_widget.dart:596:45 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/search_page/search_page_widget.dart:876:45 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/search_page/search_page_widget.dart:926:45 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/search_page/search_page_widget.dart:1204:45 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/search_page/search_page_widget.dart:1254:45 • avoid_print
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/see_all_images_page/see_all_images_page_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/see_all_images_page/see_all_images_page_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/see_all_images_page/see_all_images_page_model.dart:4:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/see_all_images_page/see_all_images_page_model.dart:5:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/see_all_images_page/see_all_images_page_model.dart:8:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/see_all_images_page/see_all_images_page_model.dart:9:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/see_all_images_page/see_all_images_page_widget.dart:4:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/see_all_images_page/see_all_images_page_widget.dart:5:8 • unnecessary_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/see_all_images_page/see_all_images_page_widget.dart:8:8 • unused_import
+   info • Don't invoke 'print' in production code • lib/pages/see_all_images_page/see_all_images_page_widget.dart:68:19 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/see_all_images_page/see_all_images_page_widget.dart:132:29 • avoid_print
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/splash2/splash2_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/splash2/splash2_model.dart:3:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/splash2/splash2_model.dart:4:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/splash2/splash2_model.dart:9:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/splash2/splash2_model.dart:10:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/splash2/splash2_widget.dart:4:8 • unnecessary_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/splash2/splash2_widget.dart:9:8 • unused_import
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/splash2/splash2_widget.dart:59:24 • sized_box_for_whitespace
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/splash_screen_page2/splash_screen_page2_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/splash_screen_page2/splash_screen_page2_model.dart:3:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/splash_screen_page2/splash_screen_page2_model.dart:4:8 • unused_import
+warning • Unused import: 'package:flutter/gestures.dart' • lib/pages/splash_screen_page2/splash_screen_page2_model.dart:7:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/splash_screen_page2/splash_screen_page2_model.dart:9:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/splash_screen_page2/splash_screen_page2_model.dart:10:8 • unused_import
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/splash_screen_page2/splash_screen_page2_widget.dart:87:18 • sized_box_for_whitespace
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/pages/splash_screen_page2/splash_screen_page2_widget.dart:217:61 • deprecated_member_use
+   info • Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check • lib/pages/splash_screen_page2/splash_screen_page2_widget.dart:265:52 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check • lib/pages/splash_screen_page2/splash_screen_page2_widget.dart:269:41 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check • lib/pages/splash_screen_page2/splash_screen_page2_widget.dart:278:43 • use_build_context_synchronously
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/pages/splash_screen_page2/splash_screen_page2_widget.dart:303:61 • deprecated_member_use
+   info • Parameter 'key' could be a super parameter • lib/pages/support_page/support_page_widget.dart:6:9 • use_super_parameters
+   info • Don't use 'BuildContext's across async gaps • lib/pages/support_page/support_page_widget.dart:13:53 • use_build_context_synchronously
+   info • Don't use 'BuildContext's across async gaps • lib/pages/support_page/support_page_widget.dart:18:53 • use_build_context_synchronously
+   info • Parameter 'key' could be a super parameter • lib/pages/terms_page/terms_page_widget.dart:5:9 • use_super_parameters
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/update_password/update_password_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/update_password/update_password_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/update_password/update_password_model.dart:4:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/update_password/update_password_model.dart:5:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/update_password/update_password_model.dart:8:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/update_password/update_password_model.dart:9:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/update_password/update_password_widget.dart:5:8 • unnecessary_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/update_password/update_password_widget.dart:8:8 • unused_import
+   info • Don't invoke 'print' in production code • lib/pages/update_password/update_password_widget.dart:73:15 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/update_password/update_password_widget.dart:680:21 • avoid_print
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/update_profilepage/update_profilepage_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/update_profilepage/update_profilepage_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/update_profilepage/update_profilepage_model.dart:4:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/update_profilepage/update_profilepage_model.dart:5:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/update_profilepage/update_profilepage_model.dart:8:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/update_profilepage/update_profilepage_model.dart:9:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/update_profilepage/update_profilepage_widget.dart:5:8 • unnecessary_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/update_profilepage/update_profilepage_widget.dart:8:8 • unused_import
+   info • Don't invoke 'print' in production code • lib/pages/update_profilepage/update_profilepage_widget.dart:93:15 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/update_profilepage/update_profilepage_widget.dart:152:27 • avoid_print
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/update_profilepage/update_profilepage_widget.dart:189:29 • sized_box_for_whitespace
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/update_profilepage/update_profilepage_widget.dart:282:29 • sized_box_for_whitespace
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/update_profilepage/update_profilepage_widget.dart:375:29 • sized_box_for_whitespace
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/update_profilepage/update_profilepage_widget.dart:492:29 • sized_box_for_whitespace
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/update_profilepage/update_profilepage_widget.dart:585:29 • sized_box_for_whitespace
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/update_profilepage/update_profilepage_widget.dart:678:29 • sized_box_for_whitespace
+   info • Use a 'SizedBox' to add whitespace to a layout • lib/pages/update_profilepage/update_profilepage_widget.dart:801:29 • sized_box_for_whitespace
+warning • The '!' will have no effect because the receiver can't be null • lib/pages/update_profilepage/update_profilepage_widget.dart:1144:77 • unnecessary_non_null_assertion
+warning • The '!' will have no effect because the receiver can't be null • lib/pages/update_profilepage/update_profilepage_widget.dart:1231:77 • unnecessary_non_null_assertion
+warning • The '!' will have no effect because the receiver can't be null • lib/pages/update_profilepage/update_profilepage_widget.dart:1318:77 • unnecessary_non_null_assertion
+   info • Don't invoke 'print' in production code • lib/pages/update_profilepage/update_profilepage_widget.dart:1346:33 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/update_profilepage/update_profilepage_widget.dart:1389:33 • avoid_print
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/user_walletpage/user_walletpage_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/user_walletpage/user_walletpage_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/user_walletpage/user_walletpage_model.dart:4:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/user_walletpage/user_walletpage_model.dart:5:8 • unused_import
+warning • Unused import: 'package:font_awesome_flutter/font_awesome_flutter.dart' • lib/pages/user_walletpage/user_walletpage_model.dart:8:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/user_walletpage/user_walletpage_model.dart:9:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/user_walletpage/user_walletpage_model.dart:10:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/user_walletpage/user_walletpage_widget.dart:5:8 • unnecessary_import
+warning • Unused import: 'package:font_awesome_flutter/font_awesome_flutter.dart' • lib/pages/user_walletpage/user_walletpage_widget.dart:7:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/user_walletpage/user_walletpage_widget.dart:9:8 • unused_import
+   info • Don't invoke 'print' in production code • lib/pages/user_walletpage/user_walletpage_widget.dart:96:17 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/user_walletpage/user_walletpage_widget.dart:108:17 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/user_walletpage/user_walletpage_widget.dart:208:35 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/user_walletpage/user_walletpage_widget.dart:338:27 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/user_walletpage/user_walletpage_widget.dart:378:27 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/user_walletpage/user_walletpage_widget.dart:418:27 • avoid_print
+warning • Unused import: '/flutter_flow/flutter_flow_icon_button.dart' • lib/pages/verification_page/verification_page_model.dart:1:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_theme.dart' • lib/pages/verification_page/verification_page_model.dart:2:8 • unused_import
+warning • Unused import: '/flutter_flow/flutter_flow_widgets.dart' • lib/pages/verification_page/verification_page_model.dart:4:8 • unused_import
+warning • Unused import: 'dart:ui' • lib/pages/verification_page/verification_page_model.dart:5:8 • unused_import
+warning • Unused import: 'package:easy_debounce/easy_debounce.dart' • lib/pages/verification_page/verification_page_model.dart:7:8 • unused_import
+warning • Unused import: 'package:google_fonts/google_fonts.dart' • lib/pages/verification_page/verification_page_model.dart:9:8 • unused_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/verification_page/verification_page_model.dart:10:8 • unused_import
+   info • The import of 'dart:ui' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' • lib/pages/verification_page/verification_page_widget.dart:5:8 • unnecessary_import
+warning • Unused import: 'package:provider/provider.dart' • lib/pages/verification_page/verification_page_widget.dart:9:8 • unused_import
+   info • Don't invoke 'print' in production code • lib/pages/verification_page/verification_page_widget.dart:85:15 • avoid_print
+   info • Don't invoke 'print' in production code • lib/pages/verification_page/verification_page_widget.dart:548:35 • avoid_print
+warning • Unused import: '/flutter_flow/flutter_flow_util.dart' • lib/pages/welcome_after_signup/welcome_after_signup_widget.dart:1:8 • unused_import
+warning • Unused import: 'dart:convert' • lib/services/api_client.dart:1:8 • unused_import
+   info • Statements in an if should be enclosed in a block • lib/services/auth_service.dart:33:64 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block • lib/services/auth_service.dart:34:69 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block • lib/services/auth_service.dart:35:38 • curly_braces_in_flow_control_structures
+   info • Angle brackets will be interpreted as HTML • lib/services/auth_service.dart:50:48 • unintended_html_in_doc_comment
+   info • Don't invoke 'print' in production code • lib/services/auth_service.dart:69:7 • avoid_print
+   info • Don't invoke 'print' in production code • lib/services/auth_service.dart:70:7 • avoid_print
+   info • Unnecessary braces in a string interpolation • lib/services/auth_service.dart:70:47 • unnecessary_brace_in_string_interps
+   info • Don't invoke 'print' in production code • lib/services/auth_service.dart:77:7 • avoid_print
+   info • Don't invoke 'print' in production code • lib/services/auth_service.dart:92:7 • avoid_print
+   info • Don't invoke 'print' in production code • lib/services/auth_service.dart:95:7 • avoid_print
+   info • Don't invoke 'print' in production code • lib/services/auth_service.dart:96:7 • avoid_print
+   info • Angle brackets will be interpreted as HTML • lib/services/auth_service.dart:173:41 • unintended_html_in_doc_comment
+warning • The operand can't be 'null', so the condition is always 'false' • lib/services/auth_service.dart:198:19 • unnecessary_null_comparison
+   info • Use interpolation to compose strings and values • lib/services/kyc_service.dart:9:54 • prefer_interpolation_to_compose_strings
+   info • Angle brackets will be interpreted as HTML • lib/services/kyc_service.dart:19:8 • unintended_html_in_doc_comment
+   info • Don't invoke 'print' in production code • lib/services/kyc_service.dart:103:7 • avoid_print
+   info • Use interpolation to compose strings and values • lib/services/kyc_service.dart:103:13 • prefer_interpolation_to_compose_strings
+   info • Don't invoke 'print' in production code • lib/services/kyc_service.dart:105:7 • avoid_print
+   info • Use interpolation to compose strings and values • lib/services/kyc_service.dart:105:13 • prefer_interpolation_to_compose_strings
+   info • Don't invoke 'print' in production code • lib/services/kyc_service.dart:126:13 • avoid_print
+   info • Don't invoke 'print' in production code • lib/services/kyc_service.dart:169:13 • avoid_print
+   info • Use interpolation to compose strings and values • lib/services/kyc_service.dart:169:19 • prefer_interpolation_to_compose_strings
+   info • Don't invoke 'print' in production code • lib/services/kyc_service.dart:183:11 • avoid_print
+   info • Don't invoke 'print' in production code • lib/services/kyc_service.dart:187:11 • avoid_print
+   info • Don't invoke 'print' in production code • lib/services/kyc_service.dart:196:17 • avoid_print
+   info • Use interpolation to compose strings and values • lib/services/kyc_service.dart:196:23 • prefer_interpolation_to_compose_strings
+   info • Don't invoke 'print' in production code • lib/services/kyc_service.dart:207:17 • avoid_print
+   info • Use interpolation to compose strings and values • lib/services/kyc_service.dart:207:23 • prefer_interpolation_to_compose_strings
+   info • Don't invoke 'print' in production code • lib/services/kyc_service.dart:212:17 • avoid_print
+warning • The receiver can't be null, so the null-aware operator '?.' is unnecessary • lib/services/kyc_service.dart:226:23 • invalid_null_aware_operator
+   info • Don't invoke 'print' in production code • lib/services/kyc_service.dart:227:13 • avoid_print
+   info • Don't invoke 'print' in production code • lib/services/kyc_service.dart:233:15 • avoid_print
+   info • Don't invoke 'print' in production code • lib/services/kyc_service.dart:241:15 • avoid_print
+   info • Use interpolation to compose strings and values • lib/services/kyc_service.dart:241:21 • prefer_interpolation_to_compose_strings
+   info • Don't invoke 'print' in production code • lib/services/kyc_service.dart:250:9 • avoid_print
+   info • Statements in an if should be enclosed in a block • lib/services/location_service.dart:21:25 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block • lib/services/location_service.dart:22:53 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block • lib/services/location_service.dart:23:12 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block • lib/services/location_service.dart:40:25 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block • lib/services/location_service.dart:41:53 • curly_braces_in_flow_control_structures
+   info • Statements in an if should be enclosed in a block • lib/services/location_service.dart:42:12 • curly_braces_in_flow_control_structures
+   info • Angle brackets will be interpreted as HTML • lib/services/upload_service.dart:9:41 • unintended_html_in_doc_comment
+   info • Angle brackets will be interpreted as HTML • lib/services/upload_service.dart:9:68 • unintended_html_in_doc_comment
+warning • The operand can't be 'null', so the condition is always 'false' • lib/utils/awesome_dialogs.dart:201:15 • unnecessary_null_comparison
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/utils/awesome_dialogs.dart:219:42 • deprecated_member_use
+   info • Parameter 'key' could be a super parameter • lib/widgets/skeleton.dart:23:9 • use_super_parameters
+   info • Invalid use of a private type in a public API • lib/widgets/skeleton.dart:39:3 • library_private_types_in_public_api
+   info • Parameter 'key' could be a super parameter • lib/widgets/skeleton_screen.dart:11:9 • use_super_parameters
+
+615 issues found. (ran in 2.3s)
