@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:awesome_notifications/awesome_notifications.dart';
 import '../state/app_state_notifier.dart';
 import '../api_config.dart';
 import '../services/token_storage.dart';
@@ -15,7 +15,8 @@ final String SOCKET_PATH = const String.fromEnvironment(_socketPathKey);
 /// and improved error handling; preserves public API (instance/init/connect/disconnect).
 class RealtimeNotifications {
   static RealtimeNotifications? _instance;
-  static RealtimeNotifications get instance => _instance ??= RealtimeNotifications._();
+  static RealtimeNotifications get instance =>
+      _instance ??= RealtimeNotifications._();
 
   io.Socket? _socket;
   // Broadcast stream for incoming realtime events (chat/message/thread events)
@@ -24,7 +25,6 @@ class RealtimeNotifications {
 
   /// Whether the underlying socket is connected.
   bool get connected => _socket != null && _socket!.connected;
-  final FlutterLocalNotificationsPlugin _local = FlutterLocalNotificationsPlugin();
   bool initialized = false;
   bool _connecting = false;
 
@@ -46,22 +46,6 @@ class RealtimeNotifications {
         _log('RealtimeNotifications: no token');
         _connecting = false;
         return;
-      }
-
-      // Initialize local notifications (silently, errors ignored)
-      try {
-        const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-        const ios = DarwinInitializationSettings();
-        const initSettings = InitializationSettings(android: android, iOS: ios);
-        await _local.initialize(initSettings, onDidReceiveNotificationResponse: (payload) async {
-          try {
-            if (payload.payload != null) {
-              // optional: handle taps
-            }
-          } catch (_) {}
-        });
-      } catch (e) {
-        _log('local notification init failed: $e');
       }
 
       initialized = true;
@@ -114,15 +98,20 @@ class RealtimeNotifications {
       }
 
       final uri = Uri.parse(API_BASE_URL);
-      final port = (uri.hasPort && uri.port != 0) ? uri.port : (uri.scheme == 'https' ? 443 : 80);
+      final port = (uri.hasPort && uri.port != 0)
+          ? uri.port
+          : (uri.scheme == 'https' ? 443 : 80);
       final socketUrl = '${uri.scheme}://${uri.host}:$port';
       _log('connecting to $socketUrl');
 
       // Log a masked preview of the token for debugging (don't print full token)
       try {
         final tlen = token.length;
-        final preview = tlen > 12 ? '${token.substring(0,6)}...${token.substring(tlen-6)}' : token;
-        _log('connecting to $socketUrl using token(len=$tlen, preview=$preview)');
+        final preview = tlen > 12
+            ? '${token.substring(0, 6)}...${token.substring(tlen - 6)}'
+            : token;
+        _log(
+            'connecting to $socketUrl using token(len=$tlen, preview=$preview)');
       } catch (_) {
         _log('connecting to $socketUrl (token preview unavailable)');
       }
@@ -145,13 +134,15 @@ class RealtimeNotifications {
       // If a specific socket path is provided via dart-define, include it
       if (SOCKET_PATH.isNotEmpty) options['path'] = SOCKET_PATH;
 
-      _log('socket options: auth present, query token included${SOCKET_PATH.isNotEmpty ? ', path=$SOCKET_PATH' : ''}');
+      _log(
+          'socket options: auth present, query token included${SOCKET_PATH.isNotEmpty ? ', path=$SOCKET_PATH' : ''}');
       _socket = io.io(socketUrl, options);
 
       _socket!.onConnect((_) {
         try {
           final profile = AppStateNotifier.instance.profile;
-          final myId = (profile?['_id'] ?? profile?['id'] ?? profile?['userId'])?.toString();
+          final myId = (profile?['_id'] ?? profile?['id'] ?? profile?['userId'])
+              ?.toString();
           if (myId != null && myId.isNotEmpty) {
             // Attempt to join a per-user room using a documented-friendly payload.
             try {
@@ -161,7 +152,11 @@ class RealtimeNotifications {
             } catch (_) {}
           }
         } catch (_) {}
-        try { _log('socket connected id=${_socket?.id}'); } catch (_) { _log('socket connected'); }
+        try {
+          _log('socket connected id=${_socket?.id}');
+        } catch (_) {
+          _log('socket connected');
+        }
         _connecting = false;
       });
 
@@ -218,14 +213,19 @@ class RealtimeNotifications {
           // Update unread count if targeted
           try {
             final profile = AppStateNotifier.instance.profile;
-            final myId = (profile?['_id'] ?? profile?['id'] ?? profile?['userId'])?.toString();
+            final myId =
+                (profile?['_id'] ?? profile?['id'] ?? profile?['userId'])
+                    ?.toString();
             String? targetId;
             if (payload is Map) {
-              final v = payload['userId'] ?? payload['recipientId'] ?? payload['to'];
+              final v =
+                  payload['userId'] ?? payload['recipientId'] ?? payload['to'];
               targetId = v != null ? v.toString() : null;
             }
             if (myId?.isNotEmpty ?? false) {
-              if (targetId == null || targetId == myId || (payload is Map && payload['broadcast'] == true)) {
+              if (targetId == null ||
+                  targetId == myId ||
+                  (payload is Map && payload['broadcast'] == true)) {
                 final current = AppStateNotifier.instance.unreadNotifications;
                 AppStateNotifier.instance.setUnreadNotifications(current + 1);
               }
@@ -261,7 +261,16 @@ class RealtimeNotifications {
         }
       }
 
-      for (final ev in ['message', 'thread_message', 'thread_created', 'chat_ready', 'booking_closed', 'chat_closed', 'typing', 'read']) {
+      for (final ev in [
+        'message',
+        'thread_message',
+        'thread_created',
+        'chat_ready',
+        'booking_closed',
+        'chat_closed',
+        'typing',
+        'read'
+      ]) {
         _socket!.on(ev, (data) => _forwardEvent(ev, data));
       }
 
@@ -320,14 +329,18 @@ class RealtimeNotifications {
         try {
           _socket?.on('typing', (payload) {
             try {
-              final p = (payload is Map) ? Map<String, dynamic>.from(payload) : (payload as dynamic);
+              final p = (payload is Map)
+                  ? Map<String, dynamic>.from(payload)
+                  : (payload as dynamic);
               _log('RealtimeNotifications: received typing $p');
               _eventsController.add({'event': 'typing', 'payload': p});
             } catch (e) {}
           });
           _socket?.on('presence', (payload) {
             try {
-              final p = (payload is Map) ? Map<String, dynamic>.from(payload) : (payload as dynamic);
+              final p = (payload is Map)
+                  ? Map<String, dynamic>.from(payload)
+                  : (payload as dynamic);
               _log('RealtimeNotifications: received presence $p');
               _eventsController.add({'event': 'presence', 'payload': p});
             } catch (e) {}
@@ -350,27 +363,33 @@ class RealtimeNotifications {
     _socket = null;
   }
 
-  /// Show a local notification.
+  /// Show a local notification using Awesome Notifications.
   // ignore: unused_element
   Future<void> _showLocalNotification(dynamic payload) async {
     if (!initialized) return;
     try {
       final title = payload['title']?.toString() ?? 'Notification';
-      final body = payload['message']?.toString() ?? payload['text']?.toString() ?? '';
-      final jsonPayload = jsonEncode(payload);
+      final body =
+          payload['message']?.toString() ?? payload['text']?.toString() ?? '';
 
-      const androidDetails = AndroidNotificationDetails(
-        'rijhub_channel',
-        'RijHub Notifications',
-        channelDescription: 'Notifications from RijHub server',
-        importance: Importance.max,
-        priority: Priority.high,
-        playSound: true,
+      // Create notification ID from timestamp
+      final notificationId = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+      await AwesomeNotifications().createNotification(
+        content: NotificationContent(
+          id: notificationId,
+          channelKey: 'chat_channel', // Use chat channel for realtime messages
+          title: title,
+          body: body,
+          category: NotificationCategory.Message,
+          notificationLayout: NotificationLayout.Default,
+          payload: payload is Map
+              ? Map<String, String>.from(payload.map(
+                  (key, value) => MapEntry(key.toString(), value.toString())))
+              : null,
+          wakeUpScreen: true,
+        ),
       );
-      const iosDetails = DarwinNotificationDetails();
-      const platform = NotificationDetails(android: androidDetails, iOS: iosDetails);
-
-      await _local.show(0, title, body, platform, payload: jsonPayload);
     } catch (e) {
       _log('showLocalNotification error $e');
     }
@@ -396,41 +415,41 @@ class RealtimeNotifications {
     try {
       if (_socket != null && _socket!.connected) {
         _socket!.emit('join', {'threadId': threadId});
-       }
-     } catch (e) {
-       _log('joinThread error: $e');
-     }
-   }
+      }
+    } catch (e) {
+      _log('joinThread error: $e');
+    }
+  }
 
-   /// Ask the server to mark messages as read for a thread.
-   void emitRead(String threadId, List<String> messageIds) {
-     try {
-       if (_socket != null && _socket!.connected) {
-         final payload = {'threadId': threadId, 'messageIds': messageIds};
-         _socket!.emit('read', payload);
-       } else {
-         _log('emitRead: socket not connected');
-       }
-     } catch (e) {
-       _log('emitRead error: $e');
-     }
-   }
+  /// Ask the server to mark messages as read for a thread.
+  void emitRead(String threadId, List<String> messageIds) {
+    try {
+      if (_socket != null && _socket!.connected) {
+        final payload = {'threadId': threadId, 'messageIds': messageIds};
+        _socket!.emit('read', payload);
+      } else {
+        _log('emitRead: socket not connected');
+      }
+    } catch (e) {
+      _log('emitRead error: $e');
+    }
+  }
 
-   /// Ask the server to leave a thread room. Some servers accept a 'leave'
-   /// event which removes this socket from the thread room to avoid receiving
-   /// further thread events. This is best-effort and will silently fail if the
-   /// server doesn't support it.
-   void leaveThread(String threadId) {
-     try {
-       if (threadId.isEmpty) return;
-       if (_socket != null && _socket!.connected) {
-         _socket!.emit('leave', {'threadId': threadId});
-         _log('leaveThread emitted: $threadId');
-       }
-     } catch (e) {
-       _log('leaveThread error: $e');
-     }
-   }
+  /// Ask the server to leave a thread room. Some servers accept a 'leave'
+  /// event which removes this socket from the thread room to avoid receiving
+  /// further thread events. This is best-effort and will silently fail if the
+  /// server doesn't support it.
+  void leaveThread(String threadId) {
+    try {
+      if (threadId.isEmpty) return;
+      if (_socket != null && _socket!.connected) {
+        _socket!.emit('leave', {'threadId': threadId});
+        _log('leaveThread emitted: $threadId');
+      }
+    } catch (e) {
+      _log('leaveThread error: $e');
+    }
+  }
 
   /// Send a chat message via the socket (best-effort). Payload matches server expectations.
   void sendChatMessage(String threadId, String text) {
@@ -451,7 +470,11 @@ class RealtimeNotifications {
   void emitTyping(String threadId, String userId, bool typing) {
     try {
       if (_socket != null && _socket!.connected) {
-        final payload = {'threadId': threadId, 'userId': userId, 'typing': typing};
+        final payload = {
+          'threadId': threadId,
+          'userId': userId,
+          'typing': typing
+        };
         _socket!.emit('typing', payload);
         _log('emitTyping: $payload');
       } else {
