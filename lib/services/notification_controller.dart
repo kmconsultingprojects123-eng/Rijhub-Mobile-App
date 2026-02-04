@@ -3,6 +3,9 @@ import 'package:awesome_notifications_fcm/awesome_notifications_fcm.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:developer' as developer;
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import '../api_config.dart';
 
 class NotificationController {
   static String? fcmToken;
@@ -382,6 +385,76 @@ class NotificationController {
       body: 'If you see this, local notifications are working!',
       payload: {'test': 'true'},
     );
+  }
+
+  /// Register device with backend
+  static Future<void> registerDevice(String? jwt) async {
+    if (jwt == null || jwt.isEmpty) return;
+    final token = fcmToken;
+    if (token == null || token.isEmpty) {
+      print('⚠️ [NOTIFICATION] Cannot register device: No FCM token available');
+      return;
+    }
+
+    try {
+      print('🔔 [NOTIFICATION] Registering device with backend...');
+      final uri = Uri.parse('$API_BASE_URL/api/devices/register');
+      final body = jsonEncode({
+        'token': token,
+        'platform':
+            'flutter', // or Platform.operatingSystem if you want more specific
+      });
+
+      final resp = await http.post(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $jwt',
+          'Content-Type': 'application/json',
+        },
+        body: body,
+      );
+
+      print('🔔 [NOTIFICATION] Register device response: ${resp.statusCode}');
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        print('✅ [NOTIFICATION] Device registered successfully');
+      } else {
+        print('❌ [NOTIFICATION] Failed to register device: ${resp.body}');
+      }
+    } catch (e) {
+      print('❌ [NOTIFICATION] Error registering device: $e');
+    }
+  }
+
+  /// Unregister device from backend
+  static Future<void> unregisterDevice(String? jwt) async {
+    if (jwt == null || jwt.isEmpty) return;
+    final token = fcmToken;
+    if (token == null) return; // Nothing to unregister if we don't have a token
+
+    try {
+      print('🔔 [NOTIFICATION] Unregistering device from backend...');
+      final uri = Uri.parse('$API_BASE_URL/api/devices/unregister');
+      final body = jsonEncode({
+        'token': token,
+      });
+
+      final resp = await http.post(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $jwt',
+          'Content-Type': 'application/json',
+        },
+        body: body,
+      );
+
+      print('🔔 [NOTIFICATION] Unregister device response: ${resp.statusCode}');
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        print('✅ [NOTIFICATION] Device unregistered successfully');
+      }
+    } catch (e) {
+      // Fail silently for unregister
+      print('⚠️ [NOTIFICATION] Error unregistering device: $e');
+    }
   }
 
   /// Dispose notification resources
