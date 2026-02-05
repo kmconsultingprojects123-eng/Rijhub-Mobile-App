@@ -63,6 +63,7 @@ android {
         targetSdkVersion 35
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
+        multiDexEnabled true
         // Consider limiting supported locales with resConfigs to reduce APK size (e.g. resConfigs "en")
         // Enable English-only resources by default to shrink APK resources. Remove or change if you need other locales.
         resConfigs "en"
@@ -140,4 +141,6 @@ dependencies {
 
     // Play Core dependency to satisfy R8 and deferred components references
     implementation 'com.google.android.play:core:1.10.3'
+
+    implementation "androidx.multidex:multidex:2.0.1"
 }

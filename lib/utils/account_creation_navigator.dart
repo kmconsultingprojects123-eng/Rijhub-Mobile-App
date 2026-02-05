@@ -28,7 +28,8 @@ class AccountCreationNavigator {
     debugPrint('NavigationHelper[$ts] -> navigateAfterSignup requested');
 
     if (!context.mounted) {
-      debugPrint('NavigationHelper[$ts] -> context not mounted, aborting navigation');
+      debugPrint(
+          'NavigationHelper[$ts] -> context not mounted, aborting navigation');
       return;
     }
 
@@ -41,34 +42,28 @@ class AccountCreationNavigator {
         final router = GoRouter.maybeOf(context);
         if (router != null) {
           final target = goRoute ?? '/home';
-          debugPrint('NavigationHelper[$ts] -> attempting GoRouter.go("$target")');
           router.go(target);
-          debugPrint('NavigationHelper[$ts] -> GoRouter succeeded');
           return;
         }
       } catch (e, st) {
-        debugPrint('NavigationHelper[$ts] -> GoRouter navigation failed: $e\n$st');
+        // failed
       }
 
       // small pause between attempts
       await Future.delayed(const Duration(milliseconds: 30));
-    } else {
-      debugPrint('NavigationHelper[$ts] -> preferImperative=true, skipping GoRouter.go attempt');
     }
 
     // If caller requested imperative navigation AND provided a route name, try
-    // a named pushReplacement first (this works well with some router setups
-    // and keeps route names visible to analytics/DevTools). If that fails,
-    // we'll fall back to widget-based imperative navigation below.
+    // a named pushReplacement first. We DO NOT await the result because pushReplacement
+    // returns a Future that completes only when the pushed route is popped. We want
+    // to return control to the caller immediately so they can proceed (e.g. set auth token).
     if (preferImperative && goRoute != null) {
       try {
-        debugPrint('NavigationHelper[$ts] -> attempting Navigator.pushReplacementNamed("$goRoute")');
         if (!context.mounted) return;
-        await Navigator.of(context).pushReplacementNamed(goRoute);
-        debugPrint('NavigationHelper[$ts] -> Navigator.pushReplacementNamed succeeded');
+        Navigator.of(context).pushReplacementNamed(goRoute).ignore();
         return;
       } catch (e, st) {
-        debugPrint('NavigationHelper[$ts] -> named pushReplacement failed: $e\n$st');
+        // failed
       }
 
       // small pause
@@ -91,19 +86,20 @@ class AccountCreationNavigator {
     // Attempt 2: If app uses page-based Navigator, try a simple push (imperative)
     try {
       final isPages = _isPageBasedNavigator(context);
-      debugPrint('NavigationHelper[$ts] -> page-based navigator: $isPages');
 
       if (isPages) {
-        debugPrint('NavigationHelper[$ts] -> attempting Navigator.pushReplacement (pages API fallback)');
         if (!context.mounted) return;
-        await Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => homePage, settings: RouteSettings(name: goRoute)),
-        );
-        debugPrint('NavigationHelper[$ts] -> Navigator.pushReplacement succeeded');
+        Navigator.of(context)
+            .pushReplacement(
+              MaterialPageRoute(
+                  builder: (_) => homePage,
+                  settings: RouteSettings(name: goRoute)),
+            )
+            .ignore();
         return;
       }
     } catch (e, st) {
-      debugPrint('NavigationHelper[$ts] -> pages-API push failed: $e\n$st');
+      // failed
     }
 
     // small pause between attempts
@@ -111,39 +107,48 @@ class AccountCreationNavigator {
 
     // Attempt 3: Traditional Navigator pushReplacement
     try {
-      debugPrint('NavigationHelper[$ts] -> attempting traditional Navigator.pushReplacement');
       if (!context.mounted) return;
-      await Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => homePage, settings: RouteSettings(name: goRoute)),
-      );
-      debugPrint('NavigationHelper[$ts] -> traditional Navigator.pushReplacement succeeded');
+      Navigator.of(context)
+          .pushReplacement(
+            MaterialPageRoute(
+                builder: (_) => homePage,
+                settings: RouteSettings(name: goRoute)),
+          )
+          .ignore();
       return;
     } catch (e, st) {
-      debugPrint('NavigationHelper[$ts] -> traditional Navigator failed: $e\n$st');
+      // failed
     }
 
     // Attempt 4: Root navigator fallback
     try {
-      debugPrint('NavigationHelper[$ts] -> attempting rootNavigator fallback');
       if (!context.mounted) return;
-      await Navigator.of(context, rootNavigator: true).pushReplacement(
-        MaterialPageRoute(builder: (_) => homePage, settings: RouteSettings(name: goRoute)),
-      );
-      debugPrint('NavigationHelper[$ts] -> rootNavigator fallback succeeded');
+      Navigator.of(context, rootNavigator: true)
+          .pushReplacement(
+            MaterialPageRoute(
+                builder: (_) => homePage,
+                settings: RouteSettings(name: goRoute)),
+          )
+          .ignore();
       return;
     } catch (e, st) {
-      debugPrint('NavigationHelper[$ts] -> rootNavigator fallback failed: $e\n$st');
+      // failed
     }
 
     // Recovery: schedule one retry after a short delay
     try {
-      debugPrint('NavigationHelper[$ts] -> scheduling one recovery retry in 250ms');
+      debugPrint(
+          'NavigationHelper[$ts] -> scheduling one recovery retry in 250ms');
       await Future.delayed(const Duration(milliseconds: 250));
       if (!context.mounted) return;
-      await Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => homePage, settings: RouteSettings(name: goRoute)),
-      );
-      debugPrint('NavigationHelper[$ts] -> recovery retry succeeded');
+      Navigator.of(context)
+          .pushReplacement(
+            MaterialPageRoute(
+                builder: (_) => homePage,
+                settings: RouteSettings(name: goRoute)),
+          )
+          .ignore();
+      debugPrint('NavigationHelper[$ts] -> recovery retry dispatched');
       return;
     } catch (e, st) {
       debugPrint('NavigationHelper[$ts] -> recovery retry failed: $e\n$st');
@@ -154,7 +159,8 @@ class AccountCreationNavigator {
       debugPrint('NavigationHelper[$ts] -> all navigation attempts failed');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Unable to open home page. Please try again.')),
+          const SnackBar(
+              content: Text('Unable to open home page. Please try again.')),
         );
       }
     } catch (_) {}

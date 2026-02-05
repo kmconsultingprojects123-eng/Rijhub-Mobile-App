@@ -14,7 +14,8 @@ class WelcomeAfterSignupWidget extends StatefulWidget {
   static String routePath = '/welcomeAfterSignup';
 
   @override
-  State<WelcomeAfterSignupWidget> createState() => _WelcomeAfterSignupWidgetState();
+  State<WelcomeAfterSignupWidget> createState() =>
+      _WelcomeAfterSignupWidgetState();
 }
 
 class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
@@ -51,7 +52,8 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
         }
         if (args['role'] != null && args['role'].toString().isNotEmpty) {
           final r = args['role']?.toString();
-          if (r != null && r.isNotEmpty) setState(() => _role = r.toLowerCase());
+          if (r != null && r.isNotEmpty)
+            setState(() => _role = r.toLowerCase());
         }
       }
     });
@@ -96,24 +98,21 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       try {
-        // Debug trace
-        try { debugPrint('WelcomeAfterSignup: navigating to dashboard for role=$_role'); } catch (_) {}
-
         // Use replace-all so the onboarding/auth pages are removed from the
-        // stack and the app lands at the proper home/dashboard route. The
-        // NavigationUtils.safeReplaceAllWith helper maps NavBarPage to the
-        // appropriate GoRouter path when the app uses the declarative router.
+        // stack and the app lands at the proper home/dashboard route.
         final target = _role == 'artisan'
             ? NavBarPage(initialPage: 'homePage', showDiscover: false)
             : NavBarPage(initialPage: 'homePage');
 
         await NavigationUtils.safeReplaceAllWith(context, target);
-      } catch (e) {
+      } catch (e, st) {
         // Fallback: try a simple replace so the user isn't blocked.
         try {
           NavigationUtils.safePushReplacement(
             context,
-            _role == 'artisan' ? ArtisanDashboardPageWidget() : HomePageWidget(),
+            _role == 'artisan'
+                ? ArtisanDashboardPageWidget()
+                : HomePageWidget(),
           );
         } catch (_) {}
       }
@@ -235,7 +234,8 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
                           color: isDark
                               ? _primaryColor.withOpacity(0.15)
                               : _primaryColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(isSmallScreen ? 20 : 24),
+                          borderRadius:
+                              BorderRadius.circular(isSmallScreen ? 20 : 24),
                           border: Border.all(
                             color: isDark
                                 ? _primaryColor.withOpacity(0.3)
@@ -251,15 +251,21 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
                                   ? Icons.person_outline
                                   : Icons.business_center_outlined,
                               size: isSmallScreen ? 16 : 18,
-                              color: _role == 'artisan' ? _successColor : _primaryColor,
+                              color: _role == 'artisan'
+                                  ? _successColor
+                                  : _primaryColor,
                             ),
                             SizedBox(width: isSmallScreen ? 6 : 8),
                             Text(
-                              _role == 'artisan' ? 'Artisan Account' : 'Client Account',
+                              _role == 'artisan'
+                                  ? 'Artisan Account'
+                                  : 'Client Account',
                               style: TextStyle(
                                 fontSize: isSmallScreen ? 13 : 15,
                                 fontWeight: FontWeight.w600,
-                                color: _role == 'artisan' ? _successColor : _primaryColor,
+                                color: _role == 'artisan'
+                                    ? _successColor
+                                    : _primaryColor,
                               ),
                             ),
                           ],
@@ -314,7 +320,8 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
                             value: _progressValue,
                             minHeight: 4,
                             backgroundColor: _getBorderColor(context),
-                            valueColor: AlwaysStoppedAnimation<Color>(_primaryColor),
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(_primaryColor),
                             borderRadius: BorderRadius.circular(2),
                           ),
                           SizedBox(height: isSmallScreen ? 8 : 12),
