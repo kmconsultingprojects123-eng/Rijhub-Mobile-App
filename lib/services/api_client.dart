@@ -7,33 +7,81 @@ import 'dart:async';
 class ApiClient {
   // Internal helper: perform HTTP request with retries and timeout.
   // method: 'GET', 'POST', 'PUT'
-  static Future<http.Response> _requestWithRetries(
-      String method, Uri uri,
-      {Map<String, String>? headers, Object? body, int timeoutSeconds = 15, int maxAttempts = 2, Duration retryDelay = const Duration(milliseconds: 700)}) async {
+  static Future<http.Response> _requestWithRetries(String method, Uri uri,
+      {Map<String, String>? headers,
+      Object? body,
+      int timeoutSeconds = 15,
+      int maxAttempts = 2,
+      Duration retryDelay = const Duration(milliseconds: 700)}) async {
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      // ┌──────────────────────────────────────────────────────────────────────────────
+      // │ API Logger - Request
+      // └──────────────────────────────────────────────────────────────────────────────
+      print(
+          '┌──────────────────────────────────────────────────────────────────────────────');
+      print('│ [API Request] $method $uri');
+      if (headers != null && headers.isNotEmpty) {
+        print('│ Headers:');
+        headers.forEach((k, v) => print('│   $k: $v'));
+      }
+      if (body != null) {
+        print('│ Body: $body');
+      }
+      print(
+          '└──────────────────────────────────────────────────────────────────────────────');
+
       try {
         late http.Response resp;
         if (method == 'GET') {
-          resp = await http.get(uri, headers: headers).timeout(Duration(seconds: timeoutSeconds));
+          resp = await http
+              .get(uri, headers: headers)
+              .timeout(Duration(seconds: timeoutSeconds));
         } else if (method == 'POST') {
-          resp = await http.post(uri, headers: headers, body: body).timeout(Duration(seconds: timeoutSeconds));
+          resp = await http
+              .post(uri, headers: headers, body: body)
+              .timeout(Duration(seconds: timeoutSeconds));
         } else if (method == 'PUT') {
-          resp = await http.put(uri, headers: headers, body: body).timeout(Duration(seconds: timeoutSeconds));
+          resp = await http
+              .put(uri, headers: headers, body: body)
+              .timeout(Duration(seconds: timeoutSeconds));
         } else {
           throw UnsupportedError('Unsupported method $method');
         }
+
+        // ┌──────────────────────────────────────────────────────────────────────────────
+        // │ API Logger - Response
+        // └──────────────────────────────────────────────────────────────────────────────
+        print(
+            '┌──────────────────────────────────────────────────────────────────────────────');
+        print('│ [API Response] ${resp.statusCode} $uri');
+        print('│ Body: ${resp.body}');
+        print(
+            '└──────────────────────────────────────────────────────────────────────────────');
+
         return resp;
       } on TimeoutException catch (_) {
         if (attempt == maxAttempts) {
-          return http.Response(jsonEncode({'message': 'Request timed out'}), 408);
+          print('│ [API Error] Request timed out for $uri');
+          print(
+              '└──────────────────────────────────────────────────────────────────────────────');
+          return http.Response(
+              jsonEncode({'message': 'Request timed out'}), 408);
         }
         await Future.delayed(retryDelay * attempt);
         continue;
       } on SocketException catch (_) {
-        if (attempt == maxAttempts) return http.Response(jsonEncode({'message': 'Network error'}), 599);
+        if (attempt == maxAttempts) {
+          print('│ [API Error] Network error for $uri');
+          print(
+              '└──────────────────────────────────────────────────────────────────────────────');
+          return http.Response(jsonEncode({'message': 'Network error'}), 599);
+        }
         await Future.delayed(retryDelay * attempt);
         continue;
       } catch (e) {
+        print('│ [API Error] Exception for $uri: $e');
+        print(
+            '└──────────────────────────────────────────────────────────────────────────────');
         return http.Response(jsonEncode({'message': e.toString()}), 500);
       }
     }
@@ -74,7 +122,8 @@ class ApiClient {
     };
   }
 
-  static String _humanizeErrorResponse(int status, Object? jsonBody, String rawBody) {
+  static String _humanizeErrorResponse(
+      int status, Object? jsonBody, String rawBody) {
     // Prefer server-provided message fields
     try {
       if (jsonBody is Map) {
@@ -86,10 +135,14 @@ class ApiClient {
             if (v is String && v.trim().isNotEmpty) {
               final lc = v.toLowerCase();
               // Map experience-level validation to a friendly message
-              if (lc.contains('experiencelevel') || lc.contains('experience level') || lc.contains('body/experiencelevel') || lc.contains('body/experience level')) {
+              if (lc.contains('experiencelevel') ||
+                  lc.contains('experience level') ||
+                  lc.contains('body/experiencelevel') ||
+                  lc.contains('body/experience level')) {
                 return 'Please choose a valid experience level.';
               }
-              if (lc.contains('must be equal to one of the allowed values') || lc.contains('allowed values')) {
+              if (lc.contains('must be equal to one of the allowed values') ||
+                  lc.contains('allowed values')) {
                 return 'One of the provided fields contains an invalid value. Please check and try again.';
               }
               return _friendlyFromRaw(v);
@@ -112,7 +165,8 @@ class ApiClient {
       if (lc.contains('experiencelevel') || lc.contains('experience level')) {
         return 'Please choose a valid experience level.';
       }
-      if (lc.contains('must be equal to one of the allowed values') || lc.contains('allowed values')) {
+      if (lc.contains('must be equal to one of the allowed values') ||
+          lc.contains('allowed values')) {
         return 'One of the provided fields has an invalid value. Please check your input and try again.';
       }
       if (lc.contains('unauthorized') || status == 401 || status == 403) {
@@ -152,9 +206,12 @@ class ApiClient {
         final parts = <String>[];
         structured.forEach((k, v) {
           if (v == null) return;
-          if (v is String) parts.add('$k: ${v}');
-          else if (v is List) parts.add('$k: ${v.join(", ")}');
-          else parts.add('$k: ${v.toString()}');
+          if (v is String)
+            parts.add('$k: ${v}');
+          else if (v is List)
+            parts.add('$k: ${v.join(", ")}');
+          else
+            parts.add('$k: ${v.toString()}');
         });
         if (parts.isNotEmpty) return parts.join(' — ');
       }
@@ -174,8 +231,10 @@ class ApiClient {
       if (token != null) 'Authorization': 'Bearer $token',
     };
 
-    final resp = await _requestWithRetries('GET', Uri.parse(url), headers: merged, timeoutSeconds: 15, maxAttempts: 2);
-    if (resp.statusCode >= 200 && resp.statusCode < 300) return _buildSuccessfulResult(resp);
+    final resp = await _requestWithRetries('GET', Uri.parse(url),
+        headers: merged, timeoutSeconds: 15, maxAttempts: 2);
+    if (resp.statusCode >= 200 && resp.statusCode < 300)
+      return _buildSuccessfulResult(resp);
     return _buildErrorResult(resp);
   }
 
@@ -189,12 +248,16 @@ class ApiClient {
 
     dynamic sendBody = body;
     final contentType = merged['Content-Type'] ?? merged['content-type'];
-    if ((contentType == 'application/json' || contentType == 'application/json; charset=utf-8') && (sendBody == null)) {
+    if ((contentType == 'application/json' ||
+            contentType == 'application/json; charset=utf-8') &&
+        (sendBody == null)) {
       sendBody = jsonEncode({});
     }
 
-    final resp = await _requestWithRetries('POST', Uri.parse(url), headers: merged, body: sendBody, timeoutSeconds: 20, maxAttempts: 2);
-    if (resp.statusCode >= 200 && resp.statusCode < 300) return _buildSuccessfulResult(resp);
+    final resp = await _requestWithRetries('POST', Uri.parse(url),
+        headers: merged, body: sendBody, timeoutSeconds: 20, maxAttempts: 2);
+    if (resp.statusCode >= 200 && resp.statusCode < 300)
+      return _buildSuccessfulResult(resp);
     return _buildErrorResult(resp);
   }
 
@@ -208,12 +271,16 @@ class ApiClient {
 
     dynamic sendBody = body;
     final contentType = merged['Content-Type'] ?? merged['content-type'];
-    if ((contentType == 'application/json' || contentType == 'application/json; charset=utf-8') && (sendBody == null)) {
+    if ((contentType == 'application/json' ||
+            contentType == 'application/json; charset=utf-8') &&
+        (sendBody == null)) {
       sendBody = jsonEncode({});
     }
 
-    final resp = await _requestWithRetries('PUT', Uri.parse(url), headers: merged, body: sendBody, timeoutSeconds: 20, maxAttempts: 2);
-    if (resp.statusCode >= 200 && resp.statusCode < 300) return _buildSuccessfulResult(resp);
+    final resp = await _requestWithRetries('PUT', Uri.parse(url),
+        headers: merged, body: sendBody, timeoutSeconds: 20, maxAttempts: 2);
+    if (resp.statusCode >= 200 && resp.statusCode < 300)
+      return _buildSuccessfulResult(resp);
     return _buildErrorResult(resp);
   }
 
@@ -222,7 +289,10 @@ class ApiClient {
   /// Fields are simple string fields; fileMap is a map from field name -> list of
   /// local file paths.
   static Future<Map<String, dynamic>> postMultipart(String url,
-      {Map<String, String>? headers, Map<String, String>? fields, Map<String, List<String>>? fileMap, String method = 'POST'}) async {
+      {Map<String, String>? headers,
+      Map<String, String>? fields,
+      Map<String, List<String>>? fileMap,
+      String method = 'POST'}) async {
     final token = await TokenStorage.getToken();
     final merged = {
       if (headers != null) ...headers,
@@ -247,7 +317,9 @@ class ApiClient {
             final file = File(path);
             if (!await file.exists()) continue;
             final filename = file.path.split(Platform.pathSeparator).last;
-            final multipart = await http.MultipartFile.fromPath(fieldName, file.path, filename: filename);
+            final multipart = await http.MultipartFile.fromPath(
+                fieldName, file.path,
+                filename: filename);
             req.files.add(multipart);
           } catch (e) {
             // ignore per-file attach errors; let the server respond accordingly
@@ -258,7 +330,8 @@ class ApiClient {
 
     final streamed = await req.send();
     final resp = await http.Response.fromStream(streamed);
-    if (resp.statusCode >= 200 && resp.statusCode < 300) return _buildSuccessfulResult(resp);
+    if (resp.statusCode >= 200 && resp.statusCode < 300)
+      return _buildSuccessfulResult(resp);
     return _buildErrorResult(resp);
   }
 }

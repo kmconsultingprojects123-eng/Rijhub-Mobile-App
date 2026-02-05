@@ -498,6 +498,32 @@ class ApiManager {
       apiUrl = 'https://$apiUrl';
     }
 
+    // ┌──────────────────────────────────────────────────────────────────────────────
+    // │ API Logger - Request
+    // └──────────────────────────────────────────────────────────────────────────────
+    // ignore: avoid_print
+    print(
+        '┌──────────────────────────────────────────────────────────────────────────────');
+    // ignore: avoid_print
+    print('│ [API Request] $callType $apiUrl');
+    if (headers.isNotEmpty) {
+      // ignore: avoid_print
+      print('│ Headers:');
+      // ignore: avoid_print
+      headers.forEach((k, v) => print('│   $k: $v'));
+    }
+    if (params.isNotEmpty) {
+      // ignore: avoid_print
+      print('│ Params: $params');
+    }
+    if (body != null) {
+      // ignore: avoid_print
+      print('│ Body: $body');
+    }
+    // ignore: avoid_print
+    print(
+        '└──────────────────────────────────────────────────────────────────────────────');
+
     // If we've already made this exact call before and caching is on,
     // return the cached result.
     if (cache && _apiCache.containsKey(callOptions)) {
@@ -573,6 +599,25 @@ class ApiManager {
     } catch (e) {
       result = ApiCallResponse(null, {}, -1, exception: e);
     }
+
+    // ┌──────────────────────────────────────────────────────────────────────────────
+    // │ API Logger - Response
+    // └──────────────────────────────────────────────────────────────────────────────
+    // ignore: avoid_print
+    print(
+        '┌──────────────────────────────────────────────────────────────────────────────');
+    // ignore: avoid_print
+    print('│ [API Response] ${result.statusCode} $apiUrl');
+    if (result.jsonBody != null) {
+      // ignore: avoid_print
+      print('│ Body: ${result.jsonBody}');
+    } else if (result.response != null) {
+      // ignore: avoid_print
+      print('│ Body: ${result.response?.body}');
+    }
+    // ignore: avoid_print
+    print(
+        '└──────────────────────────────────────────────────────────────────────────────');
 
     return result;
   }

@@ -25,35 +25,80 @@ class AuthService {
     Duration retryDelay = const Duration(milliseconds: 700),
   }) async {
     headers ??= {'Content-Type': 'application/json'};
+
+    // ┌──────────────────────────────────────────────────────────────────────────────
+    // │ API Logger - Request (AuthService)
+    // └──────────────────────────────────────────────────────────────────────────────
+    // ignore: avoid_print
+    print(
+        '┌──────────────────────────────────────────────────────────────────────────────');
+    // ignore: avoid_print
+    print('│ [API Request] POST $uri');
+    if (headers != null && headers.isNotEmpty) {
+      // ignore: avoid_print
+      print('│ Headers:');
+      // ignore: avoid_print
+      headers.forEach((k, v) => print('│   $k: $v'));
+    }
+    // ignore: avoid_print
+    print('│ Body: ${jsonEncode(body)}');
+    // ignore: avoid_print
+    print(
+        '└──────────────────────────────────────────────────────────────────────────────');
+
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         final resp = await http
             .post(uri, headers: headers, body: jsonEncode(body))
             .timeout(Duration(seconds: timeoutSeconds));
+
+        // ┌──────────────────────────────────────────────────────────────────────────────
+        // │ API Logger - Response (AuthService)
+        // └──────────────────────────────────────────────────────────────────────────────
+        // ignore: avoid_print
+        print(
+            '┌──────────────────────────────────────────────────────────────────────────────');
+        // ignore: avoid_print
+        print('│ [API Response] ${resp.statusCode} $uri');
+        // ignore: avoid_print
+        print('│ Body: ${resp.body}');
+        // ignore: avoid_print
+        print(
+            '└──────────────────────────────────────────────────────────────────────────────');
+
         return resp;
       } on TimeoutException catch (_) {
         if (attempt == maxAttempts) {
-          // Return synthetic 408 response so callers can handle it uniformly
-          return http.Response(jsonEncode({'message': 'Request timed out'}), 408);
+          // ignore: avoid_print
+          print('│ [API Error] Request timed out for $uri');
+          // ignore: avoid_print
+          print(
+              '└──────────────────────────────────────────────────────────────────────────────');
+          return http.Response(
+              jsonEncode({'message': 'Request timed out'}), 408);
         }
-        // backoff and retry
         await Future.delayed(retryDelay * attempt);
         continue;
       } on SocketException catch (_) {
         if (attempt == maxAttempts) {
-          // Status code 0 is invalid for http.Response and causes an
-          // ArgumentError in the http package. Use 599 as a synthetic
-          // non-standard code to represent network/connectivity errors.
+          // ignore: avoid_print
+          print('│ [API Error] Network error for $uri');
+          // ignore: avoid_print
+          print(
+              '└──────────────────────────────────────────────────────────────────────────────');
           return http.Response(jsonEncode({'message': 'Network error'}), 599);
         }
         await Future.delayed(retryDelay * attempt);
         continue;
       } catch (e) {
-        // For unknown errors, stop retrying and return a 500-like synthetic response
+        // ignore: avoid_print
+        print('│ [API Error] Exception for $uri: $e');
+        // ignore: avoid_print
+        print(
+            '└──────────────────────────────────────────────────────────────────────────────');
         return http.Response(jsonEncode({'message': e.toString()}), 500);
       }
     }
-    // Shouldn't reach here, but return a synthetic response as a safeguard.
     return http.Response(jsonEncode({'message': 'Unknown network error'}), 500);
   }
 
@@ -61,7 +106,8 @@ class AuthService {
   static String? _normalizeRoleString(dynamic raw) {
     if (raw == null) return null;
     final r = raw.toString().toLowerCase();
-    if (r == 'client') return 'customer'; // UI label 'Client' maps to backend 'customer'
+    if (r == 'client')
+      return 'customer'; // UI label 'Client' maps to backend 'customer'
     return r;
   }
 
@@ -75,12 +121,14 @@ class AuthService {
       String? refreshToken;
 
       if (body['token'] != null) token = body['token'].toString();
-      if (token == null && body['data'] is Map && body['data']['token'] != null) token = body['data']['token'].toString();
+      if (token == null && body['data'] is Map && body['data']['token'] != null)
+        token = body['data']['token'].toString();
 
       // role may live at body.user.role, body.data.role or body.role
       if (body['user'] is Map && body['user']['role'] != null) {
         roleCandidate = body['user']['role'];
-      } else if (body['data'] is Map && body['data']['role'] != null) roleCandidate = body['data']['role'];
+      } else if (body['data'] is Map && body['data']['role'] != null)
+        roleCandidate = body['data']['role'];
       else if (body['role'] != null) roleCandidate = body['role'];
 
       final normalizedRole = _normalizeRoleString(roleCandidate);
@@ -88,11 +136,15 @@ class AuthService {
       if (token != null) await TokenStorage.saveToken(token);
       // Persist refreshToken if backend provided one (various shapes)
       try {
-        if (body['refreshToken'] != null) refreshToken = body['refreshToken'].toString();
-        if (refreshToken == null && body['data'] is Map && body['data']['refreshToken'] != null) {
+        if (body['refreshToken'] != null)
+          refreshToken = body['refreshToken'].toString();
+        if (refreshToken == null &&
+            body['data'] is Map &&
+            body['data']['refreshToken'] != null) {
           refreshToken = body['data']['refreshToken'].toString();
         }
-        if (refreshToken != null && refreshToken.isNotEmpty) await TokenStorage.saveRefreshToken(refreshToken);
+        if (refreshToken != null && refreshToken.isNotEmpty)
+          await TokenStorage.saveRefreshToken(refreshToken);
       } catch (_) {}
 
       if (normalizedRole != null) await TokenStorage.saveRole(normalizedRole);
@@ -144,7 +196,8 @@ class AuthService {
       };
       // request headers prepared
 
-      final resp = await _postWithRetries(uri, body: reqBody, headers: headers, timeoutSeconds: 20, maxAttempts: 2);
+      final resp = await _postWithRetries(uri,
+          body: reqBody, headers: headers, timeoutSeconds: 20, maxAttempts: 2);
 
       // response received
 
@@ -158,21 +211,43 @@ class AuthService {
 
       // Map synthetic network/timeout responses to friendly errors so UI shows
       // an actionable message instead of 'HTTP 599' or similar.
-      if (status == 408) return {'success': false, 'error': {'message': 'Request timed out'}};
-      if (status == 599) return {'success': false, 'error': {'message': 'Network error'}};
+      if (status == 408)
+        return {
+          'success': false,
+          'error': {'message': 'Request timed out'}
+        };
+      if (status == 599)
+        return {
+          'success': false,
+          'error': {'message': 'Network error'}
+        };
 
       // If backend returned 403 with empty body, provide more context in the error
       if (status == 403 && (body == null || (body is Map && body.isEmpty))) {
-        final serverMsg = resp.headers['x-error'] ?? resp.headers['x-message'] ?? '';
+        final serverMsg =
+            resp.headers['x-error'] ?? resp.headers['x-message'] ?? '';
         final message = serverMsg.isNotEmpty
             ? 'Forbidden: $serverMsg'
             : 'Forbidden (HTTP 403) - check backend auth/IP allowlist or server logs';
-        return {'success': false, 'error': {'message': message, 'status': status, 'headers': resp.headers}};
+        return {
+          'success': false,
+          'error': {
+            'message': message,
+            'status': status,
+            'headers': resp.headers
+          }
+        };
       }
 
-      return {'success': false, 'error': body ?? {'message': 'HTTP $status', 'headers': resp.headers}};
+      return {
+        'success': false,
+        'error': body ?? {'message': 'HTTP $status', 'headers': resp.headers}
+      };
     } catch (e) {
-      return {'success': false, 'error': {'message': e.toString()}};
+      return {
+        'success': false,
+        'error': {'message': e.toString()}
+      };
     }
   }
 
@@ -185,7 +260,10 @@ class AuthService {
     try {
       // Normalize email client-side to ensure consistent format
       final normalizedEmail = email.trim().toLowerCase();
-      final resp = await _postWithRetries(uri, body: {'email': normalizedEmail, 'password': password}, timeoutSeconds: 20, maxAttempts: 2);
+      final resp = await _postWithRetries(uri,
+          body: {'email': normalizedEmail, 'password': password},
+          timeoutSeconds: 20,
+          maxAttempts: 2);
 
       // response received
 
@@ -199,22 +277,38 @@ class AuthService {
         return {'success': true, 'data': body};
       }
 
-      if (status == 408) return {'success': false, 'error': {'message': 'Request timed out'}};
-      if (status == 599) return {'success': false, 'error': {'message': 'Network error'}};
+      if (status == 408)
+        return {
+          'success': false,
+          'error': {'message': 'Request timed out'}
+        };
+      if (status == 599)
+        return {
+          'success': false,
+          'error': {'message': 'Network error'}
+        };
 
-      return {'success': false, 'error': body ?? {'message': 'HTTP $status'}};
+      return {
+        'success': false,
+        'error': body ?? {'message': 'HTTP $status'}
+      };
     } catch (e) {
-      return {'success': false, 'error': {'message': e.toString()}};
+      return {
+        'success': false,
+        'error': {'message': e.toString()}
+      };
     }
   }
 
   static Future<Map<String, dynamic>> guest() async {
     final uri = Uri.parse('$API_BASE_URL/api/auth/guest');
     try {
-      final resp = await _postWithRetries(uri, body: {}, timeoutSeconds: 20, maxAttempts: 2);
+      final resp = await _postWithRetries(uri,
+          body: {}, timeoutSeconds: 20, maxAttempts: 2);
       if (kDebugMode) {
         try {
-          debugPrint('AuthService.guest -> HTTP ${resp.statusCode} ${resp.body}');
+          debugPrint(
+              'AuthService.guest -> HTTP ${resp.statusCode} ${resp.body}');
         } catch (_) {}
       }
       final status = resp.statusCode;
@@ -228,17 +322,41 @@ class AuthService {
       // Provide status and raw body in the returned error so callers can
       // inspect HTTP response codes (eg. 5xx) even when the server's JSON
       // body doesn't include a status field.
-      if (status == 408) return {'success': false, 'error': {'message': 'Request timed out', 'status': status, 'body': body}};
-      if (status == 599) return {'success': false, 'error': {'message': 'Network error', 'status': status, 'body': body}};
+      if (status == 408)
+        return {
+          'success': false,
+          'error': {
+            'message': 'Request timed out',
+            'status': status,
+            'body': body
+          }
+        };
+      if (status == 599)
+        return {
+          'success': false,
+          'error': {'message': 'Network error', 'status': status, 'body': body}
+        };
 
-      return {'success': false, 'error': (body is Map)
-          ? ({'message': (body['message']?.toString() ?? 'HTTP $status'), 'status': status, 'body': body})
-          : ({'message': 'HTTP $status', 'status': status, 'body': body})};
+      return {
+        'success': false,
+        'error': (body is Map)
+            ? ({
+                'message': (body['message']?.toString() ?? 'HTTP $status'),
+                'status': status,
+                'body': body
+              })
+            : ({'message': 'HTTP $status', 'status': status, 'body': body})
+      };
     } catch (e) {
       if (kDebugMode) {
-        try { debugPrint('AuthService.guest -> exception: ${e.toString()}'); } catch (_) {}
+        try {
+          debugPrint('AuthService.guest -> exception: ${e.toString()}');
+        } catch (_) {}
       }
-      return {'success': false, 'error': {'message': e.toString()}};
+      return {
+        'success': false,
+        'error': {'message': e.toString()}
+      };
     }
   }
 
@@ -250,7 +368,8 @@ class AuthService {
   }) async {
     final uri = Uri.parse('$API_BASE_URL/api/auth/forgot-password');
     try {
-      final resp = await _postWithRetries(uri, body: {'email': email}, timeoutSeconds: 20, maxAttempts: 2);
+      final resp = await _postWithRetries(uri,
+          body: {'email': email}, timeoutSeconds: 20, maxAttempts: 2);
       final status = resp.statusCode;
       final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
 
@@ -259,12 +378,26 @@ class AuthService {
       }
 
       // Map synthetic responses to a standard error shape
-      if (status == 408) return {'success': false, 'error': {'message': 'Request timed out'}};
-      if (status == 599) return {'success': false, 'error': {'message': 'Network error'}};
+      if (status == 408)
+        return {
+          'success': false,
+          'error': {'message': 'Request timed out'}
+        };
+      if (status == 599)
+        return {
+          'success': false,
+          'error': {'message': 'Network error'}
+        };
 
-      return {'success': false, 'error': body ?? {'message': 'HTTP $status'}};
+      return {
+        'success': false,
+        'error': body ?? {'message': 'HTTP $status'}
+      };
     } catch (e) {
-      return {'success': false, 'error': {'message': e.toString()}};
+      return {
+        'success': false,
+        'error': {'message': e.toString()}
+      };
     }
   }
 
@@ -278,17 +411,34 @@ class AuthService {
     final uri = Uri.parse('$API_BASE_URL/api/auth/forgot-password');
     try {
       // Single attempt, short timeout
-      final resp = await _postWithRetries(uri, body: {'email': email}, timeoutSeconds: timeoutSeconds, maxAttempts: 1);
+      final resp = await _postWithRetries(uri,
+          body: {'email': email},
+          timeoutSeconds: timeoutSeconds,
+          maxAttempts: 1);
       final status = resp.statusCode;
       final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
       if (status >= 200 && status < 300) {
         return {'success': true, 'data': body};
       }
-      if (status == 408) return {'success': false, 'error': {'message': 'Request timed out'}};
-      if (status == 599) return {'success': false, 'error': {'message': 'Network error'}};
-      return {'success': false, 'error': body ?? {'message': 'HTTP $status'}};
+      if (status == 408)
+        return {
+          'success': false,
+          'error': {'message': 'Request timed out'}
+        };
+      if (status == 599)
+        return {
+          'success': false,
+          'error': {'message': 'Network error'}
+        };
+      return {
+        'success': false,
+        'error': body ?? {'message': 'HTTP $status'}
+      };
     } catch (e) {
-      return {'success': false, 'error': {'message': e.toString()}};
+      return {
+        'success': false,
+        'error': {'message': e.toString()}
+      };
     }
   }
 
@@ -305,7 +455,8 @@ class AuthService {
   }) async {
     final uri = Uri.parse('$API_BASE_URL/api/auth/check-email');
     try {
-      final resp = await _postWithRetries(uri, body: {'email': email}, timeoutSeconds: 15, maxAttempts: 2);
+      final resp = await _postWithRetries(uri,
+          body: {'email': email}, timeoutSeconds: 15, maxAttempts: 2);
       final status = resp.statusCode;
       final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
 
@@ -313,56 +464,127 @@ class AuthService {
         return {'success': true, 'data': body};
       }
 
-      if (status == 408) return {'success': false, 'error': {'message': 'Request timed out'}};
-      if (status == 599) return {'success': false, 'error': {'message': 'Network error'}};
+      if (status == 408)
+        return {
+          'success': false,
+          'error': {'message': 'Request timed out'}
+        };
+      if (status == 599)
+        return {
+          'success': false,
+          'error': {'message': 'Network error'}
+        };
 
-      return {'success': false, 'error': body ?? {'message': 'HTTP $status'}};
+      return {
+        'success': false,
+        'error': body ?? {'message': 'HTTP $status'}
+      };
     } catch (e) {
-      return {'success': false, 'error': {'message': e.toString()}};
+      return {
+        'success': false,
+        'error': {'message': e.toString()}
+      };
     }
   }
 
   /// Sign in with Google, send tokens to backend and persist returned JWT if any.
   /// Returns {'success': bool, 'data': <backend response> , 'profile': {name,email,photo}} on success.
   static Future<Map<String, dynamic>> signInWithGoogle() async {
+    // ┌──────────────────────────────────────────────────────────────────────────────
+    // │ Google Sign-In - Start
+    // └──────────────────────────────────────────────────────────────────────────────
+    // ignore: avoid_print
+    print(
+        '┌──────────────────────────────────────────────────────────────────────────────');
+    // ignore: avoid_print
+    print('│ [Google Sign-In] Starting Google authentication...');
+
     try {
       final googleSignIn = GoogleSignIn.instance;
 
       // Initialize the plugin once per app lifecycle.
       if (!_googleSignInInitialized) {
-        await googleSignIn.initialize();
+        // ignore: avoid_print
+        print('│ [Google Sign-In] Initializing GoogleSignIn plugin...');
+
+        // On Android, serverClientId is REQUIRED to get an ID token.
+        // This should be the Web Client ID from Google Cloud Console.
+        final serverClientId = GOOGLE_WEB_CLIENT_ID;
+        // ignore: avoid_print
+        print(
+            '│ [Google Sign-In] serverClientId: ${serverClientId ?? "NOT SET - will fail on Android!"}');
+
+        // google_sign_in v7 uses named parameters for initialize()
+        await googleSignIn.initialize(serverClientId: serverClientId);
         _googleSignInInitialized = true;
+        // ignore: avoid_print
+        print('│ [Google Sign-In] Plugin initialized successfully');
       }
 
       GoogleSignInAccount account;
       try {
         // `authenticate` starts an interactive sign-in and returns an account.
+        // ignore: avoid_print
+        print('│ [Google Sign-In] Calling authenticate()...');
         account = await googleSignIn.authenticate();
+        // ignore: avoid_print
+        print(
+            '│ [Google Sign-In] authenticate() returned account: ${account.email}');
       } on GoogleSignInException catch (e) {
         // User cancelled or other auth issues.
+        // ignore: avoid_print
+        print('│ [Google Sign-In] GoogleSignInException: code=${e.code}');
+        print(
+            '└──────────────────────────────────────────────────────────────────────────────');
         if (e.code == GoogleSignInExceptionCode.canceled ||
             e.code == GoogleSignInExceptionCode.interrupted ||
             e.code == GoogleSignInExceptionCode.uiUnavailable) {
-          return {'success': false, 'error': {'message': 'Google sign-in cancelled'}};
+          return {
+            'success': false,
+            'error': {'message': 'Google sign-in cancelled'}
+          };
         }
         rethrow;
       }
 
       final auth = account.authentication;
       final idToken = auth.idToken;
+      // ignore: avoid_print
+      print(
+          '│ [Google Sign-In] Got authentication, idToken present: ${idToken != null}');
 
       if (idToken == null) {
-        return {'success': false, 'error': {'message': 'Missing Google idToken'}};
+        // ignore: avoid_print
+        print(
+            '│ [Google Sign-In] ERROR: idToken is null! Check serverClientId configuration.');
+        print(
+            '└──────────────────────────────────────────────────────────────────────────────');
+        return {
+          'success': false,
+          'error': {
+            'message':
+                'Missing Google idToken - serverClientId may not be configured'
+          }
+        };
       }
 
+      // ignore: avoid_print
+      print('│ [Google Sign-In] Sending idToken to backend...');
       final uri = Uri.parse('$API_BASE_URL/api/auth/oauth/google');
-      final resp = await _postWithRetries(uri, body: {'idToken': idToken}, timeoutSeconds: 20, maxAttempts: 2);
+      final resp = await _postWithRetries(uri,
+          body: {'idToken': idToken}, timeoutSeconds: 20, maxAttempts: 2);
 
       final status = resp.statusCode;
       final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
+      // ignore: avoid_print
+      print('│ [Google Sign-In] Backend response: HTTP $status');
 
       if (status >= 200 && status < 300) {
         await _persistTokenAndRole(body);
+        // ignore: avoid_print
+        print('│ [Google Sign-In] SUCCESS - Token persisted');
+        print(
+            '└──────────────────────────────────────────────────────────────────────────────');
 
         return {
           'success': true,
@@ -375,9 +597,24 @@ class AuthService {
         };
       }
 
-      return {'success': false, 'error': body ?? {'message': 'HTTP $status'}};
-    } catch (e) {
-      return {'success': false, 'error': {'message': e.toString()}};
+      // ignore: avoid_print
+      print('│ [Google Sign-In] FAILED - Backend returned error');
+      print(
+          '└──────────────────────────────────────────────────────────────────────────────');
+      return {
+        'success': false,
+        'error': body ?? {'message': 'HTTP $status'}
+      };
+    } catch (e, stackTrace) {
+      // ignore: avoid_print
+      print('│ [Google Sign-In] EXCEPTION: $e');
+      print('│ [Google Sign-In] Stack: $stackTrace');
+      print(
+          '└──────────────────────────────────────────────────────────────────────────────');
+      return {
+        'success': false,
+        'error': {'message': e.toString()}
+      };
     }
   }
 
@@ -387,11 +624,15 @@ class AuthService {
       await TokenStorage.deleteToken();
       await TokenStorage.deleteRole();
       // Also remove any cached Google profile when logging out
-      try { await TokenStorage.deleteGoogleProfile(); } catch (_) {}
+      try {
+        await TokenStorage.deleteGoogleProfile();
+      } catch (_) {}
     } catch (_) {}
 
     // Clear in-memory app state to immediately update route guards
-    try { AppStateNotifier.instance.clearAuth(); } catch (_) {}
+    try {
+      AppStateNotifier.instance.clearAuth();
+    } catch (_) {}
 
     try {
       await GoogleSignIn.instance.signOut();
@@ -402,10 +643,14 @@ class AuthService {
   /// refreshed payload (map) that contains a new token or null if refresh
   /// isn't supported or failed. This calls POST /api/auth/refresh which may
   /// not be implemented on the server; the method handles failures gracefully.
-  static Future<Map<String, dynamic>?> tryRefreshToken(String refreshToken) async {
+  static Future<Map<String, dynamic>?> tryRefreshToken(
+      String refreshToken) async {
     try {
       final uri = Uri.parse('$API_BASE_URL/api/auth/refresh');
-      final resp = await _postWithRetries(uri, body: {'refreshToken': refreshToken}, timeoutSeconds: 15, maxAttempts: 2);
+      final resp = await _postWithRetries(uri,
+          body: {'refreshToken': refreshToken},
+          timeoutSeconds: 15,
+          maxAttempts: 2);
 
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;

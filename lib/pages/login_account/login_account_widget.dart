@@ -42,6 +42,8 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
 
   // Add a navigation lock
   bool _isNavigating = false;
+  // Google sign-in in progress
+  bool _isGoogleSigningIn = false;
   // Remember-me flag (persisted)
   bool _rememberMe = false;
 
@@ -120,8 +122,10 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
         // Persist remember-me preference/email
         try {
           await TokenStorage.saveRememberMe(_rememberMe);
-          if (_rememberMe) await TokenStorage.saveRememberedEmail(email);
-          else await TokenStorage.saveRememberedEmail(null);
+          if (_rememberMe)
+            await TokenStorage.saveRememberedEmail(email);
+          else
+            await TokenStorage.saveRememberedEmail(null);
         } catch (_) {}
 
         await _processSuccessfulLogin(res);
@@ -148,13 +152,17 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
     try {
       final body = res['data'] ?? res;
       if (body is Map) {
-        parsedRole = (body['role'] ?? body['user']?['role'] ?? body['data']?['role'])?.toString();
+        parsedRole =
+            (body['role'] ?? body['user']?['role'] ?? body['data']?['role'])
+                ?.toString();
         // Some APIs include user object at top-level
         if (parsedRole == null && body['user'] is Map) {
-          parsedRole = (body['user']?['type'] ?? body['user']?['role'])?.toString();
+          parsedRole =
+              (body['user']?['type'] ?? body['user']?['role'])?.toString();
         }
       }
-      if (parsedRole != null && parsedRole.isNotEmpty) parsedRole = parsedRole.toLowerCase();
+      if (parsedRole != null && parsedRole.isNotEmpty)
+        parsedRole = parsedRole.toLowerCase();
     } catch (_) {
       parsedRole = null;
     }
@@ -211,7 +219,8 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
       final router = GoRouter.of(context);
       final dynamic cfg = router.routerDelegate.currentConfiguration;
       final String cfgStr = cfg?.toString() ?? '';
-      if (cfgStr.startsWith(LoginAccountWidget.routePath) || cfgStr.contains(LoginAccountWidget.routePath)) {
+      if (cfgStr.startsWith(LoginAccountWidget.routePath) ||
+          cfgStr.contains(LoginAccountWidget.routePath)) {
         // Imperative fallback to ensure user is taken to their landing page.
         await _navigateBasedOnRole();
       }
@@ -243,7 +252,8 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
       if (roleStr.isEmpty) {
         try {
           final storedRole = await TokenStorage.getRole();
-          if (storedRole != null && storedRole.isNotEmpty) roleStr = storedRole.toLowerCase();
+          if (storedRole != null && storedRole.isNotEmpty)
+            roleStr = storedRole.toLowerCase();
         } catch (_) {}
       }
 
@@ -256,7 +266,9 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
 
       // Helper to log navigation attempts for debugging
       void _log(String m) {
-        try { if (kDebugMode) debugPrint('LoginNav: $m'); } catch (_) {}
+        try {
+          if (kDebugMode) debugPrint('LoginNav: $m');
+        } catch (_) {}
       }
 
       var navigated = false;
@@ -298,8 +310,11 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
       // 4) Fallback to direct pushReplacement with Widget
       if (!navigated) {
         try {
-          _log('Attempting NavigationUtils.safePushReplacement with direct widget');
-          final widget = role.contains('artisan') ? NavBarPage(initialPage: 'homePage') : HomePageWidget();
+          _log(
+              'Attempting NavigationUtils.safePushReplacement with direct widget');
+          final widget = role.contains('artisan')
+              ? NavBarPage(initialPage: 'homePage')
+              : HomePageWidget();
           await NavigationUtils.safePushReplacement(context, widget);
           navigated = true;
           _log('NavigationUtils.safePushReplacement scheduled');
@@ -312,7 +327,9 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
       if (!navigated) {
         try {
           _log('Attempting appNavigatorKey.pushAndRemoveUntil');
-          final page = roleStr.contains('artisan') ? NavBarPage(initialPage: 'homePage') : HomePageWidget();
+          final page = roleStr.contains('artisan')
+              ? NavBarPage(initialPage: 'homePage')
+              : HomePageWidget();
           NavigationUtils.safeReplaceAllWith(context, page);
           navigated = true;
           _log('NavigationUtils.safeReplaceAllWith scheduled');
@@ -341,7 +358,9 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
       final profile = AppStateNotifier.instance.profile;
       final role = _getUserRole(profile);
 
-      final widget = role.contains('artisan') ? NavBarPage(initialPage: 'homePage') : HomePageWidget();
+      final widget = role.contains('artisan')
+          ? NavBarPage(initialPage: 'homePage')
+          : HomePageWidget();
       NavigationUtils.safeReplaceAllWith(context, widget);
     } finally {
       _isNavigating = false;
@@ -358,6 +377,65 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
     }
 
     AppNotification.showError(context, errorMessage);
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    if (_isGoogleSigningIn || _isNavigating) return;
+    setState(() => _isGoogleSigningIn = true);
+
+    try {
+      final res = await AuthService.signInWithGoogle();
+
+      if (!mounted) return;
+
+      if (res['success'] == true) {
+        // Notify user
+        AppNotification.showSuccess(context, 'Logged in with Google');
+        await Future.delayed(const Duration(milliseconds: 200));
+
+        // Extract token and role from response
+        final data = res['data'];
+        String? token;
+        String? parsedRole;
+
+        if (data is Map) {
+          token = (data['token'] ?? data['data']?['token'])?.toString();
+          parsedRole =
+              (data['role'] ?? data['user']?['role'] ?? data['data']?['role'])
+                  ?.toString();
+        }
+
+        // Set auth state
+        if (parsedRole != null && parsedRole.isNotEmpty) {
+          await AuthNotifier.instance
+              .login(parsedRole.toLowerCase(), token: token);
+        } else if (token != null) {
+          await AuthNotifier.instance.setToken(token);
+        } else {
+          await AuthNotifier.instance.refreshAuth();
+        }
+
+        // Wait briefly for profile
+        final timeout = DateTime.now().add(Duration(seconds: 2));
+        while (DateTime.now().isBefore(timeout)) {
+          if (AuthNotifier.instance.profile != null) break;
+          await Future.delayed(Duration(milliseconds: 100));
+        }
+
+        if (!mounted) return;
+        await _navigateBasedOnRole();
+      } else {
+        final err = res['error'];
+        final message = (err is Map && err['message'] != null)
+            ? err['message'].toString()
+            : (err != null ? err.toString() : 'Google sign-in failed');
+        AppNotification.showError(context, message);
+      }
+    } catch (e) {
+      AppNotification.showError(context, ErrorMessages.humanize(e));
+    } finally {
+      if (mounted) setState(() => _isGoogleSigningIn = false);
+    }
   }
 
   Future<void> _navigateToSignUp() async {
@@ -392,9 +470,11 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
       }
     } catch (e, st) {
       // Show a friendly error and log stacktrace if navigation fails
-      AppNotification.showError(context, 'Could not open Sign up: ${ErrorMessages.humanize(e)}');
+      AppNotification.showError(
+          context, 'Could not open Sign up: ${ErrorMessages.humanize(e)}');
       // Optionally: print to console for debugging
-      if (kDebugMode) debugPrint('Navigation error in _navigateToSignUp: $e\n$st');
+      if (kDebugMode)
+        debugPrint('Navigation error in _navigateToSignUp: $e\n$st');
     } finally {
       if (mounted) setState(() => _isNavigating = false);
     }
@@ -443,7 +523,8 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                     ),
                     IconButton(
                       onPressed: () => Navigator.of(ctx).pop(null),
-                      icon: Icon(Icons.close, size: 20, color: theme.iconTheme.color),
+                      icon: Icon(Icons.close,
+                          size: 20, color: theme.iconTheme.color),
                       tooltip: 'Close',
                     ),
                   ],
@@ -456,7 +537,8 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                   padding: const EdgeInsets.symmetric(horizontal: 4.0),
                   child: Text(
                     'Create account',
-                    style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                    style: theme.textTheme.titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w700),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -464,7 +546,9 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                   padding: const EdgeInsets.symmetric(horizontal: 4.0),
                   child: Text(
                     'Choose how you want to use the platform',
-                    style: theme.textTheme.bodyMedium?.copyWith(color: theme.textTheme.bodySmall?.color?.withOpacity(0.8)),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                        color:
+                            theme.textTheme.bodySmall?.color?.withOpacity(0.8)),
                   ),
                 ),
 
@@ -480,34 +564,42 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                         borderRadius: BorderRadius.circular(12),
                         onTap: () => Navigator.of(ctx).pop('artisan'),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 14.0, horizontal: 12.0),
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 14.0, horizontal: 12.0),
                           child: Row(
                             children: [
                               CircleAvatar(
                                 radius: 22,
                                 backgroundColor: primaryColor.withOpacity(0.12),
-                                child: Icon(Icons.handyman_rounded, color: primaryColor, size: 22),
+                                child: Icon(Icons.handyman_rounded,
+                                    color: primaryColor, size: 22),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text('Artisan', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                                    Text('Artisan',
+                                        style: theme.textTheme.titleMedium
+                                            ?.copyWith(
+                                                fontWeight: FontWeight.w600)),
                                     const SizedBox(height: 4),
-                                    Text('Sign up to offer services and get booked by clients', style: theme.textTheme.bodySmall),
+                                    Text(
+                                        'Sign up to offer services and get booked by clients',
+                                        style: theme.textTheme.bodySmall),
                                   ],
                                 ),
                               ),
-                              Icon(Icons.arrow_forward_ios, size: 14, color: theme.iconTheme.color?.withOpacity(0.6)),
+                              Icon(Icons.arrow_forward_ios,
+                                  size: 14,
+                                  color:
+                                      theme.iconTheme.color?.withOpacity(0.6)),
                             ],
                           ),
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 12),
-
                     Material(
                       color: isDark ? Color(0xFF111212) : Colors.grey.shade50,
                       borderRadius: BorderRadius.circular(12),
@@ -515,26 +607,36 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                         borderRadius: BorderRadius.circular(12),
                         onTap: () => Navigator.of(ctx).pop('customer'),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 14.0, horizontal: 12.0),
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 14.0, horizontal: 12.0),
                           child: Row(
                             children: [
                               CircleAvatar(
                                 radius: 22,
                                 backgroundColor: primaryColor.withOpacity(0.12),
-                                child: Icon(Icons.person_rounded, color: primaryColor, size: 22),
+                                child: Icon(Icons.person_rounded,
+                                    color: primaryColor, size: 22),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text('Client', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                                    Text('Client',
+                                        style: theme.textTheme.titleMedium
+                                            ?.copyWith(
+                                                fontWeight: FontWeight.w600)),
                                     const SizedBox(height: 4),
-                                    Text('Sign up to post jobs and hire artisans in your area', style: theme.textTheme.bodySmall),
+                                    Text(
+                                        'Sign up to post jobs and hire artisans in your area',
+                                        style: theme.textTheme.bodySmall),
                                   ],
                                 ),
                               ),
-                              Icon(Icons.arrow_forward_ios, size: 14, color: theme.iconTheme.color?.withOpacity(0.6)),
+                              Icon(Icons.arrow_forward_ios,
+                                  size: 14,
+                                  color:
+                                      theme.iconTheme.color?.withOpacity(0.6)),
                             ],
                           ),
                         ),
@@ -548,7 +650,10 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                 // Cancel secondary action
                 TextButton(
                   onPressed: () => Navigator.of(ctx).pop(null),
-                  child: Text('Cancel', style: TextStyle(color: theme.textTheme.bodySmall?.color?.withOpacity(0.9))),
+                  child: Text('Cancel',
+                      style: TextStyle(
+                          color: theme.textTheme.bodySmall?.color
+                              ?.withOpacity(0.9))),
                 ),
               ],
             ),
@@ -573,32 +678,38 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
 
       // Try named route with arguments if configured (best-effort)
       try {
-        await navigator.push(MaterialPageRoute(builder: (_) => CreateAccount2Widget(initialRole: role)));
+        await navigator.push(MaterialPageRoute(
+            builder: (_) => CreateAccount2Widget(initialRole: role)));
         navigated = true;
       } catch (_) {}
 
       // Fallbacks: attempt other navigation styles
       if (!navigated) {
         try {
-          await navigator.pushNamed(CreateAccount2Widget.routeName, arguments: {'initialRole': role});
+          await navigator.pushNamed(CreateAccount2Widget.routeName,
+              arguments: {'initialRole': role});
           navigated = true;
         } catch (_) {}
       }
 
       if (!navigated) {
         try {
-          await navigator.pushNamed(CreateAccount2Widget.routePath, arguments: {'initialRole': role});
+          await navigator.pushNamed(CreateAccount2Widget.routePath,
+              arguments: {'initialRole': role});
           navigated = true;
         } catch (_) {}
       }
 
       if (!navigated) {
         // direct push (already attempted above, but keep final fallback)
-        await navigator.push(MaterialPageRoute(builder: (_) => CreateAccount2Widget(initialRole: role)));
+        await navigator.push(MaterialPageRoute(
+            builder: (_) => CreateAccount2Widget(initialRole: role)));
       }
     } catch (e, st) {
-      AppNotification.showError(context, 'Could not open Sign up: ${ErrorMessages.humanize(e)}');
-      if (kDebugMode) debugPrint('Navigation error in _navigateToSignUpWithRole: $e\n$st');
+      AppNotification.showError(
+          context, 'Could not open Sign up: ${ErrorMessages.humanize(e)}');
+      if (kDebugMode)
+        debugPrint('Navigation error in _navigateToSignUpWithRole: $e\n$st');
     } finally {
       if (mounted) setState(() => _isNavigating = false);
     }
@@ -659,7 +770,8 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                   Text(
                     'Sign in to your account',
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurface.withAlpha((0.5 * 255).toInt()),
+                      color: theme.colorScheme.onSurface
+                          .withAlpha((0.5 * 255).toInt()),
                       fontWeight: FontWeight.w300,
                     ),
                   ),
@@ -677,7 +789,8 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
-                            color: theme.colorScheme.onSurface.withAlpha((0.6 * 255).toInt()),
+                            color: theme.colorScheme.onSurface
+                                .withAlpha((0.6 * 255).toInt()),
                             letterSpacing: 1.0,
                           ),
                         ),
@@ -688,12 +801,12 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                           decoration: InputDecoration(
                             hintText: 'your@email.com',
                             hintStyle: TextStyle(
-                              color: theme.colorScheme.onSurface.withAlpha((0.3 * 255).toInt()),
+                              color: theme.colorScheme.onSurface
+                                  .withAlpha((0.3 * 255).toInt()),
                             ),
                             filled: true,
-                            fillColor: isDark
-                                ? Colors.grey[900]
-                                : Colors.grey[50],
+                            fillColor:
+                                isDark ? Colors.grey[900] : Colors.grey[50],
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12.0),
                               borderSide: BorderSide.none,
@@ -724,8 +837,8 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                           keyboardType: TextInputType.emailAddress,
                           textInputAction: TextInputAction.next,
                           validator: _validateEmail,
-                          onFieldSubmitted: (_) =>
-                              FocusScope.of(context).requestFocus(_model.passWordFocusNode),
+                          onFieldSubmitted: (_) => FocusScope.of(context)
+                              .requestFocus(_model.passWordFocusNode),
                         ),
 
                         const SizedBox(height: 24.0),
@@ -736,7 +849,8 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
-                            color: theme.colorScheme.onSurface.withAlpha((0.6 * 255).toInt()),
+                            color: theme.colorScheme.onSurface
+                                .withAlpha((0.6 * 255).toInt()),
                             letterSpacing: 1.0,
                           ),
                         ),
@@ -748,12 +862,12 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                           decoration: InputDecoration(
                             hintText: '••••••••',
                             hintStyle: TextStyle(
-                              color: theme.colorScheme.onSurface.withAlpha((0.3 * 255).toInt()),
+                              color: theme.colorScheme.onSurface
+                                  .withAlpha((0.3 * 255).toInt()),
                             ),
                             filled: true,
-                            fillColor: isDark
-                                ? Colors.grey[900]
-                                : Colors.grey[50],
+                            fillColor:
+                                isDark ? Colors.grey[900] : Colors.grey[50],
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12.0),
                               borderSide: BorderSide.none,
@@ -781,7 +895,8 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                                 _passwordVisible
                                     ? Icons.visibility_outlined
                                     : Icons.visibility_off_outlined,
-                                color: theme.colorScheme.onSurface.withAlpha((0.4 * 255).toInt()),
+                                color: theme.colorScheme.onSurface
+                                    .withAlpha((0.4 * 255).toInt()),
                                 size: 20,
                               ),
                               onPressed: () {
@@ -805,7 +920,8 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(
-                            onPressed: () => context.go(ForgetPasswordWidget.routePath),
+                            onPressed: () =>
+                                context.go(ForgetPasswordWidget.routePath),
                             style: TextButton.styleFrom(
                               padding: EdgeInsets.zero,
                               minimumSize: Size.zero,
@@ -833,7 +949,9 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                                 setState(() => _rememberMe = v ?? false);
                               },
                             ),
-                            Expanded(child: Text('Remember me', style: theme.textTheme.bodyMedium)),
+                            Expanded(
+                                child: Text('Remember me',
+                                    style: theme.textTheme.bodyMedium)),
                           ],
                         ),
 
@@ -852,23 +970,23 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                           onPressed: _isLoggingIn ? null : _handleLogin,
                           child: _isLoggingIn
                               ? SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation(
-                                colorScheme.onPrimary,
-                              ),
-                            ),
-                          )
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation(
+                                      colorScheme.onPrimary,
+                                    ),
+                                  ),
+                                )
                               : Text(
-                            'SIGN IN',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
+                                  'SIGN IN',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
                         ),
                       ],
                     ),
@@ -880,7 +998,8 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                     children: [
                       Expanded(
                         child: Divider(
-                          color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).toInt()),
+                          color: theme.colorScheme.onSurface
+                              .withAlpha((0.1 * 255).toInt()),
                           thickness: 1,
                         ),
                       ),
@@ -889,7 +1008,8 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                         child: Text(
                           'OR',
                           style: TextStyle(
-                            color: theme.colorScheme.onSurface.withAlpha((0.3 * 255).toInt()),
+                            color: theme.colorScheme.onSurface
+                                .withAlpha((0.3 * 255).toInt()),
                             fontSize: 12,
                             fontWeight: FontWeight.w400,
                           ),
@@ -897,11 +1017,75 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                       ),
                       Expanded(
                         child: Divider(
-                          color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).toInt()),
+                          color: theme.colorScheme.onSurface
+                              .withAlpha((0.1 * 255).toInt()),
                           thickness: 1,
                         ),
                       ),
                     ],
+                  ),
+
+                  // Google Sign In Button
+                  const SizedBox(height: 24.0),
+                  OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: primaryColor),
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 14.0, horizontal: 12.0),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                      ),
+                    ),
+                    onPressed: _isGoogleSigningIn ? null : _handleGoogleSignIn,
+                    child: _isGoogleSigningIn
+                        ? SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation(primaryColor),
+                            ),
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(
+                                height: 24,
+                                width: 24,
+                                child: Builder(builder: (ctx) {
+                                  try {
+                                    return Image.asset(
+                                      'assets/images/google.webp',
+                                      fit: BoxFit.contain,
+                                      errorBuilder:
+                                          (context, error, stackTrace) {
+                                        return Icon(
+                                          Icons.g_mobiledata,
+                                          color: primaryColor,
+                                          size: 20,
+                                        );
+                                      },
+                                    );
+                                  } catch (_) {
+                                    return Icon(
+                                      Icons.g_mobiledata,
+                                      color: primaryColor,
+                                      size: 20,
+                                    );
+                                  }
+                                }),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Continue with Google',
+                                style: TextStyle(
+                                  color: primaryColor,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
                   ),
 
                   // Sign Up - Minimal
@@ -912,7 +1096,8 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                       Text(
                         "Don't have an account? ",
                         style: TextStyle(
-                          color: theme.colorScheme.onSurface.withAlpha((0.5 * 255).toInt()),
+                          color: theme.colorScheme.onSurface
+                              .withAlpha((0.5 * 255).toInt()),
                           fontSize: 14,
                         ),
                       ),
