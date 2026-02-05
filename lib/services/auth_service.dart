@@ -489,7 +489,8 @@ class AuthService {
 
   /// Sign in with Google, send tokens to backend and persist returned JWT if any.
   /// Returns {'success': bool, 'data': <backend response> , 'profile': {name,email,photo}} on success.
-  static Future<Map<String, dynamic>> signInWithGoogle() async {
+  /// [role] - Optional role to assign during signup (e.g., 'artisan' or 'customer').
+  static Future<Map<String, dynamic>> signInWithGoogle({String? role}) async {
     // ┌──────────────────────────────────────────────────────────────────────────────
     // │ Google Sign-In - Start
     // └──────────────────────────────────────────────────────────────────────────────
@@ -572,7 +573,12 @@ class AuthService {
       print('│ [Google Sign-In] Sending idToken to backend...');
       final uri = Uri.parse('$API_BASE_URL/api/auth/oauth/google');
       final resp = await _postWithRetries(uri,
-          body: {'idToken': idToken}, timeoutSeconds: 20, maxAttempts: 2);
+          body: {
+            'idToken': idToken,
+            if (role != null) 'role': role,
+          },
+          timeoutSeconds: 20,
+          maxAttempts: 2);
 
       final status = resp.statusCode;
       final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;

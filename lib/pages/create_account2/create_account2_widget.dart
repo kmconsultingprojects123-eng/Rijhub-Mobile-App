@@ -175,7 +175,9 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
     // Otherwise proceed with the interactive Google sign-in flow.
     showAppLoadingDialog(context);
 
-    final res = await AuthService.signInWithGoogle();
+    final res = await AuthService.signInWithGoogle(
+      role: _effectiveRole ?? widget.initialRole,
+    );
 
     if (!mounted) return;
     Navigator.of(context, rootNavigator: true).pop();
