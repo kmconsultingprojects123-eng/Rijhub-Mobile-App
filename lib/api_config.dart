@@ -34,8 +34,21 @@ final String API_BASE_URL = () {
 const _cloudNameKey = 'CLOUDINARY_CLOUD_NAME';
 const _uploadPresetKey = 'CLOUDINARY_UPLOAD_PRESET';
 
-final String CLOUDINARY_CLOUD_NAME = const String.fromEnvironment(_cloudNameKey);
-final String CLOUDINARY_UPLOAD_PRESET = const String.fromEnvironment(_uploadPresetKey);
+final String CLOUDINARY_CLOUD_NAME =
+    const String.fromEnvironment(_cloudNameKey);
+final String CLOUDINARY_UPLOAD_PRESET =
+    const String.fromEnvironment(_uploadPresetKey);
 
 // Example: flutter run --dart-define=API_BASE_URL_OVERRIDE=http://10.85.1.119:5000
 // Note: you can override at runtime using --dart-define if you need to point to a different host.
+
+// Google OAuth configuration. The Web Client ID is required on Android to get ID tokens.
+// Obtain this from Google Cloud Console > APIs & Services > Credentials > OAuth 2.0 Client IDs (Web client)
+// Pass via: flutter run --dart-define=GOOGLE_WEB_CLIENT_ID=<your-web-client-id>.apps.googleusercontent.com
+const _googleWebClientIdKey = 'GOOGLE_WEB_CLIENT_ID';
+const _defaultGoogleWebClientId =
+    '174728322654-6ldaocoj4idarkp03jvd5feppfgp96m2.apps.googleusercontent.com';
+final String? GOOGLE_WEB_CLIENT_ID = () {
+  final value = const String.fromEnvironment(_googleWebClientIdKey);
+  return value.isNotEmpty ? value : _defaultGoogleWebClientId;
+}();

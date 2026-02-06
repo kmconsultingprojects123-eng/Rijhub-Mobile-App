@@ -7,6 +7,9 @@ import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+import '/services/notification_controller.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import 'flutter_flow/flutter_flow_util.dart';
 import 'package:floating_bottom_navigation_bar/floating_bottom_navigation_bar.dart';
@@ -28,6 +31,68 @@ void main() async {
   // channels (including SharedPreferences) or running async startup logic.
   WidgetsFlutterBinding.ensureInitialized();
 
+  print('');
+  print('═══════════════════════════════════════════════════════════');
+  print('🚀 APP STARTING');
+  print('═══════════════════════════════════════════════════════════');
+  print('');
+
+  // Initialize Firebase
+  print('🔥 Initializing Firebase...');
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  print('🔥 Firebase initialized');
+
+  // Initialize Awesome Notifications
+  await NotificationController.initializeNotifications();
+  await NotificationController.startListeningNotificationEvents();
+
+  // Request notification permissions
+  await NotificationController.requestNotificationPermissions();
+
+  // Request FCM token and print it
+  await NotificationController.requestFirebaseToken();
+
+  print('');
+  print('═══════════════════════════════════════════════════════════');
+  print('✅ NOTIFICATION SETUP COMPLETE - LISTENING FOR PUSH');
+  print('═══════════════════════════════════════════════════════════');
+  print('');
+
+  // Disable debugPrint globally to prevent logging sensitive data to terminal
+  // try {
+  //   debugPrint = (String? messagege, {int? wrapWidth}) {};
+  // } catch (_) {}
+
+  // Global error handlers to capture runtime assertion stack traces (helps diagnose '!semantics.parentDataDirty' issues)
+  FlutterError.onError = (FlutterErrorDetails details) {
+    // Always dump error details; avoid printing extra debug info to terminal
+    FlutterError.dumpErrorToConsole(details);
+    // Removed debugPrint calls for security: do not log exception or stacktrace to terminal
+  };
+
+  ui.PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+    // Removed debugPrint calls for security: do not log platform errors to terminal
+    return false; // prevent the engine from exiting
+  };
+
+  // ✅ FIX: Remove edgeToEdge to prevent Android from showing app name ("RijHub")
+  SystemChrome.setEnabledSystemUIMode(
+    SystemUiMode.manual,
+    overlays: [
+      SystemUiOverlay.top,
+      SystemUiOverlay.bottom,
+    ],
+  );
+
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      systemNavigationBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+    ),
+  );
   // Eagerly initialize SharedPreferences on the UI thread so plugins using
   // method channels (e.g. shared_preferences) don't race with engine setup on iOS.
   final SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -60,12 +125,14 @@ void main() async {
 
     // Load ISRG Root X1 certificate
     final rootData = await bundle.load('assets/ca/isrgrootx1.pem');
-    SecurityContext.defaultContext.setTrustedCertificatesBytes(rootData.buffer.asUint8List());
+    SecurityContext.defaultContext
+        .setTrustedCertificatesBytes(rootData.buffer.asUint8List());
     // Removed debugPrint: do not log certificate load success
 
     // Load Let's Encrypt R3 Intermediate certificate
     final r3Data = await bundle.load('assets/ca/lets-encrypt-r3.pem');
-    SecurityContext.defaultContext.setTrustedCertificatesBytes(r3Data.buffer.asUint8List());
+    SecurityContext.defaultContext
+        .setTrustedCertificatesBytes(r3Data.buffer.asUint8List());
     // Removed debugPrint: do not log certificate load success
 
     // Removed debugPrint: do not log certificate list or context to terminal
@@ -78,7 +145,10 @@ void main() async {
     runApp(MyApp());
   }, (error, stack) {
     // Forward to Flutter error handlers without printing stacktrace to terminal
-    try { FlutterError.reportError(FlutterErrorDetails(exception: error, stack: stack)); } catch (_) {}
+    try {
+      FlutterError.reportError(
+          FlutterErrorDetails(exception: error, stack: stack));
+    } catch (_) {}
   }, zoneSpecification: ZoneSpecification(
     print: (Zone self, ZoneDelegate parent, Zone zone, String line) {
       // Intentionally ignore prints to avoid leaking data to terminal
@@ -178,9 +248,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   void setThemeMode(ThemeMode mode) => safeSetState(() {
-    _themeMode = mode;
-    FlutterFlowTheme.saveThemeMode(mode);
-  });
+        _themeMode = mode;
+        FlutterFlowTheme.saveThemeMode(mode);
+      });
 
   @override
   void dispose() {
@@ -219,15 +289,25 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           foregroundColor: Colors.black,
           elevation: 0,
           centerTitle: false,
-          titleTextStyle: const TextStyle(fontFamily: 'Inter Tight', fontSize: 18.0, fontWeight: FontWeight.w600, color: Colors.black),
+          titleTextStyle: const TextStyle(
+              fontFamily: 'Inter Tight',
+              fontSize: 18.0,
+              fontWeight: FontWeight.w600,
+              color: Colors.black),
           iconTheme: const IconThemeData(color: Colors.black),
           actionsIconTheme: const IconThemeData(color: Colors.black),
         ),
         // Input highlight and cursor theme — use app primary color and stronger highlight
         inputDecorationTheme: InputDecorationTheme(
-          focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: const Color(0xFFA20025), width: 2.0), borderRadius: BorderRadius.circular(12)),
+          focusedBorder: OutlineInputBorder(
+              borderSide:
+                  BorderSide(color: const Color(0xFFA20025), width: 2.0),
+              borderRadius: BorderRadius.circular(12)),
         ),
-        textSelectionTheme: TextSelectionThemeData(cursorColor: const Color(0xFFA20025), selectionColor: const Color(0x33A20025), selectionHandleColor: const Color(0xFFA20025)),
+        textSelectionTheme: TextSelectionThemeData(
+            cursorColor: const Color(0xFFA20025),
+            selectionColor: const Color(0x33A20025),
+            selectionHandleColor: const Color(0xFFA20025)),
       ),
       darkTheme: ThemeData(
         brightness: Brightness.dark,
@@ -245,14 +325,24 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           foregroundColor: Colors.white,
           elevation: 0,
           centerTitle: false,
-          titleTextStyle: TextStyle(fontFamily: 'Inter Tight', fontSize: 18.0, fontWeight: FontWeight.w600, color: Colors.white),
+          titleTextStyle: TextStyle(
+              fontFamily: 'Inter Tight',
+              fontSize: 18.0,
+              fontWeight: FontWeight.w600,
+              color: Colors.white),
           iconTheme: IconThemeData(color: Colors.white),
           actionsIconTheme: IconThemeData(color: Colors.white),
         ),
         inputDecorationTheme: InputDecorationTheme(
-          focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: const Color(0xFFA20025), width: 2.0), borderRadius: BorderRadius.circular(12)),
+          focusedBorder: OutlineInputBorder(
+              borderSide:
+                  BorderSide(color: const Color(0xFFA20025), width: 2.0),
+              borderRadius: BorderRadius.circular(12)),
         ),
-        textSelectionTheme: TextSelectionThemeData(cursorColor: const Color(0xFFA20025), selectionColor: const Color(0x33A20025), selectionHandleColor: const Color(0xFFA20025)),
+        textSelectionTheme: TextSelectionThemeData(
+            cursorColor: const Color(0xFFA20025),
+            selectionColor: const Color(0x33A20025),
+            selectionHandleColor: const Color(0xFFA20025)),
       ),
       themeMode: _themeMode,
       routerConfig: _router,
@@ -296,17 +386,21 @@ class _NavBarPageState extends State<NavBarPage> {
       isScrollControlled: true,
       builder: (c) {
         final theme = FlutterFlowTheme.of(context);
-        final maxWidth = MediaQuery.of(context).size.width < 640 ? double.infinity : 640.0;
+        final maxWidth =
+            MediaQuery.of(context).size.width < 640 ? double.infinity : 640.0;
         return Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          padding:
+              EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
           child: Center(
             child: ConstrainedBox(
               constraints: BoxConstraints(maxWidth: maxWidth),
               child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                margin: const EdgeInsets.symmetric(
+                    horizontal: 16.0, vertical: 12.0),
                 padding: const EdgeInsets.all(20.0),
                 decoration: BoxDecoration(
-                  color: Colors.white, // user requested white background for the sheet
+                  color: Colors
+                      .white, // user requested white background for the sheet
                   borderRadius: BorderRadius.circular(16.0),
                   boxShadow: [],
                 ),
@@ -317,13 +411,25 @@ class _NavBarPageState extends State<NavBarPage> {
                     Container(
                       width: 72,
                       height: 72,
-                      decoration: BoxDecoration(color: Color.lerp(theme.primary, Colors.white, 0.88) ?? theme.primary, shape: BoxShape.circle),
-                      child: Center(child: Icon(Icons.login_rounded, size: 36, color: theme.primary)),
+                      decoration: BoxDecoration(
+                          color:
+                              Color.lerp(theme.primary, Colors.white, 0.88) ??
+                                  theme.primary,
+                          shape: BoxShape.circle),
+                      child: Center(
+                          child: Icon(Icons.login_rounded,
+                              size: 36, color: theme.primary)),
                     ),
                     const SizedBox(height: 12.0),
-                    Text('Continue with RijHub', style: theme.titleMedium.copyWith(color: theme.primary)),
+                    Text('Continue with RijHub',
+                        style:
+                            theme.titleMedium.copyWith(color: theme.primary)),
                     const SizedBox(height: 8.0),
-                    Text('Sign in to unlock all features or continue as a guest with limited access.', textAlign: TextAlign.center, style: theme.bodyMedium.copyWith(color: theme.secondaryText)),
+                    Text(
+                        'Sign in to unlock all features or continue as a guest with limited access.',
+                        textAlign: TextAlign.center,
+                        style: theme.bodyMedium
+                            .copyWith(color: theme.secondaryText)),
                     const SizedBox(height: 18.0),
                     // Continue as guest (top) — show as a simple text link in primary color
                     SizedBox(
@@ -335,7 +441,9 @@ class _NavBarPageState extends State<NavBarPage> {
                           alignment: Alignment.center,
                         ),
                         onPressed: () => Navigator.of(c).pop(false),
-                        child: Text('Continue as guest', style: theme.bodyLarge.copyWith(color: theme.primary)),
+                        child: Text('Continue as guest',
+                            style:
+                                theme.bodyLarge.copyWith(color: theme.primary)),
                       ),
                     ),
                     const SizedBox(height: 12.0),
@@ -348,10 +456,13 @@ class _NavBarPageState extends State<NavBarPage> {
                           elevation: 0,
                           shadowColor: Colors.transparent,
                           padding: const EdgeInsets.symmetric(vertical: 14.0),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8.0)),
                         ),
                         onPressed: () => Navigator.of(c).pop(true),
-                        child: Text('Sign in', style: theme.bodyLarge.copyWith(color: theme.onPrimary)),
+                        child: Text('Sign in',
+                            style: theme.bodyLarge
+                                .copyWith(color: theme.onPrimary)),
                       ),
                     ),
                   ],
@@ -408,14 +519,19 @@ class _NavBarPageState extends State<NavBarPage> {
     // Choose nav items and order depending on role.
     // Client & Guest: Home, Job, Discover, Booking, Profile
     // Artisan: Home, Job, Booking, Profile (Discover hidden)
-    final bool isArtisan = (AppStateNotifier.instance.profile?['role']?.toString().toLowerCase().contains('artisan') ?? false);
+    final bool isArtisan = (AppStateNotifier.instance.profile?['role']
+            ?.toString()
+            .toLowerCase()
+            .contains('artisan') ??
+        false);
     // Discover is shown only when both the widget allows it and the user is not an artisan.
     final bool shouldShowDiscover = widget.showDiscover && !isArtisan;
 
     // Build ordered tabs map according to role
     final tabs = <String, Widget>{};
     // Home
-    tabs['homePage'] = isArtisan ? ArtisanDashboardPageWidget() : HomePageWidget();
+    tabs['homePage'] =
+        isArtisan ? ArtisanDashboardPageWidget() : HomePageWidget();
     // Job
     tabs['JobPostPage'] = JobPostPageWidget();
     // Discover (only for client/guest when allowed)
@@ -449,33 +565,44 @@ class _NavBarPageState extends State<NavBarPage> {
       if (p['isGuest'] == true) return true;
       final role = p['role'];
       final email = p['email'];
-      if ((role == null || role.toString().isEmpty) && (email == null || email.toString().isEmpty)) return true;
+      if ((role == null || role.toString().isEmpty) &&
+          (email == null || email.toString().isEmpty)) return true;
       return false;
     })();
 
-    final restrictedForGuests = <String>{'JobPostPage', 'BookingPage', 'profile'};
+    final restrictedForGuests = <String>{
+      'JobPostPage',
+      'BookingPage',
+      'profile'
+    };
 
     // Build FloatingNavbar items from the tabs keys so they always stay in sync.
     final navItems = tabs.keys.toList().asMap().entries.map((entry) {
-       final idx = entry.key;
-       final key = entry.value;
-       final iconData = iconMap[key];
+      final idx = entry.key;
+      final key = entry.value;
+      final iconData = iconMap[key];
       final label = switch (key) {
-         'homePage' => 'Home',
-         'DiscoverPage' => 'Discover',
-         'JobPostPage' => 'Job',
-         'BookingPage' => 'Booking',
-         'profile' => 'Profile',
-         _ => key,
-       };
+        'homePage' => 'Home',
+        'DiscoverPage' => 'Discover',
+        'JobPostPage' => 'Job',
+        'BookingPage' => 'Booking',
+        'profile' => 'Profile',
+        _ => key,
+      };
 
       // Determine if this tab should appear disabled for guests
       final disabledForGuest = isGuestNow && restrictedForGuests.contains(key);
       final fadedSecondary = disabledForGuest
-          ? Color.lerp(FlutterFlowTheme.of(context).secondaryText, Colors.transparent, 0.55) ?? FlutterFlowTheme.of(context).secondaryText
+          ? Color.lerp(FlutterFlowTheme.of(context).secondaryText,
+                  Colors.transparent, 0.55) ??
+              FlutterFlowTheme.of(context).secondaryText
           : FlutterFlowTheme.of(context).secondaryText;
-      final iconColor = currentIndex == idx ? FlutterFlowTheme.of(context).primary : fadedSecondary;
-      final labelColor = currentIndex == idx ? FlutterFlowTheme.of(context).primary : fadedSecondary;
+      final iconColor = currentIndex == idx
+          ? FlutterFlowTheme.of(context).primary
+          : fadedSecondary;
+      final labelColor = currentIndex == idx
+          ? FlutterFlowTheme.of(context).primary
+          : fadedSecondary;
 
       return FloatingNavbarItem(
         customWidget: Column(
@@ -497,9 +624,10 @@ class _NavBarPageState extends State<NavBarPage> {
           ],
         ),
       );
-     }).toList();
+    }).toList();
 
-    final bool _isNestedNavBar = context.findAncestorWidgetOfExactType<NavBarPage>() != null;
+    final bool _isNestedNavBar =
+        context.findAncestorWidgetOfExactType<NavBarPage>() != null;
 
     return Scaffold(
       resizeToAvoidBottomInset: !widget.disableResizeToAvoidBottomInset,
@@ -517,20 +645,28 @@ class _NavBarPageState extends State<NavBarPage> {
         visible: responsiveVisibility(
               context: context,
               desktop: false,
-            ) && tabs.length > 1 && !_isNestedNavBar,
+            ) &&
+            tabs.length > 1 &&
+            !_isNestedNavBar,
         child: FloatingNavbar(
           currentIndex: currentIndex,
           onTap: (i) async {
             // Handle taps asynchronously because we may need to check guest session and prompt sign-in
             final key = tabs.keys.toList()[i];
-            final restrictedKeysForGuests = ['JobPostPage', 'BookingPage', 'profile'];
+            final restrictedKeysForGuests = [
+              'JobPostPage',
+              'BookingPage',
+              'profile'
+            ];
             final guest = await isGuestSession();
 
             if (guest && restrictedKeysForGuests.contains(key)) {
               // For guests: show the themed guest prompt (immediately on tap) and respect choice
               final res = await _showGuestPrompt();
               if (res == true) {
-                try { NavigationUtils.safePush(context, const LoginAccountWidget()); } catch (_) {}
+                try {
+                  NavigationUtils.safePush(context, const LoginAccountWidget());
+                } catch (_) {}
               }
               return;
             }
@@ -571,14 +707,16 @@ class _NavBarPageState extends State<NavBarPage> {
 }
 
 // Global route observer used by pages that need to know when they're re-shown
-final RouteObserver<ModalRoute<void>> routeObserver = RouteObserver<ModalRoute<void>>();
+final RouteObserver<ModalRoute<void>> routeObserver =
+    RouteObserver<ModalRoute<void>>();
 
 // Return a configured HttpClient. We don't extend `HttpClient` (it's an
 // interface class) — instead we create and configure an instance. For
 // additional logging or custom behavior, call the helper functions below.
 HttpClient createCustomHttpClient() {
   final client = HttpClient();
-  client.badCertificateCallback = (X509Certificate cert, String host, int port) {
+  client.badCertificateCallback =
+      (X509Certificate cert, String host, int port) {
     // Removed debugPrint to prevent logging host info to terminal.
     // Keep default behavior: don't accept bad certificates unless you have a
     // specific reason to allow them. Returning false rejects the certificate.

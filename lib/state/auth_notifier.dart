@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/token_storage.dart';
 import '../services/user_service.dart';
 import '../services/auth_service.dart';
+import '../services/notification_controller.dart';
 
 enum AuthStatus {
   unauthenticated,
@@ -20,7 +21,9 @@ class AuthNotifier extends ChangeNotifier {
 
   AuthStatus get status => _status;
   bool get isGuest => _status == AuthStatus.guest;
-  bool get isAuthenticated => _status == AuthStatus.authenticatedClient || _status == AuthStatus.authenticatedArtisan;
+  bool get isAuthenticated =>
+      _status == AuthStatus.authenticatedClient ||
+      _status == AuthStatus.authenticatedArtisan;
   String? get userRole => _profile?['role']?.toString().toLowerCase();
   Map<String, dynamic>? get profile => _profile;
   String? get token => _token;
@@ -51,7 +54,10 @@ class AuthNotifier extends ChangeNotifier {
       final prof = await UserService.getProfile();
       if (prof != null) {
         _profile = Map<String, dynamic>.from(prof);
-        final role = (_profile?['role'] ?? _profile?['type'] ?? '')?.toString().toLowerCase() ?? '';
+        final role = (_profile?['role'] ?? _profile?['type'] ?? '')
+                ?.toString()
+                .toLowerCase() ??
+            '';
         if (role.contains('artisan')) {
           _status = AuthStatus.authenticatedArtisan;
         } else {
@@ -64,6 +70,11 @@ class AuthNotifier extends ChangeNotifier {
     } catch (_) {
       // If profile fetch fails, keep token but mark as authenticatedClient as a conservative default.
       _status = AuthStatus.authenticatedClient;
+    }
+
+    // Attempt to register device for push notifications if we have a valid token
+    if (_token != null && _token!.isNotEmpty) {
+      NotificationController.registerDevice(_token);
     }
   }
 
@@ -87,6 +98,11 @@ class AuthNotifier extends ChangeNotifier {
         final prof = await UserService.getProfile();
         if (prof != null) _profile = Map<String, dynamic>.from(prof);
       } catch (_) {}
+
+      // Register device for push notifications
+      if (_token != null && _token!.isNotEmpty) {
+        NotificationController.registerDevice(_token);
+      }
     } catch (_) {
       // ignore
     } finally {
@@ -133,6 +149,12 @@ class AuthNotifier extends ChangeNotifier {
   /// Logout: clear token and set to unauthenticated.
   Future<void> logout() async {
     try {
+      // Attempt to unregister device before clearing token
+      if (_token != null) {
+        // Fire and forget unregistration
+        NotificationController.unregisterDevice(_token).catchError((_) {});
+      }
+
       _token = null;
       _status = AuthStatus.unauthenticated;
       _profile = null;

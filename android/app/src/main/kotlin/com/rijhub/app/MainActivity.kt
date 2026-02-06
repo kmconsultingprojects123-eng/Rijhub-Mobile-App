@@ -1,4 +1,4 @@
-package com.mycompany.rijhub
+package com.rijhub.app
 
 import io.flutter.embedding.android.FlutterActivity
 

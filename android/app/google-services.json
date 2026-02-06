@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "174728322654",
+    "project_id": "rijhub-mobile-app-972e3",
+    "storage_bucket": "rijhub-mobile-app-972e3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:174728322654:android:ecadc0bad2f34e0ef55ecf",
+        "android_client_info": {
+          "package_name": "com.rijhub.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBA_uya2rkcN-dh5yyjLHjx8bK_FQ6ISPE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

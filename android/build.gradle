@@ -5,12 +5,12 @@ allprojects {
     }
 }
 
-// Force Kotlin artifacts to 1.8.22 to avoid mixed-version downloads (some transitive deps may request 1.8.20)
+// Force Kotlin artifacts to 2.0.21 to match Google Play Services requirements
 subprojects {
     configurations.all {
         resolutionStrategy.eachDependency { details ->
             if (details.requested.group == 'org.jetbrains.kotlin') {
-                details.useVersion '1.8.22'
+                details.useVersion '2.0.21'
             }
         }
     }
@@ -34,7 +34,7 @@ subprojects {
         if (project.hasProperty("kotlin")) {
             project.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
                 kotlinOptions {
-                    jvmTarget = "1.8"
+                    jvmTarget = "17"
                 }
             }
         }

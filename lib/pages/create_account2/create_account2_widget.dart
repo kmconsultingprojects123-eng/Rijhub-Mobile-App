@@ -64,14 +64,16 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
         setState(() {
           _googleProfile = p;
           _model.fullNameTextController?.text = (p['name'] ?? '').toString();
-          _model.emailAddressTextController?.text = (p['email'] ?? '').toString();
+          _model.emailAddressTextController?.text =
+              (p['email'] ?? '').toString();
         });
       }
     });
 
     // Set initial effective role from constructor so UI can display it immediately.
     _effectiveRole = widget.initialRole;
-    if (kDebugMode) debugPrint('CreateAccount2 initState initialRole=${widget.initialRole}');
+    if (kDebugMode)
+      debugPrint('CreateAccount2 initState initialRole=${widget.initialRole}');
 
     // Determine the effective role for this flow. The role can come from the
     // widget constructor (when using generated routes), or from previous
@@ -95,11 +97,13 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
       // Normalize some common synonyms (client -> customer)
       if (role != null) {
         final v = role.trim().toLowerCase();
-        if (v == 'client' ) role = 'customer';
+        if (v == 'client') role = 'customer';
       }
 
       // Debug log to help trace navigation role propagation during testing
-      if (kDebugMode) debugPrint('CreateAccount2 resolved role: $role (widget.initialRole=${widget.initialRole})');
+      if (kDebugMode)
+        debugPrint(
+            'CreateAccount2 resolved role: $role (widget.initialRole=${widget.initialRole})');
 
       if (mounted) setState(() => _effectiveRole = role);
     });
@@ -171,7 +175,9 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
     // Otherwise proceed with the interactive Google sign-in flow.
     showAppLoadingDialog(context);
 
-    final res = await AuthService.signInWithGoogle();
+    final res = await AuthService.signInWithGoogle(
+      role: _effectiveRole ?? widget.initialRole,
+    );
 
     if (!mounted) return;
     Navigator.of(context, rootNavigator: true).pop();
@@ -189,12 +195,16 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
         } catch (_) {}
       }
       if (profile != null) {
-        _model.fullNameTextController?.text = (profile['name'] ?? '').toString();
-        _model.emailAddressTextController?.text = (profile['email'] ?? '').toString();
+        _model.fullNameTextController?.text =
+            (profile['name'] ?? '').toString();
+        _model.emailAddressTextController?.text =
+            (profile['email'] ?? '').toString();
       }
 
       final data = res['data'];
-      if (data != null && data is Map && (data['token'] != null || (data['user'] != null))) {
+      if (data != null &&
+          data is Map &&
+          (data['token'] != null || (data['user'] != null))) {
         // Extract token if present and set it on AppState so subsequent pages can
         // fetch profile data. Then navigate to the welcome-after-signup flow so
         // the user sees the onboarding screen before the dashboard.
@@ -203,13 +213,15 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
           try {
             String? token;
             if (res['token'] != null) token = res['token']?.toString();
-            if (token == null) token = (data['token'] ?? data['data']?['token'])?.toString();
+            if (token == null)
+              token = (data['token'] ?? data['data']?['token'])?.toString();
             // NOTE: previously we set the token here which could trigger app-wide
             // router redirects (to home/dashboard) before the WelcomeAfterSignup
             // page had a chance to show. Move token persistence until after we
             // successfully navigate to the welcome page below.
 
-            final name = profile != null ? (profile['name']?.toString() ?? '') : '';
+            final name =
+                profile != null ? (profile['name']?.toString() ?? '') : '';
             final role = _effectiveRole ?? widget.initialRole ?? 'customer';
             final welcome = WelcomeAfterSignupWidget(role: role, name: name);
             await AccountCreationNavigator.navigateAfterSignup(
@@ -240,7 +252,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
       await showAppSuccessDialog(
         context,
         title: 'Google signed in',
-        desc: 'We prefilled your name and email. Complete the form to finish creating your account.',
+        desc:
+            'We prefilled your name and email. Complete the form to finish creating your account.',
       );
     } else {
       final err = res['error'];
@@ -266,7 +279,10 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
 
     // Enforce acceptance of T&C and Privacy Policy
     if (!_acceptedTos) {
-      await showAppErrorDialog(context, title: 'Terms required', desc: 'You must accept the Terms & Conditions and Privacy Policy to create an account.');
+      await showAppErrorDialog(context,
+          title: 'Terms required',
+          desc:
+              'You must accept the Terms & Conditions and Privacy Policy to create an account.');
       return;
     }
 
@@ -282,7 +298,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
 
       // Use the effective role (from constructor/route args) if available,
       // otherwise fallback to the widget.initialRole and finally 'customer'.
-      final normalizedRole = normalizeRole(_effectiveRole ?? widget.initialRole);
+      final normalizedRole =
+          normalizeRole(_effectiveRole ?? widget.initialRole);
 
       final res = await AuthService.register(
         name: _model.fullNameTextController?.text.trim() ?? '',
@@ -309,9 +326,9 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
   }
 
   Future<void> _processSuccessfulRegistration(
-      Map<String, dynamic> res,
-      String normalizedRole,
-      ) async {
+    Map<String, dynamic> res,
+    String normalizedRole,
+  ) async {
     try {
       await TokenStorage.saveRecentRegistration(
         name: _model.fullNameTextController?.text.trim(),
@@ -364,7 +381,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
           // so the router does not auto-redirect before the welcome screen is shown.
 
           // Navigate to the welcome page passing role and name.
-          final welcome = WelcomeAfterSignupWidget(role: normalizedRole, name: name);
+          final welcome =
+              WelcomeAfterSignupWidget(role: normalizedRole, name: name);
           try {
             // Use the AccountCreationNavigator helper which detects GoRouter/pages API
             await AccountCreationNavigator.navigateAfterSignup(
@@ -379,7 +397,6 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
             if (token != null && token.isNotEmpty) {
               await AuthNotifier.instance.setToken(token);
             }
-
           } catch (e) {
             // Fallback to existing navigation util if helper fails
             try {
@@ -484,7 +501,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                 Text(
                   'Let\'s get started by filling out the form below.',
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurface.withAlpha((0.5 * 255).toInt()),
+                    color: theme.colorScheme.onSurface
+                        .withAlpha((0.5 * 255).toInt()),
                     fontWeight: FontWeight.w300,
                   ),
                 ),
@@ -498,7 +516,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                     decoration: BoxDecoration(
                       color: _effectiveRole!.toLowerCase() == 'artisan'
                           ? primaryColor.withAlpha((0.1 * 255).toInt())
-                          : colorScheme.secondary.withAlpha((0.1 * 255).toInt()),
+                          : colorScheme.secondary
+                              .withAlpha((0.1 * 255).toInt()),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     padding: const EdgeInsets.symmetric(
@@ -548,7 +567,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
-                          color: theme.colorScheme.onSurface.withAlpha((0.6 * 255).toInt()),
+                          color: theme.colorScheme.onSurface
+                              .withAlpha((0.6 * 255).toInt()),
                           letterSpacing: 1.0,
                         ),
                       ),
@@ -560,12 +580,12 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                         decoration: InputDecoration(
                           hintText: 'John Doe',
                           hintStyle: TextStyle(
-                            color: theme.colorScheme.onSurface.withAlpha((0.3 * 255).toInt()),
+                            color: theme.colorScheme.onSurface
+                                .withAlpha((0.3 * 255).toInt()),
                           ),
                           filled: true,
-                          fillColor: isDark
-                              ? Colors.grey[900]
-                              : Colors.grey[50],
+                          fillColor:
+                              isDark ? Colors.grey[900] : Colors.grey[50],
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12.0),
                             borderSide: BorderSide.none,
@@ -595,8 +615,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                         ),
                         textInputAction: TextInputAction.next,
                         validator: _validateName,
-                        onFieldSubmitted: (_) =>
-                            FocusScope.of(context).requestFocus(_model.emailAddressFocusNode),
+                        onFieldSubmitted: (_) => FocusScope.of(context)
+                            .requestFocus(_model.emailAddressFocusNode),
                       ),
 
                       const SizedBox(height: 20.0),
@@ -607,7 +627,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
-                          color: theme.colorScheme.onSurface.withAlpha((0.6 * 255).toInt()),
+                          color: theme.colorScheme.onSurface
+                              .withAlpha((0.6 * 255).toInt()),
                           letterSpacing: 1.0,
                         ),
                       ),
@@ -620,12 +641,12 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                         decoration: InputDecoration(
                           hintText: 'your@email.com',
                           hintStyle: TextStyle(
-                            color: theme.colorScheme.onSurface.withAlpha((0.3 * 255).toInt()),
+                            color: theme.colorScheme.onSurface
+                                .withAlpha((0.3 * 255).toInt()),
                           ),
                           filled: true,
-                          fillColor: isDark
-                              ? Colors.grey[900]
-                              : Colors.grey[50],
+                          fillColor:
+                              isDark ? Colors.grey[900] : Colors.grey[50],
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12.0),
                             borderSide: BorderSide.none,
@@ -655,8 +676,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                         ),
                         textInputAction: TextInputAction.next,
                         validator: _validateEmail,
-                        onFieldSubmitted: (_) =>
-                            FocusScope.of(context).requestFocus(_phoneFocusNode),
+                        onFieldSubmitted: (_) => FocusScope.of(context)
+                            .requestFocus(_phoneFocusNode),
                       ),
 
                       const SizedBox(height: 20.0),
@@ -667,7 +688,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
-                          color: theme.colorScheme.onSurface.withAlpha((0.6 * 255).toInt()),
+                          color: theme.colorScheme.onSurface
+                              .withAlpha((0.6 * 255).toInt()),
                           letterSpacing: 1.0,
                         ),
                       ),
@@ -680,12 +702,12 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                         decoration: InputDecoration(
                           hintText: '+1234567890',
                           hintStyle: TextStyle(
-                            color: theme.colorScheme.onSurface.withAlpha((0.3 * 255).toInt()),
+                            color: theme.colorScheme.onSurface
+                                .withAlpha((0.3 * 255).toInt()),
                           ),
                           filled: true,
-                          fillColor: isDark
-                              ? Colors.grey[900]
-                              : Colors.grey[50],
+                          fillColor:
+                              isDark ? Colors.grey[900] : Colors.grey[50],
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12.0),
                             borderSide: BorderSide.none,
@@ -715,8 +737,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                         ),
                         textInputAction: TextInputAction.next,
                         validator: _validatePhone,
-                        onFieldSubmitted: (_) =>
-                            FocusScope.of(context).requestFocus(_passwordFocusNode),
+                        onFieldSubmitted: (_) => FocusScope.of(context)
+                            .requestFocus(_passwordFocusNode),
                       ),
 
                       const SizedBox(height: 20.0),
@@ -727,7 +749,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
-                          color: theme.colorScheme.onSurface.withAlpha((0.6 * 255).toInt()),
+                          color: theme.colorScheme.onSurface
+                              .withAlpha((0.6 * 255).toInt()),
                           letterSpacing: 1.0,
                         ),
                       ),
@@ -739,12 +762,12 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                         decoration: InputDecoration(
                           hintText: '••••••••',
                           hintStyle: TextStyle(
-                            color: theme.colorScheme.onSurface.withAlpha((0.3 * 255).toInt()),
+                            color: theme.colorScheme.onSurface
+                                .withAlpha((0.3 * 255).toInt()),
                           ),
                           filled: true,
-                          fillColor: isDark
-                              ? Colors.grey[900]
-                              : Colors.grey[50],
+                          fillColor:
+                              isDark ? Colors.grey[900] : Colors.grey[50],
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12.0),
                             borderSide: BorderSide.none,
@@ -772,7 +795,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                               _passwordVisible
                                   ? Icons.visibility_outlined
                                   : Icons.visibility_off_outlined,
-                              color: theme.colorScheme.onSurface.withAlpha((0.4 * 255).toInt()),
+                              color: theme.colorScheme.onSurface
+                                  .withAlpha((0.4 * 255).toInt()),
                               size: 20,
                             ),
                             onPressed: () {
@@ -805,9 +829,12 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                               setState(() => _acceptedTos = v ?? false);
                             },
                             // Brand the checkbox with the app primary color
-                            fillColor: MaterialStateProperty.resolveWith<Color?>((states) => primaryColor),
+                            fillColor:
+                                MaterialStateProperty.resolveWith<Color?>(
+                                    (states) => primaryColor),
                             checkColor: Colors.white,
-                            visualDensity: const VisualDensity(horizontal: 0, vertical: -2),
+                            visualDensity: const VisualDensity(
+                                horizontal: 0, vertical: -2),
                           ),
                           Expanded(
                             child: GestureDetector(
@@ -820,12 +847,24 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                                 alignment: Alignment.topLeft,
                                 child: RichText(
                                   text: TextSpan(
-                                    style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color),
+                                    style: TextStyle(
+                                        color: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium
+                                            ?.color),
                                     children: [
                                       const TextSpan(text: 'I accept the '),
-                                      TextSpan(text: 'T&C', style: TextStyle(color: primaryColor, fontWeight: FontWeight.w600)),
+                                      TextSpan(
+                                          text: 'T&C',
+                                          style: TextStyle(
+                                              color: primaryColor,
+                                              fontWeight: FontWeight.w600)),
                                       const TextSpan(text: ' and the '),
-                                      TextSpan(text: 'Privacy Policy', style: TextStyle(color: primaryColor, fontWeight: FontWeight.w600)),
+                                      TextSpan(
+                                          text: 'Privacy Policy',
+                                          style: TextStyle(
+                                              color: primaryColor,
+                                              fontWeight: FontWeight.w600)),
                                       const TextSpan(text: ' of Rijhub'),
                                     ],
                                   ),
@@ -846,26 +885,27 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                           ),
                           elevation: 0,
                         ),
-                        onPressed: _isCreatingAccount ? null : _handleCreateAccount,
+                        onPressed:
+                            _isCreatingAccount ? null : _handleCreateAccount,
                         child: _isCreatingAccount
                             ? SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation(
-                              colorScheme.onPrimary,
-                            ),
-                          ),
-                        )
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation(
+                                    colorScheme.onPrimary,
+                                  ),
+                                ),
+                              )
                             : Text(
-                          'CREATE ACCOUNT',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
+                                'CREATE ACCOUNT',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
                       ),
 
                       // Divider
@@ -874,16 +914,19 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                         children: [
                           Expanded(
                             child: Divider(
-                              color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).toInt()),
+                              color: theme.colorScheme.onSurface
+                                  .withAlpha((0.1 * 255).toInt()),
                               thickness: 1,
                             ),
                           ),
                           Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 16.0),
                             child: Text(
                               'OR',
                               style: TextStyle(
-                                color: theme.colorScheme.onSurface.withAlpha((0.3 * 255).toInt()),
+                                color: theme.colorScheme.onSurface
+                                    .withAlpha((0.3 * 255).toInt()),
                                 fontSize: 12,
                                 fontWeight: FontWeight.w400,
                               ),
@@ -891,7 +934,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                           ),
                           Expanded(
                             child: Divider(
-                              color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).toInt()),
+                              color: theme.colorScheme.onSurface
+                                  .withAlpha((0.1 * 255).toInt()),
                               thickness: 1,
                             ),
                           ),
@@ -905,13 +949,14 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                           side: BorderSide(
                             color: primaryColor,
                           ),
-                          padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 12.0),
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 12.0, horizontal: 12.0),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12.0),
                           ),
                         ),
-                        // Disabled per request: keep visible but not interactive
-                        onPressed: null,
+                        // Google Sign-In enabled
+                        onPressed: _handleGoogleSignIn,
                         child: LayoutBuilder(builder: (context, constraints) {
                           // Keep content constrained to avoid overflow on narrow screens
                           return Row(
@@ -923,8 +968,12 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                                 width: 28,
                                 child: Builder(builder: (ctx) {
                                   // If we have a cached Google profile with a picture, show it
-                                  final pic = _googleProfile != null ? _googleProfile!['picture'] : null;
-                                  if (pic != null && pic is String && pic.isNotEmpty) {
+                                  final pic = _googleProfile != null
+                                      ? _googleProfile!['picture']
+                                      : null;
+                                  if (pic != null &&
+                                      pic is String &&
+                                      pic.isNotEmpty) {
                                     try {
                                       return CircleAvatar(
                                         backgroundImage: NetworkImage(pic),
@@ -940,10 +989,12 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                                     return Image.asset(
                                       'assets/images/google.webp',
                                       fit: BoxFit.contain,
-                                      errorBuilder: (context, error, stackTrace) {
+                                      errorBuilder:
+                                          (context, error, stackTrace) {
                                         return Icon(
                                           Icons.g_mobiledata,
-                                          color: primaryColor.withAlpha((0.5 * 255).round()),
+                                          color: primaryColor
+                                              .withAlpha((0.5 * 255).round()),
                                           size: 20,
                                         );
                                       },
@@ -951,7 +1002,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                                   } catch (_) {
                                     return Icon(
                                       Icons.g_mobiledata,
-                                      color: primaryColor.withAlpha((0.5 * 255).round()),
+                                      color: primaryColor
+                                          .withAlpha((0.5 * 255).round()),
                                       size: 20,
                                     );
                                   }
@@ -965,7 +1017,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    color: primaryColor.withAlpha((0.5 * 255).round()),
+                                    color: primaryColor
+                                        .withAlpha((0.5 * 255).round()),
                                     fontSize: 15,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -985,7 +1038,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                             Text(
                               'Already have an account? ',
                               style: TextStyle(
-                                color: theme.colorScheme.onSurface.withAlpha((0.7 * 255).toInt()),
+                                color: theme.colorScheme.onSurface
+                                    .withAlpha((0.7 * 255).toInt()),
                                 fontSize: 14,
                                 fontWeight: FontWeight.w400,
                               ),
@@ -997,21 +1051,26 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                                 try {
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
-                                      builder: (_) => const LoginAccountWidget(),
+                                      builder: (_) =>
+                                          const LoginAccountWidget(),
                                     ),
                                   );
                                 } catch (e) {
                                   // Fallback to safe helpers if direct push fails for any reason
                                   try {
-                                    NavigationUtils.safePushNoAuth(context, const LoginAccountWidget());
+                                    NavigationUtils.safePushNoAuth(
+                                        context, const LoginAccountWidget());
                                   } catch (_) {
                                     try {
-                                      NavigationUtils.safePush(context, const LoginAccountWidget());
+                                      NavigationUtils.safePush(
+                                          context, const LoginAccountWidget());
                                     } catch (_) {}
                                   }
                                 }
                               },
-                              style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 4.0)),
+                              style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 4.0)),
                               child: Text(
                                 'Log in',
                                 style: TextStyle(
@@ -1038,4 +1097,3 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
     );
   }
 }
-

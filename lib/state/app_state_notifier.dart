@@ -55,14 +55,18 @@ class AppStateNotifier extends ChangeNotifier {
       // accidental routing leaks where a cached guest token grants access.
       try {
         final persistedRole = await TokenStorage.getRole();
+        // Only clear auth if role is 'guest' AND there's no valid token.
+        // This distinguishes explicit browser guests from authenticated users
+        // whose backend role happens to be 'guest' (e.g., pending profile completion).
         if ((persistedRole ?? '').toLowerCase() == 'guest') {
-          // Remove persisted guest artifacts and treat as not authenticated.
-          await TokenStorage.deleteToken();
-          await TokenStorage.deleteRole();
-          token = null;
-          profile = null;
-          notifyListeners();
-          return;
+          if (token == null || token!.isEmpty) {
+            // No token means explicit browser guest session - clear it
+            await TokenStorage.deleteRole();
+            profile = null;
+            notifyListeners();
+            return;
+          }
+          // Has token + role 'guest' = authenticated user, continue normally
         }
       } catch (_) {}
       // If there's no token at all, bail out early.
@@ -88,7 +92,8 @@ class AppStateNotifier extends ChangeNotifier {
                 token = newToken;
               }
               if (refreshed['refreshToken'] != null) {
-                await TokenStorage.saveRefreshToken(refreshed['refreshToken'].toString());
+                await TokenStorage.saveRefreshToken(
+                    refreshed['refreshToken'].toString());
               }
             } catch (_) {}
           } else {
@@ -186,7 +191,7 @@ class AppStateNotifier extends ChangeNotifier {
     } catch (_) {
       // ignore
     }
-   // TokenStorage.deleteToken emits a null event to the token stream, so other
+    // TokenStorage.deleteToken emits a null event to the token stream, so other
     // listeners will be notified. No further action required here.
     notifyListeners();
   }
