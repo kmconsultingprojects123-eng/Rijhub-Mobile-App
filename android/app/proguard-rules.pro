@@ -4,6 +4,7 @@
 -dontwarn com.google.errorprone.annotations.CheckReturnValue
 -dontwarn com.google.errorprone.annotations.Immutable
 -dontwarn com.google.errorprone.annotations.RestrictedApi
+-dontwarn com.google.j2objc.annotations.RetainedWith
 -dontwarn javax.annotation.Nullable
 -dontwarn javax.annotation.concurrent.GuardedBy
 -dontwarn org.bouncycastle.jce.provider.BouncyCastleProvider
