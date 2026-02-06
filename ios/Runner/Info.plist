@@ -78,9 +78,13 @@
 		<true/>
 	</dict>
 
-	<!-- Mapbox access token placeholder - replace at build time or set runtime via mapbox_config -->
-	<key>MGLMapboxAccessToken</key>
-	<string>pk.eyJ1IjoicmlqaHViIiwiYSI6ImNtamhkbW83NDFid3IzZXF4cDRyeDMwbDYifQ.BO-Hzrpl9ynt2rtURZEpUw</string>
+
+	<!-- Mapbox removed: MGLMapboxAccessToken entry deleted. The app now uses Google Maps; set the
+	     Google API key via `GoogleService-Info.plist` (iOS) or runtime initialization. -->
+
+	<!-- Google Maps API key for iOS. This is required by the native Google Maps SDK. -->
+	<key>GMSApiKey</key>
+	<string>AIzaSyAjdDayJe-TVV8Cz6a-kHFCoJm6oNgeix8</string>
 
 	<!-- Location usage description (if you plan to enable user location) -->
 	<key>NSLocationWhenInUseUsageDescription</key>

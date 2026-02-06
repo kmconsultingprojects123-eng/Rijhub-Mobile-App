@@ -10,8 +10,11 @@ const kThemeModeKey = '__theme_mode__';
 SharedPreferences? _prefs;
 
 abstract class FlutterFlowTheme {
-  static Future initialize() async =>
-      _prefs = await SharedPreferences.getInstance();
+  // Accept an optional pre-created SharedPreferences instance to avoid
+  // calling getInstance multiple times during startup and to ensure that
+  // the binding is initialized before any platform channel access.
+  static Future initialize({SharedPreferences? prefs}) async =>
+      _prefs = prefs ?? await SharedPreferences.getInstance();
 
   static ThemeMode get themeMode {
     final darkMode = _prefs?.getBool(kThemeModeKey);

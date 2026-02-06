@@ -9,9 +9,7 @@ import '../../services/artist_service.dart';
 import '../../services/user_service.dart';
 import '../../services/token_storage.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart' as latlng;
-import '../../mapbox_config.dart';
+import '../../google_maps_config.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
@@ -1287,45 +1285,32 @@ class _ArtisanCompleteProfileWidgetState extends State<ArtisanCompleteProfileWid
         .trim()
         .isEmpty) return;
     try {
+      final key = GOOGLE_MAPS_API_KEY;
+      if (key.isEmpty) return;
       final encoded = Uri.encodeComponent(query + ' Nigeria');
-      final url = Uri.parse(
-          'https://api.mapbox.com/geocoding/v5/mapbox.places/$encoded.json?country=ng&limit=1&access_token=$MAPBOX_ACCESS_TOKEN');
+      final url = Uri.parse('https://maps.googleapis.com/maps/api/geocode/json?address=$encoded&key=$key');
       final resp = await http.get(url).timeout(const Duration(seconds: 10));
       if (resp.statusCode == 200 && resp.body.isNotEmpty) {
         final decoded = jsonDecode(resp.body);
-        if (decoded is Map && decoded['features'] is List &&
-            (decoded['features'] as List).isNotEmpty) {
-          final first = (decoded['features'] as List).first;
-          final placeName = first['place_name']?.toString() ?? '';
-          final coords = first['center'];
-          if (coords is List && coords.length >= 2) {
-            final lon = coords[0];
-            final lat = coords[1];
-            _coordsCtrl.text = '${lat.toString()},${lon.toString()}';
-            _locationCtrl.text = placeName;
-            setState(() {});
-            return;
+        if (decoded is Map && decoded['results'] is List && (decoded['results'] as List).isNotEmpty) {
+          final first = (decoded['results'] as List).first;
+          final placeName = first['formatted_address']?.toString() ?? '';
+          final geometry = first['geometry'];
+          if (geometry is Map && geometry['location'] is Map) {
+            final loc = geometry['location'];
+            final lat = loc['lat'];
+            final lon = loc['lng'];
+            if (lat is num && lon is num) {
+              _coordsCtrl.text = '${lat.toString()},${lon.toString()}';
+              _locationCtrl.text = placeName;
+              setState(() {});
+              return;
+            }
           }
         }
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not find coordinates for location'),
-          backgroundColor: FlutterFlowTheme
-              .of(context)
-              .warning,
-        ),
-      );
     } catch (e) {
       if (kDebugMode) debugPrint('forwardGeocode error: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error finding coordinates'),
-          backgroundColor: FlutterFlowTheme
-              .of(context)
-              .error,
-        ),
-      );
     }
   }
 
@@ -2576,5 +2561,4 @@ class _ArtisanCompleteProfileWidgetState extends State<ArtisanCompleteProfileWid
     );
   }
 }
-
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'dart:async';
@@ -26,6 +27,8 @@ import 'package:flutter/services.dart' show PlatformAssetBundle;
 import 'dart:convert';
 
 void main() async {
+  // Ensure Flutter binding is initialized before calling any platform
+  // channels (including SharedPreferences) or running async startup logic.
   WidgetsFlutterBinding.ensureInitialized();
 
   print('');
@@ -90,11 +93,16 @@ void main() async {
       statusBarIconBrightness: Brightness.dark,
     ),
   );
+  // Eagerly initialize SharedPreferences on the UI thread so plugins using
+  // method channels (e.g. shared_preferences) don't race with engine setup on iOS.
+  final SharedPreferences prefs = await SharedPreferences.getInstance();
 
+  // Use the pre-created prefs instance when initializing the theme so that
+  // FlutterFlowTheme.themeMode and other consumers read a ready-backed value.
   GoRouter.optionURLReflectsImperativeAPIs = true;
   usePathUrlStrategy();
 
-  await FlutterFlowTheme.initialize();
+  await FlutterFlowTheme.initialize(prefs: prefs);
 
   try {
     await AppStateNotifier.instance.refreshAuth();
