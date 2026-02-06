@@ -7,9 +7,9 @@ Push notifications have been successfully configured using Awesome Notifications
 ## 📦 Dependencies Added
 
 - `awesome_notifications: ^0.10.0` - Local and push notifications
-- `awesome_notifications_fcm: ^0.10.0` - Firebase Cloud Messaging integration
+- `firebase_messaging` - Firebase Cloud Messaging integration (foreground/background/terminated)
 - Removed `flutter_local_notifications` (replaced by awesome_notifications)
-- Removed `firebase_messaging` (replaced by awesome_notifications_fcm)
+- Removed `awesome_notifications_fcm` (replaced by firebase_messaging)
 
 ## 🔧 Configuration Files Modified
 
@@ -268,16 +268,23 @@ ElevatedButton(
 ## 📚 Additional Resources
 
 - [Awesome Notifications Docs](https://pub.dev/packages/awesome_notifications)
-- [Awesome Notifications FCM](https://pub.dev/packages/awesome_notifications_fcm)
+- [Firebase Messaging (Flutter)](https://firebase.google.com/docs/cloud-messaging/flutter/client)
 - [Firebase Console](https://console.firebase.google.com)
 
 ## ⚠️ Important Notes
 
 1. **Do NOT use** `flutter_local_notifications` alongside awesome_notifications
-2. **Do NOT use** `firebase_messaging` alongside awesome_notifications_fcm
+2. Prefer sending **notification** (or notification+data) payloads for Android “app closed” delivery. Use **data-only** payloads only if you handle them via `FirebaseMessaging.onBackgroundMessage`.
 3. Test on **real devices** for best results (especially for FCM)
 4. iOS requires physical device for push notifications (simulator won't work)
 5. Always request permissions before sending notifications
+
+## ✅ Channel key is optional
+
+When sending **data-only** pushes from your backend, you **do not need** to include a `channelKey`.
+
+- If `channelKey` is missing (or unknown), the app will use `basic_channel`.
+- You can optionally send `channelKey` as one of: `basic_channel`, `scheduled_channel`, `chat_channel`, `call_channel`.
 
 ## 🎉 You're All Set!
 

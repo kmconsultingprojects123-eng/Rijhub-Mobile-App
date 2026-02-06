@@ -1,15 +1,61 @@
 import 'package:awesome_notifications/awesome_notifications.dart';
-import 'package:awesome_notifications_fcm/awesome_notifications_fcm.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:developer' as developer;
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../api_config.dart';
+import '../firebase_options.dart';
+import 'token_storage.dart';
+
+/// Background handler for Firebase Messaging.
+///
+/// Must be a top-level function for the background isolate entrypoint.
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Firebase must be initialized in the background isolate.
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (_) {
+    // Ignore "already initialized" and other non-fatal init errors here.
+  }
+
+  // Ensure local notification channels exist before creating notifications.
+  try {
+    await NotificationController.initializeNotifications();
+  } catch (_) {}
+
+  await NotificationController.handleRemoteMessage(
+    message,
+    reason: 'onBackgroundMessage',
+  );
+}
 
 class NotificationController {
   static String? fcmToken;
   static const String _fcmTokenKey = 'fcm_token';
+  static bool _deviceRegisterInFlight = false;
+  static bool _firebaseMessagingListenersReady = false;
+
+  static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+  static const String _defaultChannelKey = 'basic_channel';
+  static const Set<String> _knownChannelKeys = {
+    'basic_channel',
+    'scheduled_channel',
+    'chat_channel',
+    'call_channel',
+  };
+
+  static void _log(String message) {
+    // Do not log JWT or raw tokens.
+    developer.log(message, name: 'NotificationController');
+  }
 
   /// Initialize Awesome Notifications
   static Future<void> initializeNotifications() async {
@@ -72,17 +118,6 @@ class NotificationController {
     );
     print('🔔 [NOTIFICATION] Awesome Notifications initialized');
 
-    // Initialize FCM
-    print('🔔 [NOTIFICATION] Initializing FCM...');
-    await AwesomeNotificationsFcm().initialize(
-      onFcmSilentDataHandle: silentDataHandle,
-      onFcmTokenHandle: fcmTokenHandle,
-      onNativeTokenHandle: nativeTokenHandle,
-      licenseKeys: null, // Add license keys if you have them
-      debug: true,
-    );
-    print('🔔 [NOTIFICATION] FCM initialized');
-
     // Check if notifications are allowed
     bool isAllowed = await AwesomeNotifications().isNotificationAllowed();
     print('🔔 [NOTIFICATION] Notifications allowed: $isAllowed');
@@ -98,6 +133,36 @@ class NotificationController {
       onDismissActionReceivedMethod: onDismissActionReceivedMethod,
     );
     print('🔔 [NOTIFICATION] Listeners set up successfully');
+
+    if (!_firebaseMessagingListenersReady) {
+      _firebaseMessagingListenersReady = true;
+
+      // Foreground messages: show a local notification so the user still sees it.
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+        await handleRemoteMessage(message, reason: 'onMessage');
+      });
+
+      // When a user taps a system notification (app in background).
+      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) async {
+        _log('🔔 Notification opened (background): hasData=${message.data.isNotEmpty}');
+        // TODO: Implement navigation using message.data
+      });
+
+      // When app is launched by tapping a system notification (terminated/cold start).
+      try {
+        final initialMessage = await _messaging.getInitialMessage();
+        if (initialMessage != null) {
+          _log(
+              '🔔 App opened from notification (terminated): hasData=${initialMessage.data.isNotEmpty}');
+          // TODO: Implement navigation using initialMessage.data
+        }
+      } catch (_) {}
+
+      // Keep token updated.
+      _messaging.onTokenRefresh.listen((newToken) async {
+        await fcmTokenHandle(newToken);
+      });
+    }
   }
 
   /// Request notification permissions
@@ -127,20 +192,17 @@ class NotificationController {
   static Future<String?> requestFirebaseToken() async {
     print('🔔 [NOTIFICATION] Requesting FCM token...');
     try {
-      // Check if FCM is available
-      bool isFirebaseAvailable =
-          await AwesomeNotificationsFcm().isFirebaseAvailable;
-      print('🔔 [NOTIFICATION] Firebase available: $isFirebaseAvailable');
+      // iOS/macOS: request permission (Android handled via POST_NOTIFICATIONS).
+      try {
+        final settings = await _messaging.requestPermission(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+        _log('🔔 FirebaseMessaging permission: ${settings.authorizationStatus}');
+      } catch (_) {}
 
-      if (!isFirebaseAvailable) {
-        print('❌ [NOTIFICATION] Firebase is NOT available on this device');
-        return null;
-      }
-
-      // Request FCM token
-      print('🔔 [NOTIFICATION] Calling requestFirebaseAppToken()...');
-      String? token = await AwesomeNotificationsFcm().requestFirebaseAppToken();
-
+      final token = await _messaging.getToken();
       if (token != null && token.isNotEmpty) {
         fcmToken = token;
         await _saveFcmToken(token);
@@ -151,11 +213,16 @@ class NotificationController {
         print('$token');
         print('═══════════════════════════════════════════════════════════');
         print('');
+
+        // Best-effort: if user is already signed in, register this device token
+        // with the backend immediately. This covers the "returning user" case
+        // where auth was restored before the FCM token existed.
+        await registerDeviceWithStoredJwt(reason: 'requestFirebaseToken');
+        return token;
       } else {
         print('❌ [NOTIFICATION] Token is null or empty!');
+        return null;
       }
-
-      return token;
     } catch (e, stackTrace) {
       print('❌ [NOTIFICATION] Error requesting FCM token: $e');
       print('❌ [NOTIFICATION] Stack trace: $stackTrace');
@@ -200,48 +267,110 @@ class NotificationController {
     print('');
     fcmToken = token;
     await _saveFcmToken(token);
+
+    // Best-effort: register refreshed token with backend (if signed in).
+    // Note: this may run while app is in background; failures are safe to ignore.
+    await registerDeviceWithStoredJwt(reason: 'fcmTokenHandle');
   }
 
-  /// Handle native token (APNS for iOS)
-  @pragma("vm:entry-point")
-  static Future<void> nativeTokenHandle(String token) async {
-    print('🍎 [NOTIFICATION] Native Token (APNS): $token');
-  }
+  /// Best-effort helper to register the current FCM token with the backend
+  /// using the persisted JWT (if available). Uses `debugPrint` (not `print`)
+  /// so logs are still visible even when `print()` is silenced by zones.
+  static Future<void> registerDeviceWithStoredJwt({required String reason}) async {
+    if (_deviceRegisterInFlight) {
+      _log('🔔 Device register skipped (in-flight). reason=$reason');
+      return;
+    }
+    _deviceRegisterInFlight = true;
+    try {
+      // Ensure we have an in-memory FCM token if it was persisted previously.
+      await _hydrateFcmTokenFromPrefsIfNeeded();
 
-  /// Handle silent data messages (BACKGROUND PUSH)
-  @pragma("vm:entry-point")
-  static Future<void> silentDataHandle(FcmSilentData silentData) async {
-    print('');
-    print('═══════════════════════════════════════════════════════════');
-    print('📩 SILENT/BACKGROUND PUSH RECEIVED');
-    print('═══════════════════════════════════════════════════════════');
-    print('Data: ${silentData.data}');
-    print('Created Lifecycle: ${silentData.createdLifeCycle}');
-    print('═══════════════════════════════════════════════════════════');
-    print('');
-
-    // Handle silent push notification data here
-    if (silentData.data != null) {
-      // If the data contains notification content, create a local notification
-      try {
-        final data = silentData.data!;
-        print('🔔 [NOTIFICATION] Processing silent data: $data');
-
-        // Check if there's a 'content' field (Awesome Notifications format)
-        if (data.containsKey('content')) {
-          print(
-              '🔔 [NOTIFICATION] Found content field, notification should auto-display');
-        }
-
-        // If you want to manually create a notification from silent data:
-        // await showLocalNotification(
-        //   id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        //   title: data['title'] ?? 'Notification',
-        //   body: data['body'] ?? data['message'] ?? '',
-        // );
-      } catch (e) {
-        print('❌ [NOTIFICATION] Error processing silent data: $e');
+      final jwt = await TokenStorage.getToken();
+      if (jwt == null || jwt.isEmpty) {
+        _log('🔔 Device register skipped (no JWT). reason=$reason');
+        return;
       }
+      if (fcmToken == null || fcmToken!.isEmpty) {
+        _log('🔔 Device register skipped (no FCM token). reason=$reason');
+        return;
+      }
+
+      _log('🔔 Attempting backend device register. reason=$reason');
+      await registerDevice(jwt);
+    } catch (e) {
+      _log('❌ Device register helper error. reason=$reason error=$e');
+    } finally {
+      _deviceRegisterInFlight = false;
+    }
+  }
+
+  static Future<void> _hydrateFcmTokenFromPrefsIfNeeded() async {
+    try {
+      if (fcmToken != null && fcmToken!.isNotEmpty) return;
+      final prefs = await SharedPreferences.getInstance();
+      final stored = prefs.getString(_fcmTokenKey);
+      if (stored != null && stored.isNotEmpty) {
+        fcmToken = stored;
+      }
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  /// Convert a `RemoteMessage` into a local notification (foreground + data-only pushes).
+  @pragma('vm:entry-point')
+  static Future<void> handleRemoteMessage(
+    RemoteMessage message, {
+    required String reason,
+  }) async {
+    try {
+      // Avoid duplicate notifications when app is background/terminated:
+      // - If the message contains a `notification` payload, Android will display it automatically.
+      // - We only create a local notification ourselves for foreground messages OR data-only pushes.
+      if (reason == 'onBackgroundMessage' && message.notification != null) {
+        _log(
+          '🔕 Skipping local notification (system will display). reason=$reason',
+        );
+        return;
+      }
+
+      final title =
+          message.notification?.title ?? (message.data['title']?.toString());
+      final body =
+          message.notification?.body ?? (message.data['body']?.toString());
+
+      // Avoid creating empty notifications.
+      if ((title == null || title.isEmpty) && (body == null || body.isEmpty)) {
+        _log('🔕 Remote message ignored (no title/body). reason=$reason');
+        return;
+      }
+
+      final payload = <String, String>{};
+      message.data.forEach((k, v) => payload[k] = v.toString());
+
+      // Channel key is OPTIONAL. If none (or unknown), we always fall back.
+      final requestedChannelKey =
+          (message.data['channelKey'] ?? message.data['channel_key'])?.toString();
+      final channelKey = (requestedChannelKey != null &&
+              requestedChannelKey.isNotEmpty &&
+              _knownChannelKeys.contains(requestedChannelKey))
+          ? requestedChannelKey
+          : _defaultChannelKey;
+
+      await AwesomeNotifications().createNotification(
+        content: NotificationContent(
+          id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
+          channelKey: channelKey,
+          title: title,
+          body: body,
+          payload: payload.isEmpty ? null : payload,
+          category: NotificationCategory.Message,
+          wakeUpScreen: true,
+        ),
+      );
+    } catch (e) {
+      _log('❌ Failed to create local notification. reason=$reason error=$e');
     }
   }
 
@@ -358,7 +487,7 @@ class NotificationController {
   static Future<void> subscribeToTopic(String topic) async {
     try {
       print('🔔 [NOTIFICATION] Subscribing to topic: $topic');
-      await AwesomeNotificationsFcm().subscribeToTopic(topic);
+      await _messaging.subscribeToTopic(topic);
       print('✅ [NOTIFICATION] Subscribed to topic: $topic');
     } catch (e) {
       print('❌ [NOTIFICATION] Error subscribing to topic: $e');
@@ -392,12 +521,12 @@ class NotificationController {
     if (jwt == null || jwt.isEmpty) return;
     final token = fcmToken;
     if (token == null || token.isEmpty) {
-      print('⚠️ [NOTIFICATION] Cannot register device: No FCM token available');
+      _log('⚠️ Cannot register device: no FCM token available');
       return;
     }
 
     try {
-      print('🔔 [NOTIFICATION] Registering device with backend...');
+      _log('🔔 Registering device with backend...');
       final uri = Uri.parse('$API_BASE_URL/api/devices/register');
       final body = jsonEncode({
         'token': token,
@@ -414,14 +543,15 @@ class NotificationController {
         body: body,
       );
 
-      print('🔔 [NOTIFICATION] Register device response: ${resp.statusCode}');
+      _log('🔔 Register device response: HTTP ${resp.statusCode}');
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        print('✅ [NOTIFICATION] Device registered successfully');
+        _log('✅ Device registered successfully');
       } else {
-        print('❌ [NOTIFICATION] Failed to register device: ${resp.body}');
+        // Avoid logging response bodies to the terminal (can contain sensitive data).
+        _log('❌ Failed to register device (HTTP ${resp.statusCode})');
       }
     } catch (e) {
-      print('❌ [NOTIFICATION] Error registering device: $e');
+      _log('❌ Error registering device: $e');
     }
   }
 

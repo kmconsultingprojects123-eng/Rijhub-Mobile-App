@@ -4,9 +4,9 @@
 
 ### 1. Dependencies Updated
 - ✅ Added `awesome_notifications: ^0.10.0`
-- ✅ Added `awesome_notifications_fcm: ^0.10.0`
+- ✅ Added `firebase_messaging` (for background + terminated push handling)
 - ✅ Removed `flutter_local_notifications` (incompatible)
-- ✅ Removed `firebase_messaging` (replaced by awesome_notifications_fcm)
+- ✅ Removed `awesome_notifications_fcm` (replaced by firebase_messaging)
 
 ### 2. Android Configuration
 **File: `android/app/src/main/AndroidManifest.xml`**

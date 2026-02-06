@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <resources>
     <string name="app_name">RijHub</string>
+    <!-- FCM uses this channel if incoming messages omit a channel -->
+    <string name="default_notification_channel_id">basic_channel</string>
 
 </resources>

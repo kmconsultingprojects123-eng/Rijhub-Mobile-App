@@ -9,14 +9,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.3.59"
-  animated_stack_widget:
-    dependency: transitive
-    description:
-      name: animated_stack_widget
-      sha256: ce4788dd158768c9d4388354b6fb72600b78e041a37afc4c279c63ecafcb9408
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.0.4"
   ansicolor:
     dependency: transitive
     description:
@@ -70,14 +62,6 @@ packages:
     description:
       name: awesome_notifications
       sha256: "0d5fa4457f2ba4e536adc3ef6af709cdcecf4a05a1f3035981e9afa2f899b2a8"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.10.1"
-  awesome_notifications_fcm:
-    dependency: "direct main"
-    description:
-      name: awesome_notifications_fcm
-      sha256: "77c23d452bb40eae06c1bf00ca259a8b9d88f1c6a1e8433fdc3fd94100289b7d"
       url: "https://pub.dev"
     source: hosted
     version: "0.10.1"
@@ -345,22 +329,30 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.24.1"
-  firebase_crashlytics:
-    dependency: transitive
+  firebase_messaging:
+    dependency: "direct main"
     description:
-      name: firebase_crashlytics
-      sha256: "662ae6443da91bca1fb0be8aeeac026fa2975e8b7ddfca36e4d90ebafa35dde1"
+      name: firebase_messaging
+      sha256: "60be38574f8b5658e2f22b7e311ff2064bea835c248424a383783464e8e02fcc"
       url: "https://pub.dev"
     source: hosted
-    version: "4.3.10"
-  firebase_crashlytics_platform_interface:
+    version: "15.2.10"
+  firebase_messaging_platform_interface:
     dependency: transitive
     description:
-      name: firebase_crashlytics_platform_interface
-      sha256: "7222a8a40077c79f6b8b3f3439241c9f2b34e9ddfde8381ffc512f7b2e61f7eb"
+      name: firebase_messaging_platform_interface
+      sha256: "685e1771b3d1f9c8502771ccc9f91485b376ffe16d553533f335b9183ea99754"
       url: "https://pub.dev"
     source: hosted
-    version: "3.8.10"
+    version: "4.6.10"
+  firebase_messaging_web:
+    dependency: transitive
+    description:
+      name: firebase_messaging_web
+      sha256: "0d1be17bc89ed3ff5001789c92df678b2e963a51b6fa2bdb467532cc9dbed390"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.10.10"
   fixnum:
     dependency: transitive
     description:
@@ -689,18 +681,18 @@ packages:
     dependency: transitive
     description:
       name: google_maps_flutter_android
-      sha256: "7c7ff5b883b27bfdd0d52d91d89faf00858a6c1b33aeca0dc80faca64f389983"
+      sha256: "98d7f5354f770f3e993db09fc798d40aeb6a254f04c1c468a94818ec2086e83e"
       url: "https://pub.dev"
     source: hosted
-    version: "2.18.3"
+    version: "2.18.12"
   google_maps_flutter_ios:
     dependency: transitive
     description:
       name: google_maps_flutter_ios
-      sha256: "16fb8f913a7575d6f9156e43401e7ba5f7766d58f4d250580f4f983dba16bdb3"
+      sha256: "0504508a024410979936bd22bc2dc10a0df5cb1d15a21618d6cfbd973832464f"
       url: "https://pub.dev"
     source: hosted
-    version: "2.16.0"
+    version: "2.17.1"
   google_maps_flutter_platform_interface:
     dependency: transitive
     description:
@@ -973,15 +965,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.17.0"
-  mgrs_dart:
-    dependency: transitive
-    description:
-      name: mgrs_dart
-      sha256: fb89ae62f05fa0bb90f70c31fc870bcbcfd516c843fb554452ab3396f78586f7
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.0.0"
-    version: "1.16.0"
   mime:
     dependency: transitive
     description:
@@ -1588,5 +1571,5 @@ packages:
     source: hosted
     version: "3.1.3"
 sdks:
-  dart: ">=3.8.0 <4.0.0"
-  flutter: ">=3.32.0"
+  dart: ">=3.9.0 <4.0.0"
+  flutter: ">=3.35.0"
