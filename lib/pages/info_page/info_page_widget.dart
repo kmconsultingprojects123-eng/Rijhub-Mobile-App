@@ -19,7 +19,8 @@ class _InfoPageWidgetState extends State<InfoPageWidget> with SingleTickerProvid
   // URLs for external links
   static const _termsUrl = 'https://example.com/terms';
   static const _supportEmail = 'support@rijhub.com';
-  static const _contactPhone = '+1 555 555 5555';
+  // Updated support phone per project contact
+  static const _contactPhone = '08053466666';
 
   @override
   void initState() {

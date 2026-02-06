@@ -13,6 +13,7 @@ import '../../services/user_service.dart';
 import '../../services/token_storage.dart';
 import '../../services/artist_service.dart';
 import '../../services/job_service.dart';
+import '../../services/location_service.dart';
 import 'artisan_profileupdate_model.dart';
 export 'artisan_profileupdate_model.dart';
 
@@ -176,50 +177,19 @@ class _ArtisanProfileupdateWidgetState
 
   Future<void> _loadStatesLgas() async {
     try {
-      final s = await rootBundle.loadString('assets/jsons/nigeria_states_lgas.json');
-      final decoded = jsonDecode(s) as Map<String, dynamic>;
+      // Prefer LocationService which returns only Abuja FCT
+      final states = await LocationService.fetchNigeriaStates();
       final map = <String, List<String>>{};
-      for (final e in decoded.entries) {
-        final key = e.key.toString();
-        final v = e.value;
-        if (v is List) {
-          map[key] = List<String>.from(v.map((i) => i.toString()));
-        }
+      for (final s in states) {
+        final lgas = await LocationService.fetchNigeriaLgas(s);
+        map[s] = lgas;
       }
       setState(() {
         _statesLgas = map;
         _statesList = map.keys.toList()..sort();
       });
-      // If profile already filled serviceArea address was loaded earlier, try to pre-select matching state/LGA
-      if ((_model.serviceAreaAddressController?.text ?? '').isNotEmpty) {
-        final addr = _model.serviceAreaAddressController!.text.toLowerCase();
-        String? foundState;
-        String? foundLga;
-        for (final entry in map.entries) {
-          final stateKey = entry.key.toLowerCase();
-          if (addr.contains(stateKey) || stateKey.contains(addr)) {
-            foundState = entry.key;
-            break;
-          }
-        }
-        if (foundState == null) {
-          // try fuzzy match by checking any state name contained in address
-          for (final k in map.keys) {
-            if (addr.contains(k.toLowerCase())) { foundState = k; break; }
-          }
-        }
-        if (foundState != null) {
-          final lg = map[foundState] ?? [];
-          for (final l in lg) {
-            if (addr.contains(l.toLowerCase())) { foundLga = l; break; }
-          }
-        }
-        if (mounted) setState(() { _selectedState = foundState; _lgasForSelectedState = _statesLgas[foundState] ?? []; _selectedLga = foundLga; });
-      }
     } catch (e) {
-      if (mounted && kDebugMode) debugPrint('Failed to load states/lgas json: $e');
-      // Show a friendly message but keep app usable
-      _showUserError('Could not load location data. Some address helpers may be unavailable.');
+      if (kDebugMode) debugPrint('Failed to load states/lgas json via LocationService: $e');
     }
   }
 
@@ -1526,6 +1496,8 @@ class _ArtisanProfileupdateWidgetState
     );
   }
 }
+
+
 
 
 

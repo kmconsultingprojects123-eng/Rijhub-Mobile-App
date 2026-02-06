@@ -8,6 +8,7 @@ import '../../google_maps_config.dart';
 import 'edit_profile_user_model.dart';
 import '../../services/user_service.dart';
 import '../../services/token_storage.dart';
+import '../../services/location_service.dart';
 import '../../utils/awesome_dialogs.dart';
 import '../../utils/error_messages.dart';
 import 'package:file_picker/file_picker.dart';
@@ -122,17 +123,15 @@ class _EditProfileUserWidgetState extends State<EditProfileUserWidget> {
 
   Future<void> _loadStatesLgas() async {
     try {
-      final s = await rootBundle.loadString('assets/jsons/nigeria_states_lgas.json');
-      final decoded = jsonDecode(s) as Map<String, dynamic>;
+      // Use LocationService which only exposes Abuja FCT
+      final states = await LocationService.fetchNigeriaStates();
       final map = <String, List<String>>{};
-      for (final e in decoded.entries) {
-        final key = e.key.toString();
-        final v = e.value;
-        if (v is List) map[key] = List<String>.from(v.map((i) => i.toString()));
+      for (final s in states) {
+        map[s] = await LocationService.fetchNigeriaLgas(s);
       }
       if (mounted) setState(() { _statesLgas = map; _statesList = map.keys.toList()..sort(); });
     } catch (e) {
-      if (kDebugMode) debugPrint('Failed to load states/lgas json: $e');
+      if (kDebugMode) debugPrint('Failed to load states/lgas via LocationService: $e');
     }
   }
 

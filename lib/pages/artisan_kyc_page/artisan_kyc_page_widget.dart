@@ -11,6 +11,7 @@ import '../../utils/error_messages.dart';
 import 'package:flutter/foundation.dart';
 import '../../services/job_service.dart';
 import '../../services/api_client.dart';
+import '../../services/location_service.dart';
 import 'package:flutter/widgets.dart';
 
 class ArtisanKycPageWidget extends StatefulWidget {
@@ -136,21 +137,32 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
   Future<void> _fetchStates() async {
     try {
       setState(() { _loadingStates = true; });
-      final resp = await ApiClient.get('$API_BASE_URL/api/locations/nigeria/states', headers: {'Content-Type': 'application/json'});
-      if (resp['status'] is int && resp['status'] >= 200 && resp['status'] < 300) {
-        final body = resp['json'] ?? (resp['body']?.isNotEmpty == true ? jsonDecode(resp['body'] as String) : null);
-        List<dynamic>? list;
-        if (body is Map && body['data'] is List) list = body['data'] as List<dynamic>;
-        else if (body is List) list = body as List<dynamic>;
-        else if (body is Map && body['states'] is List) list = body['states'] as List<dynamic>;
 
-        if (list != null) {
-          final names = list.map((e) => e is String ? e : (e is Map && e['name'] != null ? e['name'].toString() : e.toString())).toList().cast<String>();
-          if (mounted) setState(() { _states = names; });
-        }
-      }
+      // Prefer client-side LocationService which is now restricted to Abuja FCT.
+      final states = await LocationService.fetchNigeriaStates();
+      if (mounted) setState(() { _states = states; });
+
     } catch (e) {
-      if (kDebugMode) debugPrint('Failed to load states: $e');
+      if (kDebugMode) debugPrint('Failed to load states via LocationService: $e');
+
+      // fallback to existing API call if needed
+      try {
+        final resp = await ApiClient.get('$API_BASE_URL/api/locations/nigeria/states', headers: {'Content-Type': 'application/json'});
+        if (resp['status'] is int && resp['status'] >= 200 && resp['status'] < 300) {
+          final body = resp['json'] ?? (resp['body']?.isNotEmpty == true ? jsonDecode(resp['body'] as String) : null);
+          List<dynamic>? list;
+          if (body is Map && body['data'] is List) list = body['data'] as List<dynamic>;
+          else if (body is List) list = body as List<dynamic>;
+          else if (body is Map && body['states'] is List) list = body['states'] as List<dynamic>;
+
+          if (list != null) {
+            final names = list.map((e) => e is String ? e : (e is Map && e['name'] != null ? e['name'].toString() : e.toString())).toList().cast<String>();
+            if (mounted) setState(() { _states = names; });
+          }
+        }
+      } catch (e) {
+        if (kDebugMode) debugPrint('Failed to load states: $e');
+      }
     } finally {
       if (mounted) setState(() { _loadingStates = false; });
     }
@@ -159,18 +171,26 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
   Future<void> _fetchLgasForState(String state) async {
     try {
       setState(() { _loadingLgas = true; _lgas = []; _lgaCtrl.text = ''; });
-      final uri = '$API_BASE_URL/api/locations/nigeria/lgas?state=${Uri.encodeQueryComponent(state)}';
-      final resp = await ApiClient.get(uri, headers: {'Content-Type': 'application/json'});
-      if (resp['status'] is int && resp['status'] >= 200 && resp['status'] < 300) {
-        final body = resp['json'] ?? (resp['body']?.isNotEmpty == true ? jsonDecode(resp['body'] as String) : null);
-        List<dynamic>? list;
-        if (body is Map && body['data'] is List) list = body['data'] as List<dynamic>;
-        else if (body is List) list = body as List<dynamic>;
-        else if (body is Map && body['lgas'] is List) list = body['lgas'] as List<dynamic>;
 
-        if (list != null) {
-          final names = list.map((e) => e is String ? e : (e is Map && e['name'] != null ? e['name'].toString() : e.toString())).toList().cast<String>();
-          if (mounted) setState(() { _lgas = names; });
+      // If the requested state isn't allowed, return empty list.
+      final lgas = await LocationService.fetchNigeriaLgas(state);
+      if (mounted) setState(() { _lgas = lgas; });
+
+      // if LocationService returned nothing, fall back to API
+      if (lgas.isEmpty) {
+        final uri = '$API_BASE_URL/api/locations/nigeria/lgas?state=${Uri.encodeQueryComponent(state)}';
+        final resp = await ApiClient.get(uri, headers: {'Content-Type': 'application/json'});
+        if (resp['status'] is int && resp['status'] >= 200 && resp['status'] < 300) {
+          final body = resp['json'] ?? (resp['body']?.isNotEmpty == true ? jsonDecode(resp['body'] as String) : null);
+          List<dynamic>? list;
+          if (body is Map && body['data'] is List) list = body['data'] as List<dynamic>;
+          else if (body is List) list = body as List<dynamic>;
+          else if (body is Map && body['lgas'] is List) list = body['lgas'] as List<dynamic>;
+
+          if (list != null) {
+            final names = list.map((e) => e is String ? e : (e is Map && e['name'] != null ? e['name'].toString() : e.toString())).toList().cast<String>();
+            if (mounted) setState(() { _lgas = names; });
+          }
         }
       }
     } catch (e) {

@@ -37,7 +37,6 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
   // Payout details controllers
   final TextEditingController _pNameCtrl = TextEditingController();
   final TextEditingController _pAccountCtrl = TextEditingController();
-  final TextEditingController _pBankCodeCtrl = TextEditingController();
   final TextEditingController _pBankNameCtrl = TextEditingController();
   final TextEditingController _pCurrencyCtrl = TextEditingController(text: 'NGN');
   bool _pSaving = false;
@@ -54,7 +53,6 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
   void dispose() {
     _pNameCtrl.dispose();
     _pAccountCtrl.dispose();
-    _pBankCodeCtrl.dispose();
     _pBankNameCtrl.dispose();
     _pCurrencyCtrl.dispose();
     _model.dispose();
@@ -153,7 +151,6 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
         'name': _pNameCtrl.text.trim(),
         'account_number': _pAccountCtrl.text.trim(),
         'bank_name': _pBankNameCtrl.text.trim(),
-        'bank_code': _pBankCodeCtrl.text.trim(),
         'currency': _pCurrencyCtrl.text.trim().isEmpty ? 'NGN' : _pCurrencyCtrl.text.trim(),
       };
 
@@ -181,7 +178,6 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
         mpReq.fields['name'] = bodyMap['name'] ?? '';
         mpReq.fields['account_number'] = bodyMap['account_number'] ?? '';
         mpReq.fields['bank_name'] = bodyMap['bank_name'] ?? '';
-        mpReq.fields['bank_code'] = bodyMap['bank_code'] ?? '';
         mpReq.fields['currency'] = bodyMap['currency'] ?? 'NGN';
         final streamed = await mpReq.send().timeout(const Duration(seconds: 15));
         final mpResp = await http.Response.fromStream(streamed);
@@ -290,7 +286,6 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
 
     _pNameCtrl.text = pd?['name']?.toString() ?? '';
     _pAccountCtrl.text = pd?['account_number']?.toString() ?? '';
-    _pBankCodeCtrl.text = pd?['bank_code']?.toString() ?? '';
     _pBankNameCtrl.text = pd?['bank_name']?.toString() ?? '';
     _pCurrencyCtrl.text = pd?['currency']?.toString() ?? 'NGN';
 
@@ -399,28 +394,6 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                 }
                                 return null;
                               },
-                            ),
-                            const SizedBox(height: 12),
-                            // Bank code (required by some payout providers like Paystack)
-                            TextFormField(
-                              controller: _pBankCodeCtrl,
-                              decoration: InputDecoration(
-                                labelText: 'Bank code',
-                                hintText: 'e.g. 058',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
-                                  ),
-                                ),
-                              ),
-                              validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
                             ),
                             const SizedBox(height: 12),
                             TextFormField(
@@ -1312,5 +1285,4 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
     await _init();
   }
 }
-
 

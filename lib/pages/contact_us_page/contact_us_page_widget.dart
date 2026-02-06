@@ -264,7 +264,7 @@ class _ContactUsPageWidgetState extends State<ContactUsPageWidget> {
                                         ),
                                   ),
                                   Text(
-                                    'support@company.com',
+                                    'support@rijhub.com',
                                     style: FlutterFlowTheme.of(context)
                                         .bodySmall
                                         .override(
@@ -374,7 +374,7 @@ class _ContactUsPageWidgetState extends State<ContactUsPageWidget> {
                                         ),
                                   ),
                                   Text(
-                                    '+1 (555) 123-4567',
+                                    '08053466666',
                                     style: FlutterFlowTheme.of(context)
                                         .bodySmall
                                         .override(

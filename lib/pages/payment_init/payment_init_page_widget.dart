@@ -1270,7 +1270,7 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
                   Expanded(child: OutlinedButton(onPressed: () async {
                     Navigator.of(ctx).pop();
                     // Open mailto or support flow
-                    try { final uri = Uri.parse('mailto:support@example.com?subject=Payment%20confirmation%20help&body=Quote%20id:%20$quoteId'); if (await canLaunchUrl(uri)) await launchUrl(uri); } catch (_) {}
+                    try { final uri = Uri.parse('mailto:support@rijhub.com?subject=Payment%20confirmation%20help&body=Quote%20id:%20$quoteId'); if (await canLaunchUrl(uri)) await launchUrl(uri); } catch (_) {}
                   }, child: const Text('Contact support'))),
                 ])
               ]),

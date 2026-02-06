@@ -197,6 +197,73 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
 
+    // Create a normalized copy of the job to ensure EditJobForm gets the fields it expects.
+    final Map<String, dynamic> prefilledJob = Map<String, dynamic>.from(job);
+
+    // Title/company/description
+    prefilledJob['title'] = (job['title'] ?? job['jobTitle'] ?? job['name'] ?? '').toString();
+    prefilledJob['company'] = (job['company'] ?? job['employer'] ?? '').toString();
+    prefilledJob['description'] = (job['description'] ?? job['details'] ?? job['desc'] ?? '').toString();
+
+    // Location/address
+    prefilledJob['location'] = (job['location'] ?? job['address'] ?? job['venue'] ?? '').toString();
+
+    // Budget: prefer budget, fall back to price/amount; keep numeric or string form
+    prefilledJob['budget'] = job['budget'] ?? job['price'] ?? job['amount'] ?? job['salary'] ?? '';
+
+    // Trade/skills: ensure a List when possible
+    try {
+      if (job['trade'] is List) {
+        prefilledJob['trade'] = List.from(job['trade']);
+      } else if (job['skills'] is List) {
+        prefilledJob['trade'] = List.from(job['skills']);
+      } else if (job['skills'] is String && (job['skills'] as String).trim().isNotEmpty) {
+        prefilledJob['trade'] = (job['skills'] as String).split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      } else if (job['trade'] is String && (job['trade'] as String).trim().isNotEmpty) {
+        prefilledJob['trade'] = (job['trade'] as String).split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      }
+    } catch (_) {}
+
+    // Coordinates: unify to [lon, lat] if possible
+    try {
+      if (job['coordinates'] is List && (job['coordinates'] as List).length >= 2) {
+        prefilledJob['coordinates'] = List<double>.from((job['coordinates'] as List).map((e) => (e is num) ? e.toDouble() : double.tryParse(e.toString()) ?? 0.0));
+      } else if (job['coords'] is Map) {
+        final c = job['coords'];
+        final lat = (c['lat'] ?? c['latitude'])?.toString();
+        final lon = (c['lon'] ?? c['longitude'])?.toString();
+        if (lat != null && lon != null) {
+          final latN = double.tryParse(lat);
+          final lonN = double.tryParse(lon);
+          if (latN != null && lonN != null) prefilledJob['coordinates'] = [lonN, latN];
+        }
+      } else if (job['location'] is Map) {
+        final loc = job['location'];
+        final lat = (loc['lat'] ?? loc['latitude'])?.toString();
+        final lon = (loc['lon'] ?? loc['longitude'])?.toString();
+        if (lat != null && lon != null) {
+          final latN = double.tryParse(lat);
+          final lonN = double.tryParse(lon);
+          if (latN != null && lonN != null) prefilledJob['coordinates'] = [lonN, latN];
+        }
+      }
+    } catch (_) {}
+
+    // Schedule/deadline
+    prefilledJob['schedule'] = job['schedule'] ?? job['deadline'] ?? job['dueDate'] ?? job['date'];
+
+    // Category id normalization
+    try {
+      if (job['category'] is Map) {
+        prefilledJob['categoryId'] = (job['category']['_id'] ?? job['category']['id'] ?? job['category']['categoryId'])?.toString();
+      } else {
+        prefilledJob['categoryId'] = (job['categoryId'] ?? job['category'] ?? job['category_id'])?.toString();
+      }
+    } catch (_) {}
+
+    // Experience/type
+    prefilledJob['type'] = job['type'] ?? job['experience'] ?? job['experienceLevel'];
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -312,10 +379,14 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                       child: EditJobForm(
                         key: formKey,
-                        job: job,
+                        // Pass the normalized job so the form fields are prefilled consistently
+                        job: prefilledJob,
                         embedded: true,
                         onUpdated: () {
-                          Navigator.pop(context);
+                          // Close the sheet and refresh jobs
+                          try {
+                            Navigator.pop(context);
+                          } catch (_) {}
                           _loadJobs(query: _searchController!.text.trim());
                         },
                       ),
@@ -1374,3 +1445,4 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
     );
   }
 }
+

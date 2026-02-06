@@ -53,59 +53,42 @@ class LocationService {
     }
   }
 
-  /// Minimal hardcoded dataset for Nigeria states and a few LGAs.
+  /// Allowed (and only supported) country/state for now.
+  static const String allowedCountry = 'Nigeria';
+  static const String allowedState = 'Abuja FCT';
+  static const List<String> _abujaLgas = [
+    'Abaji',
+    'Abuja Municipal',
+    'Bwari',
+    'Gwagwalada',
+    'Kuje',
+    'Kwali',
+  ];
+
+  /// Minimal hardcoded dataset for Nigeria states (restricted to Abuja FCT only).
   static const Map<String, List<String>> _nigeriaData = {
-    'Lagos': ['Ikeja', 'Surulere', 'Epe', 'Eti-Osa', 'Kosofe'],
-    'Abia': ['Aba North', 'Aba South', 'Umuahia North', 'Isiala Ngwa North'],
-    'Kano': ['Nasarawa', 'Tarauni', 'Gwale', 'Dala'],
-    'Rivers': ['Port Harcourt', 'Obio-Akpor', 'Bonny', 'Ogu-Bolo'],
-    'Abuja FCT': ['Abuja Municipal', 'Gwagwalada', 'Kwali', 'Kuje'],
-    'Anambra': ['Awka South', 'Onitsha North', 'Oyi', 'Nnewi North'],
-    'Akwa Ibom': ['Uyo', 'Eket', 'Ikot Ekpene', 'Oron'],
-    'Bauchi': ['Bauchi', 'Toro', 'Ningi', 'Darazo'],
-    'Benue': ['Makurdi', 'Gboko', 'Buruku', 'Vandeikya'],
-    'Borno': ['Maiduguri', 'Jere', 'Bama', 'Dikwa'],
-    'Bayelsa': ['Yenagoa', 'Brass', 'Nembe', 'Sagbama'],
-    'Cross River': ['Calabar Municipal', 'Odukpani', 'Ikom', 'Bakassi'],
-    'Delta': ['Asaba', 'Warri North', 'Sapele', 'Ughelli North'],
-    'Edo': ['Benin City', 'Oredo', 'Ovia North-East', 'Ikpoba-Okha'],
-    'Ekiti': ['Ado-Ekiti', 'Ikere', 'Ise/Orun', 'Efon'],
-    'Enugu': ['Enugu North', 'Enugu South', 'Nsukka', 'Udi'],
-    'Gombe': ['Gombe', 'Akko', 'Balanga', 'Yamaltu/Deba'],
-    'Imo': ['Owerri North', 'Orlu', 'Okigwe', 'Mbaitoli'],
-    'Jigawa': ['Dutse', 'Hadejia', 'Kiyawa', 'Gumel'],
-    'Kaduna': ['Kaduna North', 'Kaduna South', 'Zaria', 'Kachia'],
-    'Kebbi': ['Birnin Kebbi', 'Argungu', 'Zuru', 'Sakaba'],
-    'Kogi': ['Lokoja', 'Okene', 'Ajaokuta', 'Anyigba'],
-    'Kwara': ['Ilorin East', 'Ilorin West', 'Offa', 'Edu'],
-    'Nasarawa': ['Lafia', 'Akwanga', 'Keffi', 'Doma'],
-    'Niger': ['Minna', 'Kontagora', 'Suleja', 'Bida'],
-    'Ogun': ['Abeokuta North', 'Abeokuta South', 'Ifo', 'Sagamu'],
-    'Ondo': ['Akure South', 'Owo', 'Ikare', 'Ondo West'],
-    'Osun': ['Osogbo', 'Ilesa', 'Ife North', 'Ede North'],
-    'Oyo': ['Ibadan North', 'Ibadan South-West', 'Ogbomosho', 'Iseyin'],
-    'Plateau': ['Jos North', 'Bassa', 'Bokkos', 'Langtang North'],
-    'Sokoto': ['Sokoto North', 'Sokoto South', 'Gwadabawa', 'Wurno'],
-    'Taraba': ['Jalingo', 'Wukari', 'Ibi', 'Gashaka'],
-    'Yobe': ['Damaturu', 'Borsari', 'Yusufari', 'Potiskum'],
-    'Zamfara': ['Gusau', 'Talata Mafara', 'Shinkafi', 'Anka'],
+    allowedState: _abujaLgas,
   };
 
   /// Returns the list of Nigeria states. Prefers asset data if present, otherwise uses the static dataset.
+  /// NOTE: will only return the configured allowed state (Abuja FCT).
   static Future<List<String>> fetchNigeriaStates() async {
     // try asset first
     await _loadNigeriaDataFromAsset();
     if (_assetNigeriaData != null && _assetNigeriaData!.isNotEmpty) {
-      final keys = _assetNigeriaData!.keys.toList()..sort();
+      final keys = _assetNigeriaData!.keys.where((k) => k == allowedState).toList()..sort();
       return keys;
     }
     // fallback
     await Future.delayed(const Duration(milliseconds: 120));
-    return _nigeriaData.keys.toList()..sort();
+    return [allowedState];
   }
 
   /// Returns the list of LGAs for the provided `state`. Prefers asset data if present.
+  /// NOTE: Only `Abuja FCT` is supported. Other states return an empty list.
   static Future<List<String>> fetchNigeriaLgas(String state) async {
+    if (state != allowedState) return <String>[];
+
     await _loadNigeriaDataFromAsset();
     if (_assetNigeriaData != null) {
       final l = _assetNigeriaData![state];
@@ -123,5 +106,12 @@ class LocationService {
     final copy = List<String>.from(lgas);
     copy.sort();
     return copy;
+  }
+
+  /// Helper to validate that a given country/state/lga is allowed by the client.
+  static bool isAllowedLocation({required String country, required String state, required String lga}) {
+    if (country.trim().toLowerCase() != allowedCountry.toLowerCase()) return false;
+    if (state.trim() != allowedState) return false;
+    return _abujaLgas.map((e) => e.toLowerCase()).contains(lga.trim().toLowerCase());
   }
 }
