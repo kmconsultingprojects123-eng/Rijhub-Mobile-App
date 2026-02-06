@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'dart:math' as math;
-import '../../mapbox_config.dart';
+import '../../google_maps_config.dart';
 import '../../utils/error_messages.dart';
 import '../../services/user_service.dart';
 import '../../services/token_storage.dart';
@@ -223,23 +223,25 @@ class _ArtisanProfileupdateWidgetState
     }
   }
 
-  Future<void> _geocodeAddress(String address) async {
+    Future<void> _geocodeAddress(String address) async {
     if (address.trim().isEmpty) return;
     setState(() { _isGeocoding = true; _serviceLat = null; _serviceLon = null; });
     try {
+      final key = GOOGLE_MAPS_API_KEY;
+      if (key.isEmpty) return;
       final q = Uri.encodeComponent(address);
-      final url = Uri.parse('https://api.mapbox.com/geocoding/v5/mapbox.places/$q.json?limit=1&access_token=$MAPBOX_ACCESS_TOKEN');
+      final url = Uri.parse('https://maps.googleapis.com/maps/api/geocode/json?address=$q&key=$key');
       final resp = await http.get(url).timeout(const Duration(seconds: 12));
       if (resp.statusCode == 200 && resp.body.isNotEmpty) {
         final body = jsonDecode(resp.body);
-        if (body is Map && body['features'] is List && (body['features'] as List).isNotEmpty) {
-          final feat = (body['features'] as List).first;
-          if (feat is Map && feat['center'] is List) {
-            final center = List.from(feat['center']);
-            if (center.length >= 2) {
-              final lon = (center[0] is num) ? center[0].toDouble() : double.tryParse(center[0].toString());
-              final lat = (center[1] is num) ? center[1].toDouble() : double.tryParse(center[1].toString());
-              setState(() { _serviceLat = lat; _serviceLon = lon; });
+        if (body is Map && body['results'] is List && (body['results'] as List).isNotEmpty) {
+          final res = (body['results'] as List).first;
+          if (res is Map && res['geometry'] is Map && res['geometry']['location'] is Map) {
+            final loc = res['geometry']['location'];
+            final lat = loc['lat'];
+            final lon = loc['lng'];
+            if (lat is num && lon is num) {
+              setState(() { _serviceLat = lat.toDouble(); _serviceLon = lon.toDouble(); });
             }
           }
         }
@@ -254,7 +256,7 @@ class _ArtisanProfileupdateWidgetState
     } finally {
       if (mounted) setState(() => _isGeocoding = false);
     }
-  }
+    }
 
   // Load profile data from backend and prefill fields
   Future<void> _loadProfileData() async {

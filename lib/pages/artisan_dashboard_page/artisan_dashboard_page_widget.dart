@@ -12,7 +12,7 @@ import 'package:http/http.dart' as http;
 import 'package:badges/badges.dart' as badges; // added for notification badge
 import 'dart:async'; // <-- added for Timer
 import '../../services/notification_service.dart'; // <-- added for NotificationService
-import '../../mapbox_config.dart';
+import '../../google_maps_config.dart';
 import '../../utils/location_permission.dart';
 import 'dart:convert';
 import 'artisan_dashboard_page_model.dart';
@@ -1929,7 +1929,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                             ),
                                           ),
                                         ),
-                                        if (_model.recentBookings!.indexOf(item) < _model.recentBookings!.take(3).length -  1)
+                                        if (_model.recentBookings!.indexOf(item) < _model.recentBookings!.take(3).length -   1)
                                           Padding(
                                             padding: const EdgeInsets.symmetric(horizontal: 60),
                                             child: Divider(
@@ -2241,17 +2241,20 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
 
                           try {
                             final pos = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.best));
-                            // Reverse geocode using Mapbox to get human-readable address
+                            // Reverse geocode using Google Maps Geocoding API to get human-readable address
                             String? address;
                             try {
-                              final url = Uri.parse('https://api.mapbox.com/geocoding/v5/mapbox.places/${pos.longitude},${pos.latitude}.json?access_token=$MAPBOX_ACCESS_TOKEN&limit=1');
-                              final resp = await http.get(url).timeout(const Duration(seconds: 10));
-                              if (resp.statusCode == 200 && resp.body.isNotEmpty) {
-                                final body = jsonDecode(resp.body);
-                                if (body is Map && body['features'] is List && (body['features'] as List).isNotEmpty) {
-                                  final feat = (body['features'] as List).first;
-                                  if (feat is Map && feat['place_name'] != null) {
-                                    address = feat['place_name'].toString();
+                              final key = GOOGLE_MAPS_API_KEY;
+                              if (key.isNotEmpty) {
+                                final url = Uri.parse('https://maps.googleapis.com/maps/api/geocode/json?latlng=${pos.latitude},${pos.longitude}&key=$key');
+                                final resp = await http.get(url).timeout(const Duration(seconds: 10));
+                                if (resp.statusCode == 200 && resp.body.isNotEmpty) {
+                                  final body = jsonDecode(resp.body);
+                                  if (body is Map && body['results'] is List && (body['results'] as List).isNotEmpty) {
+                                    final feat = (body['results'] as List).first;
+                                    if (feat is Map && feat['formatted_address'] != null) {
+                                      address = feat['formatted_address'].toString();
+                                    }
                                   }
                                 }
                               }

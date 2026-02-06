@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'dart:async';
@@ -23,46 +24,20 @@ import 'package:flutter/services.dart' show PlatformAssetBundle;
 import 'dart:convert';
 
 void main() async {
+  // Ensure Flutter binding is initialized before calling any platform
+  // channels (including SharedPreferences) or running async startup logic.
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Disable debugPrint globally to prevent logging sensitive data to terminal
-  // try {
-  //   debugPrint = (String? messagege, {int? wrapWidth}) {};
-  // } catch (_) {}
+  // Eagerly initialize SharedPreferences on the UI thread so plugins using
+  // method channels (e.g. shared_preferences) don't race with engine setup on iOS.
+  final SharedPreferences prefs = await SharedPreferences.getInstance();
 
-  // Global error handlers to capture runtime assertion stack traces (helps diagnose '!semantics.parentDataDirty' issues)
-  FlutterError.onError = (FlutterErrorDetails details) {
-    // Always dump error details; avoid printing extra debug info to terminal
-    FlutterError.dumpErrorToConsole(details);
-    // Removed debugPrint calls for security: do not log exception or stacktrace to terminal
-  };
-
-  ui.PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
-    // Removed debugPrint calls for security: do not log platform errors to terminal
-    return false; // prevent the engine from exiting
-  };
-
-  // ✅ FIX: Remove edgeToEdge to prevent Android from showing app name ("RijHub")
-  SystemChrome.setEnabledSystemUIMode(
-    SystemUiMode.manual,
-    overlays: [
-      SystemUiOverlay.top,
-      SystemUiOverlay.bottom,
-    ],
-  );
-
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      systemNavigationBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-    ),
-  );
-
+  // Use the pre-created prefs instance when initializing the theme so that
+  // FlutterFlowTheme.themeMode and other consumers read a ready-backed value.
   GoRouter.optionURLReflectsImperativeAPIs = true;
   usePathUrlStrategy();
 
-  await FlutterFlowTheme.initialize();
+  await FlutterFlowTheme.initialize(prefs: prefs);
 
   try {
     await AppStateNotifier.instance.refreshAuth();

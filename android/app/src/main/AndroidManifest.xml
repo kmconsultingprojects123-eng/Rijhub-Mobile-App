@@ -11,10 +11,10 @@
         android:roundIcon="@mipmap/ic_launcher"
         android:theme="@style/NormalTheme">
 
-        <!-- Mapbox access token (provided) -->
+        <!-- Google Maps API Key -->
         <meta-data
-            android:name="com.mapbox.token"
-            android:value="pk.eyJ1IjoicmlqaHViIiwiYSI6ImNtamhkbW83NDFid3IzZXF4cDRyeDMwbDYifQ.BO-Hzrpl9ynt2rtURZEpUw" />
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyAjdDayJe-TVV8Cz6a-kHFCoJm6oNgeix8" />
 
         <!--
           Google OAuth: add your Web client ID here (optional helper metadata).

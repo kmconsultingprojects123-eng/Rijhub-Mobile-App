@@ -79,13 +79,40 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
     });
   }
 
+  /// Extract a canonical user id from a possibly nested profile map.
+  /// Tries several common keys and also checks nested `user` object.
+  String? _extractUserIdFromProfile(Map<String, dynamic>? profile) {
+    if (profile == null) return null;
+    try {
+      final candidates = ['_id', 'id', 'userId', 'user_id', 'uid'];
+      for (final k in candidates) {
+        final v = profile[k];
+        if (v != null) return v.toString();
+      }
+      // Some endpoints embed the user under 'user'
+      if (profile['user'] is Map) {
+        for (final k in candidates) {
+          final v = (profile['user'] as Map)[k];
+          if (v != null) return v.toString();
+        }
+      }
+      // Some APIs return { data: { user: {...} } }
+      if (profile['data'] is Map) {
+        final data = profile['data'] as Map;
+        for (final k in candidates) {
+          final v = data[k] ?? (data['user'] is Map ? (data['user'] as Map)[k] : null);
+          if (v != null) return v.toString();
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<void> _initialize() async {
     try {
       final profile = await UserService.getProfile();
-      final role =
-      (profile?['role'] ?? profile?['type'] ?? '').toString().toLowerCase();
-      final id =
-      (profile?['_id'] ?? profile?['id'] ?? profile?['userId'])?.toString();
+      final role = (profile?['role'] ?? profile?['type'] ?? '').toString().toLowerCase();
+      final id = _extractUserIdFromProfile(profile);
 
       // Check if user is job owner
       final clientId = _extractClientId(widget.job);
@@ -123,8 +150,7 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
 
       final quotes = await _fetchJobQuotes(jobId.toString());
       final profile = await UserService.getProfile();
-      final myId =
-      (profile?['_id'] ?? profile?['id'] ?? profile?['userId'])?.toString();
+      final myId = _extractUserIdFromProfile(profile);
       if (myId == null) return;
 
       final hasApplied = quotes.any((quote) {
@@ -173,7 +199,7 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
         return '₦${NumberFormat('#,##0', 'en_US').format(budget)}';
       }
       final numVal =
-      num.tryParse(budget.toString().replaceAll(RegExp(r'[^0-9.-]'), ''));
+          num.tryParse(budget.toString().replaceAll(RegExp(r'[^0-9.-]'), ''));
       if (numVal != null) {
         return '₦${NumberFormat('#,##0', 'en_US').format(numVal)}';
       }
@@ -257,7 +283,7 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
   Widget build(BuildContext context) {
     final job = widget.job;
     final title =
-    (job['title'] ?? job['jobTitle'] ?? 'Untitled Job').toString();
+        (job['title'] ?? job['jobTitle'] ?? 'Untitled Job').toString();
     final description = (job['description'] ?? job['details'] ?? '').toString();
     final budget = job['budget'];
     final isClosed = _isJobClosed();
@@ -308,7 +334,7 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
                 physics: const BouncingScrollPhysics(),
                 child: Padding(
                   padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -352,7 +378,7 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
                                   horizontal: 12, vertical: 6),
                               decoration: BoxDecoration(
                                 color:
-                                _getTextSecondary(context).withOpacity(0.1),
+                                    _getTextSecondary(context).withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Row(
@@ -504,161 +530,161 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
               ),
               child: _loadingRole
                   ? Center(
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation(_primaryColor),
-                  ),
-                ),
-              )
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation(_primaryColor),
+                        ),
+                      ),
+                    )
                   : SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _isJobPaid() ||
-                      isClosed ||
-                      (_isArtisan && _hasApplied)
-                      ? null
-                      : () async {
-                    if (_isArtisan) {
-                      // Ensure KYC verified before allowing quote submission
-                      try {
-                        final kyc =
-                        await TokenStorage.getKycVerified();
-                        if (kyc != true) {
-                          final go = await showDialog<bool>(
-                            context: context,
-                            barrierDismissible: false,
-                            builder: (ctx) {
-                              return AlertDialog(
-                                title: const Text('KYC required'),
-                                content: const Text(
-                                    'You must complete KYC verification before you can submit quotes. Go to KYC now?'),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () =>
-                                        Navigator.of(ctx)
-                                            .pop(false),
-                                    child: const Text('Not now'),
-                                  ),
-                                  ElevatedButton(
-                                    onPressed: () =>
-                                        Navigator.of(ctx).pop(true),
-                                    child: const Text('Go to KYC'),
-                                  ),
-                                ],
-                              );
-                            },
-                          );
-                          if (go == true) {
-                            try {
-                              final status = await TokenStorage.getKycStatus();
-                              if (status == 'pending') {
-                                // Inform user that admin review is in progress
-                                await showDialog<void>(
-                                  context: context,
-                                  builder: (ctx) => AlertDialog(
-                                    title: const Text('Awaiting KYC approval'),
-                                    content: const Text('Your KYC request is pending admin review. We will notify you when it is approved.'),
-                                    actions: [
-                                      TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK')),
-                                    ],
-                                  ),
-                                );
-                              } else {
-                                await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ArtisanKycWidget()));
-                                final after = await TokenStorage.getKycVerified();
-                                if (after == true) {
-                                  _openSubmitQuotePage(context);
-                                }
-                              }
-                            } catch (_) {}
-                          }
-                          return;
-                        }
-                      } catch (_) {
-                        final go = await showDialog<bool>(
-                          context: context,
-                          barrierDismissible: false,
-                          builder: (ctx) {
-                            return AlertDialog(
-                              title: const Text('KYC required'),
-                              content: const Text(
-                                  'You must complete KYC verification before you can submit quotes. Go to KYC now?'),
-                              actions: [
-                                TextButton(
-                                  onPressed: () =>
-                                      Navigator.of(ctx).pop(false),
-                                  child: const Text('Not now'),
-                                ),
-                                ElevatedButton(
-                                  onPressed: () =>
-                                      Navigator.of(ctx).pop(true),
-                                  child: const Text('Go to KYC'),
-                                ),
-                              ],
-                            );
-                          },
-                        );
-                        if (go == true) {
-                          try {
-                            final status = await TokenStorage.getKycStatus();
-                            if (status == 'pending') {
-                              await showDialog<void>(
-                                context: context,
-                                builder: (ctx) => AlertDialog(
-                                  title: const Text('Awaiting KYC approval'),
-                                  content: const Text('Your KYC request is pending admin review. We will notify you when it is approved.'),
-                                  actions: [
-                                    TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK')),
-                                  ],
-                                ),
-                              );
-                            } else {
-                              await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ArtisanKycWidget()));
-                            }
-                          } catch (_) {}
-                        }
-                        return;
-                      }
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _isJobPaid() ||
+                                isClosed ||
+                                (_isArtisan && _hasApplied)
+                            ? null
+                            : () async {
+                                if (_isArtisan) {
+                                  // Ensure KYC verified before allowing quote submission
+                                  try {
+                                    final kyc =
+                                        await TokenStorage.getKycVerified();
+                                    if (kyc != true) {
+                                      final go = await showDialog<bool>(
+                                        context: context,
+                                        barrierDismissible: false,
+                                        builder: (ctx) {
+                                          return AlertDialog(
+                                            title: const Text('KYC required'),
+                                            content: const Text(
+                                                'You must complete KYC verification before you can submit quotes. Go to KYC now?'),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () =>
+                                                    Navigator.of(ctx)
+                                                        .pop(false),
+                                                child: const Text('Not now'),
+                                              ),
+                                              ElevatedButton(
+                                                onPressed: () =>
+                                                    Navigator.of(ctx).pop(true),
+                                                child: const Text('Go to KYC'),
+                                              ),
+                                            ],
+                                          );
+                                        },
+                                      );
+                                      if (go == true) {
+                                        try {
+                                          final status = await TokenStorage.getKycStatus();
+                                          if (status == 'pending') {
+                                            // Inform user that admin review is in progress
+                                            await showDialog<void>(
+                                              context: context,
+                                              builder: (ctx) => AlertDialog(
+                                                title: const Text('Awaiting KYC approval'),
+                                                content: const Text('Your KYC request is pending admin review. We will notify you when it is approved.'),
+                                                actions: [
+                                                  TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK')),
+                                                ],
+                                              ),
+                                            );
+                                          } else {
+                                            await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ArtisanKycWidget()));
+                                            final after = await TokenStorage.getKycVerified();
+                                            if (after == true) {
+                                              _openSubmitQuotePage(context);
+                                            }
+                                          }
+                                        } catch (_) {}
+                                      }
+                                      return;
+                                    }
+                                  } catch (_) {
+                                    final go = await showDialog<bool>(
+                                      context: context,
+                                      barrierDismissible: false,
+                                      builder: (ctx) {
+                                        return AlertDialog(
+                                          title: const Text('KYC required'),
+                                          content: const Text(
+                                              'You must complete KYC verification before you can submit quotes. Go to KYC now?'),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.of(ctx).pop(false),
+                                              child: const Text('Not now'),
+                                            ),
+                                            ElevatedButton(
+                                              onPressed: () =>
+                                                  Navigator.of(ctx).pop(true),
+                                              child: const Text('Go to KYC'),
+                                            ),
+                                          ],
+                                        );
+                                      },
+                                    );
+                                    if (go == true) {
+                                      try {
+                                        final status = await TokenStorage.getKycStatus();
+                                        if (status == 'pending') {
+                                          await showDialog<void>(
+                                            context: context,
+                                            builder: (ctx) => AlertDialog(
+                                              title: const Text('Awaiting KYC approval'),
+                                              content: const Text('Your KYC request is pending admin review. We will notify you when it is approved.'),
+                                              actions: [
+                                                TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK')),
+                                              ],
+                                            ),
+                                          );
+                                        } else {
+                                          await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ArtisanKycWidget()));
+                                        }
+                                      } catch (_) {}
+                                    }
+                                    return;
+                                  }
 
-                      // KYC passed; open submit quote page
-                      _openSubmitQuotePage(context);
-                    } else if (_isOwner) {
-                      _openApplicantsPage(context);
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _primaryColor,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                                  // KYC passed; open submit quote page
+                                  _openSubmitQuotePage(context);
+                                } else if (_isOwner) {
+                                  _openApplicantsPage(context);
+                                }
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _primaryColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(
+                          isClosed
+                              ? 'Job Closed'
+                              : _isJobPaid()
+                                  ? 'Job Paid'
+                                  : _isArtisan
+                                      ? (_hasApplied
+                                          ? 'Application Submitted'
+                                          : 'Submit Quote')
+                                      : (_isOwner
+                                          ? 'View Applicants'
+                                          : 'Login to Apply'),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                  child: Text(
-                    isClosed
-                        ? 'Job Closed'
-                        : _isJobPaid()
-                        ? 'Job Paid'
-                        : _isArtisan
-                        ? (_hasApplied
-                        ? 'Application Submitted'
-                        : 'Submit Quote')
-                        : (_isOwner
-                        ? 'View Applicants'
-                        : 'Login to Apply'),
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
             ),
-          ],
-        ),
+        ]
+      ),
       ),
     );
   }

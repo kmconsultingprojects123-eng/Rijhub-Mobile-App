@@ -7,15 +7,15 @@ import 'dart:math';
 
 import '/flutter_flow/flutter_flow_util.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart' as ll;
+import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart' show Factory;
+import 'package:google_maps_flutter/google_maps_flutter.dart' as gmaps;
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/artist_service.dart';
 import '../../services/user_service.dart';
 import '../artisan_detail_page/artisan_detail_page_widget.dart';
-import '../../mapbox_config.dart';
 import '../../utils/navigation_utils.dart';
 import '/main.dart';
 import '../../api_config.dart';
@@ -31,11 +31,11 @@ class DiscoverPageWidget extends StatefulWidget {
 }
 
 class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTickerProviderStateMixin {
-  // UI state
-  final ScrollController _scrollController = ScrollController();
-  final MapController _mapController = MapController();
-  final TextEditingController _searchController = TextEditingController();
-  final FocusNode _searchFocus = FocusNode();
+    // UI state
+    final ScrollController _scrollController = ScrollController();
+    gmaps.GoogleMapController? _googleMapController;
+    final TextEditingController _searchController = TextEditingController();
+    final FocusNode _searchFocus = FocusNode();
 
   List<Map<String, dynamic>> _artisans = [];
   List<Map<String, dynamic>> _cachedArtisans = [];
@@ -44,11 +44,11 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTick
   bool _hasMore = true;
   int _page = 1;
 
-  // Map features state
-  bool _showUserLocation = true;
-  bool _showArtisanMarkers = true;
-  double _mapZoom = 13.0;
-  LatLngBounds? _visibleBounds;
+    // Map features state
+    bool _showUserLocation = true;
+    bool _showArtisanMarkers = true;
+    double _mapZoom = 13.0;
+    gmaps.LatLngBounds? _visibleBounds;
 
   // user location
   List<double>? _userCoords;
@@ -63,34 +63,13 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTick
   static const double DEFAULT_LAT = 9.0820;
   static const double DEFAULT_LON = 8.6753;
 
-  // Map style - adaptable to theme
-  String get _mapStyle {
-    final brightness = MediaQuery.of(context).platformBrightness;
-    if (MAPBOX_ACCESS_TOKEN.isNotEmpty) {
-      return brightness == Brightness.dark
-          ? 'mapbox/dark-v10' // Dark style for Mapbox
-          : 'mapbox/streets-v11'; // Light style for Mapbox
-    } else {
-      // For OpenStreetMap, we can't change style, but we'll use different tile layers
-      return brightness == Brightness.dark ? 'cartodbdark' : 'openstreetmap';
-    }
-  }
-
-  @override
-  void initState() {
+    @override
+    void initState() {
     super.initState();
     _searchFocus.addListener(_onSearchFocusChange);
     _scrollController.addListener(_onScroll);
-    _mapController.mapEventStream.listen(_onMapEvent);
     _init();
-  }
-
-  void _onMapEvent(MapEvent event) {
-    if (event is MapEventMoveEnd) {
-      _mapZoom = _mapController.camera.zoom;
-      _visibleBounds = _mapController.camera.visibleBounds;
     }
-  }
 
   Future<void> _init() async {
     // load cached artisans if any
@@ -287,8 +266,8 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTick
     }
   }
 
-  Future<void> _fitMapToArtisans() async {
-    final points = <ll.LatLng>[];
+    Future<void> _fitMapToArtisans() async {
+    final points = <LatLng>[];
     for (final a in _artisans) {
       final c = _extractLatLon(a);
       if (c != null) points.add(c);
@@ -296,8 +275,13 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTick
     if (points.isEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         try {
-          if (_userCoords != null) _mapController.move(ll.LatLng(_userCoords![0], _userCoords![1]), 12.0);
-          else _mapController.move(ll.LatLng(DEFAULT_LAT, DEFAULT_LON), 6.0);
+          if (_googleMapController != null) {
+            if (_userCoords != null) {
+              _googleMapController!.moveCamera(gmaps.CameraUpdate.newLatLngZoom(gmaps.LatLng(_userCoords![0], _userCoords![1]), 12.0));
+            } else {
+              _googleMapController!.moveCamera(gmaps.CameraUpdate.newLatLngZoom(gmaps.LatLng(DEFAULT_LAT, DEFAULT_LON), 6.0));
+            }
+          }
         } catch (_) {}
       });
       return;
@@ -332,24 +316,31 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTick
     else zoom = 8.0;
 
     try {
-      _mapController.move(ll.LatLng(centerLat, centerLng), zoom);
-    } catch (_) {}
-  }
-
-  ll.LatLng? _extractLatLon(Map<String, dynamic> a) {
-    try {
-      final coords = a['coordinates'] ?? a['coords'] ?? a['locationCoordinates'];
-      if (coords is List && coords.length >= 2) {
-        final v0 = coords[0];
-        final v1 = coords[1];
-        if (v0 is num && v1 is num) return ll.LatLng(v0.toDouble(), v1.toDouble());
+      if (_googleMapController != null) {
+        final bounds = gmaps.LatLngBounds(
+          southwest: gmaps.LatLng(minLat, minLng),
+          northeast: gmaps.LatLng(maxLat, maxLng),
+        );
+        // Use a small padding (in pixels) when fitting
+        await _googleMapController!.moveCamera(gmaps.CameraUpdate.newLatLngBounds(bounds, 50));
       }
-      final lat = a['latitude'] ?? a['lat'] ?? a['location']?['lat'];
-      final lon = a['longitude'] ?? a['lon'] ?? a['location']?['lng'];
-      if (lat is num && lon is num) return ll.LatLng(lat.toDouble(), lon.toDouble());
     } catch (_) {}
-    return null;
-  }
+    }
+
+LatLng? _extractLatLon(Map<String, dynamic> a) {
+ try {
+   final coords = a['coordinates'] ?? a['coords'] ?? a['locationCoordinates'];
+   if (coords is List && coords.length >= 2) {
+     final v0 = coords[0];
+     final v1 = coords[1];
+     if (v0 is num && v1 is num) return LatLng(v0.toDouble(), v1.toDouble());
+   }
+   final lat = a['latitude'] ?? a['lat'] ?? a['location']?['lat'];
+   final lon = a['longitude'] ?? a['lon'] ?? a['location']?['lng'];
+   if (lat is num && lon is num) return LatLng(lat.toDouble(), lon.toDouble());
+ } catch (_) {}
+ return null;
+ }
 
   String _initialsFromName(String name) {
     try {
@@ -512,11 +503,11 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTick
     );
   }
 
-  void _zoomToUserLocation() {
-    if (_userCoords != null) {
-      _mapController.move(ll.LatLng(_userCoords![0], _userCoords![1]), 15.0);
+    void _zoomToUserLocation() {
+    if (_userCoords != null && _googleMapController != null) {
+      _googleMapController!.moveCamera(gmaps.CameraUpdate.newLatLngZoom(gmaps.LatLng(_userCoords![0], _userCoords![1]), 15.0));
     }
-  }
+    }
 
   String _normalizeImageUrl(String url) {
     try {
@@ -882,7 +873,6 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTick
                 minExtentHeight: headerMin,
                 mapBuilder: (ctx) => _buildMap(),
                 searchBuilder: (ctx) => _buildSearchBar(),
-                featuresBuilder: _buildMapFeatures,
               ),
             ),
             SliverToBoxAdapter(
@@ -915,6 +905,12 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTick
                       ),
                   ],
                 ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Container(
+                height: 8,
+                color: theme.colorScheme.background,
               ),
             ),
             if (_loading && _page == 1)
@@ -1205,114 +1201,97 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTick
     );
   }
 
-  // Enhanced map widget with theme adaptation
-  Widget _buildMap() {
-    final brightness = MediaQuery.of(context).platformBrightness;
+    // Enhanced map widget with Google Maps implementation
+    Widget _buildMap() {
     final theme = Theme.of(context);
 
-    return FlutterMap(
-      mapController: _mapController,
-      options: MapOptions(
-        initialCenter: _userCoords != null
-            ? ll.LatLng(_userCoords![0], _userCoords![1])
-            : ll.LatLng(DEFAULT_LAT, DEFAULT_LON),
-        initialZoom: 13.0,
-        onPositionChanged: (pos, _) {
+    // Build Google Map widget with basic markers. Note: for custom marker widgets (like
+    // the previous `_buildMarker` container) we'd need to convert widgets to bitmaps; for
+    // now we use default markers and info windows that navigate to artisan detail on tap.
+    final Set<gmaps.Marker> markers = {};
+
+    if (_userCoords != null && _showUserLocation) {
+      markers.add(gmaps.Marker(
+        markerId: const gmaps.MarkerId('user_location'),
+        position: gmaps.LatLng(_userCoords![0], _userCoords![1]),
+        icon: gmaps.BitmapDescriptor.defaultMarkerWithHue(gmaps.BitmapDescriptor.hueAzure),
+        infoWindow: const gmaps.InfoWindow(title: 'You'),
+      ));
+    }
+
+    for (var i = 0; i < _artisans.length; i++) {
+      final a = _artisans[i];
+      final latlon = _extractLatLon(a);
+      if (latlon == null) continue;
+      final id = (a['_id'] ?? a['id'] ?? i.toString()).toString();
+      markers.add(gmaps.Marker(
+        markerId: gmaps.MarkerId('artisan_$id'),
+        position: gmaps.LatLng(latlon.latitude, latlon.longitude),
+        infoWindow: gmaps.InfoWindow(
+          title: _displayName(a),
+          snippet: _locationText(a),
+          onTap: () async {
+            try {
+              await NavigationUtils.safePush(
+                context,
+                ArtisanDetailPageWidget(artisan: _artisanWithUserId(a), openHire: true),
+              );
+            } catch (_) {}
+          },
+        ),
+        onTap: () async {
           try {
-            final center = pos.center;
-            if (center == null) return;
-            double lat = center.latitude;
-            double lon = center.longitude;
-            lat = lat.clamp(4.271, 13.892);
-            lon = lon.clamp(2.676, 14.678);
-            if (lat != center.latitude || lon != center.longitude) {
-              _mapController.move(ll.LatLng(lat, lon), pos.zoom ?? 13.0);
-            }
+            await NavigationUtils.safePush(
+              context,
+              ArtisanDetailPageWidget(artisan: _artisanWithUserId(a), openHire: true),
+            );
           } catch (_) {}
         },
-      ),
+      ));
+    }
+
+    return Stack(
+      fit: StackFit.expand,
       children: [
-        // Map tiles with theme adaptation
-        if (MAPBOX_ACCESS_TOKEN.isNotEmpty)
-          TileLayer(
-            urlTemplate: 'https://api.mapbox.com/styles/v1/${brightness == Brightness.dark ? 'mapbox/dark-v10' : 'mapbox/streets-v11'}/tiles/256/{z}/{x}/{y}?access_token=$MAPBOX_ACCESS_TOKEN',
-            additionalOptions: const {'accessToken': MAPBOX_ACCESS_TOKEN},
-            tileSize: 256,
-            maxNativeZoom: 19,
-            maxZoom: 19,
-          )
-        else if (brightness == Brightness.dark)
-          TileLayer(
-            urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-            subdomains: const ['a', 'b', 'c'],
-            userAgentPackageName: 'com.example.app',
-            tileSize: 256,
-            maxNativeZoom: 19,
-            maxZoom: 19,
-          )
-        else
-          TileLayer(
-            urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-            subdomains: const ['a', 'b', 'c'],
-            userAgentPackageName: 'com.example.app',
-            tileSize: 256,
-            maxNativeZoom: 19,
-            maxZoom: 19,
+        gmaps.GoogleMap(
+          initialCameraPosition: gmaps.CameraPosition(
+            target: _userCoords != null ? gmaps.LatLng(_userCoords![0], _userCoords![1]) : gmaps.LatLng(DEFAULT_LAT, DEFAULT_LON),
+            zoom: 13.0,
           ),
+          // Enable built-in UI controls so the user has on-map buttons (zoom, compass, toolbar)
+          zoomControlsEnabled: true,
+          compassEnabled: true,
+          mapToolbarEnabled: true,
+          // Show my-location layer/button when we have user location enabled
+          myLocationEnabled: _showUserLocation,
+          myLocationButtonEnabled: _showUserLocation,
+          // Enable gesture interactions (pan/zoom/rotate/tilt)
+          zoomGesturesEnabled: true,
+          scrollGesturesEnabled: true,
+          rotateGesturesEnabled: true,
+          tiltGesturesEnabled: true,
+          // Ensure the map receives gesture events when nested inside scrollable widgets
+          gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+            Factory<OneSequenceGestureRecognizer>(() => EagerGestureRecognizer()),
+          },
+           markers: markers,
+           onMapCreated: (controller) {
+             _googleMapController = controller;
+           },
+           onCameraMove: (pos) {
+             _mapZoom = pos.zoom;
+           },
+           onCameraIdle: () async {
+             try {
+               if (_googleMapController != null) {
+                 final bounds = await _googleMapController!.getVisibleRegion();
+                 _visibleBounds = bounds;
+               }
+             } catch (_) {}
+           },
+        ),
 
-        // Markers
-        if (_showArtisanMarkers)
-          MarkerLayer(
-            markers: [
-              if (_userCoords != null && _showUserLocation)
-                Marker(
-                  width: 42,
-                  height: 42,
-                  point: ll.LatLng(_userCoords![0], _userCoords![1]),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: theme.colorScheme.onPrimary,
-                        width: 3,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: theme.colorScheme.onSurface.withOpacity(0.3),
-                          blurRadius: 8,
-                          spreadRadius: 1,
-                        ),
-                      ],
-                    ),
-                    child: Center(
-                      child: Icon(
-                        Icons.person_pin_circle_rounded,
-                        size: 20,
-                        color: theme.colorScheme.onPrimary,
-                      ),
-                    ),
-                  ),
-                ),
-              ..._artisans.map((a) {
-                final latlon = _extractLatLon(a);
-                if (latlon == null) return Marker(
-                  width: 0,
-                  height: 0,
-                  point: ll.LatLng(0, 0),
-                  child: const SizedBox.shrink(),
-                );
-                return Marker(
-                  width: 48,
-                  height: 48,
-                  point: latlon,
-                  child: _buildMarker(a),
-                );
-              }).where((m) => m.point.latitude != 0 || m.point.longitude != 0).toList(),
-            ],
-          ),
-
-        // Zoom indicator (replaces removed ScaleLayer)
+        // Zoom indicator
         Positioned(
           left: 8,
           bottom: 8,
@@ -1330,7 +1309,7 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTick
         ),
       ],
     );
-  }
+    }
 
   Widget _buildSearchBar() {
     final theme = Theme.of(context);
@@ -1608,6 +1587,38 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTick
 
   Future<void> _onRefreshPressed() async {
     await _loadArtisans(next: false, showLoading: true);
+  }
+
+  @override
+  void dispose() {
+    // Cancel debounce timer
+    try {
+      _debounce?.cancel();
+    } catch (_) {}
+
+    // Remove listeners
+    try {
+      _searchFocus.removeListener(_onSearchFocusChange);
+    } catch (_) {}
+    try {
+      _scrollController.removeListener(_onScroll);
+    } catch (_) {}
+
+    // Dispose controllers
+    try {
+      _searchController.dispose();
+    } catch (_) {}
+    try {
+      _scrollController.dispose();
+    } catch (_) {}
+    try {
+      _searchFocus.dispose();
+    } catch (_) {}
+
+    // GoogleMapController doesn't have a direct dispose method; release reference
+    _googleMapController = null;
+
+    super.dispose();
   }
 }
 
