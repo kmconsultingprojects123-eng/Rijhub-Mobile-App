@@ -948,6 +948,13 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                                 if (!mounted) return;
                                 setState(() => _rememberMe = v ?? false);
                               },
+                              fillColor: MaterialStateProperty.resolveWith<Color?>((states) {
+                                if (states.contains(MaterialState.selected))
+                                  return primaryColor;
+                                return Colors.transparent;
+                              }),
+                              checkColor: Colors.white,
+                              side: const BorderSide(color: Colors.white),
                             ),
                             Expanded(
                                 child: Text('Remember me',

@@ -9,6 +9,8 @@ import '../../utils/awesome_dialogs.dart';
 import 'package:flutter/foundation.dart'; // Import foundation library for kDebugMode
 import '../../utils/navigation_utils.dart';
 import '../../utils/account_creation_navigator.dart';
+import 'package:flutter/gestures.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 export 'create_account2_model.dart';
 
@@ -34,6 +36,10 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
   // Holds Google profile info (if user signed in with Google during this flow)
   Map<String, dynamic>? _googleProfile;
 
+  // Tap recognizers for T&C and Privacy links
+  late TapGestureRecognizer _tncRecognizer;
+  late TapGestureRecognizer _privacyRecognizer;
+
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final _formKey = GlobalKey<FormState>();
 
@@ -46,6 +52,16 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
   void initState() {
     super.initState();
     _model = createModel(context, () => CreateAccount2Model());
+
+    // Initialize link recognizers
+    _tncRecognizer = TapGestureRecognizer()
+      ..onTap = () {
+        _openUrl('https://rijhub.com/terms-and-conditions.html');
+      };
+    _privacyRecognizer = TapGestureRecognizer()
+      ..onTap = () {
+        _openUrl('https://rijhub.com/privacy-policy.html');
+      };
 
     _model.fullNameTextController ??= TextEditingController();
     _model.fullNameFocusNode ??= FocusNode();
@@ -97,7 +113,7 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
       // Normalize some common synonyms (client -> customer)
       if (role != null) {
         final v = role.trim().toLowerCase();
-        if (v == 'client') role = 'customer';
+        if (v == 'client' ) role = 'customer';
       }
 
       // Debug log to help trace navigation role propagation during testing
@@ -111,12 +127,39 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
 
   @override
   void dispose() {
+    // dispose recognizers
+    try {
+      _tncRecognizer.dispose();
+    } catch (_) {}
+    try {
+      _privacyRecognizer.dispose();
+    } catch (_) {}
+
     _model.dispose();
     _phoneController.dispose();
     _phoneFocusNode.dispose();
     _passwordController.dispose();
     _passwordFocusNode.dispose();
     super.dispose();
+  }
+
+  // Helper to open external URLs safely
+  Future<void> _openUrl(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        // Fallback: show an error dialog if opening fails
+        if (!mounted) return;
+        await showAppErrorDialog(context,
+            title: 'Unable to open link',
+            desc: 'Could not open the link. Please try again.');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      await showAppErrorDialog(context,
+          title: 'Unable to open link',
+          desc: 'Could not open the link. Please try again.');
+    }
   }
 
   String? _validateName(String? value) {
@@ -819,60 +862,69 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                       const SizedBox(height: 32.0),
 
                       // Accept T&C and Privacy Policy (required)
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Checkbox(
-                            value: _acceptedTos,
-                            onChanged: (v) {
-                              if (!mounted) return;
-                              setState(() => _acceptedTos = v ?? false);
-                            },
-                            // Brand the checkbox with the app primary color
-                            fillColor:
-                                MaterialStateProperty.resolveWith<Color?>(
-                                    (states) => primaryColor),
-                            checkColor: Colors.white,
-                            visualDensity: const VisualDensity(
-                                horizontal: 0, vertical: -2),
-                          ),
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () async {
-                                // Toggle checkbox when tapping text
+                      Center(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Checkbox(
+                              value: _acceptedTos,
+                              onChanged: (v) {
+                                if (!mounted) return;
+                                setState(() => _acceptedTos = v ?? false);
+                              },
+                              // Unchecked: white outline & transparent fill. Checked: primaryColor fill, white tick.
+                              fillColor: MaterialStateProperty.resolveWith<Color?>((states) {
+                                if (states.contains(MaterialState.selected)) return primaryColor;
+                                return Colors.transparent;
+                              }),
+                              checkColor: Colors.white,
+                              // Fixed white outline for unchecked state
+                              side: const BorderSide(color: Colors.white),
+                            ),
+                            const SizedBox(width: 8),
+                            // Tap non-link text to toggle the checkbox; link spans still open URLs.
+                            GestureDetector(
+                              onTap: () {
                                 if (!mounted) return;
                                 setState(() => _acceptedTos = !_acceptedTos);
                               },
-                              child: Align(
-                                alignment: Alignment.topLeft,
-                                child: RichText(
-                                  text: TextSpan(
-                                    style: TextStyle(
-                                        color: Theme.of(context)
-                                            .textTheme
-                                            .bodyMedium
-                                            ?.color),
-                                    children: [
-                                      const TextSpan(text: 'I accept the '),
-                                      TextSpan(
-                                          text: 'T&C',
-                                          style: TextStyle(
-                                              color: primaryColor,
-                                              fontWeight: FontWeight.w600)),
-                                      const TextSpan(text: ' and the '),
-                                      TextSpan(
-                                          text: 'Privacy Policy',
-                                          style: TextStyle(
-                                              color: primaryColor,
-                                              fontWeight: FontWeight.w600)),
-                                      const TextSpan(text: ' of Rijhub'),
-                                    ],
+                              child: Text.rich(
+                                TextSpan(
+                                  style: TextStyle(
+                                    color: Theme.of(context).textTheme.bodyMedium?.color,
+                                    fontSize: 11, // slightly smaller to keep whole text on one line
                                   ),
+                                  children: [
+                                    const TextSpan(text: 'I accept the '),
+                                    TextSpan(
+                                      text: 'T&C',
+                                      recognizer: _tncRecognizer,
+                                      style: TextStyle(
+                                        color: primaryColor,
+                                        fontWeight: FontWeight.w600,
+                                        decoration: TextDecoration.underline,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                    const TextSpan(text: ' and the '),
+                                    TextSpan(
+                                      text: 'Privacy Policy',
+                                      recognizer: _privacyRecognizer,
+                                      style: TextStyle(
+                                        color: primaryColor,
+                                        fontWeight: FontWeight.w600,
+                                        decoration: TextDecoration.underline,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                    const TextSpan(text: ' of Rijhub'),
+                                  ],
                                 ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
 
                       ElevatedButton(
@@ -962,29 +1014,11 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                           return Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              // Show the default Google logo and label, but visually disabled
+                              // Match login page: 24x24 asset icon and centered label
                               SizedBox(
-                                height: 28,
-                                width: 28,
+                                height: 24,
+                                width: 24,
                                 child: Builder(builder: (ctx) {
-                                  // If we have a cached Google profile with a picture, show it
-                                  final pic = _googleProfile != null
-                                      ? _googleProfile!['picture']
-                                      : null;
-                                  if (pic != null &&
-                                      pic is String &&
-                                      pic.isNotEmpty) {
-                                    try {
-                                      return CircleAvatar(
-                                        backgroundImage: NetworkImage(pic),
-                                        radius: 14,
-                                        backgroundColor: Colors.transparent,
-                                      );
-                                    } catch (_) {
-                                      // fallback to asset
-                                    }
-                                  }
-
                                   try {
                                     return Image.asset(
                                       'assets/images/google.webp',
@@ -993,8 +1027,7 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                                           (context, error, stackTrace) {
                                         return Icon(
                                           Icons.g_mobiledata,
-                                          color: primaryColor
-                                              .withAlpha((0.5 * 255).round()),
+                                          color: primaryColor,
                                           size: 20,
                                         );
                                       },
@@ -1002,26 +1035,19 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                                   } catch (_) {
                                     return Icon(
                                       Icons.g_mobiledata,
-                                      color: primaryColor
-                                          .withAlpha((0.5 * 255).round()),
+                                      color: primaryColor,
                                       size: 20,
                                     );
                                   }
                                 }),
                               ),
                               const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  'Continue with Google',
-                                  textAlign: TextAlign.center,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: primaryColor
-                                        .withAlpha((0.5 * 255).round()),
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                              Text(
+                                'Continue with Google',
+                                style: TextStyle(
+                                  color: primaryColor,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ],

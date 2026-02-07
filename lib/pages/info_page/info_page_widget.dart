@@ -17,7 +17,8 @@ class _InfoPageWidgetState extends State<InfoPageWidget> with SingleTickerProvid
   late TabController _tabController;
 
   // URLs for external links
-  static const _termsUrl = 'https://example.com/terms';
+  static const _termsUrl = 'https://rijhub.com/terms-and-conditions.html';
+  static const _privacyUrl = 'https://rijhub.com/privacy-policy.html';
   static const _supportEmail = 'support@rijhub.com';
   // Updated support phone per project contact
   static const _contactPhone = '08053466666';
@@ -570,26 +571,26 @@ class _InfoPageWidgetState extends State<InfoPageWidget> with SingleTickerProvid
                                       ),
                                       child: Center(
                                         child: Icon(
-                                          Icons.link_outlined,
+                                          Icons.privacy_tip_outlined,
                                           color: theme.primary,
                                           size: 22,
                                         ),
                                       ),
                                     ),
                                     title: Text(
-                                      'Contact Support',
+                                      'Privacy Policy',
                                       style: theme.titleSmall.copyWith(
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
                                     subtitle: Text(
-                                      'For privacy or terms inquiries, reach out to our support team',
+                                      'Read our privacy policy',
                                       style: theme.bodyMedium.copyWith(
                                         color: theme.secondaryText,
                                       ),
                                     ),
                                     trailing: const Icon(Icons.open_in_new, size: 20),
-                                    onTap: () => _launchEmail(_supportEmail),
+                                    onTap: () => _launchUrl(_privacyUrl),
                                   ),
                                 ],
                               ),
