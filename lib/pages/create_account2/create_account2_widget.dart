@@ -1,6 +1,7 @@
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
 import 'package:flutter/material.dart';
+import 'dart:io' show Platform;
 import 'create_account2_model.dart';
 import '/services/auth_service.dart';
 import '/services/token_storage.dart';
@@ -113,7 +114,7 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
       // Normalize some common synonyms (client -> customer)
       if (role != null) {
         final v = role.trim().toLowerCase();
-        if (v == 'client' ) role = 'customer';
+        if (v == 'client') role = 'customer';
       }
 
       // Debug log to help trace navigation role propagation during testing
@@ -310,6 +311,90 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
         title: 'Sign-in error',
         desc: message,
       );
+    }
+  }
+
+  Future<void> _handleAppleSignIn() async {
+    // Only available on iOS
+    if (!Platform.isIOS) return;
+
+    showAppLoadingDialog(context);
+
+    final res = await AuthService.signInWithApple(
+      role: _effectiveRole ?? widget.initialRole,
+    );
+
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+
+    if (res['success'] == true) {
+      final profile = res['profile'] as Map<String, dynamic>?;
+      // Save profile to state so we can show it in the button
+      if (profile != null) {
+        _model.fullNameTextController?.text =
+            (profile['name'] ?? '').toString();
+        _model.emailAddressTextController?.text =
+            (profile['email'] ?? '').toString();
+      }
+
+      final data = res['data'];
+      if (data != null &&
+          data is Map &&
+          (data['token'] != null || (data['user'] != null))) {
+        // Navigate to welcome screen
+        Future.microtask(() async {
+          if (!mounted) return;
+          try {
+            String? token;
+            if (res['token'] != null) token = res['token']?.toString();
+            if (token == null)
+              token = (data['token'] ?? data['data']?['token'])?.toString();
+
+            final name =
+                profile != null ? (profile['name']?.toString() ?? '') : '';
+            final role = _effectiveRole ?? widget.initialRole ?? 'customer';
+            final welcome = WelcomeAfterSignupWidget(role: role, name: name);
+            await AccountCreationNavigator.navigateAfterSignup(
+              context,
+              welcome,
+              goRoute: WelcomeAfterSignupWidget.routePath,
+              preferImperative: true,
+            );
+
+            if (token != null && token.isNotEmpty) {
+              await AuthNotifier.instance.setToken(token);
+            }
+          } catch (_) {
+            try {
+              NavigationUtils.safePushReplacement(context, HomePageWidget());
+            } catch (_) {}
+          }
+          return;
+        });
+        return;
+      }
+
+      await showAppSuccessDialog(
+        context,
+        title: 'Apple signed in',
+        desc:
+            'We prefilled your name and email. Complete the form to finish creating your account.',
+      );
+    } else {
+      final err = res['error'];
+      final message = (err is Map && err['message'] != null)
+          ? err['message'].toString()
+          : (err != null ? err.toString() : 'Apple sign-in failed');
+
+      // Don't show error dialog for user cancellation
+      if (message != 'Apple sign-in cancelled') {
+        if (!mounted) return;
+        await showAppErrorDialog(
+          context,
+          title: 'Sign-in error',
+          desc: message,
+        );
+      }
     }
   }
 
@@ -874,8 +959,11 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                                 setState(() => _acceptedTos = v ?? false);
                               },
                               // Unchecked: white outline & transparent fill. Checked: primaryColor fill, white tick.
-                              fillColor: MaterialStateProperty.resolveWith<Color?>((states) {
-                                if (states.contains(MaterialState.selected)) return primaryColor;
+                              fillColor:
+                                  MaterialStateProperty.resolveWith<Color?>(
+                                      (states) {
+                                if (states.contains(MaterialState.selected))
+                                  return primaryColor;
                                 return Colors.transparent;
                               }),
                               checkColor: Colors.white,
@@ -892,8 +980,12 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                               child: Text.rich(
                                 TextSpan(
                                   style: TextStyle(
-                                    color: Theme.of(context).textTheme.bodyMedium?.color,
-                                    fontSize: 11, // slightly smaller to keep whole text on one line
+                                    color: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.color,
+                                    fontSize:
+                                        11, // slightly smaller to keep whole text on one line
                                   ),
                                   children: [
                                     const TextSpan(text: 'I accept the '),
@@ -1054,6 +1146,44 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                           );
                         }),
                       ),
+
+                      // Apple Sign In Button (iOS only)
+                      if (Platform.isIOS) ...[
+                        const SizedBox(height: 12.0),
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(
+                                color: isDark ? Colors.white : Colors.black),
+                            backgroundColor:
+                                isDark ? Colors.white : Colors.black,
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 12.0, horizontal: 12.0),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12.0),
+                            ),
+                          ),
+                          onPressed: _handleAppleSignIn,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.apple,
+                                color: isDark ? Colors.black : Colors.white,
+                                size: 24,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Continue with Apple',
+                                style: TextStyle(
+                                  color: isDark ? Colors.black : Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
 
                       // Already have an account? Log in
                       const SizedBox(height: 24.0),

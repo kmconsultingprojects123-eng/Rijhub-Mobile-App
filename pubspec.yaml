@@ -85,6 +85,8 @@ dependencies:
   xml: ^6.6.1
   webview_flutter: ^4.0.7
   google_sign_in: ^7.2.0
+  sign_in_with_apple: ^6.1.4
+  crypto: ^3.0.3
   file_picker: ^10.3.7
   geolocator: ^14.0.2
   awesome_dialog: ^3.3.0

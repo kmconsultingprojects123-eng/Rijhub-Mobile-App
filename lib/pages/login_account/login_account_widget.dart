@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:go_router/go_router.dart';
@@ -44,6 +45,8 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
   bool _isNavigating = false;
   // Google sign-in in progress
   bool _isGoogleSigningIn = false;
+  // Apple sign-in in progress
+  bool _isAppleSigningIn = false;
   // Remember-me flag (persisted)
   bool _rememberMe = false;
 
@@ -435,6 +438,74 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
       AppNotification.showError(context, ErrorMessages.humanize(e));
     } finally {
       if (mounted) setState(() => _isGoogleSigningIn = false);
+    }
+  }
+
+  Future<void> _handleAppleSignIn() async {
+    // Only available on iOS
+    if (!Platform.isIOS) {
+      AppNotification.showError(
+          context, 'Apple Sign-In is only available on iOS');
+      return;
+    }
+
+    if (_isAppleSigningIn || _isNavigating) return;
+    setState(() => _isAppleSigningIn = true);
+
+    try {
+      final res = await AuthService.signInWithApple();
+
+      if (!mounted) return;
+
+      if (res['success'] == true) {
+        // Notify user
+        AppNotification.showSuccess(context, 'Logged in with Apple');
+        await Future.delayed(const Duration(milliseconds: 200));
+
+        // Extract token and role from response
+        final data = res['data'];
+        String? token;
+        String? parsedRole;
+
+        if (data is Map) {
+          token = (data['token'] ?? data['data']?['token'])?.toString();
+          parsedRole =
+              (data['role'] ?? data['user']?['role'] ?? data['data']?['role'])
+                  ?.toString();
+        }
+
+        // Set auth state
+        if (parsedRole != null && parsedRole.isNotEmpty) {
+          await AuthNotifier.instance
+              .login(parsedRole.toLowerCase(), token: token);
+        } else if (token != null) {
+          await AuthNotifier.instance.setToken(token);
+        } else {
+          await AuthNotifier.instance.refreshAuth();
+        }
+
+        // Wait briefly for profile
+        final timeout = DateTime.now().add(Duration(seconds: 2));
+        while (DateTime.now().isBefore(timeout)) {
+          if (AuthNotifier.instance.profile != null) break;
+          await Future.delayed(Duration(milliseconds: 100));
+        }
+
+        if (!mounted) return;
+        await _navigateBasedOnRole();
+      } else {
+        final err = res['error'];
+        final message = (err is Map && err['message'] != null)
+            ? err['message'].toString()
+            : (err != null ? err.toString() : 'Apple sign-in failed');
+        if (message != 'Apple sign-in cancelled') {
+          AppNotification.showError(context, message);
+        }
+      }
+    } catch (e) {
+      AppNotification.showError(context, ErrorMessages.humanize(e));
+    } finally {
+      if (mounted) setState(() => _isAppleSigningIn = false);
     }
   }
 
@@ -948,7 +1019,9 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                                 if (!mounted) return;
                                 setState(() => _rememberMe = v ?? false);
                               },
-                              fillColor: MaterialStateProperty.resolveWith<Color?>((states) {
+                              fillColor:
+                                  MaterialStateProperty.resolveWith<Color?>(
+                                      (states) {
                                 if (states.contains(MaterialState.selected))
                                   return primaryColor;
                                 return Colors.transparent;
@@ -1094,6 +1167,53 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                             ],
                           ),
                   ),
+
+                  // Apple Sign In Button (iOS only)
+                  if (Platform.isIOS) ...[
+                    const SizedBox(height: 12.0),
+                    OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(
+                            color: isDark ? Colors.white : Colors.black),
+                        backgroundColor: isDark ? Colors.white : Colors.black,
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 14.0, horizontal: 12.0),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12.0),
+                        ),
+                      ),
+                      onPressed: _isAppleSigningIn ? null : _handleAppleSignIn,
+                      child: _isAppleSigningIn
+                          ? SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation(
+                                    isDark ? Colors.black : Colors.white),
+                              ),
+                            )
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.apple,
+                                  color: isDark ? Colors.black : Colors.white,
+                                  size: 24,
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  'Continue with Apple',
+                                  style: TextStyle(
+                                    color: isDark ? Colors.black : Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ],
 
                   // Sign Up - Minimal
                   const SizedBox(height: 32.0),

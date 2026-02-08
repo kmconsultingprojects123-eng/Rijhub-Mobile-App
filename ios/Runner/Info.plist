@@ -46,14 +46,14 @@
 			<string>com.googleusercontent.apps</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.YOUR_REVERSED_CLIENT_ID</string>
+				<string>com.googleusercontent.apps.174728322654-rjg0aka0i3ujrmkkeuqesa1v12djnriq</string>
 			</array>
 		</dict>
 	</array>
 
 	<!-- Google Sign-In client id (web or iOS client id). Replace this with your actual client id. -->
 	<key>GIDClientID</key>
-	<string>YOUR_IOS_CLIENT_ID.apps.googleusercontent.com</string>
+	<string>174728322654-rjg0aka0i3ujrmkkeuqesa1v12djnriq.apps.googleusercontent.com</string>
 
 	<!-- Flutter deep linking flag -->
 	<key>FlutterDeepLinkingEnabled</key>
