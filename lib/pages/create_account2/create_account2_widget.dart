@@ -967,10 +967,11 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                                 return Colors.transparent;
                               }),
                               checkColor: Colors.white,
-                              // Fixed white outline for unchecked state
-                              side: const BorderSide(color: Colors.white),
+                              side: BorderSide(
+                                  color: isDark ? Colors.white : Colors.black,
+                                  width: 1.5),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 5),
                             // Tap non-link text to toggle the checkbox; link spans still open URLs.
                             GestureDetector(
                               onTap: () {
@@ -996,7 +997,7 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                                         color: primaryColor,
                                         fontWeight: FontWeight.w600,
                                         decoration: TextDecoration.underline,
-                                        fontSize: 11,
+                                        fontSize: 10,
                                       ),
                                     ),
                                     const TextSpan(text: ' and the '),

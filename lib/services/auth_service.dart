@@ -677,10 +677,11 @@ class AuthService {
       // ignore: avoid_print
       print('│ [Apple Sign-In] Sending identityToken to backend...');
       final uri = Uri.parse('$API_BASE_URL/api/auth/oauth/apple');
+      // For mobile apps, use identity-token flow (NOT authorization-code flow)
+      // We send: identityToken + raw nonce (backend will hash and verify)
       final resp = await _postWithRetries(uri,
           body: {
             'identityToken': identityToken,
-            'authorizationCode': credential.authorizationCode,
             'nonce': rawNonce, // Send raw nonce for backend verification
             if (displayName != null && displayName.isNotEmpty)
               'name': displayName,
