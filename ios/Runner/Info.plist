@@ -68,7 +68,13 @@
 		<true/>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>App needs location access to show nearby artisans.</string>
+	<string>RijHub needs your location to show nearby artisans and service providers in your area.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>RijHub needs your location to show nearby artisans and provide location-based services even when the app is in the background.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>RijHub needs access to your photo library to let you select and upload images for your profile, service listings, and project galleries.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>RijHub needs camera access to let you take photos for your profile, service listings, and project galleries.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>
