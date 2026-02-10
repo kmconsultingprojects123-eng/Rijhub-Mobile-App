@@ -971,7 +971,7 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                                   color: isDark ? Colors.white : Colors.black,
                                   width: 1.5),
                             ),
-                            const SizedBox(width: 5),
+                            // const SizedBox(width: 5),
                             // Tap non-link text to toggle the checkbox; link spans still open URLs.
                             GestureDetector(
                               onTap: () {
@@ -1140,7 +1140,7 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                                 style: TextStyle(
                                   color: primaryColor,
                                   fontSize: 15,
-                                  fontWeight: FontWeight.w500,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ],
@@ -1193,7 +1193,7 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              'Already have an account? ',
+                              'Already have an account?',
                               style: TextStyle(
                                 color: theme.colorScheme.onSurface
                                     .withAlpha((0.7 * 255).toInt()),

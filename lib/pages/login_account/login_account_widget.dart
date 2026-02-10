@@ -1161,7 +1161,7 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                                 style: TextStyle(
                                   color: primaryColor,
                                   fontSize: 15,
-                                  fontWeight: FontWeight.w500,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ],
