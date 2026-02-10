@@ -103,16 +103,17 @@ android {
         }
     }
 
-    // Configure ABI splits to create per-ABI APKs and a smaller universal APK while
-    // limiting to supported ABIs to reduce size.
-    splits {
-        abi {
-            enable true
-            reset()
-            include 'arm64-v8a', 'armeabi-v7a'
-            universalApk true
-        }
-    }
+    // ABI splits are NOT compatible with app bundles (appbundle).
+    // The Play Store handles per-ABI delivery automatically for bundles.
+    // If you need per-ABI APKs (flutter build apk), re-enable this block.
+    // splits {
+    //     abi {
+    //         enable true
+    //         reset()
+    //         include 'arm64-v8a', 'armeabi-v7a'
+    //         universalApk true
+    //     }
+    // }
 
      // Exclude some common unused metadata files which add to APK size.
      packagingOptions {
