@@ -41,6 +41,7 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
   final TextEditingController _pCurrencyCtrl =
       TextEditingController(text: 'NGN');
   bool _pSaving = false;
+  bool _pEditLoading = false;
   final GlobalKey<FormState> _pFormKey = GlobalKey<FormState>();
 
   @override
@@ -327,38 +328,42 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
   }
 
   Future<void> _showPayoutDetailsSheet({bool isEdit = false}) async {
-    // Fetch latest payout details
-    try {
-      final token = await TokenStorage.getToken();
-      if (token != null && token.isNotEmpty) {
-        final uri = Uri.parse('$API_BASE_URL/api/wallet/payout-details');
-        if (kDebugMode)
-          debugPrint('[UserWalletpage] Fetching payout details from: $uri');
-        final resp = await http.get(uri, headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token'
-        }).timeout(const Duration(seconds: 10));
-        if (kDebugMode)
-          debugPrint(
-              '[UserWalletpage] Payout details response: ${resp.statusCode} ${resp.body}');
+    // For edit: fetch latest payout details first (shows loader on Edit button)
+    if (isEdit) {
+      try {
+        final token = await TokenStorage.getToken();
+        if (token != null && token.isNotEmpty) {
+          final uri = Uri.parse('$API_BASE_URL/api/wallet/payout-details');
+          if (kDebugMode)
+            debugPrint('[UserWalletpage] Fetching payout details from: $uri');
+          final resp = await http.get(uri, headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token'
+          }).timeout(const Duration(seconds: 10));
+          if (kDebugMode)
+            debugPrint(
+                '[UserWalletpage] Payout details response: ${resp.statusCode} ${resp.body}');
 
-        if (resp.statusCode >= 200 &&
-            resp.statusCode < 300 &&
-            resp.body.isNotEmpty) {
-          try {
-            final decoded = jsonDecode(resp.body);
-            final data =
-                decoded is Map ? (decoded['data'] ?? decoded) : decoded;
-            if (data is Map) {
-              setState(() {
-                _wallet ??= {};
-                _wallet!['payoutDetails'] = Map<String, dynamic>.from(data);
-              });
-            }
-          } catch (_) {}
+          if (resp.statusCode >= 200 &&
+              resp.statusCode < 300 &&
+              resp.body.isNotEmpty) {
+            try {
+              final decoded = jsonDecode(resp.body);
+              final data =
+                  decoded is Map ? (decoded['data'] ?? decoded) : decoded;
+              if (data is Map && mounted) {
+                setState(() {
+                  _wallet ??= {};
+                  _wallet!['payoutDetails'] = Map<String, dynamic>.from(data);
+                });
+              }
+            } catch (_) {}
+          }
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
+
+    if (!mounted) return;
 
     // Prefill controllers
     final pd = _wallet?['payoutDetails'] is Map
@@ -384,201 +389,223 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
               minChildSize: 0.4,
               maxChildSize: 0.9,
               builder: (_, controller) {
-                return Container(
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.black : Colors.white,
-                    borderRadius:
-                        const BorderRadius.vertical(top: Radius.circular(16)),
-                  ),
-                  padding: EdgeInsets.fromLTRB(24, 16, 24,
-                      MediaQuery.of(context).viewInsets.bottom + 24),
-                  child: ListView(
-                    controller: controller,
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.onSurface
-                                .withAlpha((0.3 * 255).round()),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
+                return StatefulBuilder(
+                  builder: (modalContext, setModalState) {
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.black : Colors.white,
+                        borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(16)),
                       ),
-                      const SizedBox(height: 16),
-                      Text(
-                        isEdit ? 'Edit Account Details' : 'Account Details',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Form(
-                        key: _pFormKey,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Account Information',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w500,
+                      padding: EdgeInsets.fromLTRB(24, 16, 24,
+                          MediaQuery.of(context).viewInsets.bottom + 24),
+                      child: ListView(
+                        controller: controller,
+                        children: [
+                          Center(
+                            child: Container(
+                              width: 40,
+                              height: 4,
+                              decoration: BoxDecoration(
                                 color: theme.colorScheme.onSurface
-                                    .withAlpha((0.7 * 255).round()),
+                                    .withAlpha((0.3 * 255).round()),
+                                borderRadius: BorderRadius.circular(4),
                               ),
                             ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _pNameCtrl,
-                              decoration: InputDecoration(
-                                labelText: 'Account holder name',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: theme.colorScheme.onSurface
-                                        .withAlpha((0.1 * 255).round()),
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: theme.colorScheme.onSurface
-                                        .withAlpha((0.1 * 255).round()),
-                                  ),
-                                ),
-                              ),
-                              validator: (v) => v == null || v.trim().isEmpty
-                                  ? 'Required'
-                                  : null,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            isEdit ? 'Edit Account Details' : 'Account Details',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w600,
                             ),
-                            const SizedBox(height: 12),
-                            TextFormField(
-                              controller: _pAccountCtrl,
-                              decoration: InputDecoration(
-                                labelText: 'Account number',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
+                          ),
+                          const SizedBox(height: 16),
+                          Form(
+                            key: _pFormKey,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Account Information',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w500,
                                     color: theme.colorScheme.onSurface
-                                        .withAlpha((0.1 * 255).round()),
+                                        .withAlpha((0.7 * 255).round()),
                                   ),
                                 ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: theme.colorScheme.onSurface
-                                        .withAlpha((0.1 * 255).round()),
+                                const SizedBox(height: 16),
+                                TextFormField(
+                                  controller: _pNameCtrl,
+                                  decoration: InputDecoration(
+                                    labelText: 'Account holder name',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: theme.colorScheme.onSurface
+                                            .withAlpha((0.1 * 255).round()),
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: theme.colorScheme.onSurface
+                                            .withAlpha((0.1 * 255).round()),
+                                      ),
+                                    ),
+                                  ),
+                                  validator: (v) =>
+                                      v == null || v.trim().isEmpty
+                                          ? 'Required'
+                                          : null,
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  controller: _pAccountCtrl,
+                                  decoration: InputDecoration(
+                                    labelText: 'Account number',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: theme.colorScheme.onSurface
+                                            .withAlpha((0.1 * 255).round()),
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: theme.colorScheme.onSurface
+                                            .withAlpha((0.1 * 255).round()),
+                                      ),
+                                    ),
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  validator: (v) {
+                                    if (v == null || v.trim().isEmpty)
+                                      return 'Required';
+                                    final s = v.trim();
+                                    if (!RegExp(r'^\d{10}$').hasMatch(s)) {
+                                      return 'Enter a 10-digit account number';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  controller: _pBankNameCtrl,
+                                  decoration: InputDecoration(
+                                    labelText: 'Bank name',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: theme.colorScheme.onSurface
+                                            .withAlpha((0.1 * 255).round()),
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: theme.colorScheme.onSurface
+                                            .withAlpha((0.1 * 255).round()),
+                                      ),
+                                    ),
+                                  ),
+                                  validator: (v) =>
+                                      v == null || v.trim().isEmpty
+                                          ? 'Required'
+                                          : null,
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  controller: _pCurrencyCtrl,
+                                  decoration: InputDecoration(
+                                    labelText: 'Currency',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: theme.colorScheme.onSurface
+                                            .withAlpha((0.1 * 255).round()),
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: theme.colorScheme.onSurface
+                                            .withAlpha((0.1 * 255).round()),
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
-                              keyboardType: TextInputType.number,
-                              validator: (v) {
-                                if (v == null || v.trim().isEmpty)
-                                  return 'Required';
-                                final s = v.trim();
-                                if (!RegExp(r'^\d{10}$').hasMatch(s)) {
-                                  return 'Enter a 10-digit account number';
-                                }
-                                return null;
-                              },
+                                const SizedBox(height: 24),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton(
+                                    onPressed: _pSaving
+                                        ? null
+                                        : () async {
+                                            if (!_pFormKey.currentState!
+                                                .validate()) return;
+                                            setModalState(() {
+                                              _pSaving = true;
+                                            });
+                                            try {
+                                              await _savePayoutDetails();
+                                            } finally {
+                                              if (modalContext.mounted) {
+                                                setModalState(() {
+                                                  _pSaving = false;
+                                                });
+                                              }
+                                            }
+                                          },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor:
+                                          theme.colorScheme.primary,
+                                      foregroundColor:
+                                          theme.colorScheme.onPrimary,
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 16),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      elevation: 0,
+                                    ),
+                                    child: _pSaving
+                                        ? SizedBox(
+                                            height: 20,
+                                            width: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color:
+                                                  theme.colorScheme.onPrimary,
+                                            ),
+                                          )
+                                        : Text('Save Account Details'),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: TextButton(
+                                    onPressed: _pSaving
+                                        ? null
+                                        : () => Navigator.of(context).pop(),
+                                    child: Text(
+                                      'Cancel',
+                                      style: TextStyle(
+                                        color: theme.colorScheme.onSurface
+                                            .withAlpha((0.6 * 255).round()),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 12),
-                            TextFormField(
-                              controller: _pBankNameCtrl,
-                              decoration: InputDecoration(
-                                labelText: 'Bank name',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: theme.colorScheme.onSurface
-                                        .withAlpha((0.1 * 255).round()),
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: theme.colorScheme.onSurface
-                                        .withAlpha((0.1 * 255).round()),
-                                  ),
-                                ),
-                              ),
-                              validator: (v) => v == null || v.trim().isEmpty
-                                  ? 'Required'
-                                  : null,
-                            ),
-                            const SizedBox(height: 12),
-                            TextFormField(
-                              controller: _pCurrencyCtrl,
-                              decoration: InputDecoration(
-                                labelText: 'Currency',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: theme.colorScheme.onSurface
-                                        .withAlpha((0.1 * 255).round()),
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(
-                                    color: theme.colorScheme.onSurface
-                                        .withAlpha((0.1 * 255).round()),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 24),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: _pSaving
-                                    ? null
-                                    : () async {
-                                        if (!_pFormKey.currentState!.validate())
-                                          return;
-                                        await _savePayoutDetails();
-                                      },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: theme.colorScheme.primary,
-                                  foregroundColor: theme.colorScheme.onPrimary,
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 16),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  elevation: 0,
-                                ),
-                                child: _pSaving
-                                    ? SizedBox(
-                                        height: 20,
-                                        width: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: theme.colorScheme.onPrimary,
-                                        ),
-                                      )
-                                    : Text('Save Account Details'),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            SizedBox(
-                              width: double.infinity,
-                              child: TextButton(
-                                onPressed: () => Navigator.of(context).pop(),
-                                child: Text(
-                                  'Cancel',
-                                  style: TextStyle(
-                                    color: theme.colorScheme.onSurface
-                                        .withAlpha((0.6 * 255).round()),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    );
+                  },
                 );
               });
         });
@@ -1211,20 +1238,42 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                         ),
                                       ),
                                       TextButton(
-                                        onPressed: () =>
-                                            _showPayoutDetailsSheet(
-                                                isEdit: true),
+                                        onPressed: _pEditLoading
+                                            ? null
+                                            : () async {
+                                                setState(() =>
+                                                    _pEditLoading = true);
+                                                try {
+                                                  await _showPayoutDetailsSheet(
+                                                      isEdit: true);
+                                                } finally {
+                                                  if (mounted)
+                                                    setState(() =>
+                                                        _pEditLoading = false);
+                                                }
+                                              },
                                         style: TextButton.styleFrom(
-                                          padding: EdgeInsets.zero,
-                                          minimumSize: Size.zero,
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 16, vertical: 12),
+                                          minimumSize: const Size(48, 48),
                                         ),
-                                        child: Text(
-                                          'Edit',
-                                          style: TextStyle(
-                                            color: colorScheme.primary,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
+                                        child: _pEditLoading
+                                            ? SizedBox(
+                                                width: 18,
+                                                height: 18,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  color: colorScheme.primary,
+                                                ),
+                                              )
+                                            : Text(
+                                                'Edit',
+                                                style: TextStyle(
+                                                  color: colorScheme.primary,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
                                       ),
                                     ],
                                   ),
