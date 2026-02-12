@@ -270,36 +270,60 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
           msg = 'Failed to save account details (status ${resp.statusCode})';
         }
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(msg),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          );
-        }
+        if (mounted) _showErrorDialog(msg);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(ErrorMessages.humanize(e)),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        );
-      }
+      if (mounted) _showErrorDialog(ErrorMessages.humanize(e));
     } finally {
       if (mounted)
         setState(() {
           _pSaving = false;
         });
     }
+  }
+
+  void _showErrorDialog(String message) {
+    final theme = Theme.of(context);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Row(
+          children: [
+            Icon(
+              Icons.error_outline_rounded,
+              color: theme.colorScheme.error,
+              size: 28,
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Unable to Save',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          message,
+          style: theme.textTheme.bodyMedium,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(
+              'OK',
+              style: TextStyle(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _showPayoutDetailsSheet({bool isEdit = false}) async {

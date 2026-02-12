@@ -154,9 +154,9 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
     final screenHeight = MediaQuery.of(context).size.height;
     final isSmallScreen = screenHeight < 700;
 
-    return GestureDetector(
+    return Listener(
       behavior: HitTestBehavior.opaque,
-      onTap: _navigateToDashboard,
+      onPointerDown: (_) => _navigateToDashboard(),
       child: Scaffold(
         backgroundColor: isDark ? Colors.black : Colors.white,
         body: SafeArea(

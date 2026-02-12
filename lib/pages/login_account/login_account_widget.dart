@@ -1024,10 +1024,17 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                                       (states) {
                                 if (states.contains(MaterialState.selected))
                                   return primaryColor;
-                                return Colors.transparent;
+                                return isDark
+                                    ? Colors.grey[800]
+                                    : Colors.grey[100];
                               }),
                               checkColor: Colors.white,
-                              side: const BorderSide(color: Colors.white),
+                              side: BorderSide(
+                                color: _rememberMe
+                                    ? primaryColor
+                                    : theme.colorScheme.outline,
+                                width: 1.5,
+                              ),
                             ),
                             Expanded(
                                 child: Text('Remember me',
