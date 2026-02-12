@@ -266,7 +266,21 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
 
             final name =
                 profile != null ? (profile['name']?.toString() ?? '') : '';
-            final role = _effectiveRole ?? widget.initialRole ?? 'customer';
+
+            // Use the backend-returned role (from the user object) so that
+            // existing users see the correct welcome message. Fall back to
+            // the locally-selected role only for genuinely new accounts.
+            String role = _effectiveRole ?? widget.initialRole ?? 'customer';
+            try {
+              final userData = data['user'] ?? data['data'];
+              if (userData is Map && userData['role'] != null) {
+                final backendRole = userData['role'].toString().toLowerCase();
+                if (backendRole == 'artisan' || backendRole == 'customer') {
+                  role = backendRole;
+                }
+              }
+            } catch (_) {}
+
             final welcome = WelcomeAfterSignupWidget(role: role, name: name);
             await AccountCreationNavigator.navigateAfterSignup(
               context,
@@ -352,7 +366,21 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
 
             final name =
                 profile != null ? (profile['name']?.toString() ?? '') : '';
-            final role = _effectiveRole ?? widget.initialRole ?? 'customer';
+
+            // Use the backend-returned role (from the user object) so that
+            // existing users see the correct welcome message. Fall back to
+            // the locally-selected role only for genuinely new accounts.
+            String role = _effectiveRole ?? widget.initialRole ?? 'customer';
+            try {
+              final userData = data['user'] ?? data['data'];
+              if (userData is Map && userData['role'] != null) {
+                final backendRole = userData['role'].toString().toLowerCase();
+                if (backendRole == 'artisan' || backendRole == 'customer') {
+                  role = backendRole;
+                }
+              }
+            } catch (_) {}
+
             final welcome = WelcomeAfterSignupWidget(role: role, name: name);
             await AccountCreationNavigator.navigateAfterSignup(
               context,

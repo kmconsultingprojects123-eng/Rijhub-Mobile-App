@@ -38,7 +38,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
   final TextEditingController _pNameCtrl = TextEditingController();
   final TextEditingController _pAccountCtrl = TextEditingController();
   final TextEditingController _pBankNameCtrl = TextEditingController();
-  final TextEditingController _pCurrencyCtrl = TextEditingController(text: 'NGN');
+  final TextEditingController _pCurrencyCtrl =
+      TextEditingController(text: 'NGN');
   bool _pSaving = false;
   final GlobalKey<FormState> _pFormKey = GlobalKey<FormState>();
 
@@ -60,6 +61,7 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
   }
 
   Future<void> _init() async {
+    if (kDebugMode) debugPrint('[UserWalletpage] _init called');
     setState(() {
       _loading = true;
       _error = null;
@@ -70,7 +72,9 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
       final profile = AppStateNotifier.instance.profile;
       try {
         if (profile != null) {
-          final r = (profile['role'] ?? profile['type'] ?? '').toString().toLowerCase();
+          final r = (profile['role'] ?? profile['type'] ?? '')
+              .toString()
+              .toLowerCase();
           _isArtisan = r.contains('artisan');
         } else {
           final role = await UserService.getRole();
@@ -98,8 +102,18 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
       // Fetch wallet summary
       try {
         final uri = Uri.parse('$API_BASE_URL/api/wallet');
-        final resp = await http.get(uri, headers: headers).timeout(const Duration(seconds: 12));
-        if (resp.statusCode >= 200 && resp.statusCode < 300 && resp.body.isNotEmpty) {
+        if (kDebugMode)
+          debugPrint('[UserWalletpage] Fetching wallet summary from: $uri');
+        final resp = await http
+            .get(uri, headers: headers)
+            .timeout(const Duration(seconds: 12));
+        if (kDebugMode)
+          debugPrint(
+              '[UserWalletpage] Wallet summary response: ${resp.statusCode} ${resp.body}');
+
+        if (resp.statusCode >= 200 &&
+            resp.statusCode < 300 &&
+            resp.body.isNotEmpty) {
           final decoded = jsonDecode(resp.body);
           final data = decoded is Map ? (decoded['data'] ?? decoded) : decoded;
           if (data is Map) {
@@ -117,9 +131,12 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
           final fetched = await WalletService.fetchTransactions(token: token);
           // Filter to only transactions that belong to the current user
           final prof = AppStateNotifier.instance.profile;
-          final myId = (prof?['_id'] ?? prof?['id'] ?? prof?['userId'])?.toString();
+          final myId =
+              (prof?['_id'] ?? prof?['id'] ?? prof?['userId'])?.toString();
           if (myId != null && myId.isNotEmpty) {
-            _transactions = fetched.where((tx) => _transactionBelongsToUser(tx, myId)).toList();
+            _transactions = fetched
+                .where((tx) => _transactionBelongsToUser(tx, myId))
+                .toList();
           } else {
             _transactions = fetched;
           }
@@ -132,12 +149,18 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
     } catch (e) {
       _error = ErrorMessages.humanize(e);
     } finally {
-      if (mounted) setState(() { _loading = false; });
+      if (mounted)
+        setState(() {
+          _loading = false;
+        });
     }
   }
 
   Future<void> _savePayoutDetails() async {
-    setState(() { _pSaving = true; });
+    if (kDebugMode) debugPrint('[UserWalletpage] _savePayoutDetails called');
+    setState(() {
+      _pSaving = true;
+    });
 
     try {
       final token = await TokenStorage.getToken();
@@ -151,8 +174,13 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
         'name': _pNameCtrl.text.trim(),
         'account_number': _pAccountCtrl.text.trim(),
         'bank_name': _pBankNameCtrl.text.trim(),
-        'currency': _pCurrencyCtrl.text.trim().isEmpty ? 'NGN' : _pCurrencyCtrl.text.trim(),
+        'currency': _pCurrencyCtrl.text.trim().isEmpty
+            ? 'NGN'
+            : _pCurrencyCtrl.text.trim(),
       };
+      if (kDebugMode)
+        debugPrint(
+            '[UserWalletpage] Saving payout details to: $uri Payload: $bodyMap');
 
       final headers = {
         'Content-Type': 'application/json',
@@ -163,33 +191,52 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
       http.Response resp = await http
           .put(uri, body: jsonEncode(bodyMap), headers: headers)
           .timeout(const Duration(seconds: 12));
+      if (kDebugMode)
+        debugPrint(
+            '[UserWalletpage] PUT response: ${resp.statusCode} ${resp.body}');
+
       if (resp.statusCode == 404) {
         if (kDebugMode) debugPrint('PUT returned 404, retrying with POST');
         resp = await http
             .post(uri, body: jsonEncode(bodyMap), headers: headers)
             .timeout(const Duration(seconds: 12));
+        if (kDebugMode)
+          debugPrint(
+              '[UserWalletpage] POST fallback response: ${resp.statusCode} ${resp.body}');
       }
 
       // If both JSON PUT/POST failed (non-2xx), some servers expect multipart/form-data.
-      if (!(resp.statusCode >= 200 && resp.statusCode < 300 && resp.body.isNotEmpty)) {
-        if (kDebugMode) debugPrint('JSON save failed (${resp.statusCode}), trying multipart/form-data fallback');
+      if (!(resp.statusCode >= 200 &&
+          resp.statusCode < 300 &&
+          resp.body.isNotEmpty)) {
+        if (kDebugMode)
+          debugPrint(
+              'JSON save failed (${resp.statusCode}), trying multipart/form-data fallback');
         final mpReq = http.MultipartRequest('POST', uri);
-        mpReq.headers.addAll({ 'Authorization': 'Bearer $token' });
+        mpReq.headers.addAll({'Authorization': 'Bearer $token'});
         mpReq.fields['name'] = bodyMap['name'] ?? '';
         mpReq.fields['account_number'] = bodyMap['account_number'] ?? '';
         mpReq.fields['bank_name'] = bodyMap['bank_name'] ?? '';
         mpReq.fields['currency'] = bodyMap['currency'] ?? 'NGN';
-        final streamed = await mpReq.send().timeout(const Duration(seconds: 15));
+        final streamed =
+            await mpReq.send().timeout(const Duration(seconds: 15));
         final mpResp = await http.Response.fromStream(streamed);
         resp = mpResp;
+        if (kDebugMode)
+          debugPrint(
+              '[UserWalletpage] Multipart fallback response: ${resp.statusCode} ${resp.body}');
       }
 
-      if (resp.statusCode >= 200 && resp.statusCode < 300 && resp.body.isNotEmpty) {
+      if (resp.statusCode >= 200 &&
+          resp.statusCode < 300 &&
+          resp.body.isNotEmpty) {
         // Parse response and update wallet state when server returns updated object
         final decoded = jsonDecode(resp.body);
         final data = decoded is Map ? (decoded['data'] ?? decoded) : decoded;
         if (data is Map) {
-          setState(() { _wallet = Map<String, dynamic>.from(data); });
+          setState(() {
+            _wallet = Map<String, dynamic>.from(data);
+          });
         }
         if (mounted) Navigator.of(context).pop();
 
@@ -204,12 +251,14 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
         );
       } else {
         // Log response for debugging when server replies with 4xx/5xx
-        if (kDebugMode) debugPrint('Save payout response: ${resp.statusCode} ${resp.body}');
+        if (kDebugMode)
+          debugPrint('Save payout response: ${resp.statusCode} ${resp.body}');
         String msg;
         try {
           if (resp.body.isNotEmpty) {
             final parsed = jsonDecode(resp.body);
-            if (parsed is Map && (parsed['message'] ?? parsed['error']) != null) {
+            if (parsed is Map &&
+                (parsed['message'] ?? parsed['error']) != null) {
               msg = (parsed['message'] ?? parsed['error']).toString();
             } else {
               msg = 'Failed to save account details';
@@ -232,8 +281,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
             ),
           );
         }
-       }
-     } catch (e) {
+      }
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -245,39 +294,47 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
           ),
         );
       }
-     } finally {
-       if (mounted) setState(() { _pSaving = false; });
-     }
-   }
+    } finally {
+      if (mounted)
+        setState(() {
+          _pSaving = false;
+        });
+    }
+  }
 
-   Future<void> _showPayoutDetailsSheet({bool isEdit = false}) async {
-     // Fetch latest payout details
-     try {
-       final token = await TokenStorage.getToken();
-       if (token != null && token.isNotEmpty) {
-         final uri = Uri.parse('$API_BASE_URL/api/wallet/payout-details');
-         final resp = await http.get(
-             uri,
-             headers: {
-               'Content-Type': 'application/json',
-               'Authorization': 'Bearer $token'
-             }
-         ).timeout(const Duration(seconds: 10));
+  Future<void> _showPayoutDetailsSheet({bool isEdit = false}) async {
+    // Fetch latest payout details
+    try {
+      final token = await TokenStorage.getToken();
+      if (token != null && token.isNotEmpty) {
+        final uri = Uri.parse('$API_BASE_URL/api/wallet/payout-details');
+        if (kDebugMode)
+          debugPrint('[UserWalletpage] Fetching payout details from: $uri');
+        final resp = await http.get(uri, headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token'
+        }).timeout(const Duration(seconds: 10));
+        if (kDebugMode)
+          debugPrint(
+              '[UserWalletpage] Payout details response: ${resp.statusCode} ${resp.body}');
 
-         if (resp.statusCode >= 200 && resp.statusCode < 300 && resp.body.isNotEmpty) {
-           try {
-             final decoded = jsonDecode(resp.body);
-             final data = decoded is Map ? (decoded['data'] ?? decoded) : decoded;
-             if (data is Map) {
-               setState(() {
-                 _wallet ??= {};
-                 _wallet!['payoutDetails'] = Map<String, dynamic>.from(data);
-               });
-             }
-           } catch (_) {}
-         }
-       }
-     } catch (_) {}
+        if (resp.statusCode >= 200 &&
+            resp.statusCode < 300 &&
+            resp.body.isNotEmpty) {
+          try {
+            final decoded = jsonDecode(resp.body);
+            final data =
+                decoded is Map ? (decoded['data'] ?? decoded) : decoded;
+            if (data is Map) {
+              setState(() {
+                _wallet ??= {};
+                _wallet!['payoutDetails'] = Map<String, dynamic>.from(data);
+              });
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
 
     // Prefill controllers
     final pd = _wallet?['payoutDetails'] is Map
@@ -306,14 +363,11 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                 return Container(
                   decoration: BoxDecoration(
                     color: isDark ? Colors.black : Colors.white,
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(16)),
                   ),
-                  padding: EdgeInsets.fromLTRB(
-                      24,
-                      16,
-                      24,
-                      MediaQuery.of(context).viewInsets.bottom + 24
-                  ),
+                  padding: EdgeInsets.fromLTRB(24, 16, 24,
+                      MediaQuery.of(context).viewInsets.bottom + 24),
                   child: ListView(
                     controller: controller,
                     children: [
@@ -322,7 +376,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                           width: 40,
                           height: 4,
                           decoration: BoxDecoration(
-                            color: theme.colorScheme.onSurface.withAlpha((0.3 * 255).round()),
+                            color: theme.colorScheme.onSurface
+                                .withAlpha((0.3 * 255).round()),
                             borderRadius: BorderRadius.circular(4),
                           ),
                         ),
@@ -344,7 +399,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                               'Account Information',
                               style: theme.textTheme.titleMedium?.copyWith(
                                 fontWeight: FontWeight.w500,
-                                color: theme.colorScheme.onSurface.withAlpha((0.7 * 255).round()),
+                                color: theme.colorScheme.onSurface
+                                    .withAlpha((0.7 * 255).round()),
                               ),
                             ),
                             const SizedBox(height: 16),
@@ -355,17 +411,21 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   borderSide: BorderSide(
-                                    color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
+                                    color: theme.colorScheme.onSurface
+                                        .withAlpha((0.1 * 255).round()),
                                   ),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   borderSide: BorderSide(
-                                    color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
+                                    color: theme.colorScheme.onSurface
+                                        .withAlpha((0.1 * 255).round()),
                                   ),
                                 ),
                               ),
-                              validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                              validator: (v) => v == null || v.trim().isEmpty
+                                  ? 'Required'
+                                  : null,
                             ),
                             const SizedBox(height: 12),
                             TextFormField(
@@ -375,19 +435,22 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   borderSide: BorderSide(
-                                    color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
+                                    color: theme.colorScheme.onSurface
+                                        .withAlpha((0.1 * 255).round()),
                                   ),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   borderSide: BorderSide(
-                                    color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
+                                    color: theme.colorScheme.onSurface
+                                        .withAlpha((0.1 * 255).round()),
                                   ),
                                 ),
                               ),
                               keyboardType: TextInputType.number,
                               validator: (v) {
-                                if (v == null || v.trim().isEmpty) return 'Required';
+                                if (v == null || v.trim().isEmpty)
+                                  return 'Required';
                                 final s = v.trim();
                                 if (!RegExp(r'^\d{10}$').hasMatch(s)) {
                                   return 'Enter a 10-digit account number';
@@ -403,17 +466,21 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   borderSide: BorderSide(
-                                    color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
+                                    color: theme.colorScheme.onSurface
+                                        .withAlpha((0.1 * 255).round()),
                                   ),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   borderSide: BorderSide(
-                                    color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
+                                    color: theme.colorScheme.onSurface
+                                        .withAlpha((0.1 * 255).round()),
                                   ),
                                 ),
                               ),
-                              validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                              validator: (v) => v == null || v.trim().isEmpty
+                                  ? 'Required'
+                                  : null,
                             ),
                             const SizedBox(height: 12),
                             TextFormField(
@@ -423,13 +490,15 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   borderSide: BorderSide(
-                                    color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
+                                    color: theme.colorScheme.onSurface
+                                        .withAlpha((0.1 * 255).round()),
                                   ),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   borderSide: BorderSide(
-                                    color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
+                                    color: theme.colorScheme.onSurface
+                                        .withAlpha((0.1 * 255).round()),
                                   ),
                                 ),
                               ),
@@ -438,14 +507,18 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton(
-                                onPressed: _pSaving ? null : () async {
-                                  if (!_pFormKey.currentState!.validate()) return;
-                                  await _savePayoutDetails();
-                                },
+                                onPressed: _pSaving
+                                    ? null
+                                    : () async {
+                                        if (!_pFormKey.currentState!.validate())
+                                          return;
+                                        await _savePayoutDetails();
+                                      },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: theme.colorScheme.primary,
                                   foregroundColor: theme.colorScheme.onPrimary,
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 16),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
@@ -453,13 +526,13 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                 ),
                                 child: _pSaving
                                     ? SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: theme.colorScheme.onPrimary,
-                                  ),
-                                )
+                                        height: 20,
+                                        width: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: theme.colorScheme.onPrimary,
+                                        ),
+                                      )
                                     : Text('Save Account Details'),
                               ),
                             ),
@@ -471,7 +544,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                 child: Text(
                                   'Cancel',
                                   style: TextStyle(
-                                    color: theme.colorScheme.onSurface.withAlpha((0.6 * 255).round()),
+                                    color: theme.colorScheme.onSurface
+                                        .withAlpha((0.6 * 255).round()),
                                   ),
                                 ),
                               ),
@@ -482,11 +556,9 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                     ],
                   ),
                 );
-              }
-          );
-        }
-     );
-   }
+              });
+        });
+  }
 
   // Simple pagination: attempt to load more using page & limit query params where supported
   int _txPage = 1;
@@ -503,18 +575,37 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
       _txPage += 1;
       // Try to call the first endpoint with page/limit, fallback to fetchTransactions
       final base = API_BASE_URL;
-      final uri = Uri.parse('$base/api/transactions?page=$_txPage&limit=$_txLimit');
+      final uri =
+          Uri.parse('$base/api/transactions?page=$_txPage&limit=$_txLimit');
+      if (kDebugMode)
+        debugPrint('[UserWalletpage] Loading more transactions from: $uri');
       try {
-        final resp = await http.get(uri, headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer $token' }).timeout(const Duration(seconds: 10));
-        if (resp.statusCode >= 200 && resp.statusCode < 300 && resp.body.isNotEmpty) {
+        final resp = await http.get(uri, headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token'
+        }).timeout(const Duration(seconds: 10));
+        if (kDebugMode)
+          debugPrint(
+              '[UserWalletpage] Load more transactions response: ${resp.statusCode} ${resp.body}');
+        if (resp.statusCode >= 200 &&
+            resp.statusCode < 300 &&
+            resp.body.isNotEmpty) {
           final decoded = jsonDecode(resp.body);
-          final list = decoded is Map ? (decoded['data'] ?? decoded['transactions'] ?? decoded['results'] ?? decoded) : decoded;
+          final list = decoded is Map
+              ? (decoded['data'] ??
+                  decoded['transactions'] ??
+                  decoded['results'] ??
+                  decoded)
+              : decoded;
           if (list is List && list.isNotEmpty) {
-            final additional = List<Map<String, dynamic>>.from(list.map((e) => e is Map ? Map<String, dynamic>.from(e) : {'raw': e}));
+            final additional = List<Map<String, dynamic>>.from(list.map(
+                (e) => e is Map ? Map<String, dynamic>.from(e) : {'raw': e}));
             final prof = AppStateNotifier.instance.profile;
-            final myId = (prof?['_id'] ?? prof?['id'] ?? prof?['userId'])?.toString();
+            final myId =
+                (prof?['_id'] ?? prof?['id'] ?? prof?['userId'])?.toString();
             if (myId != null && myId.isNotEmpty) {
-              _transactions.addAll(additional.where((tx) => _transactionBelongsToUser(tx, myId)));
+              _transactions.addAll(additional
+                  .where((tx) => _transactionBelongsToUser(tx, myId)));
             } else {
               _transactions.addAll(additional);
             }
@@ -528,8 +619,10 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
         // fallback to WalletService; but we can't easily merge incremental results, so just stop
         _txHasMore = false;
       }
-    } catch (_) {}
-    finally { setState(() => _txLoadingMore = false); }
+    } catch (_) {
+    } finally {
+      setState(() => _txLoadingMore = false);
+    }
   }
 
   String _formatAmount(dynamic value) {
@@ -551,8 +644,13 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
       // Determine currency code from wallet if available
       final walletCurrency = _wallet == null
           ? null
-          : (_wallet!['currency'] ?? _wallet!['currencyCode'] ?? _wallet!['currency_code']);
-      final currencyCode = (walletCurrency is String && walletCurrency.isNotEmpty) ? walletCurrency.toUpperCase() : 'NGN';
+          : (_wallet!['currency'] ??
+              _wallet!['currencyCode'] ??
+              _wallet!['currency_code']);
+      final currencyCode =
+          (walletCurrency is String && walletCurrency.isNotEmpty)
+              ? walletCurrency.toUpperCase()
+              : 'NGN';
 
       try {
         // Use simpleCurrency so symbol is localized where possible
@@ -562,7 +660,12 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
       } catch (_) {
         // Fallback: use grouping and a simple symbol map
         final formatter = NumberFormat.decimalPattern();
-        final symbolMap = <String, String>{'NGN': '₦', 'USD': '\$', 'EUR': '€', 'GBP': '£'};
+        final symbolMap = <String, String>{
+          'NGN': '₦',
+          'USD': '\$',
+          'EUR': '€',
+          'GBP': '£'
+        };
         final sym = symbolMap[currencyCode] ?? '';
         return '${sym}${formatter.format(number.round())}';
       }
@@ -581,8 +684,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
     final isCredit = type == 'credit';
     final isPending = status.contains('pending');
 
-    final title = transaction['title']?.toString() ??
-        (isCredit ? 'Payout' : 'Payment');
+    final title =
+        transaction['title']?.toString() ?? (isCredit ? 'Payout' : 'Payment');
     final description = transaction['subtitle']?.toString() ??
         (transaction['description']?.toString() ??
             (isCredit ? 'Wallet credit' : 'Wallet debit'));
@@ -618,7 +721,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
         ),
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         leading: Container(
           width: 48,
           height: 48,
@@ -645,7 +749,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
             Text(
               description,
               style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withAlpha((0.6 * 255).round()),
+                color:
+                    theme.colorScheme.onSurface.withAlpha((0.6 * 255).round()),
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -654,7 +759,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
             Text(
               date,
               style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withAlpha((0.4 * 255).round()),
+                color:
+                    theme.colorScheme.onSurface.withAlpha((0.4 * 255).round()),
                 fontSize: 12,
               ),
             ),
@@ -700,8 +806,24 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
     if (myId == null || myId.isEmpty) return false;
 
     final candidateKeys = [
-      'userId', 'user_id', 'user', 'customerId', 'customer_id', 'recipientId', 'recipient',
-      'clientId', 'artisanId', 'ownerId', 'from', 'to', 'account', 'accountId', 'walletId', 'customer', 'owner', 'createdBy'
+      'userId',
+      'user_id',
+      'user',
+      'customerId',
+      'customer_id',
+      'recipientId',
+      'recipient',
+      'clientId',
+      'artisanId',
+      'ownerId',
+      'from',
+      'to',
+      'account',
+      'accountId',
+      'walletId',
+      'customer',
+      'owner',
+      'createdBy'
     ];
 
     for (final k in candidateKeys) {
@@ -766,7 +888,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: colorScheme.primary,
                   foregroundColor: colorScheme.onPrimary,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -803,7 +926,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                   IconButton(
                     icon: Icon(
                       Icons.chevron_left_rounded,
-                      color: colorScheme.onSurface.withAlpha((0.8 * 255).round()),
+                      color:
+                          colorScheme.onSurface.withAlpha((0.8 * 255).round()),
                       size: 28,
                     ),
                     onPressed: () => Navigator.of(context).maybePop(),
@@ -824,7 +948,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                             height: 22,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation(colorScheme.onSurface),
+                              valueColor:
+                                  AlwaysStoppedAnimation(colorScheme.onSurface),
                             ),
                           )
                         : Icon(
@@ -862,7 +987,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                             side: BorderSide(
-                              color: colorScheme.onSurface.withAlpha((0.1 * 255).round()),
+                              color: colorScheme.onSurface
+                                  .withAlpha((0.1 * 255).round()),
                               width: 1,
                             ),
                           ),
@@ -872,19 +998,23 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     Text(
                                       'Total Balance',
-                                      style: theme.textTheme.bodyMedium?.copyWith(
-                                        color: colorScheme.onSurface.withAlpha((0.7 * 255).round()),
+                                      style:
+                                          theme.textTheme.bodyMedium?.copyWith(
+                                        color: colorScheme.onSurface
+                                            .withAlpha((0.7 * 255).round()),
                                       ),
                                     ),
                                     Container(
                                       width: 40,
                                       height: 40,
                                       decoration: BoxDecoration(
-                                        color: colorScheme.primary.withAlpha((0.1 * 255).round()),
+                                        color: colorScheme.primary
+                                            .withAlpha((0.1 * 255).round()),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: Icon(
@@ -898,87 +1028,111 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                 const SizedBox(height: 12),
                                 _loading
                                     ? Container(
-                                  height: 32,
-                                  decoration: BoxDecoration(
-                                    color: colorScheme.onSurface.withAlpha((0.1 * 255).round()),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                )
+                                        height: 32,
+                                        decoration: BoxDecoration(
+                                          color: colorScheme.onSurface
+                                              .withAlpha((0.1 * 255).round()),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                      )
                                     : Text(
-                                  _formatAmount(
-                                      _wallet?['total'] ??
-                                          _wallet?['balance'] ??
-                                          _wallet?['totalEarned'] ??
-                                          _wallet?['totalSpent'] ?? 0
-                                  ),
-                                  style: theme.textTheme.headlineMedium?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 32,
-                                  ),
-                                ),
+                                        _formatAmount(_wallet?['total'] ??
+                                            _wallet?['balance'] ??
+                                            _wallet?['totalEarned'] ??
+                                            _wallet?['totalSpent'] ??
+                                            0),
+                                        style: theme.textTheme.headlineMedium
+                                            ?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 32,
+                                        ),
+                                      ),
                                 const SizedBox(height: 24),
                                 Row(
                                   children: [
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             'Available',
-                                            style: theme.textTheme.bodySmall?.copyWith(
-                                              color: colorScheme.onSurface.withAlpha((0.6 * 255).round()),
+                                            style: theme.textTheme.bodySmall
+                                                ?.copyWith(
+                                              color: colorScheme.onSurface
+                                                  .withAlpha(
+                                                      (0.6 * 255).round()),
                                             ),
                                           ),
                                           const SizedBox(height: 6),
                                           _loading
                                               ? Container(
-                                            height: 20,
-                                            decoration: BoxDecoration(
-                                              color: colorScheme.onSurface.withAlpha((0.1 * 255).round()),
-                                              borderRadius: BorderRadius.circular(4),
-                                            ),
-                                          )
+                                                  height: 20,
+                                                  decoration: BoxDecoration(
+                                                    color: colorScheme.onSurface
+                                                        .withAlpha((0.1 * 255)
+                                                            .round()),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            4),
+                                                  ),
+                                                )
                                               : Text(
-                                            _formatAmount(
-                                                _wallet?['available'] ??
-                                                    _wallet?['availableBalance'] ??
-                                                    _wallet?['balance'] ?? 0
-                                            ),
-                                            style: theme.textTheme.titleMedium?.copyWith(
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
+                                                  _formatAmount(_wallet?[
+                                                          'available'] ??
+                                                      _wallet?[
+                                                          'availableBalance'] ??
+                                                      _wallet?['balance'] ??
+                                                      0),
+                                                  style: theme
+                                                      .textTheme.titleMedium
+                                                      ?.copyWith(
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
                                         ],
                                       ),
                                     ),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             'Pending',
-                                            style: theme.textTheme.bodySmall?.copyWith(
-                                              color: colorScheme.onSurface.withAlpha((0.6 * 255).round()),
+                                            style: theme.textTheme.bodySmall
+                                                ?.copyWith(
+                                              color: colorScheme.onSurface
+                                                  .withAlpha(
+                                                      (0.6 * 255).round()),
                                             ),
                                           ),
                                           const SizedBox(height: 6),
                                           _loading
                                               ? Container(
-                                            height: 20,
-                                            decoration: BoxDecoration(
-                                              color: colorScheme.onSurface.withAlpha((0.1 * 255).round()),
-                                              borderRadius: BorderRadius.circular(4),
-                                            ),
-                                          )
+                                                  height: 20,
+                                                  decoration: BoxDecoration(
+                                                    color: colorScheme.onSurface
+                                                        .withAlpha((0.1 * 255)
+                                                            .round()),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            4),
+                                                  ),
+                                                )
                                               : Text(
-                                            _formatAmount(
-                                                _wallet?['pending'] ??
-                                                    _wallet?['pendingAmount'] ?? 0
-                                            ),
-                                            style: theme.textTheme.titleMedium?.copyWith(
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
+                                                  _formatAmount(_wallet?[
+                                                          'pending'] ??
+                                                      _wallet?[
+                                                          'pendingAmount'] ??
+                                                      0),
+                                                  style: theme
+                                                      .textTheme.titleMedium
+                                                      ?.copyWith(
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
                                         ],
                                       ),
                                     ),
@@ -993,13 +1147,15 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                         if (_isArtisan) ...[
                           const SizedBox(height: 24),
                           Padding(
-                            padding: const EdgeInsets.only(left: 4.0, bottom: 12),
+                            padding:
+                                const EdgeInsets.only(left: 4.0, bottom: 12),
                             child: Text(
                               'PAYOUT ACCOUNT',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
-                                color: colorScheme.onSurface.withAlpha((0.6 * 255).round()),
+                                color: colorScheme.onSurface
+                                    .withAlpha((0.6 * 255).round()),
                                 letterSpacing: 1.0,
                               ),
                             ),
@@ -1009,7 +1165,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                               side: BorderSide(
-                                color: colorScheme.onSurface.withAlpha((0.1 * 255).round()),
+                                color: colorScheme.onSurface
+                                    .withAlpha((0.1 * 255).round()),
                                 width: 1,
                               ),
                             ),
@@ -1019,16 +1176,20 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       Text(
                                         'Payout Details',
-                                        style: theme.textTheme.titleMedium?.copyWith(
+                                        style: theme.textTheme.titleMedium
+                                            ?.copyWith(
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
                                       TextButton(
-                                        onPressed: () => _showPayoutDetailsSheet(isEdit: true),
+                                        onPressed: () =>
+                                            _showPayoutDetailsSheet(
+                                                isEdit: true),
                                         style: TextButton.styleFrom(
                                           padding: EdgeInsets.zero,
                                           minimumSize: Size.zero,
@@ -1044,42 +1205,57 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                     ],
                                   ),
                                   const SizedBox(height: 16),
-                                  if (_wallet != null && _wallet!['payoutDetails'] != null) ...[
+                                  if (_wallet != null &&
+                                      _wallet!['payoutDetails'] != null) ...[
                                     _buildDetailRow(
                                       context: context,
                                       label: 'Account Name',
-                                      value: _wallet!['payoutDetails']['name']?.toString() ?? '—',
+                                      value: _wallet!['payoutDetails']['name']
+                                              ?.toString() ??
+                                          '—',
                                     ),
                                     const SizedBox(height: 12),
                                     _buildDetailRow(
                                       context: context,
                                       label: 'Account Number',
-                                      value: _wallet!['payoutDetails']['account_number']?.toString() ?? '—',
+                                      value: _wallet!['payoutDetails']
+                                                  ['account_number']
+                                              ?.toString() ??
+                                          '—',
                                     ),
                                     const SizedBox(height: 12),
                                     _buildDetailRow(
                                       context: context,
                                       label: 'Bank',
-                                      value: _wallet!['payoutDetails']['bank_name']?.toString() ?? '—',
+                                      value: _wallet!['payoutDetails']
+                                                  ['bank_name']
+                                              ?.toString() ??
+                                          '—',
                                     ),
                                   ] else ...[
                                     Text(
                                       'No payout details set',
-                                      style: theme.textTheme.bodyMedium?.copyWith(
-                                        color: colorScheme.onSurface.withAlpha((0.6 * 255).round()),
+                                      style:
+                                          theme.textTheme.bodyMedium?.copyWith(
+                                        color: colorScheme.onSurface
+                                            .withAlpha((0.6 * 255).round()),
                                       ),
                                     ),
                                     const SizedBox(height: 16),
                                     ElevatedButton(
-                                      onPressed: () => _showPayoutDetailsSheet(isEdit: false),
+                                      onPressed: () => _showPayoutDetailsSheet(
+                                          isEdit: false),
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: colorScheme.primary,
                                         foregroundColor: colorScheme.onPrimary,
-                                        padding: const EdgeInsets.symmetric(vertical: 16),
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 16),
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(12),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
                                         ),
-                                        minimumSize: const Size(double.infinity, 0),
+                                        minimumSize:
+                                            const Size(double.infinity, 0),
                                       ),
                                       child: Text('Add Account Details'),
                                     ),
@@ -1099,20 +1275,25 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color: colorScheme.onSurface.withAlpha((0.6 * 255).round()),
+                              color: colorScheme.onSurface
+                                  .withAlpha((0.6 * 255).round()),
                               letterSpacing: 1.0,
                             ),
                           ),
                         ),
                         if (_loading && _transactions.isEmpty)
-                          ...List.generate(3, (index) => _buildTransactionSkeleton(context)),
-                        if (!_loading && _transactions.isEmpty && _error == null)
+                          ...List.generate(
+                              3, (index) => _buildTransactionSkeleton(context)),
+                        if (!_loading &&
+                            _transactions.isEmpty &&
+                            _error == null)
                           Card(
                             elevation: 0,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                               side: BorderSide(
-                                color: colorScheme.onSurface.withAlpha((0.1 * 255).round()),
+                                color: colorScheme.onSurface
+                                    .withAlpha((0.1 * 255).round()),
                                 width: 1,
                               ),
                             ),
@@ -1123,13 +1304,15 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                   Icon(
                                     Icons.receipt_long_outlined,
                                     size: 48,
-                                    color: colorScheme.onSurface.withAlpha((0.3 * 255).round()),
+                                    color: colorScheme.onSurface
+                                        .withAlpha((0.3 * 255).round()),
                                   ),
                                   const SizedBox(height: 16),
                                   Text(
                                     'No transactions yet',
                                     style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: colorScheme.onSurface.withAlpha((0.6 * 255).round()),
+                                      color: colorScheme.onSurface
+                                          .withAlpha((0.6 * 255).round()),
                                     ),
                                   ),
                                 ],
@@ -1145,9 +1328,13 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                             padding: const EdgeInsets.symmetric(vertical: 12.0),
                             child: Column(
                               children: [
-                                Text(_error!, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error)),
+                                Text(_error!,
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                        color: theme.colorScheme.error)),
                                 const SizedBox(height: 8),
-                                ElevatedButton(onPressed: _init, child: const Text('Retry')),
+                                ElevatedButton(
+                                    onPressed: _init,
+                                    child: const Text('Retry')),
                               ],
                             ),
                           ),
@@ -1207,7 +1394,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
         ),
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         leading: Container(
           width: 48,
           height: 48,
@@ -1231,7 +1419,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
               height: 12,
               width: 120,
               decoration: BoxDecoration(
-                color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
+                color:
+                    theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
@@ -1240,7 +1429,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
               height: 10,
               width: 80,
               decoration: BoxDecoration(
-                color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
+                color:
+                    theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
@@ -1254,7 +1444,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
               height: 16,
               width: 60,
               decoration: BoxDecoration(
-                color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
+                color:
+                    theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
@@ -1263,7 +1454,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
               height: 20,
               width: 70,
               decoration: BoxDecoration(
-                color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
+                color:
+                    theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
@@ -1285,4 +1477,3 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
     await _init();
   }
 }
-
