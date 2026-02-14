@@ -816,7 +816,7 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
     }
   }
 
-  void _showErrorDialog(String message) {
+  void _showErrorDialog(String message, {String? title}) {
     final theme = Theme.of(context);
     showDialog(
       context: context,
@@ -833,7 +833,7 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
             ),
             const SizedBox(width: 12),
             Text(
-              'Unable to Save',
+              title ?? 'Unable to Save',
               style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w600,
               ),
@@ -1385,10 +1385,28 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
             if (m != null) msg = m.toString();
           }
         } catch (_) {}
-        if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(msg)));
-        }
+        if (mounted) _showErrorDialog(msg, title: 'Account Verification Failed');
+        return false;
+      }
+
+      // Handle other HTTP errors (4xx, 5xx)
+      if (r.statusCode < 200 || r.statusCode >= 300) {
+        String msg = 'Account verification failed (${r.statusCode}). Please try again.';
+        try {
+          if (r.body.isNotEmpty) {
+            final body = jsonDecode(r.body);
+            if (body is Map) {
+              final err = body['error'];
+              if (err is Map) {
+                final m = err['message'];
+                if (m != null) msg = m.toString();
+              } else if (body['message'] != null) {
+                msg = body['message'].toString();
+              }
+            }
+          }
+        } catch (_) {}
+        if (mounted) _showErrorDialog(msg, title: 'Account Verification Failed');
         return false;
       }
 
@@ -1421,9 +1439,18 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
         }
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content:
-                Text('Could not verify account. Please check the details.')));
+        _showErrorDialog(
+          'Could not verify account. Please check the account number and bank.',
+          title: 'Account Verification Failed',
+        );
+      }
+      return false;
+    } catch (e) {
+      if (mounted) {
+        _showErrorDialog(
+          ErrorMessages.humanize(e),
+          title: 'Account Verification Failed',
+        );
       }
       return false;
     } finally {
