@@ -1,11 +1,8 @@
 import 'dart:ui';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:go_router/go_router.dart';
-import '../../api_config.dart';
-import '../forget_password/forget_password_widget.dart';
 import '/services/auth_service.dart';
+import '../forget_password/forget_password_widget.dart';
 import 'login_account_model.dart';
 import '../../utils/app_notification.dart';
 import '../../utils/error_messages.dart';
@@ -130,7 +127,55 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
 
         await _processSuccessfulLogin(res);
       } else {
-        _handleLoginError(res);
+        // Best-effort: if login failed with ambiguous error (invalid credentials),
+        // try to verify whether the email exists on the server. If the email
+        // does not exist (or was deleted), show a clearer 'Account not found'
+        // message. This avoids telling users "invalid credentials" when their
+        // account was removed.
+        try {
+          // If server already indicated 404/not found, let _handleLoginError handle it
+          final err = res['error'];
+          bool handled = false;
+          if (err is Map && err.containsKey('status')) {
+            final s = int.tryParse(err['status'].toString());
+            if (s == 404) {
+              _handleLoginError(res);
+              handled = true;
+            }
+          } else if (err is String && err.toLowerCase().contains('not found')) {
+            _handleLoginError(res);
+            handled = true;
+          }
+
+          if (!handled) {
+            // Try check-email endpoint (best-effort). The server may not expose
+            // this endpoint; in that case we fall back to the generic error.
+            try {
+              final check = await AuthService.checkEmailExists(email: email).timeout(const Duration(seconds: 8));
+              if (check['success'] == true) {
+                final body = check['data'];
+                bool? exists;
+                try {
+                  if (body is Map) {
+                    if (body.containsKey('exists')) exists = body['exists'] as bool?;
+                    else if (body.containsKey('data') && body['data'] is Map && body['data'].containsKey('exists')) exists = body['data']['exists'] as bool?;
+                  }
+                } catch (_) {}
+
+                if (exists == false) {
+                  AppNotification.showError(context, 'Account not found. Please register or check the email used.');
+                  handled = true;
+                }
+              }
+            } catch (_) {
+              // ignore any check-email errors and fallback to generic handler
+            }
+          }
+
+          if (!handled) _handleLoginError(res);
+        } catch (_) {
+          _handleLoginError(res);
+        }
       }
     } on TimeoutException catch (e) {
       AppNotification.showError(context, ErrorMessages.humanize(e));
@@ -368,12 +413,38 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
   }
 
   void _handleLoginError(Map<String, dynamic> res) {
+    // Default generic message
     String errorMessage = 'Login failed. Please check your credentials.';
 
-    if (res['error'] is Map) {
-      errorMessage = res['error']['message']?.toString() ?? errorMessage;
-    } else if (res['error'] != null) {
-      errorMessage = res['error'].toString();
+    final dynamic err = res['error'];
+    String? serverMsg;
+    int? statusCode;
+
+    try {
+      if (err is Map) {
+        // Common shapes: { message: '...', status: 404 } or { error: '...' }
+        if (err.containsKey('status')) statusCode = int.tryParse(err['status'].toString());
+        serverMsg = (err['message'] ?? err['error'] ?? err['msg'] ?? err['detail'])?.toString();
+      } else if (err != null) {
+        serverMsg = err.toString();
+      }
+    } catch (_) {
+      serverMsg = err?.toString();
+    }
+
+    final low = serverMsg?.toLowerCase() ?? '';
+
+    // If server indicates resource not found -> show 'Account not found'
+    if (statusCode == 404 || low.contains('not found') || low.contains('user not found') || low.contains('account not found') || low.contains('no account')) {
+      errorMessage = 'Account not found. Please register or check the email used.';
+    }
+    // If server was explicit about invalid credentials keep a clearer message
+    else if (low.contains('invalid') && (low.contains('credential') || low.contains('password') || low.contains('email'))) {
+      errorMessage = 'Invalid email or password.';
+    }
+    // Fallback to server message when it's informative
+    else if (serverMsg != null && serverMsg.isNotEmpty) {
+      errorMessage = serverMsg;
     }
 
     AppNotification.showError(context, errorMessage);
@@ -438,47 +509,6 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
     }
   }
 
-  Future<void> _navigateToSignUp() async {
-    if (_isNavigating) return;
-    if (!mounted) return;
-    setState(() => _isNavigating = true);
-
-    try {
-      final navigator = Navigator.of(context);
-      var navigated = false;
-
-      // Prefer direct MaterialPageRoute navigation to avoid reliance on
-      // Navigator.onGenerateRoute / named routes that may not be configured.
-      try {
-        await NavigationUtils.safePushNoAuth(context, CreateAccount2Widget());
-        navigated = true;
-      } catch (_) {}
-
-      // If the direct push failed for any reason, try named routes as a fallback
-      if (!navigated) {
-        try {
-          await NavigationUtils.safePushNoAuth(context, CreateAccount2Widget());
-          navigated = true;
-        } catch (_) {}
-      }
-
-      if (!navigated) {
-        try {
-          await NavigationUtils.safePushNoAuth(context, CreateAccount2Widget());
-          navigated = true;
-        } catch (_) {}
-      }
-    } catch (e, st) {
-      // Show a friendly error and log stacktrace if navigation fails
-      AppNotification.showError(
-          context, 'Could not open Sign up: ${ErrorMessages.humanize(e)}');
-      // Optionally: print to console for debugging
-      if (kDebugMode)
-        debugPrint('Navigation error in _navigateToSignUp: $e\n$st');
-    } finally {
-      if (mounted) setState(() => _isNavigating = false);
-    }
-  }
 
   // Show a bottom sheet prompting user to choose a role (artisan or client)
   Future<void> _showRoleSelectionSheet() async {
