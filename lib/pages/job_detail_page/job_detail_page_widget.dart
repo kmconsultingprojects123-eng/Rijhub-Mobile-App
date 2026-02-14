@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart' show kDebugMode;
 import '../../services/token_storage.dart';
 import '../../api_config.dart';
+import '../../utils/auth_guard.dart';
 import 'job_detail_page_model.dart';
 export 'job_detail_page_model.dart';
 
@@ -1045,7 +1046,8 @@ class _JobDetailPageWidgetState extends State<JobDetailPageWidget> {
                       ),
                     ),
                     child: FFButtonWidget(
-                      onPressed: () {
+                      onPressed: () async {
+                        if (!await ensureSignedInForAction(context)) return;
                         // Open bottom sheet for submitting a quote (artisan flow)
                         showModalBottomSheet<void>(
                           context: context,

@@ -12,6 +12,7 @@ import '../../services/user_service.dart';
 import '../../services/artist_service.dart';
 import '../payment_init/payment_init_page_widget.dart';
 import '../../utils/app_notification.dart';
+import '../../utils/auth_guard.dart';
 
 class ArtisanDetailPageWidget extends StatefulWidget {
   const ArtisanDetailPageWidget(
@@ -2436,7 +2437,10 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                             elevation: 0,
                             shadowColor: Colors.transparent,
                           ),
-                          onPressed: () => _showHireSheet(context),
+                          onPressed: () async {
+                            if (!await ensureSignedInForAction(context)) return;
+                            _showHireSheet(context);
+                          },
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [

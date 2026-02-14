@@ -6,6 +6,7 @@ import 'profile_model.dart';
 import 'dart:convert';
 import '../../services/user_service.dart';
 import '../../utils/navigation_utils.dart';
+import '../../utils/auth_guard.dart';
 import '../../services/token_storage.dart';
 import '../../services/api_error_handler.dart';
 import '../../api_config.dart';
@@ -550,9 +551,11 @@ class _ProfileWidgetState extends State<ProfileWidget> {
 
                         // Menu section - Optimized with const and pre-built widgets
                         _ProfileMenuSection(
-                          onEditProfile: () async {
-                            try {
-                              final result = await _pushEditProfile();
+                          onEditProfile: () {
+                            ensureSignedInForAction(context).then((ok) async {
+                              if (!ok) return;
+                              try {
+                                final result = await _pushEditProfile();
                               if (result is Map<String, dynamic>) {
                                 // Update cache with new data
                                 _cachedProfileData = Map<String, dynamic>.from(result);
@@ -573,9 +576,12 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                             } catch (_) {
                               await _loadProfile();
                             }
+                            });
                           },
                           onMyJobs: () {
-                            try {
+                            ensureSignedInForAction(context).then((ok) async {
+                              if (!ok) return;
+                              try {
                               // Determine role synchronously from cached profile
                               final profile = AppStateNotifier.instance.profile;
                               bool isArtisan = false;
@@ -606,9 +612,12 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                                 }
                               }
                             } catch (_) {}
+                            });
                           },
                           onWallet: () {
-                            try {
+                            ensureSignedInForAction(context).then((ok) async {
+                              if (!ok) return;
+                              try {
                               GoRouter.of(context).pushNamed(UserWalletpageWidget.routeName);
                               return;
                             } catch (e) {
@@ -617,6 +626,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                                 return;
                               } catch (_) {}
                             }
+                            });
                           },
                           onHelpSupport: () {
                             try {

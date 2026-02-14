@@ -64,15 +64,21 @@ class _Splash2WidgetState extends State<Splash2Widget> {
         try {
           if (body is Map) {
             if (body['token'] != null) token = body['token'].toString();
-            if (body['data'] is Map && body['data']['token'] != null) token = body['data']['token'].toString();
-            if (body['user'] is Map) userProfile = Map<String, dynamic>.from(body['user']);
-            if (userProfile == null && body['data'] is Map && body['data']['user'] is Map) userProfile = Map<String, dynamic>.from(body['data']['user']);
+            if (body['data'] is Map && body['data']['token'] != null)
+              token = body['data']['token'].toString();
+            if (body['user'] is Map)
+              userProfile = Map<String, dynamic>.from(body['user']);
+            if (userProfile == null &&
+                body['data'] is Map &&
+                body['data']['user'] is Map)
+              userProfile = Map<String, dynamic>.from(body['data']['user']);
           }
         } catch (_) {}
 
         // Fallback to persisted token if AuthService already saved it
         try {
-          if (token == null || token.isEmpty) token = await TokenStorage.getToken();
+          if (token == null || token.isEmpty)
+            token = await TokenStorage.getToken();
         } catch (_) {}
 
         if (token != null && token.isNotEmpty) {
@@ -153,7 +159,9 @@ class _Splash2WidgetState extends State<Splash2Widget> {
       }
 
       final err = res['error'];
-      final message = (err is Map && err['message'] != null) ? err['message'].toString() : (err?.toString() ?? 'Failed to enter as guest');
+      final message = (err is Map && err['message'] != null)
+          ? err['message'].toString()
+          : (err?.toString() ?? 'Failed to enter as guest');
       if (!mounted) return;
       await showAppErrorDialog(context, title: 'Error', desc: message);
     } catch (e) {
@@ -174,7 +182,8 @@ class _Splash2WidgetState extends State<Splash2Widget> {
     } catch (_) {}
 
     try {
-      if (appNavigatorKey.currentState != null && appNavigatorKey.currentState!.mounted) {
+      if (appNavigatorKey.currentState != null &&
+          appNavigatorKey.currentState!.mounted) {
         final route = MaterialPageRoute(
           builder: (_) => const SplashScreenPage2Widget(),
           settings: RouteSettings(name: SplashScreenPage2Widget.routeName),
@@ -202,7 +211,8 @@ class _Splash2WidgetState extends State<Splash2Widget> {
     } catch (_) {}
 
     try {
-      if (appNavigatorKey.currentState != null && appNavigatorKey.currentState!.mounted) {
+      if (appNavigatorKey.currentState != null &&
+          appNavigatorKey.currentState!.mounted) {
         final route = MaterialPageRoute(
           builder: (_) => const LoginAccountWidget(),
           settings: RouteSettings(name: LoginAccountWidget.routeName),
@@ -248,7 +258,8 @@ class _Splash2WidgetState extends State<Splash2Widget> {
                       end: Alignment.bottomCenter,
                       colors: [
                         theme.scaffoldBackgroundColor,
-                        theme.scaffoldBackgroundColor.withAlpha((0.98 * 255).round()),
+                        theme.scaffoldBackgroundColor
+                            .withAlpha((0.98 * 255).round()),
                       ],
                     )
                   : null,
@@ -271,12 +282,23 @@ class _Splash2WidgetState extends State<Splash2Widget> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         SizedBox(
-                          width: isSmallScreen ? 140 : isLargeScreen ? 220 : 200,
-                          height: isSmallScreen ? 140 : isLargeScreen ? 220 : 200,
+                          width: isSmallScreen
+                              ? 140
+                              : isLargeScreen
+                                  ? 220
+                                  : 200,
+                          height: isSmallScreen
+                              ? 140
+                              : isLargeScreen
+                                  ? 220
+                                  : 200,
                           child: ClipRRect(
-                            borderRadius: BorderRadius.circular(isSmallScreen ? 12 : 16),
+                            borderRadius:
+                                BorderRadius.circular(isSmallScreen ? 12 : 16),
                             child: Image.asset(
-                              isDark ? 'assets/images/logo_white.png' : 'assets/images/logo_black.png',
+                              isDark
+                                  ? 'assets/images/logo_white.png'
+                                  : 'assets/images/logo_black.png',
                               fit: BoxFit.contain,
                               errorBuilder: (c, e, s) {
                                 return Center(
@@ -293,24 +315,26 @@ class _Splash2WidgetState extends State<Splash2Widget> {
                             ),
                           ),
                         ),
-
                         SizedBox(height: isSmallScreen ? 2 : 4),
-
                         Padding(
                           padding: EdgeInsets.symmetric(
-                            horizontal: isSmallScreen ? 24 : isLargeScreen ? 80 : 40,
+                            horizontal: isSmallScreen
+                                ? 24
+                                : isLargeScreen
+                                    ? 80
+                                    : 40,
                           ),
                           child: Text(
                             'Find skilled artisans and get work done...',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: isSmallScreen ? 13 : 14,
-                              color: theme.colorScheme.onSurface.withAlpha((0.7 * 255).round()),
+                              color: theme.colorScheme.onSurface
+                                  .withAlpha((0.7 * 255).round()),
                               height: 1.25,
                             ),
                           ),
                         ),
-
                         SizedBox(height: isSmallScreen ? 40 : 60),
                       ],
                     ),
@@ -318,7 +342,11 @@ class _Splash2WidgetState extends State<Splash2Widget> {
                     // Bottom buttons
                     Padding(
                       padding: EdgeInsets.symmetric(
-                        horizontal: isSmallScreen ? 20 : isLargeScreen ? 40 : 24,
+                        horizontal: isSmallScreen
+                            ? 20
+                            : isLargeScreen
+                                ? 40
+                                : 24,
                         vertical: 24,
                       ),
                       child: Column(
@@ -350,15 +378,14 @@ class _Splash2WidgetState extends State<Splash2Widget> {
                               ),
                             ),
                           ),
-
                           const SizedBox(height: 12),
-
                           SizedBox(
                             width: double.infinity,
                             child: OutlinedButton(
                               style: OutlinedButton.styleFrom(
                                 side: BorderSide(
-                                  color: theme.dividerColor.withAlpha((0.4 * 255).round()),
+                                  color: theme.dividerColor
+                                      .withAlpha((0.4 * 255).round()),
                                   width: 1.5,
                                 ),
                                 padding: EdgeInsets.symmetric(
@@ -381,15 +408,14 @@ class _Splash2WidgetState extends State<Splash2Widget> {
                               ),
                             ),
                           ),
-
                           const SizedBox(height: 12),
-
                           SizedBox(
                             width: double.infinity,
                             child: OutlinedButton(
                               style: OutlinedButton.styleFrom(
                                 side: BorderSide(
-                                  color: theme.dividerColor.withAlpha((0.4 * 255).round()),
+                                  color: theme.dividerColor
+                                      .withAlpha((0.4 * 255).round()),
                                   width: 1.5,
                                 ),
                                 padding: EdgeInsets.symmetric(
@@ -403,7 +429,7 @@ class _Splash2WidgetState extends State<Splash2Widget> {
                               ),
                               onPressed: _continueAsGuest,
                               child: Text(
-                                'CONTINUE AS GUEST',
+                                'CONTINUE AS GUESTs',
                                 style: TextStyle(
                                   fontSize: isSmallScreen ? 15 : 16,
                                   fontWeight: FontWeight.w700,
@@ -412,7 +438,6 @@ class _Splash2WidgetState extends State<Splash2Widget> {
                               ),
                             ),
                           ),
-
                           Padding(
                             padding: const EdgeInsets.only(top: 24),
                             child: Text(
@@ -420,7 +445,8 @@ class _Splash2WidgetState extends State<Splash2Widget> {
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 11,
-                                color: theme.colorScheme.onSurface.withAlpha((0.5 * 255).round()),
+                                color: theme.colorScheme.onSurface
+                                    .withAlpha((0.5 * 255).round()),
                               ),
                             ),
                           ),

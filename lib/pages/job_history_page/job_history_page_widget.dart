@@ -9,6 +9,7 @@ import '../edit_job_page/edit_job_page_widget.dart';
 import '../job_details_page/job_details_page_widget.dart';
 import '../message_client/message_client_widget.dart';
 import '../../utils/navigation_utils.dart';
+import '../../utils/auth_guard.dart';
 import '../../services/user_service.dart';
 import '../../utils/app_notification.dart';
 import '../../utils/error_messages.dart';
@@ -1123,7 +1124,8 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
               if (_selectedTab == 'Posted' && !_isArtisan) ...[
                 SizedBox(height: isSmallScreen ? 24 : 32),
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
+                    if (!await ensureSignedInForAction(context)) return;
                     try {
                       Navigator.of(context).push(MaterialPageRoute(
                         builder: (_) => const CreateJobPage1Widget(),
@@ -1279,7 +1281,8 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: ElevatedButton(
-                      onPressed: () {
+                      onPressed: () async {
+                        if (!await ensureSignedInForAction(context)) return;
                         try {
                           Navigator.of(context).push(MaterialPageRoute(
                             builder: (_) => const CreateJobPage1Widget(),

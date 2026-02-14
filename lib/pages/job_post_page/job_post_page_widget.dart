@@ -12,6 +12,7 @@ import '../job_details_page/job_details_page_widget.dart';
 import '../artisan_jobs_history/artisan_jobs_history_widget.dart';
 import 'dart:async';
 import '../../utils/navigation_utils.dart';
+import '../../utils/auth_guard.dart';
 import '/main.dart';
 export 'job_post_page_model.dart';
 
@@ -543,7 +544,10 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                                 // Show Create Job button only after role is resolved and user is not an artisan
                                 if (_roleLoaded && !_isArtisan)
                                   ElevatedButton(
-                                    onPressed: () async { try { await NavigationUtils.safePush(context, CreateJobPage1Widget()); } catch (_) {} },
+                                    onPressed: () async {
+                                      if (!await ensureSignedInForAction(context)) return;
+                                      try { await NavigationUtils.safePush(context, CreateJobPage1Widget()); } catch (_) {}
+                                    },
                                     style: ElevatedButton.styleFrom(backgroundColor: colorScheme.primary, foregroundColor: colorScheme.onPrimary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10), elevation: 0),
                                     child: Row(children: const [Icon(Icons.add, size: 18), SizedBox(width: 6), Text('Create', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600))]),
                                   ),

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
 import '../../api_config.dart';
 import '../../services/token_storage.dart';
+import '../../utils/auth_guard.dart';
 import '../message_client/message_client_widget.dart';
 import '../booking_page/booking_page_widget.dart';
 import '../payment_init/payment_init_page_widget.dart';
@@ -165,7 +166,8 @@ class _BookingDetailsWidgetState extends State<BookingDetailsWidget> {
             ),
             const SizedBox(width: 12),
             if (widget.paymentPayload != null) ElevatedButton.icon(
-              onPressed: () {
+              onPressed: () async {
+                if (!await ensureSignedInForAction(context)) return;
                 try {
                   final pm = Map<String, dynamic>.from(widget.paymentPayload!);
                   try {
@@ -231,6 +233,7 @@ class _BookingDetailsWidgetState extends State<BookingDetailsWidget> {
         const SizedBox(height: 20),
         ElevatedButton.icon(
           onPressed: () async {
+            if (!await ensureSignedInForAction(context)) return;
             // Open chat — pass context information so the chat screen can initialize quickly
             try {
               Navigator.of(context).push(MaterialPageRoute(builder: (_) => MessageClientWidget(
@@ -274,7 +277,8 @@ class _BookingDetailsWidgetState extends State<BookingDetailsWidget> {
               if (widget.paymentPayload != null) ...[
                 const SizedBox(width: 12),
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
+                    if (!await ensureSignedInForAction(context)) return;
                     // Navigate to payment initialization page (retry) - PaymentInitPageWidget expects 'payment'
                     Navigator.of(context).push(MaterialPageRoute(builder: (_) => PaymentInitPageWidget(payment: widget.paymentPayload!)));
                   },

@@ -8,6 +8,7 @@ import '../../api_config.dart';
 import '../payment_webview/payment_webview_page_widget.dart';
 import '../../services/user_service.dart';
 import '../../utils/navigation_utils.dart';
+import '../../utils/auth_guard.dart';
 import '../../services/webview_monitor.dart';
 import '../booking_page/booking_page_widget.dart';
 import '../../utils/app_notification.dart';
@@ -249,6 +250,10 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
 
   Future<void> _initPaymentThenStart() async {
     if (_blocking) return;
+    if (needsSignInForAction()) {
+      await showGuestAuthRequiredDialog(context, message: 'You need to sign in or create an account to make payments.');
+      return;
+    }
     setState(() {
       _state = _PaymentState.initializing;
       _loading = true;

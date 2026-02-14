@@ -6,6 +6,7 @@ import '../../api_config.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../utils/app_notification.dart';
+import '../../utils/auth_guard.dart';
 import '../artisan_kyc_page/artisan_kyc_route_wrapper.dart';
 import '../applicants_page/applicants_page_widget.dart';
 import '../submit_quote_page/submit_quote_page_widget.dart';
@@ -948,6 +949,12 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
               // Owner should take precedence: open applicants
               if (_isOwner) {
                 _openApplicantsPage(context);
+                return;
+              }
+
+              // Guest or unauthenticated: prompt to sign in
+              if (!_isArtisan) {
+                await showGuestAuthRequiredDialog(context, message: 'Sign in or create an account to apply for this job.');
                 return;
               }
 
