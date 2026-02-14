@@ -1,5 +1,8 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:http/http.dart' as http;
+import 'package:crypto/crypto.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import '../api_config.dart';
 import 'token_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -621,6 +624,154 @@ class AuthService {
         'error': {'message': e.toString()}
       };
     }
+  }
+
+  /// Sign in with Apple, send tokens to backend and persist returned JWT if any.
+  /// Returns {'success': bool, 'data': <backend response>, 'profile': {name, email}} on success.
+  /// [role] - Optional role to assign during signup (e.g., 'artisan' or 'customer').
+  static Future<Map<String, dynamic>> signInWithApple({String? role}) async {
+    // Import required for Apple Sign-In
+    // ignore: avoid_print
+    print(
+        '┌──────────────────────────────────────────────────────────────────────────────');
+    // ignore: avoid_print
+    print('│ [Apple Sign-In] Starting Apple authentication...');
+
+    try {
+      // Generate a cryptographically secure random nonce
+      final rawNonce = _generateNonce();
+      final hashedNonce = _sha256ofString(rawNonce);
+
+      // ignore: avoid_print
+      print('│ [Apple Sign-In] Requesting Apple credentials...');
+
+      // Request credentials from Apple
+      final credential = await _getAppleCredential(hashedNonce);
+
+      // ignore: avoid_print
+      print(
+          '│ [Apple Sign-In] Got credential, identityToken present: ${credential.identityToken != null}');
+
+      final identityToken = credential.identityToken;
+      if (identityToken == null) {
+        // ignore: avoid_print
+        print('│ [Apple Sign-In] ERROR: identityToken is null!');
+        print(
+            '└──────────────────────────────────────────────────────────────────────────────');
+        return {
+          'success': false,
+          'error': {'message': 'Missing Apple identityToken'}
+        };
+      }
+
+      // Build user name from Apple credential (only provided on first sign-in)
+      String? displayName;
+      if (credential.givenName != null || credential.familyName != null) {
+        displayName =
+            '${credential.givenName ?? ''} ${credential.familyName ?? ''}'
+                .trim();
+      }
+
+      // Send to backend
+      // ignore: avoid_print
+      print('│ [Apple Sign-In] Sending identityToken to backend...');
+      final uri = Uri.parse('$API_BASE_URL/api/auth/oauth/apple');
+      // For mobile apps, use identity-token flow (NOT authorization-code flow)
+      // We send: identityToken + raw nonce (backend will hash and verify)
+      final resp = await _postWithRetries(uri,
+          body: {
+            'identityToken': identityToken,
+            'nonce': rawNonce, // Send raw nonce for backend verification
+            if (displayName != null && displayName.isNotEmpty)
+              'name': displayName,
+            if (credential.email != null) 'email': credential.email,
+            if (role != null) 'role': role,
+          },
+          timeoutSeconds: 20,
+          maxAttempts: 2);
+
+      final status = resp.statusCode;
+      final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
+      // ignore: avoid_print
+      print('│ [Apple Sign-In] Backend response: HTTP $status');
+
+      if (status >= 200 && status < 300) {
+        await _persistTokenAndRole(body);
+        // ignore: avoid_print
+        print('│ [Apple Sign-In] SUCCESS - Token persisted');
+        print(
+            '└──────────────────────────────────────────────────────────────────────────────');
+
+        return {
+          'success': true,
+          'data': body,
+          'profile': {
+            'name': displayName,
+            'email': credential.email,
+          }
+        };
+      }
+
+      // ignore: avoid_print
+      print('│ [Apple Sign-In] FAILED - Backend returned error');
+      print(
+          '└──────────────────────────────────────────────────────────────────────────────');
+      return {
+        'success': false,
+        'error': body ?? {'message': 'HTTP $status'}
+      };
+    } catch (e, stackTrace) {
+      // Handle user cancellation gracefully
+      if (e.toString().contains('canceled') ||
+          e.toString().contains('AuthorizationErrorCode.canceled')) {
+        // ignore: avoid_print
+        print('│ [Apple Sign-In] User cancelled');
+        print(
+            '└──────────────────────────────────────────────────────────────────────────────');
+        return {
+          'success': false,
+          'error': {'message': 'Apple sign-in cancelled'}
+        };
+      }
+
+      // ignore: avoid_print
+      print('│ [Apple Sign-In] EXCEPTION: $e');
+      print('│ [Apple Sign-In] Stack: $stackTrace');
+      print(
+          '└──────────────────────────────────────────────────────────────────────────────');
+      return {
+        'success': false,
+        'error': {'message': e.toString()}
+      };
+    }
+  }
+
+  /// Get Apple ID credential using the sign_in_with_apple package
+  static Future<AuthorizationCredentialAppleID> _getAppleCredential(
+      String hashedNonce) async {
+    return await SignInWithApple.getAppleIDCredential(
+      scopes: [
+        AppleIDAuthorizationScopes.email,
+        AppleIDAuthorizationScopes.fullName,
+      ],
+      nonce: hashedNonce,
+    );
+  }
+
+  /// Generates a cryptographically secure random nonce
+  static String _generateNonce([int length = 32]) {
+    const charset =
+        '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
+    final random = Random.secure();
+    return List.generate(length, (_) => charset[random.nextInt(charset.length)])
+        .join();
+  }
+
+  /// Returns the SHA256 hash of [input] as a hex string
+  static String _sha256ofString(String input) {
+    final bytes = utf8.encode(input);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
   }
 
   /// Clears persisted authentication (token + role) and signs out Google.

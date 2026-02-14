@@ -15,7 +15,7 @@ Added permissions:
 - `VIBRATE` - Enable vibration
 - `RECEIVE_BOOT_COMPLETED` - Reschedule notifications after reboot
 - `SCHEDULE_EXACT_ALARM` - Precise alarm scheduling
-- `USE_FULL_SCREEN_INTENT` - Full-screen notifications
+
 - `WAKE_LOCK` - Wake up device screen
 - `FOREGROUND_SERVICE` - Background notification service
 - `POST_NOTIFICATIONS` - Android 13+ permission

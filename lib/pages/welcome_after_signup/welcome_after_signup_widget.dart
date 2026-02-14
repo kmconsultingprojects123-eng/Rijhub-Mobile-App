@@ -61,9 +61,9 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
     // Start progress animation
     _startProgressAnimation();
 
-    // Auto-navigation after delay
+    // Auto-navigation after delay (reduced to 2 seconds)
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _autoNavTimer = Timer(const Duration(seconds: 5), () {
+      _autoNavTimer = Timer(const Duration(seconds: 2), () {
         if (!mounted || _navigated) return;
         _navigateToDashboard();
       });
@@ -78,7 +78,7 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
       }
       if (mounted) {
         setState(() {
-          _progressValue += 0.01; // 5 seconds to complete
+          _progressValue += 0.025; // 2 seconds to complete (1.0 / 40 steps)
         });
       }
     });
@@ -94,6 +94,11 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
     if (_navigated) return;
     _navigated = true;
     _autoNavTimer?.cancel();
+
+    // Reset progress to full to give visual feedback that action is taken
+    if (mounted) {
+      setState(() => _progressValue = 1.0);
+    }
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
@@ -149,9 +154,9 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
     final screenHeight = MediaQuery.of(context).size.height;
     final isSmallScreen = screenHeight < 700;
 
-    return GestureDetector(
+    return Listener(
       behavior: HitTestBehavior.opaque,
-      onTap: _navigateToDashboard,
+      onPointerDown: (_) => _navigateToDashboard(),
       child: Scaffold(
         backgroundColor: isDark ? Colors.black : Colors.white,
         body: SafeArea(
@@ -326,7 +331,7 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
                           ),
                           SizedBox(height: isSmallScreen ? 8 : 12),
                           Text(
-                            'Redirecting in ${(5 * (1 - _progressValue)).ceil()} seconds',
+                            'Redirecting in ${(2 * (1 - _progressValue)).ceil()} seconds',
                             style: TextStyle(
                               fontSize: isSmallScreen ? 13 : 14,
                               fontWeight: FontWeight.w500,
