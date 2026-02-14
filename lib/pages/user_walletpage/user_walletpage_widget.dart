@@ -1017,261 +1017,271 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                       child: ListView(
                         controller: controller,
                         children: [
-                          Column(
-                            children: [
-                              Center(
-                                child: Container(
-                                  width: 40,
-                                  height: 4,
-                                  decoration: BoxDecoration(
-                                    color: theme.colorScheme.onSurface
-                                        .withAlpha((0.3 * 255).round()),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              // 1. Bank name (picker with searchable modal)
-                              GestureDetector(
-                                onTap: () async {
-                                  await _showBankPickerSheet(
-                                      onModalRebuild: () =>
-                                          setModalState(() {}));
-                                  if (modalContext.mounted)
-                                    setModalState(() {});
-                                },
-                                child: AbsorbPointer(
-                                  child: TextFormField(
-                                    controller: _pBankNameCtrl,
-                                    decoration: InputDecoration(
-                                      labelText: 'Bank name',
-                                      hintText: 'Select bank',
-                                      suffixIcon: Icon(Icons.search),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                        borderSide: BorderSide(
-                                          color: theme.colorScheme.onSurface
-                                              .withAlpha((0.1 * 255).round()),
-                                        ),
-                                      ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                        borderSide: BorderSide(
-                                          color: theme.colorScheme.onSurface
-                                              .withAlpha((0.1 * 255).round()),
-                                        ),
-                                      ),
-                                    ),
-                                    validator: (v) =>
-                                        _selectedBankCode == null ||
-                                                _selectedBankCode!.isEmpty
-                                            ? 'Required'
-                                            : null,
-                                    readOnly: true,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              // 2. Bank code (read-only auto-filled)
-                              TextFormField(
-                                controller: _pBankCodeCtrl,
-                                readOnly: true,
-                                decoration: InputDecoration(
-                                  labelText: 'Bank code',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(
+                          Form(
+                            key: _pFormKey,
+                            child: Column(
+                              children: [
+                                Center(
+                                  child: Container(
+                                    width: 40,
+                                    height: 4,
+                                    decoration: BoxDecoration(
                                       color: theme.colorScheme.onSurface
-                                          .withAlpha((0.1 * 255).round()),
-                                    ),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(
-                                      color: theme.colorScheme.onSurface
-                                          .withAlpha((0.1 * 255).round()),
+                                          .withAlpha((0.3 * 255).round()),
+                                      borderRadius: BorderRadius.circular(4),
                                     ),
                                   ),
                                 ),
-                                validator: (v) => v == null || v.trim().isEmpty
-                                    ? 'Required'
-                                    : null,
-                              ),
-                              const SizedBox(height: 12),
-                              // 3. Account number (manual input)
-                              TextFormField(
-                                controller: _pAccountCtrl,
-                                decoration: InputDecoration(
-                                  labelText: 'Account number',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(
-                                      color: theme.colorScheme.onSurface
-                                          .withAlpha((0.1 * 255).round()),
-                                    ),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(
-                                      color: theme.colorScheme.onSurface
-                                          .withAlpha((0.1 * 255).round()),
-                                    ),
-                                  ),
-                                ),
-                                keyboardType: TextInputType.number,
-                                onChanged: (v) {
-                                  final s = v.trim();
-                                  // Cancel previous debounce
-                                  _resolveTimer?.cancel();
-                                  if (s.length == 10) {
-                                    // debounce to avoid rapid requests while typing
-                                    _resolveTimer =
-                                        Timer(const Duration(milliseconds: 600),
-                                            () async {
-                                      if (!mounted) return;
-                                      await _resolveAccountName(s,
-                                          onComplete: () =>
-                                              setModalState(() {}));
-                                    });
-                                  } else {
-                                    if (mounted) {
-                                      setState(() {
-                                        _pAccountNameCtrl.text = '';
-                                      });
+                                const SizedBox(height: 16),
+                                // 1. Bank name (picker with searchable modal)
+                                GestureDetector(
+                                  onTap: () async {
+                                    await _showBankPickerSheet(
+                                        onModalRebuild: () =>
+                                            setModalState(() {}));
+                                    if (modalContext.mounted)
                                       setModalState(() {});
+                                  },
+                                  child: AbsorbPointer(
+                                    child: TextFormField(
+                                      controller: _pBankNameCtrl,
+                                      decoration: InputDecoration(
+                                        labelText: 'Bank name',
+                                        hintText: 'Select bank',
+                                        suffixIcon: Icon(Icons.search),
+                                        border: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          borderSide: BorderSide(
+                                            color: theme.colorScheme.onSurface
+                                                .withAlpha((0.1 * 255).round()),
+                                          ),
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          borderSide: BorderSide(
+                                            color: theme.colorScheme.onSurface
+                                                .withAlpha((0.1 * 255).round()),
+                                          ),
+                                        ),
+                                      ),
+                                      validator: (v) =>
+                                          _selectedBankCode == null ||
+                                                  _selectedBankCode!.isEmpty
+                                              ? 'Required'
+                                              : null,
+                                      readOnly: true,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                // 2. Bank code (read-only auto-filled)
+                                TextFormField(
+                                  controller: _pBankCodeCtrl,
+                                  readOnly: true,
+                                  decoration: InputDecoration(
+                                    labelText: 'Bank code',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: theme.colorScheme.onSurface
+                                            .withAlpha((0.1 * 255).round()),
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: theme.colorScheme.onSurface
+                                            .withAlpha((0.1 * 255).round()),
+                                      ),
+                                    ),
+                                  ),
+                                  validator: (v) =>
+                                      v == null || v.trim().isEmpty
+                                          ? 'Required'
+                                          : null,
+                                ),
+                                const SizedBox(height: 12),
+                                // 3. Account number (manual input)
+                                TextFormField(
+                                  controller: _pAccountCtrl,
+                                  decoration: InputDecoration(
+                                    labelText: 'Account number',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: theme.colorScheme.onSurface
+                                            .withAlpha((0.1 * 255).round()),
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: theme.colorScheme.onSurface
+                                            .withAlpha((0.1 * 255).round()),
+                                      ),
+                                    ),
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  onChanged: (v) {
+                                    final s = v.trim();
+                                    // Cancel previous debounce
+                                    _resolveTimer?.cancel();
+                                    if (s.length == 10) {
+                                      // debounce to avoid rapid requests while typing
+                                      _resolveTimer = Timer(
+                                          const Duration(milliseconds: 600),
+                                          () async {
+                                        if (!mounted) return;
+                                        await _resolveAccountName(s,
+                                            onComplete: () =>
+                                                setModalState(() {}));
+                                      });
+                                    } else {
+                                      if (mounted) {
+                                        setState(() {
+                                          _pAccountNameCtrl.text = '';
+                                        });
+                                        setModalState(() {});
+                                      }
                                     }
-                                  }
-                                },
-                                validator: (v) {
-                                  if (v == null || v.trim().isEmpty)
-                                    return 'Required';
-                                  final s = v.trim();
-                                  if (!RegExp(r'^\d{6,20}$').hasMatch(s))
-                                    return 'Enter a valid account number';
-                                  return null;
-                                },
-                              ),
-                              const SizedBox(height: 12),
-                              // 4. Account name (filled by lookup, read-only)
-                              TextFormField(
-                                controller: _pAccountNameCtrl,
-                                readOnly: true,
-                                decoration: InputDecoration(
-                                  labelText: 'Account name',
-                                  suffix: _isAccountNameLoading
-                                      ? SizedBox(
-                                          height: 16,
-                                          width: 16,
-                                          child: CircularProgressIndicator(
-                                              strokeWidth: 2))
-                                      : null,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(
-                                      color: theme.colorScheme.onSurface
-                                          .withAlpha((0.1 * 255).round()),
-                                    ),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(
-                                      color: theme.colorScheme.onSurface
-                                          .withAlpha((0.1 * 255).round()),
-                                    ),
-                                  ),
+                                  },
+                                  validator: (v) {
+                                    if (v == null || v.trim().isEmpty)
+                                      return 'Required';
+                                    final s = v.trim();
+                                    if (!RegExp(r'^\d{6,20}$').hasMatch(s))
+                                      return 'Enter a valid account number';
+                                    return null;
+                                  },
                                 ),
-                                validator: (v) => v == null || v.trim().isEmpty
-                                    ? 'Required'
-                                    : null,
-                              ),
-                              const SizedBox(height: 12),
-                              // 5. Currency (fixed NGN, read-only)
-                              TextFormField(
-                                controller: _pCurrencyCtrl,
-                                readOnly: true,
-                                decoration: InputDecoration(
-                                  labelText: 'Currency',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(
-                                      color: theme.colorScheme.onSurface
-                                          .withAlpha((0.1 * 255).round()),
+                                const SizedBox(height: 12),
+                                // 4. Account name (filled by lookup, read-only)
+                                TextFormField(
+                                  controller: _pAccountNameCtrl,
+                                  readOnly: true,
+                                  decoration: InputDecoration(
+                                    labelText: 'Account name',
+                                    suffix: _isAccountNameLoading
+                                        ? SizedBox(
+                                            height: 16,
+                                            width: 16,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2))
+                                        : null,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: theme.colorScheme.onSurface
+                                            .withAlpha((0.1 * 255).round()),
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: theme.colorScheme.onSurface
+                                            .withAlpha((0.1 * 255).round()),
+                                      ),
                                     ),
                                   ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(
-                                      color: theme.colorScheme.onSurface
-                                          .withAlpha((0.1 * 255).round()),
-                                    ),
-                                  ),
+                                  validator: (v) =>
+                                      v == null || v.trim().isEmpty
+                                          ? 'Required'
+                                          : null,
                                 ),
-                                validator: (v) => v == null || v.trim().isEmpty
-                                    ? 'Required'
-                                    : null,
-                              ),
-                              const SizedBox(height: 24),
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton(
-                                  onPressed: _canSavePayoutDetails
-                                      ? () async {
-                                          if (!_pFormKey.currentState!
-                                              .validate()) return;
-                                          setModalState(() {
-                                            _pSaving = true;
-                                          });
-                                          try {
-                                            await _savePayoutDetails();
-                                          } finally {
-                                            if (modalContext.mounted) {
-                                              setModalState(() {
-                                                _pSaving = false;
-                                              });
+                                const SizedBox(height: 12),
+                                // 5. Currency (fixed NGN, read-only)
+                                TextFormField(
+                                  controller: _pCurrencyCtrl,
+                                  readOnly: true,
+                                  decoration: InputDecoration(
+                                    labelText: 'Currency',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: theme.colorScheme.onSurface
+                                            .withAlpha((0.1 * 255).round()),
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: theme.colorScheme.onSurface
+                                            .withAlpha((0.1 * 255).round()),
+                                      ),
+                                    ),
+                                  ),
+                                  validator: (v) =>
+                                      v == null || v.trim().isEmpty
+                                          ? 'Required'
+                                          : null,
+                                ),
+                                const SizedBox(height: 24),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton(
+                                    onPressed: _canSavePayoutDetails
+                                        ? () async {
+                                            if (!_pFormKey.currentState!
+                                                .validate()) return;
+                                            setModalState(() {
+                                              _pSaving = true;
+                                            });
+                                            try {
+                                              await _savePayoutDetails();
+                                            } finally {
+                                              if (modalContext.mounted) {
+                                                setModalState(() {
+                                                  _pSaving = false;
+                                                });
+                                              }
                                             }
                                           }
-                                        }
-                                      : null,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: theme.colorScheme.primary,
-                                    foregroundColor:
-                                        theme.colorScheme.onPrimary,
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 16),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
+                                        : null,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor:
+                                          theme.colorScheme.primary,
+                                      foregroundColor:
+                                          theme.colorScheme.onPrimary,
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 16),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      elevation: 0,
                                     ),
-                                    elevation: 0,
-                                  ),
-                                  child: _pSaving
-                                      ? SizedBox(
-                                          height: 20,
-                                          width: 20,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: theme.colorScheme.onPrimary,
-                                          ),
-                                        )
-                                      : Text('Save Account Details'),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              SizedBox(
-                                width: double.infinity,
-                                child: TextButton(
-                                  onPressed: _pSaving
-                                      ? null
-                                      : () => Navigator.of(context).pop(),
-                                  child: Text(
-                                    'Cancel',
-                                    style: TextStyle(
-                                      color: theme.colorScheme.onSurface
-                                          .withAlpha((0.6 * 255).round()),
-                                    ),
+                                    child: _pSaving
+                                        ? SizedBox(
+                                            height: 20,
+                                            width: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color:
+                                                  theme.colorScheme.onPrimary,
+                                            ),
+                                          )
+                                        : Text('Save Account Details'),
                                   ),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 8),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: TextButton(
+                                    onPressed: _pSaving
+                                        ? null
+                                        : () => Navigator.of(context).pop(),
+                                    child: Text(
+                                      'Cancel',
+                                      style: TextStyle(
+                                        color: theme.colorScheme.onSurface
+                                            .withAlpha((0.6 * 255).round()),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
@@ -1315,7 +1325,7 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
     );
   }
 
-  // Resolve account name for a given account number (tries multiple endpoints and handles non-JSON responses).
+  // Resolve account name for a given account number using the canonical API.
   // [onComplete] is called when done so modal sheets can rebuild (they don't rebuild when parent setState runs).
   Future<bool> _resolveAccountName(
     String accountNumber, {
@@ -1324,6 +1334,14 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
     if (accountNumber.trim().isEmpty) return false;
     final s = accountNumber.trim();
     if (!mounted) return false;
+    final code = _pBankCodeCtrl.text.trim();
+    if (code.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Please select a bank first to verify account')));
+      }
+      return false;
+    }
     setState(() => _isAccountNameLoading = true);
 
     try {
@@ -1333,7 +1351,6 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
       if (token != null && token.isNotEmpty)
         headers['Authorization'] = 'Bearer $token';
       if (token == null || token.isEmpty) {
-        // Can't authenticate to server; surface a helpful message in debug and return
         if (kDebugMode)
           debugPrint('No auth token available for account resolve');
         if (mounted)
@@ -1342,151 +1359,52 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
         return false;
       }
 
-      final List<Map<String, String>> attempts = [];
+      // Single canonical endpoint per API docs: GET /api/payments/banks/resolve
+      final uri = Uri.parse(
+          '$API_BASE_URL/api/payments/banks/resolve?account_number=${Uri.encodeQueryComponent(s)}&bank_code=${Uri.encodeQueryComponent(code)}');
 
-      final code = _pBankCodeCtrl.text.trim();
+      final r = await _loggedHttpCall(
+        requestId: '$reqGroupId.get',
+        label: 'wallet.resolveAccountName.get',
+        method: 'GET',
+        uri: uri,
+        headers: headers,
+        timeout: const Duration(seconds: 8),
+        send: () => http.get(uri, headers: headers),
+      );
 
-      // If bank code is missing, prefer to remind user to pick a bank first (since docs require bank_code)
-      if (code.isEmpty) {
-        // Still attempt a resolve without bank_code as a fallback, but inform user in debug
-        if (kDebugMode) debugPrint('Attempting resolve without bank_code');
+      // Handle rate limit (429) - don't retry other URLs, show user message
+      if (r.statusCode == 429) {
+        String msg =
+            'Account verification limit reached. Please try again later.';
+        try {
+          final body = jsonDecode(r.body);
+          if (body is Map && body['error'] is Map) {
+            final err = body['error'] as Map;
+            final m = err['message'];
+            if (m != null) msg = m.toString();
+          }
+        } catch (_) {}
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(msg)));
+        }
+        return false;
       }
-
-      // Build candidate URIs (GET first)
-      final candidates = <Uri>[];
-      // Prefer canonical documented endpoint: /api/payments/banks/resolve
-      if (code.isNotEmpty) {
-        candidates.add(Uri.parse(
-            '$API_BASE_URL/api/payments/banks/resolve?account_number=${Uri.encodeQueryComponent(s)}&bank_code=${Uri.encodeQueryComponent(code)}'));
-      }
-      // Try canonical without bank_code as a fallback
-      candidates.add(Uri.parse(
-          '$API_BASE_URL/api/payments/banks/resolve?account_number=${Uri.encodeQueryComponent(s)}'));
-      // Keep additional fallback variants for backwards compatibility
-      if (code.isNotEmpty) {
-        candidates.add(Uri.parse(
-            '$API_BASE_URL/api/payment/banks/resolve?account_number=${Uri.encodeQueryComponent(s)}&bank_code=${Uri.encodeQueryComponent(code)}'));
-        candidates.add(Uri.parse(
-            '$API_BASE_URL/payment/banks/resolve?account_number=${Uri.encodeQueryComponent(s)}&bank_code=${Uri.encodeQueryComponent(code)}'));
-      }
-      candidates.add(Uri.parse(
-          '$API_BASE_URL/api/payment/banks/resolve?account_number=${Uri.encodeQueryComponent(s)}'));
-      candidates.add(Uri.parse(
-          '$API_BASE_URL/payment/banks/resolve?account_number=${Uri.encodeQueryComponent(s)}'));
 
       Map<String, dynamic>? resolved;
-
-      // Try GET candidates
-      var getAttempt = 0;
-      for (final uri in candidates) {
-        try {
-          getAttempt += 1;
-          final r = await _loggedHttpCall(
-            requestId: '$reqGroupId.get.$getAttempt',
-            label: 'wallet.resolveAccountName.get',
-            method: 'GET',
-            uri: uri,
-            headers: headers,
-            timeout: const Duration(seconds: 8),
-            send: () => http.get(uri, headers: headers),
-          );
-          final contentType = r.headers['content-type'] ?? '';
-          final snippet =
-              r.body.length > 200 ? r.body.substring(0, 200) + '...' : r.body;
-          attempts.add({
-            'uri': uri.toString(),
-            'status': r.statusCode.toString(),
-            'contentType': contentType,
-            'snippet': snippet
-          });
-          if (r.statusCode >= 200 && r.statusCode < 300 && r.body.isNotEmpty) {
-            if (contentType.toLowerCase().contains('application/json') ||
-                r.body.trim().startsWith('{') ||
-                r.body.trim().startsWith('[')) {
-              final dec = jsonDecode(r.body);
-              final body = dec is Map ? (dec['data'] ?? dec) : dec;
-              if (body is Map) {
-                resolved = Map<String, dynamic>.from(body);
-                break;
-              }
-            } else {
-              if (kDebugMode)
-                debugPrint(
-                    'Resolve GET returned non-json ${uri} status=${r.statusCode} content-type=$contentType');
-              // continue to next candidate
-            }
-          }
-        } catch (e) {
-          attempts.add({
-            'uri': uri.toString(),
-            'status': 'error',
-            'contentType': '',
-            'snippet': e.toString()
-          });
-          if (kDebugMode) debugPrint('GET resolve failed $uri: $e');
-        }
-      }
-
-      // Try POST variants if GET didn't yield JSON
-      if (resolved == null) {
-        final postUris = [
-          Uri.parse('$API_BASE_URL/api/banks/resolve'),
-          Uri.parse('$API_BASE_URL/api/bank/resolve'),
-          Uri.parse('$API_BASE_URL/payment/banks/resolve'),
-          Uri.parse('$API_BASE_URL/api/payment/banks/resolve')
-        ];
-        final bodyMap = {'account_number': s, 'bank_code': code};
-        var postAttempt = 0;
-        for (final uri in postUris) {
+      if (r.statusCode >= 200 && r.statusCode < 300 && r.body.isNotEmpty) {
+        final contentType = r.headers['content-type'] ?? '';
+        if (contentType.toLowerCase().contains('application/json') ||
+            r.body.trim().startsWith('{') ||
+            r.body.trim().startsWith('[')) {
           try {
-            postAttempt += 1;
-            final r = await _loggedHttpCall(
-              requestId: '$reqGroupId.post.$postAttempt',
-              label: 'wallet.resolveAccountName.post',
-              method: 'POST',
-              uri: uri,
-              headers: headers,
-              body: bodyMap,
-              timeout: const Duration(seconds: 8),
-              send: () =>
-                  http.post(uri, headers: headers, body: jsonEncode(bodyMap)),
-            );
-            final contentType = r.headers['content-type'] ?? '';
-            final snippet =
-                r.body.length > 200 ? r.body.substring(0, 200) + '...' : r.body;
-            attempts.add({
-              'uri': uri.toString(),
-              'status': r.statusCode.toString(),
-              'contentType': contentType,
-              'snippet': snippet
-            });
-            if (r.statusCode >= 200 &&
-                r.statusCode < 300 &&
-                r.body.isNotEmpty) {
-              if (contentType.toLowerCase().contains('application/json') ||
-                  r.body.trim().startsWith('{') ||
-                  r.body.trim().startsWith('[')) {
-                final dec = jsonDecode(r.body);
-                final body = dec is Map ? (dec['data'] ?? dec) : dec;
-                if (body is Map) {
-                  resolved = Map<String, dynamic>.from(body);
-                  break;
-                }
-              } else {
-                if (kDebugMode)
-                  debugPrint(
-                      'Resolve POST returned non-json ${uri} status=${r.statusCode} content-type=$contentType');
-              }
+            final dec = jsonDecode(r.body);
+            final body = dec is Map ? (dec['data'] ?? dec) : dec;
+            if (body is Map) {
+              resolved = Map<String, dynamic>.from(body);
             }
-          } catch (e) {
-            attempts.add({
-              'uri': uri.toString(),
-              'status': 'error',
-              'contentType': '',
-              'snippet': e.toString()
-            });
-            if (kDebugMode) debugPrint('POST resolve failed $uri: $e');
-          }
+          } catch (_) {}
         }
       }
 
@@ -1502,14 +1420,10 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
           return true;
         }
       }
-      // If we reached here without a result, show a concise debug summary of attempts
-      if (kDebugMode && mounted) {
-        final lines = attempts
-            .take(4)
-            .map((a) => '${a['status']} ${a['uri']}')
-            .join('\n');
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Resolve failed for: \n$lines')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content:
+                Text('Could not verify account. Please check the details.')));
       }
       return false;
     } finally {

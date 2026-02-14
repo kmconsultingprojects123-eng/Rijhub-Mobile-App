@@ -1,6 +1,7 @@
 import 'dart:async';
 import '/flutter_flow/nav/nav.dart';
 import '/index.dart';
+import '../../state/auth_notifier.dart';
 import '../../utils/navigation_utils.dart';
 import 'package:flutter/material.dart';
 
@@ -102,6 +103,12 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
+      // Wait for auth to be ready before navigating. GoRouter redirects
+      // unauthenticated users to Splash2, so tapping before the token/profile
+      // is set would send clients (and artisans) to the wrong screen.
+      await _waitForAuthReady();
+
+      if (!mounted) return;
       try {
         // Use replace-all so the onboarding/auth pages are removed from the
         // stack and the app lands at the proper home/dashboard route.
@@ -122,6 +129,17 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
         } catch (_) {}
       }
     });
+  }
+
+  /// Waits for auth to be ready (token set, profile loaded) before navigating.
+  /// GoRouter redirects unauthenticated users to Splash2, so we must wait
+  /// for the signup flow's setToken to complete before calling go().
+  Future<void> _waitForAuthReady() async {
+    if (AuthNotifier.instance.isAuthenticated) return;
+    for (var i = 0; i < 40; i++) {
+      if (AuthNotifier.instance.isAuthenticated) return;
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
   }
 
   Color _getTextPrimary(BuildContext context) {
