@@ -268,6 +268,51 @@ GET /api/jobs — list jobs. By default this endpoint returns only open jobs for
 POST /api/users — create user (public; used by some clients).
 DELETE /api/users/profile-image — (protected) deletes authenticated user's profile image.
 
+Device Tokens / Push Notifications
+
+POST /api/devices/register — (protected)
+
+Purpose: Register (upsert) an FCM/device push token for the authenticated user. The server stores the token and associates it with the user so push notifications can be delivered to all of a user's devices.
+Headers: Authorization: Bearer <TOKEN>
+Body (application/json): { "token": "<FCM_OR_PLATFORM_TOKEN>", "platform": "ios|android|web" } — token is required.
+Behavior: Upserts the token. If the same token exists and is owned by another user, the server will reassign it and write an audit record. Registrations are rate-limited per user to prevent abuse.
+Response (200): { success: true } or 429 when rate-limited.
+
+POST /api/devices/unregister — (protected)
+
+Purpose: Unregister/remove a device token for the authenticated user.
+Headers: Authorization: Bearer <TOKEN>
+Body (application/json): { "token": "<FCM_OR_PLATFORM_TOKEN>" } — token required.
+Behavior: Only the owner of a token may remove it. If token not found the endpoint returns success (idempotent).
+Response (200): { success: true } or 403 if trying to remove a token owned by another user.
+
+GET /api/devices/my — (protected)
+
+Purpose: List the authenticated user's registered device tokens.
+Headers: Authorization: Bearer <TOKEN>
+Response (200): { success: true, tokens: [ { token, platform, createdAt, updatedAt }, ... ] }
+
+Account Deletion (Self & Admin)
+
+DELETE /api/users/me — (protected)
+
+Purpose: Permanently delete the authenticated user's account and all related data. This is irreversible.
+Headers: Authorization: Bearer <TOKEN>
+Behavior: The server:
+Validates the user id (sanitizes common client formats such as user:<id>).
+Attempts to delete related documents across multiple collections: Artisan, Booking, Transaction, Chat, Quote, Job, DeviceToken, Kyc, Notification, Review, Wallet, DeviceTokenAudit and any media stored in Cloudinary referenced by the user or their KYC/job attachments.
+Returns a single success response when deletion completes or a 500 if removing related data fails.
+Response (200): { success: true, message: 'Account and related data deleted' }
+Errors: 400 if user id invalid; 404 if user not found; 500 on server error.
+
+DELETE /api/users/:id — (admin-only)
+
+Purpose: Admins can delete any user and their related data (same behavior as self-delete).
+Headers: Authorization: Bearer <ADMIN_TOKEN>
+Params: id — target user ObjectId (24 hex chars). The server accepts common prefixed formats but will validate before deletion.
+Response (200): { success: true, message: 'Account and related data deleted' }
+Notes & Cautions: This action permanently removes user data across the system. Consider adding an admin confirmation step, a deletion grace period, or a soft-delete mechanism if you need recoverability.
+
 Flutter example (get my profile)
 
 final res = await http.get(Uri.parse('http://localhost:5000/api/users/me'),
@@ -276,7 +321,33 @@ final res = await http.get(Uri.parse('http://localhost:5000/api/users/me'),
 
 );
 
+Admin: Ban / Unban Users
 
+Overview: Admins can ban or unban user accounts (customers or artisans). The server sets User.banned = true when banned and false when unbanned. A notification is persisted and emitted to the user; an email is sent if SMTP is configured.
+
+Endpoints (admin-only):
+
+PUT /api/admin/users/:id/ban — Ban a user
+Headers: Authorization: Bearer <ADMIN_TOKEN>
+Response (200): { success: true, data: <updated user> }
+PUT /api/admin/users/:id/unban — Unban a user
+Headers: Authorization: Bearer <ADMIN_TOKEN>
+Response (200): { success: true, data: <updated user> }
+
+Examples (curl):
+
+curl -X PUT "https://api.yourdomain.com/api/admin/users/<USER_ID>/ban" \
+
+	-H "Authorization: Bearer <ADMIN_TOKEN>"
+
+curl -X PUT "https://api.yourdomain.com/api/admin/users/<USER_ID>/unban" \
+
+	-H "Authorization: Bearer <ADMIN_TOKEN>"
+
+Notes:
+Routes are protected by verifyJWT and requireRole('admin').
+The action creates an in-app Notification for the user and requests an email send when SMTP_* env vars are present.
+If you want login to be blocked for banned users, add a check in the authentication flow to reject access when user.banned === true.
 
 KYC (Know Your Customer)
 
@@ -604,6 +675,42 @@ curl -X PUT 'http://localhost:5000/api/jobs/<JOB_ID>' \
 
   -d '{"title":"Updated title", "experienceLevel":"senior"}'
 
+
+
+Company Earnings (Admin)
+
+GET /api/admin/company-earnings — list company/platform earnings (admin only)
+
+Query params:
+page (number, default: 1)
+limit (number, default: 20)
+from (ISO date string) — filter earnings createdAt >= from
+to (ISO date string) — filter earnings createdAt <= to
+bookingId (string) — filter by booking ObjectId
+transactionId (string) — filter by transaction ObjectId
+Response (200):
+
+ {
+
+   "success": true,
+
+   "data": {
+
+     "items": [{ "_id", "transactionId", "bookingId", "amount", "note", "createdAt" }],
+
+     "total": 123,
+
+     "totalAmount": 4567.89
+
+   }
+
+ }
+
+GET /api/admin/company-earnings/summary — summary totals for a date range (admin only)
+
+Query params: from, to (ISO date strings)
+Response (200): { "success": true, "data": { "totalAmount": 1234.56, "count": 12 } }
+
 PowerShell example:
 
 $body = @{ title='Updated title'; experienceLevel='senior' } | ConvertTo-Json
@@ -880,6 +987,46 @@ Sample response (201):
 	  - **Response (200):** `{ payoutDetails: { name, account_number: '****1234', bank_code, bank_name, currency }, hasRecipient: true|false }`
 
 	  - **Security:** This endpoint is protected and only returns masked account information to avoid exposing sensitive bank data.
+
+**Paystack Helpers (server-side)**
+
+- **Overview:** Small server-side helpers to make Paystack integration easier for mobile/web clients. These endpoints proxy Paystack's public bank list and account-resolution API so your client never needs the Paystack secret key.
+
+- **Env vars:** `PAYSTACK_SECRET_KEY` must be set on the server for these to work.
+
+- `GET /api/payments/banks` — (protected)
+
+	- **Purpose:** Returns the list of banks supported by Paystack (useful to populate a bank picker in the UI).
+
+	- **Headers:** `Authorization: Bearer <TOKEN>`
+
+	- **Query:** none
+
+	- **Response (200):** `{ success: true, data: [ { name, code, slug?, longcode?, currency?, type? }, ... ] }` — each item at minimum contains `name` and `code`.
+
+	- **Errors:** 500 if `PAYSTACK_SECRET_KEY` is not set or fetching fails.
+
+- `GET /api/payments/banks/resolve` — (protected)
+
+	- **Purpose:** Resolve an account number + bank code to the account holder name using Paystack's resolve endpoint. Use this to confirm recipient names before saving payout details or initiating transfers.
+
+	- **Headers:** `Authorization: Bearer <TOKEN>`
+
+	- **Query params (required):** `account_number` (string), `bank_code` (string)
+
+	- **Example request:** `GET /api/payments/banks/resolve?account_number=0123456789&bank_code=058`
+
+	- **Response (200):** `{ success: true, data: { account_number: '0123456789', account_name: 'JOHN DOE', bank_id: 123, bank: 'GTBank' } }` — actual shape mirrors Paystack's `data` object and may include additional fields.
+
+	- **Errors:** 400 if query params missing; 500 if Paystack is not configured or the gateway returns an error (response includes gateway error in `error` field).
+
+**Notes & Best Practices**
+
+- Never embed `PAYSTACK_SECRET_KEY` in your mobile or browser clients. Always call these endpoints from your app server which stores the secret key in environment variables.
+
+- Handle 400/422 responses from `/banks/resolve` gracefully in the UI — show a clear message to the user if the account could not be resolved.
+
+- For automated payouts, ensure the artisan's payout details are verified (you can call `/api/payments/banks/resolve` before creating a Paystack recipient).
 
 	---
 
@@ -2809,67 +2956,142 @@ curl 'http://localhost:5000/api/transactions' \
 
 curl 'http://localhost:5000/api/transactions?page=1&limit=10&status=holding&startDate=2026-01-01' \
 
-	-H 'Authorization: Bearer <TOKEN>'
+---
 
-# Get transactions for specific booking
+**Get transactions summary (admin)**
 
-curl 'http://localhost:5000/api/transactions?bookingId=<booking_id>' \
+- **Overview:** Returns aggregated totals for transactions grouped by status and a platform-level net availability figure. Use this from an admin dashboard to see how much money is currently held, pending, released to artisans, paid out, or refunded. The response also includes `netAvailable = total - refunded - pending` which represents funds not yet available on the platform (e.g., awaiting release or refund).
 
-	-H 'Authorization: Bearer <TOKEN>'
+- **Endpoint:** `GET /api/transactions/admin/summary`
+
+    - **PreHandler:** `verifyJWT`, `requireRole('admin')`
+
+    - **Headers:** `Authorization: Bearer <ADMIN_TOKEN>`
+
+- **Response (200):**
+
+```json
+
+{
+
+  "success": true,
+
+  "data": {
+
+    "byStatus": {
+
+      "holding": 12000.00,
+
+      "pending": 3000.00,
+
+      "released": 9000.00,
+
+      "paid": 15000.00,
+
+      "refunded": 500.00
+
+    },
+
+    "total": 39500.00,
+
+    "netAvailable": 36000.00
+
+  }
+
+}
+
+Notes:
+
+byStatus values are sums of the amount field for transactions in each status.
+total is the sum of all statuses (holding + pending + released + paid + refunded).
+netAvailable is total - refunded - pending (funds that are effectively available on the platform).
+
+Example (curl):
+
+curl 'http://localhost:5000/api/transactions/admin/summary' \
+
+-H 'Authorization: Bearer <ADMIN_TOKEN>'
+
+-H 'Authorization: Bearer <TOKEN>'
+Get transactions for specific booking
+curl 'http://localhost:5000/api/transactions?bookingId=<booking_id>'
+-H 'Authorization: Bearer '
 
 - Errors: 401 unauthorized, 500 server errors
 
-GET /api/transactions/:id — (protected) get single transaction
-PreHandler: verifyJWT (must be authenticated)
-Headers: Authorization: Bearer <TOKEN>
-Params: id — transaction ObjectId
-Access control:
-Admins can view any transaction
-Regular users can only view transactions they're involved in (as payer or payee)
-Returns 403 Forbidden if user tries to access someone else's transaction
-Response (200): { success: true, data: <transaction with populated bookingId, payerId, payeeId> }
-Errors: 401 unauthorized, 403 forbidden, 404 not found, 500 server errors
+- `GET /api/transactions/:id` — (protected) get single transaction
 
-Transaction Status Flow:
+- PreHandler: `verifyJWT` (must be authenticated)
 
-pending → Initial state after payment initiated
-holding → Funds held in escrow after payment confirmed
-released → Funds released to artisan after job completion
-paid → Final state after payout/transfer to artisan
-refunded → Payment refunded to customer
+- Headers: `Authorization: Bearer <TOKEN>`
 
+- Params: `id` — transaction ObjectId
 
+- **Access control:**
 
-Reviews
+- Admins can view any transaction
 
-GET /api/reviews — list reviews (query artisanId, page, limit).
-POST /api/reviews — (protected) create review (body: targetId, rating required).
-GET /api/reviews/:id — view a review.
+- Regular users can only view transactions they're involved in (as payer or payee)
+
+- Returns 403 Forbidden if user tries to access someone else's transaction
+
+- Response (200): `{ success: true, data: <transaction with populated bookingId, payerId, payeeId> }`
+
+- Errors: 401 unauthorized, 403 forbidden, 404 not found, 500 server errors
+
+**Transaction Status Flow:**
+
+- `pending` → Initial state after payment initiated
+
+- `holding` → Funds held in escrow after payment confirmed
+
+- `released` → Funds released to artisan after job completion
+
+- `paid` → Final state after payout/transfer to artisan
+
+- `refunded` → Payment refunded to customer
+
+---
+
+**Reviews**
+
+- `GET /api/reviews` — list reviews (query `artisanId`, `page`, `limit`).
+
+- `POST /api/reviews` — (protected) create review (body: `targetId`, `rating` required).
+
+- `GET /api/reviews/:id` — view a review.
 
 Details: create a rating/review for an artisan
 
-POST /api/reviews — submit a rating for an artisan (protected)
+- `POST /api/reviews` — submit a rating for an artisan (protected)
 
-PreHandler: verifyJWT (must be authenticated)
+- PreHandler: `verifyJWT` (must be authenticated)
 
-Body (application/json):
+- Body (application/json):
 
-targetId (string, required) — the User._id of the artisan being rated
-rating (number, required) — 1 through 5
-comment (string, optional)
-bookingId (string, optional) — optional booking id to mark booking as reviewed
+- `targetId` (string, required) — the `User._id` of the artisan being rated
 
-Important: customerId is derived from the authenticated JWT on the server — do NOT rely on or send customerId in the request body. The server uses the token to determine who submitted the review.
+- `rating` (number, required) — 1 through 5
 
-Duplicate reviews: The API enforces one review per customer per artisan. If the authenticated user has already reviewed the artisan, the server returns HTTP 409 Conflict with { success: false, message: 'You have already reviewed this artisan' }.
+- `comment` (string, optional)
 
-Server behavior:
+- `bookingId` (string, optional) — optional booking id to mark booking as reviewed
 
-Creates a Review document with { customerId, artisanId, rating, comment } where customerId is the authenticated user id.
-If bookingId is provided, marks the booking as reviewed.
-Updates the artisan aggregate (Artisan.rating and Artisan.reviewsCount) using a running average.
+- Important: `customerId` is derived from the authenticated JWT on the server — do NOT rely on or send `customerId` in the request body. The server uses the token to determine who submitted the review.
 
-Example request (curl):
+- Duplicate reviews: The API enforces one review per customer per artisan. If the authenticated user has already reviewed the artisan, the server returns HTTP `409 Conflict` with `{ success: false, message: 'You have already reviewed this artisan' }`.
+
+- Server behavior:
+
+- Creates a `Review` document with `{ customerId, artisanId, rating, comment }` where `customerId` is the authenticated user id.
+
+- If `bookingId` is provided, marks the booking as reviewed.
+
+- Updates the artisan aggregate (`Artisan.rating` and `Artisan.reviewsCount`) using a running average.
+
+- Example request (curl):
+
+```bash
 
 curl -X POST 'http://localhost:5000/api/reviews' \
 
@@ -2891,13 +3113,13 @@ Invoke-RestMethod -Uri 'http://localhost:5000/api/reviews' -Method Post -Headers
 
 - Errors:
 
-    - `400` — missing/invalid fields (e.g. rating out of range)
+- `400` — missing/invalid fields (e.g. rating out of range)
 
-    - `401` — not authenticated
+- `401` — not authenticated
 
-    - `409` — conflict — user has already submitted a review for this artisan
+- `409` — conflict — user has already submitted a review for this artisan
 
-    - `404` — referenced booking/target not found (rare)
+- `404` — referenced booking/target not found (rare)
 
 
 
@@ -2924,12 +3146,45 @@ final states = jsonDecode(res.body)['data'];
 Admin
 
 POST /api/admin/create — (protected) create a new admin. Requires verifyJWT and requireRole('admin') preHandler. Body: name, email, password, optional permissions.
-
 GET /api/admin/overview — (protected) admin dashboard overview.
-
 GET /api/admin/users — (protected) list users (admin view).
-
 PUT /api/admin/users/:id/role — change user role (protected).
+
+Admin Configs
+
+GET /api/admin/configs — (protected, admin only) list all configuration keys and metadata stored in the platform configs collection.
+
+Headers: Authorization: Bearer <ADMIN_TOKEN>
+Response (200): { success: true, data: [ { key, value, type, description, updatedBy, updatedAt }, ... ] }
+
+GET /api/admin/configs/:key — (protected, admin only) read a single config value by key.
+
+Path param: key — config key (e.g. COMPANY_FEE_PCT)
+Response (200): { success: true, data: { key, value } } or 404 if not found.
+
+PUT /api/admin/configs/:key — (protected, admin only) create or update a config key/value.
+
+Headers: Authorization: Bearer <ADMIN_TOKEN>
+
+Body (application/json): { "value": <any>, "type": "number"|"string"|"json", "description": "optional text" }
+
+Behavior: upserts the value in the configs collection and updates an in-memory cache used by the server so changes take effect immediately for most code paths.
+
+Special-case: COMPANY_FEE_PCT — validated as a numeric percent between 0 and 100 and stored with type: 'number'. Use this endpoint to change the platform fee without redeploying.
+
+Example (set company fee to 10%):
+
+curl -X PUT 'http://localhost:5000/api/admin/configs/COMPANY_FEE_PCT' \
+
+-H 'Content-Type: application/json' \
+
+-H 'Authorization: Bearer <ADMIN_TOKEN>' \
+
+-d '{ "value": 10, "type": "number", "description": "Platform fee percent" }'
+
+Notes:
+On server startup the app will migrate an existing .env value for COMPANY_FEE_PCT into the database only if the DB key does not already exist — it will not overwrite an existing DB value.
+At runtime the server reads configuration from the database first (getConfig('COMPANY_FEE_PCT')) and falls back to .env only when no DB value exists. PUT requests update the DB and refresh the in-memory cache so the change is effective immediately (cache TTL ~30s otherwise).
 
 GET /api/admin/jobs — (protected, admin only) list jobs across all users. Query params:
 
@@ -2967,185 +3222,185 @@ Response (200):
 
 {
 
-	"success": true,
+"success": true,
 
-	"data": [
+"data": [
 
-		{
+{
 
-			"_id": "64a1e2f...",
+"_id": "64a1e2f...",
 
-			"customerId": { 
+"customerId": {
 
-				"_id": "...", 
+"_id": "...",
 
-				"name": "John Doe", 
+"name": "John Doe",
 
-				"email": "john@example.com", 
+"email": "john@example.com",
 
-				"phone": "+234...", 
+"phone": "+234...",
 
-				"profileImage": {...} 
+"profileImage": {...}
 
-			},
+},
 
-			"artisanId": { 
+"artisanId": {
 
-				"_id": "...", 
+"_id": "...",
 
-				"name": "Jane Smith", 
+"name": "Jane Smith",
 
-				"email": "jane@example.com", 
+"email": "jane@example.com",
 
-				"phone": "+234...", 
+"phone": "+234...",
 
-				"profileImage": {...} 
+"profileImage": {...}
 
-			},
+},
 
-			"service": "Plumbing repair",
+"service": "Plumbing repair",
 
-			"schedule": "2026-01-20T10:00:00.000Z",
+"schedule": "2026-01-20T10:00:00.000Z",
 
-			"price": 5000,
+"price": 5000,
 
-			"status": "completed",
+"status": "completed",
 
-			"paymentStatus": "paid",
+"paymentStatus": "paid",
 
-			"acceptedQuote": {
+"acceptedQuote": {
 
-				"_id": "...",
+"_id": "...",
 
-				"serviceCharge": 5000,
+"serviceCharge": 5000,
 
-				"items": [
+"items": [
 
-					{ "name": "Pipe replacement", "qty": 1, "cost": 3000 },
+{ "name": "Pipe replacement", "qty": 1, "cost": 3000 },
 
-					{ "name": "Labor", "qty": 1, "cost": 2000 }
+{ "name": "Labor", "qty": 1, "cost": 2000 }
 
-				],
+],
 
-				"total": 5000,
+"total": 5000,
 
-				"status": "accepted"
+"status": "accepted"
 
-			},
+},
 
-			"quotes": [
+"quotes": [
 
-				{
+{
 
-					"_id": "...",
+"_id": "...",
 
-					"artisanId": { 
+"artisanId": {
 
-						"name": "Jane Smith", 
+"name": "Jane Smith",
 
-						"email": "jane@example.com", 
+"email": "jane@example.com",
 
-						"profileImage": {...} 
+"profileImage": {...}
 
-					},
+},
 
-					"serviceCharge": 5000,
+"serviceCharge": 5000,
 
-					"items": [...],
+"items": [...],
 
-					"total": 5000,
+"total": 5000,
 
-					"status": "accepted",
+"status": "accepted",
 
-					"createdAt": "2026-01-15T10:30:00.000Z"
+"createdAt": "2026-01-15T10:30:00.000Z"
 
-				},
+},
 
-				{
+{
 
-					"_id": "...",
+"_id": "...",
 
-					"artisanId": { 
+"artisanId": {
 
-						"name": "Bob Builder", 
+"name": "Bob Builder",
 
-						"email": "bob@example.com", 
+"email": "bob@example.com",
 
-						"profileImage": {...} 
+"profileImage": {...}
 
-					},
+},
 
-					"serviceCharge": 6000,
+"serviceCharge": 6000,
 
-					"items": [...],
+"items": [...],
 
-					"total": 6000,
+"total": 6000,
 
-					"status": "rejected",
+"status": "rejected",
 
-					"createdAt": "2026-01-15T11:00:00.000Z"
+"createdAt": "2026-01-15T11:00:00.000Z"
 
-				}
+}
 
-			],
+],
 
-			"job": {
+"job": {
 
-				"_id": "...",
+"_id": "...",
 
-				"title": "Need plumber urgently",
+"title": "Need plumber urgently",
 
-				"description": "Leaking pipe in kitchen, need immediate attention",
+"description": "Leaking pipe in kitchen, need immediate attention",
 
-				"clientId": { 
+"clientId": {
 
-					"name": "John Doe", 
+"name": "John Doe",
 
-					"email": "john@example.com", 
+"email": "john@example.com",
 
-					"phone": "+234..." 
+"phone": "+234..."
 
-				},
+},
 
-				"status": "filled",
+"status": "filled",
 
-				"budget": { "min": 3000, "max": 7000 },
+"budget": { "min": 3000, "max": 7000 },
 
-				"category": "plumbing",
+"category": "plumbing",
 
-				"createdAt": "2026-01-14T08:00:00.000Z"
+"createdAt": "2026-01-14T08:00:00.000Z"
 
-			},
+},
 
-			"createdAt": "2026-01-15T10:30:00.000Z"
+"createdAt": "2026-01-15T10:30:00.000Z"
 
-		}
+}
 
-	],
+],
 
-	"pagination": {
+"pagination": {
 
-		"page": 1,
+"page": 1,
 
-		"limit": 50,
+"limit": 50,
 
-		"total": 120,
+"total": 120,
 
-		"pages": 3
+"pages": 3
 
-	}
+}
 
 }
 
 - **Response fields explained:**
 
-    - `acceptedQuote`: The quote that was accepted for this booking (populated)
+- `acceptedQuote`: The quote that was accepted for this booking (populated)
 
-    - `quotes`: Array of all quotes submitted for this booking (includes artisan details)
+- `quotes`: Array of all quotes submitted for this booking (includes artisan details)
 
-    - `job`: The job posting that led to this booking (null if booking was created directly)
+- `job`: The job posting that led to this booking (null if booking was created directly)
 
-    - When `includeDetails=false`, only `acceptedQuote` is populated (quotes and job are excluded)
+- When `includeDetails=false`, only `acceptedQuote` is populated (quotes and job are excluded)
 
 - **Example:**
 
@@ -3198,195 +3453,195 @@ Response (200):
 
 {
 
-	"success": true,
+"success": true,
 
-	"data": [
+"data": [
 
-		{
+{
 
-			"_id": "64a1e2f...",
+"_id": "64a1e2f...",
 
-			"customerId": { 
+"customerId": {
 
-				"_id": "...", 
+"_id": "...",
 
-				"name": "John Doe", 
+"name": "John Doe",
 
-				"email": "john@example.com", 
+"email": "john@example.com",
 
-				"phone": "+234...", 
+"phone": "+234...",
 
-				"profileImage": {...} 
+"profileImage": {...}
 
-			},
+},
 
-			"artisanId": { 
+"artisanId": {
 
-				"_id": "...", 
+"_id": "...",
 
-				"name": "Jane Smith", 
+"name": "Jane Smith",
 
-				"email": "jane@example.com", 
+"email": "jane@example.com",
 
-				"phone": "+234...", 
+"phone": "+234...",
 
-				"profileImage": {...} 
+"profileImage": {...}
 
-			},
+},
 
-			"bookingId": { 
+"bookingId": {
 
-				"_id": "...", 
+"_id": "...",
 
-				"service": "Plumbing repair", 
+"service": "Plumbing repair",
 
-				"schedule": "2026-01-20T10:00:00.000Z",
+"schedule": "2026-01-20T10:00:00.000Z",
 
-				"status": "completed",
+"status": "completed",
 
-				"price": 5000,
+"price": 5000,
 
-				"paymentStatus": "paid"
+"paymentStatus": "paid"
 
-			},
+},
 
-			"jobId": null,
+"jobId": null,
 
-			"items": [
+"items": [
 
-				{ "name": "Pipe replacement", "qty": 1, "cost": 3000, "note": "PVC pipes" },
+{ "name": "Pipe replacement", "qty": 1, "cost": 3000, "note": "PVC pipes" },
 
-				{ "name": "Labor", "qty": 1, "cost": 2000 }
+{ "name": "Labor", "qty": 1, "cost": 2000 }
 
-			],
+],
 
-			"serviceCharge": 5000,
+"serviceCharge": 5000,
 
-			"total": 5000,
+"total": 5000,
 
-			"status": "accepted",
+"status": "accepted",
 
-			"quoteType": "booking",
+"quoteType": "booking",
 
-			"context": "Direct hire - artisan negotiating price for existing booking",
+"context": "Direct hire - artisan negotiating price for existing booking",
 
-			"createdAt": "2026-01-15T10:30:00.000Z"
+"createdAt": "2026-01-15T10:30:00.000Z"
 
-		},
+},
 
-		{
+{
 
-			"_id": "64a2f3g...",
+"_id": "64a2f3g...",
 
-			"customerId": { 
+"customerId": {
 
-				"_id": "...", 
+"_id": "...",
 
-				"name": "Alice Brown", 
+"name": "Alice Brown",
 
-				"email": "alice@example.com", 
+"email": "alice@example.com",
 
-				"phone": "+234...", 
+"phone": "+234...",
 
-				"profileImage": {...} 
+"profileImage": {...}
 
-			},
+},
 
-			"artisanId": { 
+"artisanId": {
 
-				"_id": "...", 
+"_id": "...",
 
-				"name": "Bob Builder", 
+"name": "Bob Builder",
 
-				"email": "bob@example.com", 
+"email": "bob@example.com",
 
-				"phone": "+234...", 
+"phone": "+234...",
 
-				"profileImage": {...} 
+"profileImage": {...}
 
-			},
+},
 
-			"bookingId": null,
+"bookingId": null,
 
-			"jobId": { 
+"jobId": {
 
-				"_id": "...", 
+"_id": "...",
 
-				"title": "Install new bathroom fixtures", 
+"title": "Install new bathroom fixtures",
 
-				"description": "Need plumber for bathroom renovation",
+"description": "Need plumber for bathroom renovation",
 
-				"status": "open",
+"status": "open",
 
-				"budget": { "min": 10000, "max": 20000 },
+"budget": { "min": 10000, "max": 20000 },
 
-				"category": "plumbing",
+"category": "plumbing",
 
-				"location": "Lagos"
+"location": "Lagos"
 
-			},
+},
 
-			"items": [
+"items": [
 
-				{ "name": "Fixture installation", "qty": 1, "cost": 8000 },
+{ "name": "Fixture installation", "qty": 1, "cost": 8000 },
 
-				{ "name": "Materials", "qty": 1, "cost": 4000 }
+{ "name": "Materials", "qty": 1, "cost": 4000 }
 
-			],
+],
 
-			"serviceCharge": 12000,
+"serviceCharge": 12000,
 
-			"total": 12000,
+"total": 12000,
 
-			"status": "proposed",
+"status": "proposed",
 
-			"quoteType": "job",
+"quoteType": "job",
 
-			"context": "Job posting - artisan bidding on open job",
+"context": "Job posting - artisan bidding on open job",
 
-			"createdAt": "2026-01-16T08:00:00.000Z"
+"createdAt": "2026-01-16T08:00:00.000Z"
 
-		}
+}
 
-	],
+],
 
-	"pagination": {
+"pagination": {
 
-		"page": 1,
+"page": 1,
 
-		"limit": 50,
+"limit": 50,
 
-		"total": 85,
+"total": 85,
 
-		"pages": 2
+"pages": 2
 
-	}
+}
 
 }
 
 - **Understanding Quote Types:**
 
-    - **Booking Quotes** (`type=booking`):
+- **Booking Quotes** (`type=booking`):
 
-        - Flow: Customer hires artisan directly → artisan creates quote → customer accepts
+- Flow: Customer hires artisan directly → artisan creates quote → customer accepts
 
-        - Has `bookingId`, no `jobId`
+- Has `bookingId`, no `jobId`
 
-        - Context: Price negotiation for existing booking
+- Context: Price negotiation for existing booking
 
-        - Use case: Artisan revising initial estimate, customer requested detailed breakdown
+- Use case: Artisan revising initial estimate, customer requested detailed breakdown
 
 
 
-	- **Job Quotes** (`type=job`):
+- **Job Quotes** (`type=job`):
 
-		- Flow: Customer posts job → artisans bid with quotes → customer picks winner
+- Flow: Customer posts job → artisans bid with quotes → customer picks winner
 
-		- Has `jobId`, no `bookingId` (until accepted)
+- Has `jobId`, no `bookingId` (until accepted)
 
-		- Context: Competitive bidding on open job posting
+- Context: Competitive bidding on open job posting
 
-		- Use case: Multiple artisans competing for the same job
+- Use case: Multiple artisans competing for the same job
 
 - **Examples:**
 
@@ -3451,131 +3706,131 @@ Response (200):
 
 {
 
-	"success": true,
+"success": true,
 
-	"data": [
+"data": [
 
-		{
+{
 
-			"_id": "64a1e2f...",
+"_id": "64a1e2f...",
 
-			"bookingId": {
+"bookingId": {
 
-				"_id": "...",
+"_id": "...",
 
-				"service": "Plumbing repair",
+"service": "Plumbing repair",
 
-				"schedule": "2026-01-20T10:00:00.000Z",
+"schedule": "2026-01-20T10:00:00.000Z",
 
-				"status": "completed",
+"status": "completed",
 
-				"price": 5000,
+"price": 5000,
 
-				"customerId": "...",
+"customerId": "...",
 
-				"artisanId": "..."
+"artisanId": "..."
 
-			},
+},
 
-			"participants": [
+"participants": [
 
-				{
+{
 
-					"_id": "...",
+"_id": "...",
 
-					"name": "John Doe",
+"name": "John Doe",
 
-					"email": "john@example.com",
+"email": "john@example.com",
 
-					"phone": "+234...",
+"phone": "+234...",
 
-					"role": "customer",
+"role": "customer",
 
-					"profileImage": {...}
+"profileImage": {...}
 
-				},
+},
 
-				{
+{
 
-					"_id": "...",
+"_id": "...",
 
-					"name": "Jane Smith",
+"name": "Jane Smith",
 
-					"email": "jane@example.com",
+"email": "jane@example.com",
 
-					"phone": "+234...",
+"phone": "+234...",
 
-					"role": "artisan",
+"role": "artisan",
 
-					"profileImage": {...}
+"profileImage": {...}
 
-				}
+}
 
-			],
+],
 
-			"messages": [
+"messages": [
 
-				{
+{
 
-					"_id": "...",
+"_id": "...",
 
-					"senderId": "...",
+"senderId": "...",
 
-					"senderName": "John Doe",
+"senderName": "John Doe",
 
-					"senderRole": "customer",
+"senderRole": "customer",
 
-					"senderImageUrl": "https://...",
+"senderImageUrl": "https://...",
 
-					"message": "Can you come tomorrow at 10am?",
+"message": "Can you come tomorrow at 10am?",
 
-					"timestamp": "2026-01-15T10:30:00.000Z",
+"timestamp": "2026-01-15T10:30:00.000Z",
 
-					"seen": true
+"seen": true
 
-				},
+},
 
-				{
+{
 
-					"_id": "...",
+"_id": "...",
 
-					"senderId": "...",
+"senderId": "...",
 
-					"senderName": "Jane Smith",
+"senderName": "Jane Smith",
 
-					"senderRole": "artisan",
+"senderRole": "artisan",
 
-					"senderImageUrl": "https://...",
+"senderImageUrl": "https://...",
 
-					"message": "Yes, I can make it at 10am",
+"message": "Yes, I can make it at 10am",
 
-					"timestamp": "2026-01-15T10:35:00.000Z",
+"timestamp": "2026-01-15T10:35:00.000Z",
 
-					"seen": true
+"seen": true
 
-				}
+}
 
-			],
+],
 
-			"isClosed": false,
+"isClosed": false,
 
-			"createdAt": "2026-01-15T10:00:00.000Z"
+"createdAt": "2026-01-15T10:00:00.000Z"
 
-		}
+}
 
-	],
+],
 
-	"pagination": {
+"pagination": {
 
-		"page": 1,
+"page": 1,
 
-		"limit": 50,
+"limit": 50,
 
-		"total": 45,
+"total": 45,
 
-		"pages": 1
+"pages": 1
 
-	}
+}
 
 }
 
@@ -3583,19 +3838,19 @@ Response (200):
 
 {
 
-	"data": [{
+"data": [{
 
-		"_id": "...",
+"_id": "...",
 
-		"bookingId": {...},
+"bookingId": {...},
 
-		"participants": [...],
+"participants": [...],
 
-		"messageCount": 12,
+"messageCount": 12,
 
-		"isClosed": false
+"isClosed": false
 
-	}]
+}]
 
 }
 
@@ -3633,57 +3888,57 @@ Response (200):
 
 {
 
-	"success": true,
+"success": true,
 
-	"data": {
+"data": {
 
-		"_id": "64a1e2f...",
+"_id": "64a1e2f...",
 
-		"bookingId": {...},
+"bookingId": {...},
 
-		"participants": [...],
+"participants": [...],
 
-		"messages": [
+"messages": [
 
-			{
+{
 
-				"_id": "...",
+"_id": "...",
 
-				"senderId": "...",
+"senderId": "...",
 
-				"senderName": "John Doe",
+"senderName": "John Doe",
 
-				"senderRole": "customer",
+"senderRole": "customer",
 
-				"senderImageUrl": "https://...",
+"senderImageUrl": "https://...",
 
-				"message": "Can you come tomorrow at 10am?",
+"message": "Can you come tomorrow at 10am?",
 
-				"timestamp": "2026-01-15T10:30:00.000Z",
+"timestamp": "2026-01-15T10:30:00.000Z",
 
-				"seen": true
+"seen": true
 
-			}
+}
 
-		],
+],
 
-		"bookingDetails": {
+"bookingDetails": {
 
-			"_id": "...",
+"_id": "...",
 
-			"service": "Plumbing repair",
+"service": "Plumbing repair",
 
-			"customer": { "_id": "...", "name": "John Doe", "email": "...", "role": "customer" },
+"customer": { "_id": "...", "name": "John Doe", "email": "...", "role": "customer" },
 
-			"artisan": { "_id": "...", "name": "Jane Smith", "email": "...", "role": "artisan" }
+"artisan": { "_id": "...", "name": "Jane Smith", "email": "...", "role": "artisan" }
 
-		},
+},
 
-		"isClosed": false,
+"isClosed": false,
 
-		"createdAt": "2026-01-15T10:00:00.000Z"
+"createdAt": "2026-01-15T10:00:00.000Z"
 
-	}
+}
 
 }
 
@@ -3695,223 +3950,223 @@ curl -H 'Authorization: Bearer <ADMIN_TOKEN>' \
 
 
 15. Admin Wallet Monitoring
-    **Purpose:** Admins can view all user wallets, track financial activity, monitor balances, and investigate user financial history. This is essential for financial oversight, fraud detection, and user support.
+**Purpose:** Admins can view all user wallets, track financial activity, monitor balances, and investigate user financial history. This is essential for financial oversight, fraud detection, and user support.
 
 - `GET /api/admin/wallets` — (admin) list all wallets with filters
 
-    - PreHandler: `verifyJWT`, `requireRole('admin')`
+- PreHandler: `verifyJWT`, `requireRole('admin')`
 
-    - Query params:
+- Query params:
 
-        - `page` (number, default: 1)
+- `page` (number, default: 1)
 
-        - `limit` (number, default: 50)
+- `limit` (number, default: 50)
 
-        - `sortBy` (string, default: 'balance') — `balance`, `totalEarned`, `totalSpent`, `totalJobs`, `lastUpdated`
+- `sortBy` (string, default: 'balance') — `balance`, `totalEarned`, `totalSpent`, `totalJobs`, `lastUpdated`
 
-        - `sortOrder` (string, default: 'desc') — `asc` or `desc`
+- `sortOrder` (string, default: 'desc') — `asc` or `desc`
 
-        - `minBalance` (number) — filter wallets with balance >= this value
+- `minBalance` (number) — filter wallets with balance >= this value
 
-        - `role` (string) — filter by user role: `artisan`, `customer`, `admin`
+- `role` (string) — filter by user role: `artisan`, `customer`, `admin`
 
-    - Response:
+- Response:
 
-  ```json
+```json
 
-  {
+{
 
-      "success": true,
+"success": true,
 
-      "data": [
+"data": [
 
-          {
+{
 
-              "_id": "...",
+"_id": "...",
 
-              "userId": {
+"userId": {
 
-                  "_id": "...",
+"_id": "...",
 
-                  "name": "Jane Smith",
+"name": "Jane Smith",
 
-                  "email": "jane@example.com",
+"email": "jane@example.com",
 
-                  "phone": "+234...",
+"phone": "+234...",
 
-                  "role": "artisan",
+"role": "artisan",
 
-                  "profileImage": { "url": "https://..." },
+"profileImage": { "url": "https://..." },
 
-                  "kycVerified": true,
+"kycVerified": true,
 
-                  "isVerified": true
+"isVerified": true
 
-              },
+},
 
-              "balance": 150000,
+"balance": 150000,
 
-              "totalEarned": 500000,
+"totalEarned": 500000,
 
-              "totalSpent": 350000,
+"totalSpent": 350000,
 
-              "totalJobs": 25,
+"totalJobs": 25,
 
-              "lastUpdated": "2026-01-15T10:00:00.000Z",
+"lastUpdated": "2026-01-15T10:00:00.000Z",
 
-              "payoutDetails": {
+"payoutDetails": {
 
-                  "name": "Jane Smith",
+"name": "Jane Smith",
 
-                  "account_number": "0123456789",
+"account_number": "0123456789",
 
-                  "bank_code": "058",
+"bank_code": "058",
 
-                  "bank_name": "GTBank",
+"bank_name": "GTBank",
 
-                  "currency": "NGN"
+"currency": "NGN"
 
-              },
+},
 
-              "paystackRecipientCode": "RCP_...",
+"paystackRecipientCode": "RCP_...",
 
-              "paystackRecipientMeta": { ... }
+"paystackRecipientMeta": { ... }
 
-          }
+}
 
-      ],
+],
 
-      "pagination": {
+"pagination": {
 
-          "page": 1,
+"page": 1,
 
-          "limit": 50,
+"limit": 50,
 
-          "total": 150,
+"total": 150,
 
-          "pages": 3
+"pages": 3
 
-      }
+}
 
-  }
+}
 
-  ```
+```
 
 - `GET /api/admin/wallets/:userId` — (admin) get specific wallet by user ID with full details
 
-    - PreHandler: `verifyJWT`, `requireRole('admin')`
+- PreHandler: `verifyJWT`, `requireRole('admin')`
 
-    - Params: `userId` (24-char hex user ID)
+- Params: `userId` (24-char hex user ID)
 
-    - Response includes:
+- Response includes:
 
-        - Complete wallet details
+- Complete wallet details
 
-        - User information (populated)
+- User information (populated)
 
-        - Recent 10 transactions
+- Recent 10 transactions
 
-        - Computed statistics
+- Computed statistics
 
-  ```json
+```json
 
-  {
+{
 
-      "success": true,
+"success": true,
 
-      "data": {
+"data": {
 
-          "_id": "...",
+"_id": "...",
 
-          "userId": {
+"userId": {
 
-              "_id": "...",
+"_id": "...",
 
-              "name": "Jane Smith",
+"name": "Jane Smith",
 
-              "email": "jane@example.com",
+"email": "jane@example.com",
 
-              "role": "artisan",
+"role": "artisan",
 
-              "kycVerified": true,
+"kycVerified": true,
 
-              "isVerified": true,
+"isVerified": true,
 
-              "createdAt": "2025-06-01T00:00:00.000Z"
+"createdAt": "2025-06-01T00:00:00.000Z"
 
-          },
+},
 
-          "balance": 150000,
+"balance": 150000,
 
-          "totalEarned": 500000,
+"totalEarned": 500000,
 
-          "totalSpent": 350000,
+"totalSpent": 350000,
 
-          "totalJobs": 25,
+"totalJobs": 25,
 
-          "lastUpdated": "2026-01-15T10:00:00.000Z",
+"lastUpdated": "2026-01-15T10:00:00.000Z",
 
-          "payoutDetails": {
+"payoutDetails": {
 
-              "name": "Jane Smith",
+"name": "Jane Smith",
 
-              "account_number": "0123456789",
+"account_number": "0123456789",
 
-              "bank_code": "058",
+"bank_code": "058",
 
-              "bank_name": "GTBank",
+"bank_name": "GTBank",
 
-              "currency": "NGN"
+"currency": "NGN"
 
-          },
+},
 
-          "paystackRecipientCode": "RCP_...",
+"paystackRecipientCode": "RCP_...",
 
-          "recentTransactions": [
+"recentTransactions": [
 
-              {
+{
 
-                  "_id": "...",
+"_id": "...",
 
-                  "userId": "...",
+"userId": "...",
 
-                  "type": "credit",
+"type": "credit",
 
-                  "amount": 50000,
+"amount": 50000,
 
-                  "description": "Payment for booking #123",
+"description": "Payment for booking #123",
 
-                  "status": "completed",
+"status": "completed",
 
-                  "createdAt": "2026-01-15T10:00:00.000Z"
+"createdAt": "2026-01-15T10:00:00.000Z"
 
-              }
+}
 
-          ],
+],
 
-          "statistics": {
+"statistics": {
 
-              "totalEarnings": 500000,
+"totalEarnings": 500000,
 
-              "totalSpending": 350000,
+"totalSpending": 350000,
 
-              "currentBalance": 150000,
+"currentBalance": 150000,
 
-              "netActivity": 150000,
+"netActivity": 150000,
 
-              "completedJobs": 25,
+"completedJobs": 25,
 
-              "hasPayoutDetails": true,
+"hasPayoutDetails": true,
 
-              "paystackRecipientCode": "RCP_..."
+"paystackRecipientCode": "RCP_..."
 
-          }
+}
 
-      }
+}
 
-  }
+}
 
-  ```
+```
 
 - **Example: List all wallets sorted by balance**
 
@@ -3919,7 +4174,7 @@ curl -H 'Authorization: Bearer <ADMIN_TOKEN>' \
 
 curl -H 'Authorization: Bearer <ADMIN_TOKEN>' \
 
-	'http://localhost:5000/api/admin/wallets?sortBy=balance&sortOrder=desc&limit=20'
+'http://localhost:5000/api/admin/wallets?sortBy=balance&sortOrder=desc&limit=20'
 
 ```
 

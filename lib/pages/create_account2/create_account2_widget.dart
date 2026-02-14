@@ -57,11 +57,11 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
     // Initialize link recognizers
     _tncRecognizer = TapGestureRecognizer()
       ..onTap = () {
-        _openUrl('https://rijhub.com/terms-and-conditions.html');
+        _openUrl('https://www.rijhub.com/terms-and-conditions');
       };
     _privacyRecognizer = TapGestureRecognizer()
       ..onTap = () {
-        _openUrl('https://rijhub.com/privacy-policy.html');
+        _openUrl('https://www.rijhub.com/privacy-policy');
       };
 
     _model.fullNameTextController ??= TextEditingController();

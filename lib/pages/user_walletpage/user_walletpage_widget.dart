@@ -2,17 +2,24 @@ import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../services/token_storage.dart';
 import '../../services/user_service.dart';
 import '../../services/wallet_service.dart';
+import '../../services/notification_controller.dart';
+import '../../services/notification_service.dart';
 import '../../api_config.dart';
 import '../../utils/error_messages.dart';
+import 'dart:async';
 
 import 'user_walletpage_model.dart';
 export 'user_walletpage_model.dart';
+
+// kDebugMode fallback: some analyzer environments may not resolve Flutter packages.
+// If the real `kDebugMode` from Flutter is available, it will be used; otherwise
+// this local const will provide a safe default (false in production builds).
+const bool kDebugMode = bool.fromEnvironment('dart.vm.product') == false;
 
 class UserWalletpageWidget extends StatefulWidget {
   const UserWalletpageWidget({super.key});
@@ -30,6 +37,10 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
 
   bool _loading = true;
   bool _isArtisan = false;
+  // Whether to hide the total balance on screen (eye toggle)
+  bool _hideBalance = false;
+  // Track last-known transaction statuses to detect transitions (id -> status)
+  final Map<String, String> _txStatusMap = {};
   Map<String, dynamic>? _wallet;
   List<Map<String, dynamic>> _transactions = [];
   String? _error;
@@ -38,11 +49,18 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
   final TextEditingController _pNameCtrl = TextEditingController();
   final TextEditingController _pAccountCtrl = TextEditingController();
   final TextEditingController _pBankNameCtrl = TextEditingController();
-  final TextEditingController _pCurrencyCtrl =
-      TextEditingController(text: 'NGN');
+  // account name controller populated by server lookup
+  final TextEditingController _pAccountNameCtrl = TextEditingController();
+  final TextEditingController _pCurrencyCtrl = TextEditingController(text: 'NGN');
+  final TextEditingController _pBankCodeCtrl = TextEditingController();
   bool _pSaving = false;
   bool _pEditLoading = false;
   final GlobalKey<FormState> _pFormKey = GlobalKey<FormState>();
+  // bank list and selection state
+  List<Map<String, String>> _bankList = [];
+  String? _selectedBankCode;
+  bool _isAccountNameLoading = false;
+  Timer? _resolveTimer;
 
   @override
   void initState() {
@@ -56,9 +74,17 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
     _pNameCtrl.dispose();
     _pAccountCtrl.dispose();
     _pBankNameCtrl.dispose();
+    _pAccountNameCtrl.dispose();
     _pCurrencyCtrl.dispose();
+    _pBankCodeCtrl.dispose();
+    _resolveTimer?.cancel();
     _model.dispose();
     super.dispose();
+  }
+
+  void _toggleBalanceVisibility() {
+    if (!mounted) return;
+    setState(() { _hideBalance = !_hideBalance; });
   }
 
   Future<void> _init() async {
@@ -125,22 +151,57 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
         // Non-fatal error
       }
 
-      // Fetch recent transactions using WalletService
+      // Fetch recent transactions using WalletService and detect status transitions
       try {
         final token = await TokenStorage.getToken();
         if (token != null && token.isNotEmpty) {
           final fetched = await WalletService.fetchTransactions(token: token);
           // Filter to only transactions that belong to the current user
           final prof = AppStateNotifier.instance.profile;
-          final myId =
-              (prof?['_id'] ?? prof?['id'] ?? prof?['userId'])?.toString();
+          final myId = (prof?['_id'] ?? prof?['id'] ?? prof?['userId'])?.toString();
+          List<Map<String, dynamic>> rawList;
           if (myId != null && myId.isNotEmpty) {
-            _transactions = fetched
-                .where((tx) => _transactionBelongsToUser(tx, myId))
-                .toList();
+            rawList = fetched.where((tx) => _transactionBelongsToUser(tx, myId)).toList();
           } else {
-            _transactions = fetched;
+            rawList = fetched;
           }
+
+          // Compare previous statuses to detect transitions (e.g., pending -> completed)
+          for (final tx in rawList) {
+            final id = _txId(tx);
+            final status = (tx['status'] ?? tx['transactionStatus'] ?? tx['state'] ?? '').toString().toLowerCase();
+            final prev = _txStatusMap[id];
+            if (id.isNotEmpty) {
+              // If previously pending/processing and now not pending -> consider completed
+              final wasPending = prev != null && (prev.contains('pending') || prev.contains('processing') || prev.contains('holding'));
+              final nowPending = status.contains('pending') || status.contains('processing') || status.contains('holding');
+              if (wasPending && !nowPending) {
+                // New completion observed — notify locally and ask server to create a notification
+                try {
+                  final title = 'Payout completed';
+                  final amount = tx['amount'] ?? tx['value'] ?? tx['total'] ?? '';
+                  final body = amount != null && amount.toString().isNotEmpty ? 'A payout of ${_formatAmount(amount)} is completed.' : 'Your payout has been completed.';
+                  // Local notification
+                  await NotificationController.showLocalNotification(
+                    id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+                    title: title,
+                    body: body,
+                    payload: {'type': 'payout', 'txId': id},
+                  );
+                  // Server-side record (best-effort)
+                  final prof = AppStateNotifier.instance.profile;
+                  final myId2 = (prof?['_id'] ?? prof?['id'] ?? prof?['userId'])?.toString();
+                  if (myId2 != null && myId2.isNotEmpty) {
+                    await NotificationService.sendNotification(myId2, title, body, payload: {'type': 'payout', 'txId': id});
+                  }
+                } catch (_) {}
+              }
+              // update map
+              if (id.isNotEmpty) _txStatusMap[id] = status;
+            }
+          }
+
+          _transactions = rawList;
         }
       } catch (e) {
         // Surface a subtle error message for transactions and allow retry
@@ -172,8 +233,10 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
       // the API returns: name, account_number, bank_code, bank_name, currency.
       final uri = Uri.parse('$API_BASE_URL/api/wallet/payout-details');
       final bodyMap = {
-        'name': _pNameCtrl.text.trim(),
+        // Use the auto-resolved account name when available, otherwise fallback to any manual name field
+        'name': (_pAccountNameCtrl.text.trim().isNotEmpty ? _pAccountNameCtrl.text.trim() : _pNameCtrl.text.trim()),
         'account_number': _pAccountCtrl.text.trim(),
+        'bank_code': _pBankCodeCtrl.text.trim(),
         'bank_name': _pBankNameCtrl.text.trim(),
         'currency': _pCurrencyCtrl.text.trim().isEmpty
             ? 'NGN'
@@ -250,6 +313,19 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
             ),
           ),
         );
+        // Inform backend to create a notification record (best-effort)
+        try {
+          final prof = AppStateNotifier.instance.profile;
+          final myId = (prof?['_id'] ?? prof?['id'] ?? prof?['userId'])?.toString();
+          if (myId != null && myId.isNotEmpty) {
+            await NotificationService.sendNotification(
+              myId,
+              'Payout details updated',
+              'Your payout account details were updated successfully.',
+              payload: {'type': 'payout_update'},
+            );
+          }
+        } catch (_) {}
       } else {
         // Log response for debugging when server replies with 4xx/5xx
         if (kDebugMode)
@@ -322,48 +398,91 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
+        );
+      }
+     } finally {
+       if (mounted) setState(() { _pSaving = false; });
+     }
+   }
 
-  Future<void> _showPayoutDetailsSheet({bool isEdit = false}) async {
-    // For edit: fetch latest payout details first (shows loader on Edit button)
-    if (isEdit) {
-      try {
-        final token = await TokenStorage.getToken();
-        if (token != null && token.isNotEmpty) {
-          final uri = Uri.parse('$API_BASE_URL/api/wallet/payout-details');
-          if (kDebugMode)
-            debugPrint('[UserWalletpage] Fetching payout details from: $uri');
-          final resp = await http.get(uri, headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $token'
-          }).timeout(const Duration(seconds: 10));
-          if (kDebugMode)
-            debugPrint(
-                '[UserWalletpage] Payout details response: ${resp.statusCode} ${resp.body}');
+   Future<void> _showPayoutDetailsSheet({bool isEdit = false}) async {
+     // Fetch latest payout details
+     try {
+       final token = await TokenStorage.getToken();
+       if (token != null && token.isNotEmpty) {
+         final uri = Uri.parse('$API_BASE_URL/api/wallet/payout-details');
+         final resp = await http.get(
+             uri,
+             headers: {
+               'Content-Type': 'application/json',
+               'Authorization': 'Bearer $token'
+             }
+         ).timeout(const Duration(seconds: 10));
 
-          if (resp.statusCode >= 200 &&
-              resp.statusCode < 300 &&
-              resp.body.isNotEmpty) {
-            try {
-              final decoded = jsonDecode(resp.body);
-              final data =
-                  decoded is Map ? (decoded['data'] ?? decoded) : decoded;
-              if (data is Map && mounted) {
-                setState(() {
-                  _wallet ??= {};
-                  _wallet!['payoutDetails'] = Map<String, dynamic>.from(data);
-                });
-              }
-            } catch (_) {}
-          }
-        }
-      } catch (_) {}
-    }
-
-    if (!mounted) return;
+         if (resp.statusCode >= 200 && resp.statusCode < 300 && resp.body.isNotEmpty) {
+           try {
+             final decoded = jsonDecode(resp.body);
+             // prefer payoutDetails key, then data, then raw
+             final pd = decoded is Map ? (decoded['payoutDetails'] ?? decoded['data'] ?? decoded) : decoded;
+             if (pd is Map) {
+               setState(() {
+                 _wallet ??= {};
+                 _wallet!['payoutDetails'] = Map<String, dynamic>.from(pd);
+               });
+             }
+           } catch (_) {}
+         }
+         // Fetch bank list from server (per API_DOCS: GET /payment/banks)
+         try {
+           final banksUri = Uri.parse('$API_BASE_URL/api/payments/banks');
+           final bResp = await http.get(banksUri, headers: {
+             'Content-Type': 'application/json',
+             'Authorization': 'Bearer $token'
+           }).timeout(const Duration(seconds: 8));
+           if (bResp.statusCode >= 200 && bResp.statusCode < 300 && bResp.body.isNotEmpty) {
+             final bDecoded = jsonDecode(bResp.body);
+             // docs: banks list items: { name, slug, code, longcode, ... }
+             final list = bDecoded is Map ? (bDecoded['data'] ?? bDecoded['banks'] ?? bDecoded) : bDecoded;
+             if (list is List) {
+               final parsed = list.map<Map<String,String>>((e) {
+                 if (e is Map) {
+                   final name = (e['name'] ?? e['bank_name'] ?? e['bank'])?.toString() ?? '';
+                   final code = (e['code'] ?? e['bank_code'] ?? e['id'])?.toString() ?? '';
+                   return <String,String>{'name': name, 'code': code};
+                 }
+                 return <String,String>{'name': e.toString(), 'code': ''};
+               }).where((m) => (m['code'] ?? '').isNotEmpty).toList();
+               if (parsed.isNotEmpty) {
+                 setState(() {
+                   _bankList = parsed;
+                   // If we already had a selected bank code (from payout details), prefill bank name & code
+                   if (_selectedBankCode != null && _selectedBankCode!.isNotEmpty) {
+                     final match = _bankList.firstWhere((b) => b['code'] == _selectedBankCode, orElse: () => <String,String>{});
+                     if (match.isNotEmpty) {
+                       _pBankNameCtrl.text = match['name'] ?? '';
+                       _pBankCodeCtrl.text = match['code'] ?? '';
+                     }
+                   }
+                 });
+               }
+             }
+           }
+         } catch (_) {
+           // fallback built-in list
+           if (_bankList.isEmpty) {
+             setState(() {
+               _bankList = [
+                 {'name': 'GTBank', 'code': '058'},
+                 {'name': 'First Bank', 'code': '011'},
+                 {'name': 'Zenith Bank', 'code': '057'},
+                 {'name': 'Access Bank', 'code': '044'},
+                 {'name': 'UBA', 'code': '033'},
+               ];
+             });
+           }
+         }
+       }
+     } catch (_) {}
 
     // Prefill controllers
     final pd = _wallet?['payoutDetails'] is Map
@@ -373,6 +492,9 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
     _pNameCtrl.text = pd?['name']?.toString() ?? '';
     _pAccountCtrl.text = pd?['account_number']?.toString() ?? '';
     _pBankNameCtrl.text = pd?['bank_name']?.toString() ?? '';
+    _pBankCodeCtrl.text = pd?['bank_code']?.toString() ?? '';
+    _selectedBankCode = pd?['bank_code']?.toString() ?? null;
+    _pAccountNameCtrl.text = pd?['name']?.toString() ?? '';
     _pCurrencyCtrl.text = pd?['currency']?.toString() ?? 'NGN';
 
     showModalBottomSheet(
@@ -412,47 +534,110 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                 borderRadius: BorderRadius.circular(4),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            isEdit ? 'Edit Account Details' : 'Account Details',
-                            style: theme.textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Form(
-                            key: _pFormKey,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Account Information',
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w500,
-                                    color: theme.colorScheme.onSurface
-                                        .withAlpha((0.7 * 255).round()),
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                TextFormField(
-                                  controller: _pNameCtrl,
+                            const SizedBox(height: 16),
+                            // 1. Bank name (picker with searchable modal)
+                            GestureDetector(
+                              onTap: _showBankPickerSheet,
+                              child: AbsorbPointer(
+                                child: TextFormField(
+                                  controller: _pBankNameCtrl,
                                   decoration: InputDecoration(
-                                    labelText: 'Account holder name',
+                                    labelText: 'Bank name',
+                                    hintText: 'Select bank',
+                                    suffixIcon: Icon(Icons.search),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
                                       borderSide: BorderSide(
-                                        color: theme.colorScheme.onSurface
-                                            .withAlpha((0.1 * 255).round()),
+                                        color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
                                       ),
                                     ),
                                     enabledBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
                                       borderSide: BorderSide(
-                                        color: theme.colorScheme.onSurface
-                                            .withAlpha((0.1 * 255).round()),
+                                        color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
                                       ),
                                     ),
+                                  ),
+                                  validator: (v) => _selectedBankCode == null || _selectedBankCode!.isEmpty ? 'Required' : null,
+                                  readOnly: true,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            // 2. Bank code (read-only auto-filled)
+                            TextFormField(
+                              controller: _pBankCodeCtrl,
+                              readOnly: true,
+                              decoration: InputDecoration(
+                                labelText: 'Bank code',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(
+                                    color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
+                                  ),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(
+                                    color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
+                                  ),
+                                ),
+                              ),
+                              validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                            ),
+                            const SizedBox(height: 12),
+                            // 3. Account number (manual input)
+                            TextFormField(
+                              controller: _pAccountCtrl,
+                              decoration: InputDecoration(
+                                labelText: 'Account number',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(
+                                    color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
+                                  ),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(
+                                    color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
+                                  ),
+                                ),
+                              ),
+                              keyboardType: TextInputType.number,
+                              onChanged: (v) {
+                                final s = v.trim();
+                                // Cancel previous debounce
+                                _resolveTimer?.cancel();
+                                if (s.length >= 6) {
+                                  // debounce to avoid rapid requests while typing
+                                  _resolveTimer = Timer(const Duration(milliseconds: 600), () async {
+                                    if (!mounted) return;
+                                    await _resolveAccountName(s);
+                                  });
+                                } else {
+                                  if (mounted) setState(() { _pAccountNameCtrl.text = ''; });
+                                }
+                              },
+                              validator: (v) {
+                                if (v == null || v.trim().isEmpty) return 'Required';
+                                final s = v.trim();
+                                if (!RegExp(r'^\d{6,20}$').hasMatch(s)) return 'Enter a valid account number';
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 12),
+                            // 4. Account name (filled by lookup, read-only)
+                            TextFormField(
+                              controller: _pAccountNameCtrl,
+                              readOnly: true,
+                              decoration: InputDecoration(
+                                labelText: 'Account name',
+                                suffix: _isAccountNameLoading ? SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : null,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(
+                                    color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
                                   ),
                                   validator: (v) =>
                                       v == null || v.trim().isEmpty
@@ -490,25 +675,19 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                     return null;
                                   },
                                 ),
-                                const SizedBox(height: 12),
-                                TextFormField(
-                                  controller: _pBankNameCtrl,
-                                  decoration: InputDecoration(
-                                    labelText: 'Bank name',
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: theme.colorScheme.onSurface
-                                            .withAlpha((0.1 * 255).round()),
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: theme.colorScheme.onSurface
-                                            .withAlpha((0.1 * 255).round()),
-                                      ),
-                                    ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            // 5. Currency (fixed NGN, read-only)
+                            TextFormField(
+                              controller: _pCurrencyCtrl,
+                              readOnly: true,
+                              decoration: InputDecoration(
+                                labelText: 'Currency',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(
+                                    color: theme.colorScheme.onSurface.withAlpha((0.1 * 255).round()),
                                   ),
                                   validator: (v) =>
                                       v == null || v.trim().isEmpty
@@ -610,6 +789,263 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
               });
         });
   }
+
+  // Show a searchable bottom sheet for picking a bank. Fetches bank list if empty.
+  Future<void> _showBankPickerSheet() async {
+    // Always (re)fetch banks when opening the picker so user sees full/current list
+    try {
+      final token = await TokenStorage.getToken();
+      try {
+        final banksUri = Uri.parse('$API_BASE_URL/api/payments/banks');
+        final headers = <String,String>{'Content-Type': 'application/json'};
+        if (token != null && token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
+        final bResp = await http.get(banksUri, headers: headers).timeout(const Duration(seconds: 8));
+        if (bResp.statusCode >= 200 && bResp.statusCode < 300 && bResp.body.isNotEmpty) {
+          final bDecoded = jsonDecode(bResp.body);
+          final list = bDecoded is Map ? (bDecoded['data'] ?? bDecoded['banks'] ?? bDecoded) : bDecoded;
+          if (list is List) {
+            final parsed = list.map<Map<String,String>>((e) {
+              if (e is Map) {
+                final name = (e['name'] ?? e['bank_name'] ?? e['bank'])?.toString() ?? '';
+                final code = (e['code'] ?? e['bank_code'] ?? e['id'])?.toString() ?? '';
+                return <String,String>{'name': name, 'code': code};
+              }
+              return <String,String>{'name': e.toString(), 'code': ''};
+            }).where((m) => (m['code'] ?? '').isNotEmpty).toList();
+            if (parsed.isNotEmpty) setState(() { _bankList = parsed; });
+          }
+        } else {
+          if (kDebugMode) debugPrint('Banks fetch returned ${bResp.statusCode}');
+        }
+      } catch (e) {
+        if (kDebugMode) debugPrint('Failed to fetch banks: $e');
+        // fallback built-in list only as last resort
+        if (_bankList.isEmpty) {
+          setState(() {
+            _bankList = [
+              {'name': 'GTBank', 'code': '058'},
+              {'name': 'First Bank', 'code': '011'},
+              {'name': 'Zenith Bank', 'code': '057'},
+              {'name': 'Access Bank', 'code': '044'},
+              {'name': 'UBA', 'code': '033'},
+            ];
+          });
+        }
+      }
+    } catch (_) {}
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.7,
+          minChildSize: 0.3,
+          maxChildSize: 0.95,
+          builder: (_, controller) {
+            String query = '';
+            List<Map<String,String>> filtered = List.from(_bankList);
+            return StatefulBuilder(
+              builder: (c, setInner) {
+                filtered = _bankList.where((b) {
+                  final n = (b['name'] ?? '').toLowerCase();
+                  return n.contains(query.toLowerCase());
+                }).toList();
+
+                return Container(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).brightness == Brightness.dark ? Colors.black : Colors.white,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  ),
+                  padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+                  child: Column(
+                    children: [
+                      Container(width: 40, height: 4, decoration: BoxDecoration(color: Theme.of(context).colorScheme.onSurface.withAlpha(80), borderRadius: BorderRadius.circular(4))),
+                      const SizedBox(height: 12),
+                      TextField(
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.search),
+                          hintText: 'Search bank',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                        ),
+                        onChanged: (v) { setInner(() { query = v; }); },
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: filtered.isEmpty
+                          ? Center(child: Text('No banks match "${query}"', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withAlpha((0.6 * 255).round()))))
+                          : ListView.separated(
+                              controller: controller,
+                              itemCount: filtered.length,
+                              separatorBuilder: (_, __) => const Divider(height: 0),
+                              itemBuilder: (ctx2, i) {
+                                final b = filtered[i];
+                                final code = b['code'] ?? '';
+                                final name = b['name'] ?? code;
+                                final selected = _selectedBankCode == code;
+                                return ListTile(
+                                  title: Text(name),
+                                  subtitle: code.isNotEmpty ? Text(code) : null,
+                                  trailing: selected ? Icon(Icons.check, color: Theme.of(context).colorScheme.primary) : null,
+                                  onTap: () async {
+                                    setState(() {
+                                      _selectedBankCode = code;
+                                      _pBankNameCtrl.text = name;
+                                      _pBankCodeCtrl.text = code;
+                                    });
+                                    // If an account number is already entered, attempt to resolve its name with the newly selected bank
+                                    final acct = _pAccountCtrl.text.trim();
+                                    if (acct.length >= 6) {
+                                      await _resolveAccountName(acct);
+                                    }
+                                    Navigator.of(ctx).pop();
+                                  },
+                                );
+                              },
+                            ),
+                      ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(),
+                              child: const Text('Cancel'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      }
+    );
+  }
+
+  // Resolve account name for a given account number (tries multiple endpoints and handles non-JSON responses)
+  Future<bool> _resolveAccountName(String accountNumber) async {
+    if (accountNumber.trim().isEmpty) return false;
+    final s = accountNumber.trim();
+    if (!mounted) return false;
+    setState(() => _isAccountNameLoading = true);
+
+    try {
+      final token = await TokenStorage.getToken();
+      final headers = <String,String>{'Content-Type': 'application/json'};
+      if (token != null && token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
+      if (token == null || token.isEmpty) {
+        // Can't authenticate to server; surface a helpful message in debug and return
+        if (kDebugMode) debugPrint('No auth token available for account resolve');
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Unable to verify account: not authenticated')));
+        return false;
+      }
+
+      final List<Map<String,String>> attempts = [];
+
+      final code = _pBankCodeCtrl.text.trim();
+
+      // If bank code is missing, prefer to remind user to pick a bank first (since docs require bank_code)
+      if (code.isEmpty) {
+        // Still attempt a resolve without bank_code as a fallback, but inform user in debug
+        if (kDebugMode) debugPrint('Attempting resolve without bank_code');
+      }
+
+      // Build candidate URIs (GET first)
+      final candidates = <Uri>[];
+      // Prefer canonical documented endpoint: /api/payments/banks/resolve
+      if (code.isNotEmpty) {
+        candidates.add(Uri.parse('$API_BASE_URL/api/payments/banks/resolve?account_number=${Uri.encodeQueryComponent(s)}&bank_code=${Uri.encodeQueryComponent(code)}'));
+      }
+      // Try canonical without bank_code as a fallback
+      candidates.add(Uri.parse('$API_BASE_URL/api/payments/banks/resolve?account_number=${Uri.encodeQueryComponent(s)}'));
+      // Keep additional fallback variants for backwards compatibility
+      if (code.isNotEmpty) {
+        candidates.add(Uri.parse('$API_BASE_URL/api/payment/banks/resolve?account_number=${Uri.encodeQueryComponent(s)}&bank_code=${Uri.encodeQueryComponent(code)}'));
+        candidates.add(Uri.parse('$API_BASE_URL/payment/banks/resolve?account_number=${Uri.encodeQueryComponent(s)}&bank_code=${Uri.encodeQueryComponent(code)}'));
+      }
+      candidates.add(Uri.parse('$API_BASE_URL/api/payment/banks/resolve?account_number=${Uri.encodeQueryComponent(s)}'));
+      candidates.add(Uri.parse('$API_BASE_URL/payment/banks/resolve?account_number=${Uri.encodeQueryComponent(s)}'));
+
+      Map<String,dynamic>? resolved;
+
+      // Try GET candidates
+      for (final uri in candidates) {
+        try {
+          final r = await http.get(uri, headers: headers).timeout(const Duration(seconds: 8));
+          final contentType = r.headers['content-type'] ?? '';
+          final snippet = r.body.length > 200 ? r.body.substring(0, 200) + '...' : r.body;
+          attempts.add({'uri': uri.toString(), 'status': r.statusCode.toString(), 'contentType': contentType, 'snippet': snippet});
+          if (r.statusCode >= 200 && r.statusCode < 300 && r.body.isNotEmpty) {
+            if (contentType.toLowerCase().contains('application/json') || r.body.trim().startsWith('{') || r.body.trim().startsWith('[')) {
+              final dec = jsonDecode(r.body);
+              final body = dec is Map ? (dec['data'] ?? dec) : dec;
+              if (body is Map) { resolved = Map<String,dynamic>.from(body); break; }
+            } else {
+              if (kDebugMode) debugPrint('Resolve GET returned non-json ${uri} status=${r.statusCode} content-type=$contentType');
+              // continue to next candidate
+            }
+          }
+        } catch (e) {
+          attempts.add({'uri': uri.toString(), 'status': 'error', 'contentType': '', 'snippet': e.toString()});
+          if (kDebugMode) debugPrint('GET resolve failed $uri: $e');
+        }
+      }
+
+      // Try POST variants if GET didn't yield JSON
+      if (resolved == null) {
+        final postUris = [
+          Uri.parse('$API_BASE_URL/api/banks/resolve'),
+          Uri.parse('$API_BASE_URL/api/bank/resolve'),
+          Uri.parse('$API_BASE_URL/payment/banks/resolve'),
+          Uri.parse('$API_BASE_URL/api/payment/banks/resolve')
+        ];
+        final bodyMap = {'account_number': s, 'bank_code': code};
+        for (final uri in postUris) {
+          try {
+            final r = await http.post(uri, headers: headers, body: jsonEncode(bodyMap)).timeout(const Duration(seconds: 8));
+            final contentType = r.headers['content-type'] ?? '';
+            final snippet = r.body.length > 200 ? r.body.substring(0, 200) + '...' : r.body;
+            attempts.add({'uri': uri.toString(), 'status': r.statusCode.toString(), 'contentType': contentType, 'snippet': snippet});
+            if (r.statusCode >= 200 && r.statusCode < 300 && r.body.isNotEmpty) {
+              if (contentType.toLowerCase().contains('application/json') || r.body.trim().startsWith('{') || r.body.trim().startsWith('[')) {
+                final dec = jsonDecode(r.body);
+                final body = dec is Map ? (dec['data'] ?? dec) : dec;
+                if (body is Map) { resolved = Map<String,dynamic>.from(body); break; }
+              } else {
+                if (kDebugMode) debugPrint('Resolve POST returned non-json ${uri} status=${r.statusCode} content-type=$contentType');
+              }
+            }
+          } catch (e) {
+            attempts.add({'uri': uri.toString(), 'status': 'error', 'contentType': '', 'snippet': e.toString()});
+            if (kDebugMode) debugPrint('POST resolve failed $uri: $e');
+          }
+        }
+      }
+
+      if (resolved != null) {
+        final name = resolved['account_name'] ?? resolved['accountName'] ?? resolved['name'];
+        if (name != null) {
+          if (mounted) setState(() { _pAccountNameCtrl.text = name.toString(); });
+          return true;
+        }
+      }
+      // If we reached here without a result, show a concise debug summary of attempts
+      if (kDebugMode && mounted) {
+        final lines = attempts.take(4).map((a) => '${a['status']} ${a['uri']}').join('\n');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Resolve failed for: \n$lines')));
+      }
+      return false;
+    } finally {
+      if (mounted) setState(() => _isAccountNameLoading = false);
+    }
+   }
 
   // Simple pagination: attempt to load more using page & limit query params where supported
   int _txPage = 1;
@@ -849,6 +1285,11 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
     );
   }
 
+  // Helper to extract a stable transaction id from a transaction map
+  String _txId(Map<String, dynamic> tx) {
+    return (tx['_id'] ?? tx['id'] ?? tx['transactionId'] ?? tx['reference'] ?? tx['ref'] ?? tx['txId'] ?? '').toString();
+  }
+
   // Helper to determine if a transaction belongs to the logged-in user
   bool _transactionBelongsToUser(Map<String, dynamic> tx, String? myId) {
     // If we don't have a logged-in user's id, be conservative and treat
@@ -1060,19 +1501,30 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                             .withAlpha((0.7 * 255).round()),
                                       ),
                                     ),
-                                    Container(
-                                      width: 40,
-                                      height: 40,
-                                      decoration: BoxDecoration(
-                                        color: colorScheme.primary
-                                            .withAlpha((0.1 * 255).round()),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Icon(
-                                        Icons.account_balance_wallet_rounded,
-                                        color: colorScheme.primary,
-                                        size: 20,
-                                      ),
+                                    Row(
+                                      children: [
+                                        // Eye icon to hide/unhide balance
+                                        IconButton(
+                                          tooltip: _hideBalance ? 'Show balance' : 'Hide balance',
+                                          icon: Icon(_hideBalance ? Icons.visibility_off : Icons.visibility, size: 20),
+                                          color: colorScheme.onSurface.withAlpha((0.8 * 255).round()),
+                                          onPressed: _toggleBalanceVisibility,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          width: 40,
+                                          height: 40,
+                                          decoration: BoxDecoration(
+                                            color: colorScheme.primary.withAlpha((0.1 * 255).round()),
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Icon(
+                                            Icons.account_balance_wallet_rounded,
+                                            color: colorScheme.primary,
+                                            size: 20,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
@@ -1088,17 +1540,19 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                         ),
                                       )
                                     : Text(
-                                        _formatAmount(_wallet?['total'] ??
-                                            _wallet?['balance'] ??
-                                            _wallet?['totalEarned'] ??
-                                            _wallet?['totalSpent'] ??
-                                            0),
-                                        style: theme.textTheme.headlineMedium
-                                            ?.copyWith(
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 32,
+                                  _hideBalance
+                                      ? '*****'
+                                      : _formatAmount(
+                                          _wallet?['total'] ??
+                                              _wallet?['balance'] ??
+                                              _wallet?['totalEarned'] ??
+                                              _wallet?['totalSpent'] ?? 0,
                                         ),
-                                      ),
+                                  style: theme.textTheme.headlineMedium?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 32,
+                                  ),
+                                ),
                                 const SizedBox(height: 24),
                                 Row(
                                   children: [
@@ -1339,7 +1793,7 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                           ),
                         ],
 
-                        // Recent Transactions Section
+                        // Recent Transactions Section with tabs (Pending / Completed)
                         const SizedBox(height: 24),
                         Padding(
                           padding: const EdgeInsets.only(left: 4.0, bottom: 12),
@@ -1354,64 +1808,121 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                             ),
                           ),
                         ),
-                        if (_loading && _transactions.isEmpty)
-                          ...List.generate(
-                              3, (index) => _buildTransactionSkeleton(context)),
-                        if (!_loading &&
-                            _transactions.isEmpty &&
-                            _error == null)
-                          Card(
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              side: BorderSide(
-                                color: colorScheme.onSurface
-                                    .withAlpha((0.1 * 255).round()),
-                                width: 1,
+                        // Tabbed view for Pending / Completed
+                        DefaultTabController(
+                          length: 2,
+                          child: Column(
+                            children: [
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).brightness == Brightness.dark ? Colors.black : Colors.white,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: colorScheme.onSurface.withAlpha((0.06 * 255).round())),
+                                ),
+                                child: TabBar(
+                                  labelColor: colorScheme.primary,
+                                  unselectedLabelColor: colorScheme.onSurface.withAlpha((0.6 * 255).round()),
+                                  indicatorColor: colorScheme.primary,
+                                  tabs: const [
+                                    Tab(text: 'Pending'),
+                                    Tab(text: 'Completed'),
+                                  ],
+                                ),
                               ),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(40),
-                              child: Column(
-                                children: [
-                                  Icon(
-                                    Icons.receipt_long_outlined,
-                                    size: 48,
-                                    color: colorScheme.onSurface
-                                        .withAlpha((0.3 * 255).round()),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    'No transactions yet',
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: colorScheme.onSurface
-                                          .withAlpha((0.6 * 255).round()),
-                                    ),
-                                  ),
-                                ],
+                              const SizedBox(height: 12),
+                              // Tab views
+                              SizedBox(
+                                // limit height so inner lists scroll independently
+                                height: 420,
+                                child: TabBarView(
+                                  children: [
+                                    // Pending
+                                    Builder(builder: (ctx) {
+                                      final pending = _transactions.where((t) {
+                                        final status = (t['status'] ?? t['transactionStatus'] ?? '').toString().toLowerCase();
+                                        return status.contains('pending') || status.contains('holding') || status.contains('processing');
+                                      }).toList();
+
+                                      if (_loading && pending.isEmpty) {
+                                        return ListView(
+                                          padding: EdgeInsets.zero,
+                                          children: List.generate(3, (_) => _buildTransactionSkeleton(context)),
+                                        );
+                                      }
+
+                                      if (!_loading && pending.isEmpty) {
+                                        return Center(
+                                          child: Card(
+                                            elevation: 0,
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(24.0),
+                                              child: Text('No pending transactions', style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSurface.withAlpha((0.6 * 255).round()))),
+                                            ),
+                                          ),
+                                        );
+                                      }
+
+                                      return ListView.separated(
+                                        padding: EdgeInsets.zero,
+                                        itemCount: pending.length,
+                                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                                        itemBuilder: (ctx2, i) {
+                                          final tx = pending[i];
+                                          return InkWell(
+                                            onTap: () => _showTransactionDetails(tx),
+                                            child: _buildTransactionItem(tx),
+                                          );
+                                        },
+                                      );
+                                    }),
+
+                                    // Completed
+                                    Builder(builder: (ctx) {
+                                      final completed = _transactions.where((t) {
+                                        final status = (t['status'] ?? t['transactionStatus'] ?? '').toString().toLowerCase();
+                                        return !(status.contains('pending') || status.contains('holding') || status.contains('processing'));
+                                      }).toList();
+
+                                      if (_loading && completed.isEmpty) {
+                                        return ListView(
+                                          padding: EdgeInsets.zero,
+                                          children: List.generate(3, (_) => _buildTransactionSkeleton(context)),
+                                        );
+                                      }
+
+                                      if (!_loading && completed.isEmpty) {
+                                        return Center(
+                                          child: Card(
+                                            elevation: 0,
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(24.0),
+                                              child: Text('No completed transactions', style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSurface.withAlpha((0.6 * 255).round()))),
+                                            ),
+                                          ),
+                                        );
+                                      }
+
+                                      return ListView.separated(
+                                        padding: EdgeInsets.zero,
+                                        itemCount: completed.length,
+                                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                                        itemBuilder: (ctx2, i) {
+                                          final tx = completed[i];
+                                          return InkWell(
+                                            onTap: () => _showTransactionDetails(tx),
+                                            child: _buildTransactionItem(tx),
+                                          );
+                                        },
+                                      );
+                                    }),
+                                  ],
+                                ),
                               ),
-                            ),
+                            ],
                           ),
-                        if (!_loading && _transactions.isNotEmpty)
-                          ..._transactions.map(_buildTransactionItem).toList(),
-
-                        // Transaction errors section
-                        if (!_loading && _error != null)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12.0),
-                            child: Column(
-                              children: [
-                                Text(_error!,
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                        color: theme.colorScheme.error)),
-                                const SizedBox(height: 8),
-                                ElevatedButton(
-                                    onPressed: _init,
-                                    child: const Text('Retry')),
-                              ],
-                            ),
-                          ),
-
+                        ),
                         const SizedBox(height: 32),
                       ],
                     ),
@@ -1548,5 +2059,166 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
 
     // Otherwise perform a full refresh
     await _init();
+  }
+
+  // Show transaction details bottom sheet
+  Future<void> _showTransactionDetails(Map<String, dynamic> transaction) async {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final ff = FlutterFlowTheme.of(context);
+
+    // Format date for display
+    String formatDate(String? dateStr) {
+      if (dateStr == null || dateStr.isEmpty) return 'Unknown date';
+      try {
+        final date = DateTime.parse(dateStr);
+        return DateFormat.yMMMd().add_jm().format(date);
+      } catch (_) {
+        return dateStr;
+      }
+    }
+
+    // Extract and format transaction details
+    final title = transaction['title']?.toString() ?? 'Transaction';
+    final description = transaction['description']?.toString() ?? '';
+    final amount = transaction['amount'] ?? transaction['value'] ?? 0;
+    final date = formatDate(transaction['date']?.toString() ?? '');
+    final status = (transaction['status'] ?? '').toString().toLowerCase();
+    final statusLabel = status.isNotEmpty ? (status[0].toUpperCase() + status.substring(1)) : 'Unknown';
+    final isCredit = transaction['type'] == 'credit';
+
+    // Show bottom sheet
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.6,
+          minChildSize: 0.4,
+          maxChildSize: 0.9,
+          builder: (_, controller) {
+            return Container(
+              decoration: BoxDecoration(
+                color: isDark ? Colors.black : Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              padding: EdgeInsets.fromLTRB(24, 16, 24, MediaQuery.of(context).viewInsets.bottom + 24),
+              child: ListView(
+                controller: controller,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.onSurface.withAlpha((0.3 * 255).round()),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    title,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    date,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withAlpha((0.6 * 255).round()),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Amount',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurface.withAlpha((0.7 * 255).round()),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${isCredit ? '+' : '-'}${_formatAmount(amount)}',
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 24,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Status',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurface.withAlpha((0.7 * 255).round()),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isCredit ? ff.success.withAlpha((0.1 * 255).round()) : ff.error.withAlpha((0.1 * 255).round()),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      isCredit ? 'Credit' : 'Debit',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: isCredit ? ff.success : ff.error,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // Show textual transaction status (e.g., Pending, Completed)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text(
+                      statusLabel,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: theme.colorScheme.onSurface.withAlpha((0.7 * 255).round()),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Description',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurface.withAlpha((0.7 * 255).round()),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withAlpha((0.8 * 255).round()),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: theme.colorScheme.primary,
+                        foregroundColor: theme.colorScheme.onPrimary,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: Text('Close'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            );
+          },
+        );
+      }
+    );
   }
 }

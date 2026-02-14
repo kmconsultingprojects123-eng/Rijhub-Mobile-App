@@ -1,10 +1,14 @@
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
 import '../../services/token_storage.dart';
-import '../../utils/navigation_utils.dart';
 import 'package:flutter/material.dart';
 import 'splash2_model.dart';
 export 'splash2_model.dart';
+import '../../services/auth_service.dart';
+import '../../state/auth_notifier.dart';
+import '../../state/app_state_notifier.dart';
+import '../../utils/awesome_dialogs.dart';
+import 'package:go_router/go_router.dart';
 
 class Splash2Widget extends StatefulWidget {
   const Splash2Widget({super.key});
@@ -20,7 +24,6 @@ class _Splash2WidgetState extends State<Splash2Widget> {
   late Splash2Model _model;
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final Color primaryColor = const Color(0xFFA20025);
-  // (no subtitle animation) keep the UI simple
 
   @override
   void initState() {
@@ -36,130 +39,185 @@ class _Splash2WidgetState extends State<Splash2Widget> {
     super.dispose();
   }
 
-  // Robust navigation helpers (async) with logging, delays and fallbacks.
-  Future<void> _navigateToRoleSelection() async {
-    if (!mounted) {
-      debugPrint('_navigateToRoleSelection: context not mounted');
-      return;
-    }
+  // Guest flow: call backend guest endpoint, persist tokens/role if returned,
+  // update notifiers and navigate to home.
+  Future<void> _continueAsGuest() async {
+    if (!mounted) return;
 
-    await Future.delayed(const Duration(milliseconds: 80));
-    final ts = DateTime.now().toIso8601String();
-    debugPrint('[$ts] Navigating -> SplashScreenPage2 (role selection)');
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
 
     try {
-      // Prefer declarative routing using GoRouter so the app's global router
-      // can perform role-based redirects and avoid leaving a pushed route
-      // on top of the stack which would prevent router-redirects from being
-      // visible to the user.
+      final res = await AuthService.guest();
       try {
-        GoRouter.of(context).go(SplashScreenPage2Widget.routePath);
-        debugPrint('Navigation successful via GoRouter.go');
-        return;
+        Navigator.of(context, rootNavigator: true).pop();
       } catch (_) {}
 
+      if (res['success'] == true) {
+        dynamic body = res['data'];
+        String? token;
+        Map<String, dynamic>? userProfile;
+
+        try {
+          if (body is Map) {
+            if (body['token'] != null) token = body['token'].toString();
+            if (body['data'] is Map && body['data']['token'] != null) token = body['data']['token'].toString();
+            if (body['user'] is Map) userProfile = Map<String, dynamic>.from(body['user']);
+            if (userProfile == null && body['data'] is Map && body['data']['user'] is Map) userProfile = Map<String, dynamic>.from(body['data']['user']);
+          }
+        } catch (_) {}
+
+        // Fallback to persisted token if AuthService already saved it
+        try {
+          if (token == null || token.isEmpty) token = await TokenStorage.getToken();
+        } catch (_) {}
+
+        if (token != null && token.isNotEmpty) {
+          try {
+            await TokenStorage.saveToken(token);
+          } catch (_) {}
+          try {
+            await TokenStorage.saveRole('guest');
+          } catch (_) {}
+
+          try {
+            await AuthNotifier.instance.setGuest(token: token);
+          } catch (_) {}
+
+          if (userProfile == null) userProfile = <String, dynamic>{};
+          userProfile['role'] = 'guest';
+          userProfile['isGuest'] = true;
+
+          try {
+            await AuthNotifier.instance.setProfile(userProfile);
+          } catch (_) {}
+          try {
+            AppStateNotifier.instance.token = token;
+          } catch (_) {}
+          try {
+            AppStateNotifier.instance.setProfile(userProfile);
+          } catch (_) {}
+
+          try {
+            context.go('/homePage');
+          } catch (_) {}
+
+          try {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('You are now browsing as a guest.'),
+                action: SnackBarAction(
+                  label: 'Sign in',
+                  onPressed: () {
+                    try {
+                      context.go(LoginAccountWidget.routePath);
+                    } catch (_) {}
+                  },
+                ),
+                duration: const Duration(seconds: 6),
+              ),
+            );
+          } catch (_) {}
+
+          return;
+        }
+
+        // No token returned: use in-memory guest session
+        try {
+          await AppStateNotifier.instance.setGuestSession(data: userProfile);
+        } catch (_) {}
+        try {
+          context.go('/homePage');
+        } catch (_) {}
+        try {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('You are now browsing as a guest.'),
+              action: SnackBarAction(
+                label: 'Sign in',
+                onPressed: () {
+                  try {
+                    context.go(LoginAccountWidget.routePath);
+                  } catch (_) {}
+                },
+              ),
+              duration: const Duration(seconds: 6),
+            ),
+          );
+        } catch (_) {}
+
+        return;
+      }
+
+      final err = res['error'];
+      final message = (err is Map && err['message'] != null) ? err['message'].toString() : (err?.toString() ?? 'Failed to enter as guest');
+      if (!mounted) return;
+      await showAppErrorDialog(context, title: 'Error', desc: message);
+    } catch (e) {
+      try {
+        Navigator.of(context, rootNavigator: true).pop();
+      } catch (_) {}
+      if (!mounted) return;
+      await showAppErrorDialog(context, title: 'Error', desc: e.toString());
+    }
+  }
+
+  Future<void> _navigateToRoleSelection() async {
+    if (!mounted) return;
+    await Future.delayed(const Duration(milliseconds: 80));
+    try {
+      GoRouter.of(context).go(SplashScreenPage2Widget.routePath);
+      return;
+    } catch (_) {}
+
+    try {
       if (appNavigatorKey.currentState != null && appNavigatorKey.currentState!.mounted) {
         final route = MaterialPageRoute(
           builder: (_) => const SplashScreenPage2Widget(),
           settings: RouteSettings(name: SplashScreenPage2Widget.routeName),
         );
         await appNavigatorKey.currentState!.push(route);
-        debugPrint('Navigation successful via appNavigatorKey');
         return;
       }
+    } catch (_) {}
 
-      if (mounted) {
-        final route = MaterialPageRoute(
-          builder: (_) => const SplashScreenPage2Widget(),
-          settings: RouteSettings(name: SplashScreenPage2Widget.routeName),
-        );
-        await Navigator.of(context, rootNavigator: true).push(route);
-        debugPrint('Navigation successful via Navigator.of(rootNavigator:true)');
-        return;
-      }
-
-      await NavigationUtils.safePush(context, const SplashScreenPage2Widget());
-      debugPrint('Navigation successful via NavigationUtils.safePush');
-    } catch (e, stack) {
-      debugPrint('''
-  NAVIGATION ERROR to SplashScreenPage2:
- Error: $e
- Stack: $stack
- ''');
-      if (mounted) {
-        await showDialog<void>(
-          context: context,
-          builder: (c) => AlertDialog(
-            title: const Text('Navigation Error'),
-            content: const Text('Unable to open role selection. Please try again.'),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK')),
-            ],
-          ),
-        );
-      }
+    if (mounted) {
+      final route = MaterialPageRoute(
+        builder: (_) => const SplashScreenPage2Widget(),
+        settings: RouteSettings(name: SplashScreenPage2Widget.routeName),
+      );
+      await Navigator.of(context, rootNavigator: true).push(route);
     }
   }
 
   Future<void> _navigateToLogin() async {
-    if (!mounted) {
-      debugPrint('_navigateToLogin: context not mounted');
-      return;
-    }
-
+    if (!mounted) return;
     await Future.delayed(const Duration(milliseconds: 80));
-    final ts = DateTime.now().toIso8601String();
-    debugPrint('[$ts] Navigating -> LoginAccount');
+    try {
+      GoRouter.of(context).go(LoginAccountWidget.routePath);
+      return;
+    } catch (_) {}
 
     try {
-      // Prefer declarative routing using GoRouter to ensure router redirect
-      // logic runs and doesn't leave a pushed route on top of the stack.
-      try {
-        GoRouter.of(context).go(LoginAccountWidget.routePath);
-        debugPrint('Navigation successful via GoRouter.go');
-        return;
-      } catch (_) {}
-
       if (appNavigatorKey.currentState != null && appNavigatorKey.currentState!.mounted) {
         final route = MaterialPageRoute(
           builder: (_) => const LoginAccountWidget(),
           settings: RouteSettings(name: LoginAccountWidget.routeName),
         );
         await appNavigatorKey.currentState!.push<void>(route);
-        debugPrint('Navigation successful via appNavigatorKey');
         return;
       }
+    } catch (_) {}
 
-      if (mounted) {
-        final route = MaterialPageRoute(
-          builder: (_) => const LoginAccountWidget(),
-          settings: RouteSettings(name: LoginAccountWidget.routeName),
-        );
-        await Navigator.of(context, rootNavigator: true).push<void>(route);
-        debugPrint('Navigation successful via Navigator.of(rootNavigator:true)');
-        return;
-      }
-
-      await NavigationUtils.safePush(context, const LoginAccountWidget());
-      debugPrint('Navigation successful via NavigationUtils.safePush');
-    } catch (e, stack) {
-      debugPrint('''
-  NAVIGATION ERROR to LoginAccount:
- Error: $e
- Stack: $stack
- ''');
-      if (mounted) {
-        await showDialog<void>(
-          context: context,
-          builder: (c) => AlertDialog(
-            title: const Text('Navigation Error'),
-            content: const Text('Unable to open login page. Please try again.'),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK')),
-            ],
-          ),
-        );
-      }
+    if (mounted) {
+      final route = MaterialPageRoute(
+        builder: (_) => const LoginAccountWidget(),
+        settings: RouteSettings(name: LoginAccountWidget.routeName),
+      );
+      await Navigator.of(context, rootNavigator: true).push<void>(route);
     }
   }
 
@@ -186,13 +244,13 @@ class _Splash2WidgetState extends State<Splash2Widget> {
             decoration: BoxDecoration(
               gradient: isDark
                   ? LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  theme.scaffoldBackgroundColor,
-                  theme.scaffoldBackgroundColor.withAlpha((0.98 * 255).round()),
-                ],
-              )
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        theme.scaffoldBackgroundColor,
+                        theme.scaffoldBackgroundColor.withAlpha((0.98 * 255).round()),
+                      ],
+                    )
                   : null,
             ),
             child: SingleChildScrollView(
@@ -212,7 +270,6 @@ class _Splash2WidgetState extends State<Splash2Widget> {
                     Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Logo only: larger, no border/gradient — show only the image
                         SizedBox(
                           width: isSmallScreen ? 140 : isLargeScreen ? 220 : 200,
                           height: isSmallScreen ? 140 : isLargeScreen ? 220 : 200,
@@ -221,24 +278,24 @@ class _Splash2WidgetState extends State<Splash2Widget> {
                             child: Image.asset(
                               isDark ? 'assets/images/logo_white.png' : 'assets/images/logo_black.png',
                               fit: BoxFit.contain,
-                              errorBuilder: (c, e, s) => Center(
-                                child: Text(
-                                  'R',
-                                  style: TextStyle(
-                                    color: primaryColor,
-                                    fontSize: isSmallScreen ? 36 : 46,
-                                    fontWeight: FontWeight.w800,
+                              errorBuilder: (c, e, s) {
+                                return Center(
+                                  child: Text(
+                                    'R',
+                                    style: TextStyle(
+                                      color: primaryColor,
+                                      fontSize: isSmallScreen ? 36 : 46,
+                                      fontWeight: FontWeight.w800,
+                                    ),
                                   ),
-                                ),
-                              ),
+                                );
+                              },
                             ),
                           ),
                         ),
 
-                        // tighter gap between logo and subtitle
                         SizedBox(height: isSmallScreen ? 2 : 4),
 
-                        // Full static subtitle
                         Padding(
                           padding: EdgeInsets.symmetric(
                             horizontal: isSmallScreen ? 24 : isLargeScreen ? 80 : 40,
@@ -254,12 +311,11 @@ class _Splash2WidgetState extends State<Splash2Widget> {
                           ),
                         ),
 
-                        // Spacer before buttons
                         SizedBox(height: isSmallScreen ? 40 : 60),
                       ],
                     ),
 
-                    // Bottom section with buttons
+                    // Bottom buttons
                     Padding(
                       padding: EdgeInsets.symmetric(
                         horizontal: isSmallScreen ? 20 : isLargeScreen ? 40 : 24,
@@ -267,7 +323,6 @@ class _Splash2WidgetState extends State<Splash2Widget> {
                       ),
                       child: Column(
                         children: [
-                          // Primary button
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton(
@@ -298,7 +353,6 @@ class _Splash2WidgetState extends State<Splash2Widget> {
 
                           const SizedBox(height: 12),
 
-                          // Secondary button
                           SizedBox(
                             width: double.infinity,
                             child: OutlinedButton(
@@ -328,7 +382,37 @@ class _Splash2WidgetState extends State<Splash2Widget> {
                             ),
                           ),
 
-                          // Legal text
+                          const SizedBox(height: 12),
+
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(
+                                  color: theme.dividerColor.withAlpha((0.4 * 255).round()),
+                                  width: 1.5,
+                                ),
+                                padding: EdgeInsets.symmetric(
+                                  vertical: isSmallScreen ? 14 : 16,
+                                  horizontal: 24,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                foregroundColor: theme.colorScheme.onSurface,
+                              ),
+                              onPressed: _continueAsGuest,
+                              child: Text(
+                                'CONTINUE AS GUEST',
+                                style: TextStyle(
+                                  fontSize: isSmallScreen ? 15 : 16,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          ),
+
                           Padding(
                             padding: const EdgeInsets.only(top: 24),
                             child: Text(

@@ -17,8 +17,8 @@ class _InfoPageWidgetState extends State<InfoPageWidget> with SingleTickerProvid
   late TabController _tabController;
 
   // URLs for external links
-  static const _termsUrl = 'https://rijhub.com/terms-and-conditions.html';
-  static const _privacyUrl = 'https://rijhub.com/privacy-policy.html';
+  static const _termsUrl = 'https://www.rijhub.com/terms-and-conditions';
+  static const _privacyUrl = 'https://www.rijhub.com/privacy-policy';
   static const _supportEmail = 'support@rijhub.com';
   // Updated support phone per project contact
   static const _contactPhone = '08053466666';

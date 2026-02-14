@@ -4,10 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'profile_model.dart';
 import 'dart:convert';
-import '../../services/auth_service.dart';
 import '../../services/user_service.dart';
 import '../../utils/navigation_utils.dart';
 import '../../services/token_storage.dart';
+import '../../services/api_error_handler.dart';
+import '../../api_config.dart';
 import '../../services/artist_service.dart';
 import '/main.dart';
 import '../../state/auth_notifier.dart';
@@ -28,6 +29,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   bool _loggingOut = false;
   bool _isLoading = false;
+  bool _deletingAccount = false;
 
   // Cache user data locally
   String? displayName;
@@ -170,6 +172,75 @@ class _ProfileWidgetState extends State<ProfileWidget> {
           (Route<dynamic> route) => false,
         );
       } catch (_) {}
+    }
+  }
+
+  Future<void> _handleDeleteAccount() async {
+    if (_deletingAccount) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('Delete account?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
+        content: Text(
+          'This will permanently delete your account and all related data. This action is irreversible. Are you sure you want to continue?',
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withAlpha((0.7 * 255).toInt())),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(c).pop(false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            onPressed: () => Navigator.of(c).pop(true),
+            child: const Text('Delete account'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _deletingAccount = true);
+
+    try {
+      final client = ApiClient();
+      final url = '$API_BASE_URL/api/users/me';
+      final token = await TokenStorage.getToken();
+      final headers = <String, String>{ 'Accept': 'application/json' };
+      if (token != null && token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
+
+      final resp = await client.safeDelete(url, headers: headers, context: context);
+      if (resp.ok) {
+        // Clear caches
+        _cachedProfileData = null;
+        _cachedArtisanData = null;
+        _isCacheStale = true;
+
+        // Ensure local logout/cleanup
+        try {
+          await AuthNotifier.instance.logout();
+        } catch (_) {}
+
+        // Notify user and navigate to splash/login
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text('Account deleted')));
+
+        try {
+          GoRouter.of(context).go(SplashScreenPage2Widget.routePath);
+        } catch (_) {
+          try {
+            Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => SplashScreenPage2Widget()), (r) => false);
+          } catch (_) {}
+        }
+      } else {
+        // safeDelete already shows a user-friendly message via ApiErrorHandler
+        if (resp.message.isNotEmpty) {
+          ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(resp.message)));
+        }
+      }
+    } catch (e) {
+      // Best-effort: show a simple error
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text('Unable to delete account. Please try again.')));
+    } finally {
+      if (mounted) setState(() => _deletingAccount = false);
     }
   }
 
@@ -601,6 +672,31 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                           ),
                         ),
 
+                        const SizedBox(height: 12),
+
+                        // Delete Account (danger)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(color: colorScheme.error),
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              onPressed: _handleDeleteAccount,
+                              child: _deletingAccount
+                                  ? SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.error),
+                                    )
+                                  : Text('Delete account', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: colorScheme.error, fontWeight: FontWeight.w600)),
+                            ),
+                          ),
+                        ),
+
                         const SizedBox(height: 40),
                       ],
                     ),
@@ -984,5 +1080,6 @@ class _ProfileMenuSection extends StatelessWidget {
     );
   }
 }
+
 
 

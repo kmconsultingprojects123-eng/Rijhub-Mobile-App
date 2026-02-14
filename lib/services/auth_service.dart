@@ -37,7 +37,7 @@ class AuthService {
         '┌──────────────────────────────────────────────────────────────────────────────');
     // ignore: avoid_print
     print('│ [API Request] POST $uri');
-    if (headers != null && headers.isNotEmpty) {
+    if (headers.isNotEmpty) {
       // ignore: avoid_print
       print('│ Headers:');
       // ignore: avoid_print
@@ -280,21 +280,20 @@ class AuthService {
         return {'success': true, 'data': body};
       }
 
-      if (status == 408)
-        return {
-          'success': false,
-          'error': {'message': 'Request timed out'}
-        };
-      if (status == 599)
-        return {
-          'success': false,
-          'error': {'message': 'Network error'}
-        };
+      // Map synthetic network/timeout responses to friendly errors so UI shows
+      // an actionable message instead of 'HTTP 599' or similar.
+      if (status == 408) return {'success': false, 'error': {'message': 'Request timed out', 'status': status}};
+      if (status == 599) return {'success': false, 'error': {'message': 'Network error', 'status': status}};
 
-      return {
-        'success': false,
-        'error': body ?? {'message': 'HTTP $status'}
-      };
+      // Include the HTTP status code in the returned error payload so callers
+      // can distinguish 'not found' (404) from 'invalid credentials' (401).
+      if (body is Map) {
+        final errMap = Map<String, dynamic>.from(body);
+        errMap['status'] = status;
+        return {'success': false, 'error': errMap};
+      }
+
+      return {'success': false, 'error': {'message': body != null ? body.toString() : 'HTTP $status', 'status': status}};
     } catch (e) {
       return {
         'success': false,
