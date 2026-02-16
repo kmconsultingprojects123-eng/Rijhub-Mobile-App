@@ -429,7 +429,7 @@ class _Splash2WidgetState extends State<Splash2Widget> {
                               ),
                               onPressed: _continueAsGuest,
                               child: Text(
-                                'CONTINUE AS GUESTs',
+                                'CONTINUE AS GUEST',
                                 style: TextStyle(
                                   fontSize: isSmallScreen ? 15 : 16,
                                   fontWeight: FontWeight.w700,
