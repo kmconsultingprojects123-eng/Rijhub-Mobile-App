@@ -18,6 +18,7 @@ import '../../services/token_storage.dart';
 import '../create_account2/create_account2_widget.dart';
 import '/main.dart';
 import '../../utils/navigation_utils.dart';
+import '../../utils/notification_permission_dialog.dart';
 export 'login_account_model.dart';
 
 class LoginAccountWidget extends StatefulWidget {
@@ -239,44 +240,23 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
     AppNotification.showSuccess(context, 'Logged in successfully');
     await Future.delayed(const Duration(milliseconds: 200));
 
-    // Try dismissing any pushed overlays (Navigator.push) that could be
-    // sitting on top of the GoRouter-managed stack. Pop up to a few times
-    // to recover from various push patterns used across the app.
-    try {
-      var popCount = 0;
-      while (Navigator.of(context).canPop() && popCount < 6) {
-        Navigator.of(context).pop();
-        popCount += 1;
-        await Future.delayed(const Duration(milliseconds: 40));
-      }
-    } catch (_) {}
-
-    // Allow router a short moment to process refreshListenable and redirect.
-    await Future.delayed(const Duration(milliseconds: 300));
-
+    // Show friendly notification permission dialog before navigating (Apple Guideline 4.5.4)
     if (!mounted) return;
-
-    // If the router did not navigate away (for example the login page was
-    // the current declarative location), fall back to role-based navigation.
-    try {
-      // Some versions of go_router don't expose a top-level `location` getter
-      // on the GoRouter object; inspect the routerDelegate configuration string
-      // instead which contains the current location information. This is the
-      // same approach used elsewhere in the project to avoid depending on
-      // package internals.
-      final router = GoRouter.of(context);
-      final dynamic cfg = router.routerDelegate.currentConfiguration;
-      final String cfgStr = cfg?.toString() ?? '';
-      if (cfgStr.startsWith(LoginAccountWidget.routePath) ||
-          cfgStr.contains(LoginAccountWidget.routePath)) {
-        // Imperative fallback to ensure user is taken to their landing page.
-        await _navigateBasedOnRole();
-      }
-    } catch (_) {
-      // As a last-resort fallback try the role-based navigator which has
-      // multiple fallback strategies.
-      await _navigateBasedOnRole();
+    var roleForDialog = parsedRole ?? '';
+    if (roleForDialog.isEmpty) {
+      final prof = AuthNotifier.instance.profile;
+      roleForDialog = (prof?['role'] ?? prof?['type'] ?? 'customer').toString();
     }
+    await showNotificationPermissionDialog(context, role: roleForDialog.isNotEmpty ? roleForDialog : 'customer');
+
+    // Do NOT pop the route stack here. When login is reached via Navigator.push
+    // (e.g. from create_account2 or splash_screen_page2), popping would pop back
+    // through create_account2 to splash, leaving the user on the splash screen
+    // instead of home. The GoRouter redirect also does not apply when login was
+    // pushed (GoRouter's location stays at the underlying route). Always use
+    // imperative role-based navigation to ensure the user reaches home/dashboard.
+    if (!mounted) return;
+    await _navigateBasedOnRole();
   }
 
   String? _extractToken(dynamic data) {
