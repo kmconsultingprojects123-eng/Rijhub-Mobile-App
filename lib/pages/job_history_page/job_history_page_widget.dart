@@ -712,9 +712,7 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                                 child: OutlinedButton(
                                   onPressed: () {
                                     try {
-                                      Navigator.of(context).push(MaterialPageRoute(
-                                        builder: (_) => JobDetailsPageWidget(job: job),
-                                      ));
+                                      NavigationUtils.safePush(context, JobDetailsPageWidget(job: job));
                                     } catch (_) {}
                                   },
                                   style: OutlinedButton.styleFrom(
@@ -849,9 +847,7 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                                 OutlinedButton(
                                   onPressed: () {
                                     try {
-                                      Navigator.of(context).push(MaterialPageRoute(
-                                        builder: (_) => JobDetailsPageWidget(job: job),
-                                      ));
+                                      NavigationUtils.safePush(context, JobDetailsPageWidget(job: job));
                                     } catch (_) {}
                                   },
                                   style: OutlinedButton.styleFrom(

@@ -95,7 +95,7 @@ class AuthService {
         print('│ [API Error] Exception for $uri: $e');
         // ignore: avoid_print
         print(
-            '└──────────────────────────────────────────────────────────────────────────────');
+            '└─────────────────────────────────────────────────────────────────��────────────');
         return http.Response(jsonEncode({'message': e.toString()}), 500);
       }
     }
@@ -164,6 +164,7 @@ class AuthService {
     required String password,
     String? phone,
     String? role,
+    bool persist = true,
   }) async {
     final uri = Uri.parse('$API_BASE_URL/api/auth/register');
 
@@ -205,7 +206,11 @@ class AuthService {
       final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
 
       if (status >= 200 && status < 300) {
-        await _persistTokenAndRole(body);
+        if (persist) {
+          try {
+            await _persistTokenAndRole(body);
+          } catch (_) {}
+        }
         return {'success': true, 'data': body};
       }
 
@@ -460,6 +465,179 @@ class AuthService {
       final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
 
       if (status >= 200 && status < 300) {
+        return {'success': true, 'data': body};
+      }
+
+      if (status == 408)
+        return {
+          'success': false,
+          'error': {'message': 'Request timed out'}
+        };
+      if (status == 599)
+        return {
+          'success': false,
+          'error': {'message': 'Network error'}
+        };
+
+      return {
+        'success': false,
+        'error': body ?? {'message': 'HTTP $status'}
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': {'message': e.toString()}
+      };
+    }
+  }
+
+  /// Verify an OTP code for a given email or phone and purpose.
+  ///
+  /// Endpoint: POST /api/auth/verify-otp
+  /// Body: { email?, phone?, otp }
+  static Future<Map<String, dynamic>> verifyOtp({
+    required String phone,
+    required String otp,
+    String purpose = 'registration',
+    bool persist = true,
+  }) async {
+    // Phone is required for phone-first verification
+    if (phone.isEmpty) {
+      return {
+        'success': false,
+        'error': {'message': 'Phone number is required to verify OTP.'}
+      };
+    }
+
+    final uri = Uri.parse('$API_BASE_URL/api/auth/verify-otp');
+    try {
+      final bodyPayload = <String, dynamic>{'otp': otp, 'purpose': purpose, 'phone': phone};
+      final resp = await _postWithRetries(uri,
+          body: bodyPayload,
+          timeoutSeconds: 15,
+          maxAttempts: 2);
+      final status = resp.statusCode;
+      final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
+
+      if (status >= 200 && status < 300) {
+        // Persist token/role if backend returned a token in standard shapes
+        if (persist) {
+          try {
+            await _persistTokenAndRole(body);
+          } catch (_) {}
+        }
+        return {'success': true, 'data': body};
+      }
+
+      if (status == 408)
+        return {
+          'success': false,
+          'error': {'message': 'Request timed out'}
+        };
+      if (status == 599)
+        return {
+          'success': false,
+          'error': {'message': 'Network error'}
+        };
+
+      return {
+        'success': false,
+        'error': body ?? {'message': 'HTTP $status'}
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': {'message': e.toString()}
+      };
+    }
+  }
+
+  /// Verify OTP using SendChamp provider reference.
+  ///
+  /// Endpoint: POST /api/auth/verify-sendchamp
+  /// Body: { email?, phone?, reference, otp }
+  /// Prefer `phone` when provided so phone-first verification (SMS) works.
+  static Future<Map<String, dynamic>> verifySendchamp({
+    String? email,
+    String? phone,
+    required String reference,
+    required String otp,
+    bool persist = true,
+  }) async {
+    final uri = Uri.parse('$API_BASE_URL/api/auth/verify-sendchamp');
+    try {
+      final bodyPayload = <String, dynamic>{
+        'reference': reference,
+        'otp': otp,
+      };
+      if (phone != null && phone.trim().isNotEmpty) {
+        bodyPayload['phone'] = phone.trim();
+      } else if (email != null && email.trim().isNotEmpty) {
+        bodyPayload['email'] = email.trim().toLowerCase();
+      }
+
+      final resp = await _postWithRetries(uri,
+          body: bodyPayload, timeoutSeconds: 15, maxAttempts: 2);
+      final status = resp.statusCode;
+      final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
+
+      if (status >= 200 && status < 300) {
+        if (persist) {
+          try {
+            await _persistTokenAndRole(body);
+          } catch (_) {}
+        }
+        return {'success': true, 'data': body};
+      }
+
+      if (status == 408)
+        return {
+          'success': false,
+          'error': {'message': 'Request timed out'}
+        };
+      if (status == 599)
+        return {
+          'success': false,
+          'error': {'message': 'Network error'}
+        };
+
+      return {
+        'success': false,
+        'error': body ?? {'message': 'HTTP $status'}
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': {'message': e.toString()}
+      };
+    }
+  }
+
+  /// Verify OTP using email as identifier (fallback when provider reference is not present).
+  ///
+  /// Endpoint: POST /api/auth/verify-otp
+  /// Body: { email, otp }
+  static Future<Map<String, dynamic>> verifyOtpByEmail({
+    required String email,
+    required String otp,
+    String purpose = 'registration',
+    bool persist = true,
+  }) async {
+    final uri = Uri.parse('$API_BASE_URL/api/auth/verify-otp');
+    try {
+      final normalizedEmail = email.trim().toLowerCase();
+      final bodyPayload = <String, dynamic>{'otp': otp, 'purpose': purpose, 'email': normalizedEmail};
+      final resp = await _postWithRetries(uri,
+          body: bodyPayload, timeoutSeconds: 15, maxAttempts: 2);
+      final status = resp.statusCode;
+      final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
+
+      if (status >= 200 && status < 300) {
+        if (persist) {
+          try {
+            await _persistTokenAndRole(body);
+          } catch (_) {}
+        }
         return {'success': true, 'data': body};
       }
 

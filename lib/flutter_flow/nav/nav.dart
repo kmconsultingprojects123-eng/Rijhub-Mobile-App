@@ -15,6 +15,7 @@ import '../../utils/auth_guard.dart';
 import '../../pages/booking_details/booking_details_widget.dart';
 import '../../state/auth_notifier.dart';
 import '../../state/app_state_notifier.dart';
+import '../../pages/verify_otp/verify_otp_widget.dart';
 
 export 'serialization_util.dart';
 export 'ff_navigation_adapters.dart';
@@ -52,6 +53,10 @@ GoRouter createRouter(AuthNotifier auth) {
               SplashScreenPage2Widget.routePath,
               LoginAccountWidget.routePath,
               CreateAccount2Widget.routePath,
+              VerifyOtpWidget.routePath,
+              // Allow the core verification page (where OTP is entered) so the
+              // app won't redirect to splash2 after register -> adapter navigation.
+              VerificationPageWidget.routePath,
               // Allow direct access to the forget password page without redirect
               ForgetPasswordWidget.routePath,
             };
@@ -60,8 +65,10 @@ GoRouter createRouter(AuthNotifier auth) {
             return Splash2Widget.routePath;
           }
 
-          // If authenticated, prevent navigating back to login/register routes
-          if (auth.isAuthenticated && (loc == LoginAccountWidget.routePath || loc == CreateAccount2Widget.routePath || loc == WelcomeAfterSignupWidget.routePath)) {
+          // If authenticated, prevent navigating back to login/register routes.
+          // NOTE: the WelcomeAfterSignup page must remain accessible right after
+          // a successful registration/verification, so we don't block it here.
+          if (auth.isAuthenticated && (loc == LoginAccountWidget.routePath || loc == CreateAccount2Widget.routePath)) {
             // Redirect to role-specific landing
             if (auth.status == AuthStatus.authenticatedArtisan) return ArtisanDashboardPageWidget.routePath;
             return HomePageWidget.routePath;
@@ -104,6 +111,16 @@ GoRouter createRouter(AuthNotifier auth) {
             path: LoginAccountWidget.routePath,
             requireNoAuth: true,
             builder: (context, params) => LoginAccountWidget(),
+          ),
+          FFRoute(
+            name: VerifyOtpWidget.routeName,
+            path: VerifyOtpWidget.routePath,
+            requireNoAuth: true,
+            builder: (context, params) => VerifyOtpWidget(
+              phone: params.getParam<String>('phone', ParamType.String),
+              reference: params.getParam<String>('reference', ParamType.String),
+              email: params.getParam<String>('email', ParamType.String),
+            ),
           ),
           FFRoute(
               name: ProfileWidget.routeName,
@@ -347,7 +364,8 @@ GoRouter createRouter(AuthNotifier auth) {
           FFRoute(
             name: WelcomeAfterSignupWidget.routeName,
             path: WelcomeAfterSignupWidget.routePath,
-            requireNoAuth: true,
+            // Do not mark this route as `requireNoAuth` so the welcome screen
+            // remains reachable immediately after successful verification.
             builder: (context, params) => WelcomeAfterSignupWidget(
               role: params.getParam<String>('role', ParamType.String),
             ),

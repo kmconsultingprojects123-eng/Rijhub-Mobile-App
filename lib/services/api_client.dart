@@ -4,6 +4,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
 
+String _redactToken(String? token) {
+  if (token == null || token.isEmpty) return '<missing>';
+  if (token.length <= 8) return '${token.substring(0, 2)}...';
+  return '${token.substring(0, 4)}...${token.substring(token.length - 4)}';
+}
+
 class ApiClient {
   // Internal helper: perform HTTP request with retries and timeout.
   // method: 'GET', 'POST', 'PUT'
@@ -91,7 +97,12 @@ class ApiClient {
   static Map<String, dynamic> _buildSuccessfulResult(http.Response resp) {
     Object? jsonBody;
     try {
-      if (resp.body.isNotEmpty) jsonBody = jsonDecode(resp.body);
+      if (resp.body.isNotEmpty) {
+        final parsed = jsonDecode(resp.body);
+        // If parsed is a Map, ensure it's a Map<String, dynamic>
+        if (parsed is Map) jsonBody = Map<String, dynamic>.from(parsed.cast<String, dynamic>());
+        else jsonBody = parsed;
+      }
     } catch (_) {
       jsonBody = null;
     }
@@ -107,7 +118,11 @@ class ApiClient {
     Object? jsonBody;
     String raw = resp.body;
     try {
-      if (raw.isNotEmpty) jsonBody = jsonDecode(raw);
+      if (raw.isNotEmpty) {
+        final parsed = jsonDecode(raw);
+        if (parsed is Map) jsonBody = Map<String, dynamic>.from(parsed.cast<String, dynamic>());
+        else jsonBody = parsed;
+      }
     } catch (_) {
       jsonBody = null;
     }
@@ -226,6 +241,8 @@ class ApiClient {
   static Future<Map<String, dynamic>> get(String url,
       {Map<String, String>? headers}) async {
     final token = await TokenStorage.getToken();
+    // Redacted token presence for debugging
+    try { print('ApiClient.get token: ${_redactToken(token)}'); } catch (_) {}
     final merged = {
       if (headers != null) ...headers,
       if (token != null) 'Authorization': 'Bearer $token',
@@ -241,6 +258,7 @@ class ApiClient {
   static Future<Map<String, dynamic>> post(String url,
       {Map<String, String>? headers, Object? body}) async {
     final token = await TokenStorage.getToken();
+    try { print('ApiClient.post token: ${_redactToken(token)}'); } catch (_) {}
     final merged = {
       if (headers != null) ...headers,
       if (token != null) 'Authorization': 'Bearer $token',
@@ -264,6 +282,7 @@ class ApiClient {
   static Future<Map<String, dynamic>> put(String url,
       {Map<String, String>? headers, Object? body}) async {
     final token = await TokenStorage.getToken();
+    try { print('ApiClient.put token: ${_redactToken(token)}'); } catch (_) {}
     final merged = {
       if (headers != null) ...headers,
       if (token != null) 'Authorization': 'Bearer $token',
@@ -294,6 +313,7 @@ class ApiClient {
       Map<String, List<String>>? fileMap,
       String method = 'POST'}) async {
     final token = await TokenStorage.getToken();
+    try { print('ApiClient.postMultipart token: ${_redactToken(token)}'); } catch (_) {}
     final merged = {
       if (headers != null) ...headers,
       if (token != null) 'Authorization': 'Bearer $token',

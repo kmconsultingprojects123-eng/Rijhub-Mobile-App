@@ -14,7 +14,6 @@ import '../../utils/app_notification.dart';
 import '../login_account/login_account_widget.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/foundation.dart';
-import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '/index.dart';
 import '../../services/flow_guard.dart';
@@ -26,11 +25,41 @@ import '/main.dart';
 // simplified compared to the original to remove parser-sensitivity
 // and ensure in-app webview is reachable via a dialog fallback.
 
-// Helper: normalize base URL for API calls
+// Helper: normalize base URL for API calls (robust against malformed input like 'https:/example.com')
 String _normalizeBaseUrl(String raw) {
-  var base = raw.trim();
+  var base = raw?.toString() ?? '';
+  base = base.trim();
   if (base.isEmpty) return '';
-  if (!base.startsWith(RegExp(r'https?://'))) base = 'https://$base';
+
+  // Fix common malformed schemes like 'http:/example.com' or 'https:/example.com'
+  if (base.startsWith('http:/') && !base.startsWith('http://')) base = base.replaceFirst('http:/', 'http://');
+  if (base.startsWith('https:/') && !base.startsWith('https://')) base = base.replaceFirst('https:/', 'https://');
+
+  // If scheme missing, prepend https://
+  if (!RegExp(r'^https?://', caseSensitive: false).hasMatch(base)) base = 'https://$base';
+
+  // Collapse repeated scheme prefixes like 'https://https://example.com'
+  try {
+    final m = RegExp(r'^(https?://)+', caseSensitive: false).firstMatch(base);
+    if (m != null) {
+      final prefix = m.group(0) ?? '';
+      if (base.toLowerCase().startsWith('https')) base = base.replaceFirst(prefix, 'https://');
+      else base = base.replaceFirst(prefix, 'http://');
+    }
+  } catch (_) {}
+
+  // Normalize duplicate slashes after scheme
+  try {
+    final parts = base.split('://');
+    if (parts.length >= 2) {
+      final scheme = parts[0];
+      var rest = parts.sublist(1).join('://');
+      rest = rest.replaceAll(RegExp(r'/{2,}'), '/');
+      base = '$scheme://$rest';
+    }
+  } catch (_) {}
+
+  // Remove trailing slashes
   base = base.replaceAll(RegExp(r'/+$'), '');
   return base;
 }
@@ -63,12 +92,17 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
   // (like artisanId) later when creating the booking after payment verification.
   Map<String, dynamic>? _initRequestPayload;
 
-  @override
-  void initState() {
+    @override
+    void initState() {
     super.initState();
+    // Debug: log incoming payload to help diagnose why navigation from the hire sheet may not be receiving a payment node
+    if (kDebugMode) {
+      try { debugPrint('PaymentInitPageWidget received payment: ${jsonEncode(widget.payment)}'); } catch (_) {}
+      try { debugPrint('PaymentInitPageWidget received booking: ${jsonEncode(widget.booking)}'); } catch (_) {}
+    }
     _resolveInitialData();
     _populateEmail();
-  }
+    }
 
   // Use a slightly longer timeout for payment-related network calls; webhooks and gateway
   // verifications can sometimes be slow, so 30s avoids premature failures.
@@ -124,6 +158,24 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
       if (amount is num && amount >= 100000 && !(payment['currency'] != null)) {
         // probably kobo -> divide by 100
         amount = amount / 100;
+      }
+    } catch (_) {}
+
+    // Prefer explicit clientTotal passed via payment metadata or booking object (set by caller)
+    try {
+      final meta = payment['metadata'];
+      if (meta is Map && meta['clientTotal'] != null) {
+        var ct = meta['clientTotal'];
+        if (ct is String) ct = num.tryParse(ct.replaceAll(RegExp(r'[^0-9.-]'), '')) ?? ct;
+        if (ct is num) amount = ct;
+      }
+    } catch (_) {}
+    try {
+      final bct = widget.booking?['clientTotal'];
+      if (bct != null) {
+        var ct = bct;
+        if (ct is String) ct = num.tryParse(ct.replaceAll(RegExp(r'[^0-9.-]'), '')) ?? ct;
+        if (ct is num) amount = ct;
       }
     } catch (_) {}
     _amount = amount;
@@ -1116,11 +1168,19 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
 
       try { final qid = widget.quote?['_id'] ?? widget.payment['quoteId'] ?? widget.payment['quote']?['_id']; if (qid != null) body['acceptedQuote'] = qid; } catch (_) {}
 
+      // Extract services from payload
+      try {
+        final services = _extractPayloadServices();
+        if (services != null && services.isNotEmpty) body['services'] = services;
+      } catch (e) {
+        if (kDebugMode) debugPrint('Error extracting services for booking: $e');
+      }
+
       if (kDebugMode) debugPrint('Create booking payload: ' + jsonEncode(body));
 
       final uri = Uri.parse('${_normalizeBaseUrl(API_BASE_URL)}/api/bookings/hire');
       var resp = await http.post(uri, headers: headers, body: jsonEncode(body)).timeout(const Duration(seconds: 12));
-      if (kDebugMode) debugPrint('Create booking after payment -> status=${resp.statusCode}, body=${resp.body}');
+      if (kDebugMode) debugPrint('Create booking after payment -> status=${resp.statusCode}');
       if (resp.statusCode >= 200 && resp.statusCode < 300 && resp.body.isNotEmpty) {
         try {
           final decoded = jsonDecode(resp.body);
@@ -1166,6 +1226,29 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
     } catch (e) {
       if (kDebugMode) debugPrint('Create booking error: $e');
     }
+    return null;
+  }
+
+  // Try to extract services list from known payload locations for booking creation
+  List<dynamic>? _extractPayloadServices() {
+    try {
+      final p = widget.payment;
+      if (p is Map) {
+        final meta = p['metadata'];
+        if (meta is Map && meta['services'] is List) return meta['services'] as List<dynamic>;
+        if (p['services'] is List) return p['services'] as List<dynamic>;
+      }
+    } catch (_) {}
+    try {
+      if (widget.booking != null && widget.booking!['services'] is List) return widget.booking!['services'] as List<dynamic>;
+    } catch (_) {}
+    try {
+      if (_initRequestPayload != null) {
+        final meta = _initRequestPayload!['metadata'];
+        if (meta is Map && meta['services'] is List) return meta['services'] as List<dynamic>;
+        if (_initRequestPayload!['services'] is List) return _initRequestPayload!['services'] as List<dynamic>;
+      }
+    } catch (_) {}
     return null;
   }
 
@@ -1526,7 +1609,28 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final serviceTitle = widget.booking?['service'] ?? widget.quote?['title'] ?? widget.payment['service'] ?? 'Service';
+    // Extract selected services list from payment metadata or booking (set upstream by caller)
+    final List<dynamic> selectedServices = (widget.payment['metadata'] is Map ? (widget.payment['metadata']['services'] ?? widget.payment['services']) : (widget.payment['services'] ?? [])) as List<dynamic>? ?? (widget.booking?['services'] as List<dynamic>?) ?? <dynamic>[];
+
+    // Friendly title: if single service provided as string or object use that; otherwise generic
+    String serviceTitle;
+    try {
+      if (selectedServices.isNotEmpty) {
+        if (selectedServices.length == 1) {
+          final s = selectedServices.first;
+          serviceTitle = (s is Map) ? (s['name'] ?? s['serviceName'] ?? s['title'] ?? s['label'] ?? 'Service') : s.toString();
+        } else {
+          serviceTitle = '${selectedServices.length} services';
+        }
+      } else {
+        serviceTitle = widget.booking?['service'] ?? widget.quote?['title'] ?? widget.payment['service'] ?? 'Service';
+      }
+    } catch (_) {
+      serviceTitle = widget.booking?['service'] ?? widget.quote?['title'] ?? widget.payment['service'] ?? 'Service';
+    }
+
+    final serviceSubtitle = widget.booking?['serviceDetail'] ?? widget.quote?['description'] ?? widget.payment['description'] ?? '';
+
     return WillPopScope(
       onWillPop: () async => !_blocking,
       child: Scaffold(
@@ -1548,12 +1652,44 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
                   decoration: BoxDecoration(color: FlutterFlowTheme.of(context).secondaryBackground, borderRadius: BorderRadius.circular(8), border: Border.all(color: FlutterFlowTheme.of(context).alternate.withAlpha(50))),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(serviceTitle.toString(), style: FlutterFlowTheme.of(context).titleMedium.copyWith(fontWeight: FontWeight.w700)),
+                    if (serviceSubtitle.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(serviceSubtitle, style: FlutterFlowTheme.of(context).bodySmall.copyWith(color: FlutterFlowTheme.of(context).secondaryText)),
+                    ],
                     const SizedBox(height: 8),
                     Text('Amount', style: FlutterFlowTheme.of(context).bodySmall.copyWith(color: FlutterFlowTheme.of(context).secondaryText)),
                     const SizedBox(height: 6),
                     Text(_displayAmount(_amount), style: FlutterFlowTheme.of(context).titleLarge.copyWith(fontWeight: FontWeight.w800, color: FlutterFlowTheme.of(context).primary)),
-                  ]),
-                ),
+                    const SizedBox(height: 12),
+                    if (selectedServices.isNotEmpty)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 6),
+                          Text('Selected services', style: FlutterFlowTheme.of(context).bodySmall.copyWith(color: FlutterFlowTheme.of(context).secondaryText)),
+                          const SizedBox(height: 8),
+                          ...selectedServices.map((s) {
+                            try {
+                              final name = (s is Map) ? (s['name'] ?? s['serviceName'] ?? s['title'] ?? s['label'] ?? '').toString() : s.toString();
+                              final price = (s is Map) ? (s['price'] ?? s['amount'] ?? s['unitPrice'] ?? 0) : null;
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 6.0, bottom: 6.0),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Flexible(child: Text(name, style: FlutterFlowTheme.of(context).bodyMedium)),
+                                    if (price != null) Text(_displayAmount(price), style: FlutterFlowTheme.of(context).bodyMedium.copyWith(fontWeight: FontWeight.w600)),
+                                  ],
+                                ),
+                              );
+                            } catch (_) {
+                              return const SizedBox.shrink();
+                            }
+                          }).toList(),
+                        ],
+                      ),
+                   ]),
+                 ),
                 const Spacer(),
                 Text('Payments are processed securely.', style: FlutterFlowTheme.of(context).bodySmall.copyWith(color: FlutterFlowTheme.of(context).secondaryText)),
                 const SizedBox(height: 12),

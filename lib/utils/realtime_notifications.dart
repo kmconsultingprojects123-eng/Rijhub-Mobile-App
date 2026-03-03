@@ -28,6 +28,10 @@ class RealtimeNotifications {
   bool initialized = false;
   bool _connecting = false;
 
+  // Bound AppStateNotifier and listener so we don't register duplicate listeners
+  AppStateNotifier? _boundAppState;
+  VoidCallback? _authListener;
+
   RealtimeNotifications._();
 
   // Internal logger: only logs in debug builds to avoid noisy production logs.
@@ -36,7 +40,12 @@ class RealtimeNotifications {
   }
 
   /// Initialize the notifications subsystem.
-  Future<void> init() async {
+  ///
+  /// Optionally pass an [appState] to bind to; otherwise falls back to
+  /// reading persisted token from TokenStorage. Binding to AppStateNotifier
+  /// allows the service to react to auth changes without reaching into the
+  /// global singleton directly and avoids duplicate listener registration.
+  Future<void> init({AppStateNotifier? appState}) async {
     if (initialized || _connecting) return;
     _connecting = true;
     try {
@@ -45,6 +54,8 @@ class RealtimeNotifications {
       if (token == null || token.isEmpty) {
         _log('RealtimeNotifications: no token');
         _connecting = false;
+        // still set initialized so future explicit binds can attach listener
+        initialized = true;
         return;
       }
 
@@ -57,22 +68,42 @@ class RealtimeNotifications {
         _log('init token check failed: $e');
       }
 
-      // React to auth changes
-      AppStateNotifier.instance.addListener(() async {
-        try {
-          final t = AppStateNotifier.instance.token;
-          if (t != null && t.isNotEmpty) {
-            if (_socket == null || !_socket!.connected) connect(t);
-          } else {
-            await disconnect();
+      // Bind to provided appState (or fallback to singleton) but ensure we
+      // only add a single listener. We store the listener and remove it on
+      // disconnect to avoid duplicate subscriptions.
+      _boundAppState = appState ?? AppStateNotifier.instance;
+      if (_authListener == null) {
+        _authListener = () async {
+          try {
+            final t = _boundAppState?.token ?? await TokenStorage.getToken();
+            if (t != null && t.isNotEmpty) {
+              if (_socket == null || !_socket!.connected) connect(t);
+            } else {
+              await disconnect();
+            }
+          } catch (e) {
+            _log('auth-change listener failed: $e');
           }
-        } catch (e) {
-          _log('auth-change listener failed: $e');
-        }
-      });
+        };
+        try {
+          _boundAppState?.addListener(_authListener!);
+        } catch (_) {}
+      }
     } finally {
       _connecting = false;
     }
+  }
+
+  /// Disconnect the bound AppState listener (if any). Call this before
+  /// disposing or when you explicitly want to stop reacting to auth changes.
+  void unbindAppState() {
+    try {
+      if (_authListener != null && _boundAppState != null) {
+        _boundAppState?.removeListener(_authListener!);
+      }
+    } catch (_) {}
+    _authListener = null;
+    _boundAppState = null;
   }
 
   /// Connect using [token].
@@ -138,9 +169,10 @@ class RealtimeNotifications {
           'socket options: auth present, query token included${SOCKET_PATH.isNotEmpty ? ', path=$SOCKET_PATH' : ''}');
       _socket = io.io(socketUrl, options);
 
+      // onConnect: join per-user rooms and notify listeners that we're connected
       _socket!.onConnect((_) {
         try {
-          final profile = AppStateNotifier.instance.profile;
+          final profile = _boundAppState?.profile ?? AppStateNotifier.instance.profile;
           final myId = (profile?['_id'] ?? profile?['id'] ?? profile?['userId'])
               ?.toString();
           if (myId != null && myId.isNotEmpty) {
@@ -157,6 +189,10 @@ class RealtimeNotifications {
         } catch (_) {
           _log('socket connected');
         }
+        // Notify listeners via events stream once on connect
+        try {
+          _eventsController.add({'event': 'connected'});
+        } catch (_) {}
         _connecting = false;
       });
 
@@ -192,13 +228,6 @@ class RealtimeNotifications {
         }
       });
 
-      _socket!.onReconnect((attempt) {
-        _log('reconnected after $attempt attempts');
-      });
-
-      _socket!.onReconnectAttempt((attempt) {
-        _log('reconnect attempt $attempt');
-      });
       _socket!.on('reconnect_failed', (err) {
         _log('reconnect_failed: $err');
       });
@@ -212,7 +241,7 @@ class RealtimeNotifications {
 
           // Update unread count if targeted
           try {
-            final profile = AppStateNotifier.instance.profile;
+            final profile = _boundAppState?.profile ?? AppStateNotifier.instance.profile;
             final myId =
                 (profile?['_id'] ?? profile?['id'] ?? profile?['userId'])
                     ?.toString();
@@ -226,8 +255,8 @@ class RealtimeNotifications {
               if (targetId == null ||
                   targetId == myId ||
                   (payload is Map && payload['broadcast'] == true)) {
-                final current = AppStateNotifier.instance.unreadNotifications;
-                AppStateNotifier.instance.setUnreadNotifications(current + 1);
+                final current = (_boundAppState?.unreadNotifications) ?? AppStateNotifier.instance.unreadNotifications;
+                (_boundAppState ?? AppStateNotifier.instance).setUnreadNotifications(current + 1);
               }
             }
           } catch (_) {}
@@ -269,7 +298,8 @@ class RealtimeNotifications {
         'booking_closed',
         'chat_closed',
         'typing',
-        'read'
+        'read',
+        'presence', // ensure presence is handled here (was previously added inside a connect handler)
       ]) {
         _socket!.on(ev, (data) => _forwardEvent(ev, data));
       }
@@ -285,7 +315,7 @@ class RealtimeNotifications {
         if (reason == 'io server disconnect') {
           _log('server requested disconnect; attempting refreshAuth');
           try {
-            await AppStateNotifier.instance.refreshAuth();
+            await (_boundAppState ?? AppStateNotifier.instance).refreshAuth();
           } catch (e) {
             _log('refreshAuth failed: $e');
           }
@@ -321,32 +351,6 @@ class RealtimeNotifications {
         });
       });
 
-      // Register standard event handlers
-      _socket?.on('connect', (_) {
-        _log('RealtimeNotifications: connected');
-        _eventsController.add({'event': 'connected'});
-        // listen for typing and presence events from server
-        try {
-          _socket?.on('typing', (payload) {
-            try {
-              final p = (payload is Map)
-                  ? Map<String, dynamic>.from(payload)
-                  : (payload as dynamic);
-              _log('RealtimeNotifications: received typing $p');
-              _eventsController.add({'event': 'typing', 'payload': p});
-            } catch (e) {}
-          });
-          _socket?.on('presence', (payload) {
-            try {
-              final p = (payload is Map)
-                  ? Map<String, dynamic>.from(payload)
-                  : (payload as dynamic);
-              _log('RealtimeNotifications: received presence $p');
-              _eventsController.add({'event': 'presence', 'payload': p});
-            } catch (e) {}
-          });
-        } catch (_) {}
-      });
 
       _socket!.connect();
     } catch (e) {

@@ -12,6 +12,9 @@ import '../../api_config.dart';
 import '../../services/artist_service.dart';
 import '/main.dart';
 import '../../state/auth_notifier.dart';
+import '../../services/navigation_service.dart';
+import './verification_page.dart';
+import 'my_service_page.dart';
 export 'profile_model.dart';
 
 class ProfileWidget extends StatefulWidget {
@@ -165,13 +168,18 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     try {
       GoRouter.of(context).go(SplashScreenPage2Widget.routePath);
     } catch (_) {
-      // As a last resort, fall back to Navigator replacement
+      // As a last resort, use NavigationService to perform a router-aware replace
       try {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => SplashScreenPage2Widget()),
-          (Route<dynamic> route) => false,
-        );
-      } catch (_) {}
+        await NavigationService.instance.go(context, SplashScreenPage2Widget.routePath);
+      } catch (_) {
+        // Final fallback to imperative Navigator replacement
+        try {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => SplashScreenPage2Widget()),
+            (Route<dynamic> route) => false,
+          );
+        } catch (_) {}
+      }
     }
   }
 
@@ -227,8 +235,12 @@ class _ProfileWidgetState extends State<ProfileWidget> {
           GoRouter.of(context).go(SplashScreenPage2Widget.routePath);
         } catch (_) {
           try {
-            Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => SplashScreenPage2Widget()), (r) => false);
-          } catch (_) {}
+            await NavigationService.instance.go(context, SplashScreenPage2Widget.routePath);
+          } catch (_) {
+            try {
+              Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => SplashScreenPage2Widget()), (r) => false);
+            } catch (_) {}
+          }
         }
       } else {
         // safeDelete already shows a user-friendly message via ApiErrorHandler
@@ -244,17 +256,21 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     }
   }
 
-  // Validate candidate URL/path before using Image.network
-  bool _isValidHttpUrl(String? url) {
+    // Validate candidate URL/path before using Image.network
+    bool _isValidHttpUrl(String? url) {
     if (url == null) return false;
     final s = url.trim();
     if (s.isEmpty) return false;
     final lower = s.toLowerCase();
+    // Accept absolute http(s) URLs
     if (lower.startsWith('http://') || lower.startsWith('https://')) return true;
+    // Accept protocol-relative URLs (e.g. //example.com/path) — will resolve in network contexts
     if (lower.startsWith('//')) return true;
-    if (s.startsWith('/')) return true;
+    // Accept data URIs for inline images
+    if (lower.startsWith('data:image/')) return true;
+    // Do NOT treat local filesystem paths (starting with '/') as network URLs for Image.network
     return false;
-  }
+    }
 
   Future<void> _loadProfile() async {
     if (!mounted || _isLoading) return;
@@ -419,6 +435,9 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
+
+    // Determine if current user is considered an artisan for UI purposes
+    final bool _isArtisanUser = (artisanVerified == true) || (_cachedArtisanData != null && _cachedArtisanData!.isNotEmpty);
 
     // Ensure this page is inside NavBarPage so the bottom navigation shows.
     // Only redirect automatically when the current router location actually
@@ -640,6 +659,27 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                               } catch (_) {}
                             }
                           },
+                          onVerification: () {
+                            try {
+                              NavigationUtils.safePush(context, const VerificationPage());
+                              return;
+                            } catch (e) {
+                              try { Navigator.of(context).push(MaterialPageRoute(builder: (_) => const VerificationPage())); return; } catch (_) {}
+                            }
+                          },
+                          onMyService: _isArtisanUser
+                               ? () {
+                                   try {
+                                     NavigationUtils.safePush(context, const MyServicePageWidget());
+                                     return;
+                                   } catch (e) {
+                                     try {
+                                       GoRouter.of(context).pushNamed(MyServicePageWidget.routeName);
+                                       return;
+                                     } catch (_) {}
+                                   }
+                                 }
+                               : null,
                           theme: theme,
                           colorScheme: colorScheme,
                         ),
@@ -992,6 +1032,8 @@ class _ProfileMenuSection extends StatelessWidget {
   final VoidCallback onWallet;
   final VoidCallback onHelpSupport;
   final VoidCallback onAboutUs;
+  final VoidCallback onVerification;
+  final VoidCallback? onMyService;
   final ThemeData theme;
   final ColorScheme colorScheme;
 
@@ -1001,6 +1043,8 @@ class _ProfileMenuSection extends StatelessWidget {
     required this.onWallet,
     required this.onHelpSupport,
     required this.onAboutUs,
+    required this.onVerification,
+    this.onMyService,
     required this.theme,
     required this.colorScheme,
   });
@@ -1054,6 +1098,14 @@ class _ProfileMenuSection extends StatelessWidget {
                   onTap: onMyJobs,
                 ),
                 const Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Divider(height: 1)),
+                if (onMyService != null) const Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Divider(height: 1)),
+                if (onMyService != null)
+                  _buildMenuItem(
+                    icon: Icons.room_service_outlined,
+                    title: 'My service',
+                    onTap: onMyService!,
+                  ),
+                const Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Divider(height: 1)),
                 _buildMenuItem(
                   icon: Icons.account_balance_wallet_outlined,
                   title: 'Wallet',
@@ -1061,15 +1113,40 @@ class _ProfileMenuSection extends StatelessWidget {
                 ),
                 const Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Divider(height: 1)),
                 _buildMenuItem(
-                  icon: Icons.help_outline,
-                  title: 'Help & Support',
-                  onTap: onHelpSupport,
+                  icon: Icons.verified_user_outlined,
+                  title: 'Verification',
+                  onTap: onVerification,
                 ),
-                const Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Divider(height: 1)),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        const Padding(
+          padding: EdgeInsets.only(left: 16.0, bottom: 12),
+          child: Text('INFO', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 1.0)),
+        ),
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: colorScheme.onSurface.withAlpha((0.1 * 255).toInt()), width: 1),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 8.0),
+            child: Column(
+              children: [
                 _buildMenuItem(
                   icon: Icons.info_outline,
                   title: 'About Us',
                   onTap: onAboutUs,
+                ),
+                const Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Divider(height: 1)),
+                _buildMenuItem(
+                  icon: Icons.help_outline,
+                  title: 'Help & Support',
+                  onTap: onHelpSupport,
                 ),
                 const SizedBox(height: 8),
               ],
@@ -1080,6 +1157,8 @@ class _ProfileMenuSection extends StatelessWidget {
     );
   }
 }
+
+
 
 
 

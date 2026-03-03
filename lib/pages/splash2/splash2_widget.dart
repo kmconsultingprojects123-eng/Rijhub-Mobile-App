@@ -94,9 +94,12 @@ class _Splash2WidgetState extends State<Splash2Widget> {
           try {
             await AuthNotifier.instance.setProfile(userProfile);
           } catch (_) {}
+
+          // Use setter to persist token and notify listeners instead of direct field assignment
           try {
-            AppStateNotifier.instance.token = token;
+            await AppStateNotifier.instance.setToken(token);
           } catch (_) {}
+
           try {
             AppStateNotifier.instance.setProfile(userProfile);
           } catch (_) {}

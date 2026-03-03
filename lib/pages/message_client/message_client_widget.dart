@@ -326,8 +326,12 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
     _model.textFieldFocusNode?.removeListener(_handleFocusChange);
     _messagesScrollController.dispose();
     _model.dispose();
-    _rnSub?.cancel();
-    _rnSub = null;
+
+    // Cancel realtime subscriptions to avoid leaks / duplicate handlers
+    try { _rnSub?.cancel(); _rnSub = null; } catch (_) {}
+    try { _rnDebugSub?.cancel(); _rnDebugSub = null; } catch (_) {}
+    try { _rnEventSub?.cancel(); _rnEventSub = null; } catch (_) {}
+
     super.dispose();
   }
 

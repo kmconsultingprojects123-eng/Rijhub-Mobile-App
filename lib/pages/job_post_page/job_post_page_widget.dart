@@ -13,6 +13,7 @@ import '../artisan_jobs_history/artisan_jobs_history_widget.dart';
 import 'dart:async';
 import '../../utils/navigation_utils.dart';
 import '/main.dart';
+import '../../services/navigation_service.dart';
 export 'job_post_page_model.dart';
 
 /// Create a page where list of posted jobs can been seen then artisan can
@@ -94,16 +95,20 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
           try {
             GoRouter.of(context).go(SplashScreenPage2Widget.routePath);
           } catch (_) {
-            if (appNavigatorKey.currentState != null) {
-              appNavigatorKey.currentState!.pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => SplashScreenPage2Widget()),
-                    (Route<dynamic> route) => false,
-              );
-            } else {
-              Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => SplashScreenPage2Widget()),
-                    (Route<dynamic> route) => false,
-              );
+            try {
+              await NavigationService.instance.go(context, SplashScreenPage2Widget.routePath);
+            } catch (_) {
+              if (appNavigatorKey.currentState != null) {
+                appNavigatorKey.currentState!.pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => SplashScreenPage2Widget()),
+                      (Route<dynamic> route) => false,
+                );
+              } else {
+                Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => SplashScreenPage2Widget()),
+                      (Route<dynamic> route) => false,
+                );
+              }
             }
           }
           return;
@@ -118,16 +123,20 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
         }
       } catch (_) {
         if (!mounted) return;
-        if (appNavigatorKey.currentState != null) {
-          appNavigatorKey.currentState!.pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => SplashScreenPage2Widget()),
-                (Route<dynamic> route) => false,
-          );
-        } else {
-          Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => SplashScreenPage2Widget()),
-                (Route<dynamic> route) => false,
-          );
+        try {
+          await NavigationService.instance.go(context, SplashScreenPage2Widget.routePath);
+        } catch (_) {
+          if (appNavigatorKey.currentState != null) {
+            appNavigatorKey.currentState!.pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => SplashScreenPage2Widget()),
+                  (Route<dynamic> route) => false,
+            );
+          } else {
+            Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => SplashScreenPage2Widget()),
+                  (Route<dynamic> route) => false,
+            );
+          }
         }
         return;
       }
@@ -522,11 +531,12 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                                         await NavigationUtils.safePush(context, JobHistoryPageWidget());
                                       }
                                     } catch (_) {
+                                      // final fallback: try GoRouter directly
                                       try {
                                         if (_isArtisan) {
-                                          await Navigator.of(context).push(MaterialPageRoute(builder: (_) => ArtisanJobsHistoryWidget()));
+                                          GoRouter.of(context).pushNamed(ArtisanJobsHistoryWidget.routeName);
                                         } else {
-                                          await Navigator.of(context).push(MaterialPageRoute(builder: (_) => JobHistoryPageWidget()));
+                                          GoRouter.of(context).pushNamed(JobHistoryPageWidget.routeName);
                                         }
                                       } catch (_) {}
                                     }
@@ -665,7 +675,7 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                               await NavigationUtils.safePush(context, JobDetailsPageWidget(job: job));
                             } catch (_) {
                               try {
-                                await Navigator.of(context).push(MaterialPageRoute(builder: (_) => JobDetailsPageWidget(job: job)));
+                                GoRouter.of(context).push(JobDetailsPageWidget.routePath);
                               } catch (_) {}
                             }
                           },

@@ -117,6 +117,135 @@ class _ArtisanCompleteProfileWidgetState extends State<ArtisanCompleteProfileWid
     super.dispose();
   }
 
+  // Helper to apply a profile map into the local draft and form controllers.
+  // Used after a successful create/update so the user can immediately edit
+  // the just-saved profile with prefilled values.
+  void _applyProfileToDraft(Map<String, dynamic>? p) {
+    if (p == null) return;
+    try {
+      // Merge into draft store so subsequent saves include server-returned keys
+      _draftProfile.addAll(p);
+
+      String? pickFirstString(List<dynamic> candidates) {
+        for (final c in candidates) {
+          if (c == null) continue;
+          try {
+            final s = c.toString();
+            if (s.isNotEmpty) return s;
+          } catch (_) {}
+        }
+        return null;
+      }
+
+      // Name
+      final name = pickFirstString([
+        p['user']?['name'],
+        p['artisanAuthDetails']?['name'],
+        p['name'],
+        p['fullName']
+      ]);
+      if (name != null) _nameCtrl.text = name;
+
+      // Email
+      final email = pickFirstString([
+        p['user']?['email'],
+        p['email']
+      ]);
+      if (email != null) _emailCtrl.text = email;
+
+      // Phone
+      final phone = pickFirstString([
+        p['user']?['phone'],
+        p['phone']
+      ]);
+      if (phone != null) _phoneCtrl.text = phone;
+
+      // Bio
+      try {
+        if (p['bio'] != null && p['bio'].toString().trim().isNotEmpty) _bioCtrl.text = p['bio'].toString();
+      } catch (_) {}
+
+      // Trade / services
+      try {
+        if (p['trade'] is String) _tradeCtrl.text = p['trade'] as String;
+        else if (p['trade'] is List && (p['trade'] as List).isNotEmpty) _tradeCtrl.text = (p['trade'] as List).join(', ');
+      } catch (_) {}
+
+      // Pricing fields
+      try { if (p['perJob'] != null) _perJobCtrl.text = p['perJob'].toString(); } catch (_) {}
+      try { if (p['perHour'] != null) _perHourCtrl.text = p['perHour'].toString(); } catch (_) {}
+      try { if (p['experience'] != null) _expCtrl.text = p['experience'].toString(); } catch (_) {}
+
+      // Service area / coords/radius
+      try {
+        if (p['serviceArea'] is Map) {
+          final sa = Map<String, dynamic>.from(p['serviceArea']);
+          if (sa['address'] != null) _locationCtrl.text = sa['address'].toString();
+          if (sa['coordinates'] is List && (sa['coordinates'] as List).length >= 2) {
+            final lon = sa['coordinates'][0];
+            final lat = sa['coordinates'][1];
+            _coordsCtrl.text = '${lat ?? ''},${lon ?? ''}';
+          }
+          if (sa['radiusKm'] != null) _radiusCtrl.text = sa['radiusKm'].toString();
+        }
+      } catch (_) {}
+
+      // Portfolio
+      try {
+        _portfolioItems.clear();
+        if (p['portfolio'] is List) {
+          for (final item in p['portfolio']) {
+            if (item is Map) {
+              final images = <String>[];
+              try { if (item['images'] is List) images.addAll((item['images'] as List).where((e) => e != null).map((e) => e.toString())); } catch (_) {}
+              _portfolioItems.add({'title': (item['title'] ?? '').toString(), 'imageUrl': images.isNotEmpty ? images.first : null});
+            }
+          }
+        }
+      } catch (_) {}
+
+      // Certifications
+      try {
+        _certItems.clear();
+        if (p['certifications'] is List) {
+          for (final c in p['certifications']) {
+            if (c is String && c.isNotEmpty) _certItems.add({'name': c, 'fileUrl': null});
+            else if (c is Map) _certItems.add({'name': (c['name'] ?? '').toString(), 'fileUrl': c['fileUrl'] ?? c['url']});
+          }
+        }
+      } catch (_) {}
+
+      // Services list
+      try {
+        _serviceItems.clear();
+        if (p['services'] is List) _serviceItems.addAll((p['services'] as List).where((e) => e != null).map((e) => e.toString()));
+      } catch (_) {}
+
+      // Availability
+      try {
+        _availabilityItems.clear();
+        if (p['availability'] is List) {
+          for (final a in p['availability']) {
+            if (a is String) {
+              _availabilityItems.add({'day': a, 'start': '', 'end': ''});
+            } else if (a is Map) {
+              _availabilityItems.add({
+                'day': (a['day'] ?? '').toString(),
+                'start': (a['start'] ?? '').toString(),
+                'end': (a['end'] ?? '').toString(),
+              });
+            }
+          }
+        }
+      } catch (_) {}
+
+      // Ensure UI reflects changes
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (kDebugMode) debugPrint('Failed to apply profile to draft: $e');
+    }
+  }
+
   // Modern, theme-aware input decoration with improved styling
   InputDecoration _inputDecoration(BuildContext ctx, String label,
       {IconData? prefixIcon, Widget? suffixIcon}) {
@@ -1239,6 +1368,20 @@ class _ArtisanCompleteProfileWidgetState extends State<ArtisanCompleteProfileWid
           if (kDebugMode) debugPrint(
               'Failed to clear dashboard cache after save: $e');
         }
+        // Persist role and cached dashboard/profile data so other pages can
+        // immediately see the new artisan profile and its completed state.
+        try {
+          if (res['role'] != null) await TokenStorage.saveRole(res['role'].toString());
+        } catch (_) {}
+        try {
+          await TokenStorage.saveDashboardProfile(Map<String, dynamic>.from(res));
+        } catch (_) {}
+        // Mark that we now have an artisan profile and prefill form fields
+        // so the user can immediately edit with prefilled data.
+        try {
+          if (mounted) setState(() => _hasArtisanProfile = true);
+          _applyProfileToDraft(Map<String, dynamic>.from(res));
+        } catch (_) {}
         Navigator.of(context).pop(true);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2561,4 +2704,6 @@ class _ArtisanCompleteProfileWidgetState extends State<ArtisanCompleteProfileWid
     );
   }
 }
+
+
 

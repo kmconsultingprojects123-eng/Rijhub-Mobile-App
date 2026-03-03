@@ -193,13 +193,19 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
 
   Future<void> _initCachedFlags() async {
     try {
-      final cached = await TokenStorage.getKycVerified();
-      if (cached != null && mounted) {
-        setState(() {
-          _model.isVerified = cached;
-          _kycVerifiedLocal = cached;
-        });
-      }
+      // Previously we used a cached 'kycVerified' boolean to pre-mark users as
+      // verified. To ensure KYC only counts when the server has approved it,
+      // avoid trusting that cached boolean here. Instead keep local state false
+      // until authoritative server confirmation arrives. We still read the
+      // saved kyc status (e.g., 'pending') elsewhere via _initKycStatus().
+      // This avoids prematurely marking users as verified based on stale cache.
+      // final cached = await TokenStorage.getKycVerified();
+      // if (cached != null && mounted) {
+      //   setState(() {
+      //     _model.isVerified = cached;
+      //     _kycVerifiedLocal = cached;
+      //   });
+      // }
     } catch (e) {
       if (kDebugMode) debugPrint('Failed to read cached kyc flag: $e');
     }
@@ -211,13 +217,6 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
       if (!mounted) return;
       setState(() { _kycStatus = s; });
     } catch (e) { if (kDebugMode) debugPrint('Failed to read saved kyc status: $e'); }
-  }
-
-  Future<void> _loadKycStatus() async {
-    try {
-      final s = await TokenStorage.getKycStatus();
-      if (mounted) setState(() => _kycStatus = s);
-    } catch (_) {}
   }
 
   Future<void> _loadInitialData() async {
@@ -490,8 +489,12 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
         }
       } catch (_) {}
 
-      if (mounted) setState(() => _model.isVerified = normalizedKyc);
-      try { TokenStorage.saveKycVerified(normalizedKyc); } catch (_) {}
+      // Do not mark the app-level verified flag based on the local profile
+      // object alone. KYC must be confirmed by the authoritative kyc/status
+      // endpoint. We keep normalizedKyc available for diagnostics but do not
+      // call TokenStorage.saveKycVerified(normalizedKyc) nor set
+      // _model.isVerified here.
+      if (kDebugMode) debugPrint('Local profile reported kyc verified: $normalizedKyc (waiting for authoritative confirmation)');
 
       // Fetch artisan profile (if any) for artisan-specific fields
       try {
@@ -555,37 +558,12 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
         if (kDebugMode) debugPrint('Failed to fetch artisan profile: $e');
       }
 
-      // Fetch authoritative KYC status
-      try {
-        final kycUri = Uri.parse('$API_BASE_URL/api/kyc/status');
-        final resp = await ApiClient.get(kycUri.toString(), headers: {'Content-Type': 'application/json'});
-        final status = resp['status'] as int? ?? 0;
-        final body = resp['body']?.toString() ?? '';
-        if (status >= 200 && status < 300 && body.isNotEmpty) {
-          try {
-            final decoded = jsonDecode(body);
-            bool verified = false;
-            if (decoded is Map) {
-              final data = decoded['data'] ?? decoded;
-              if (data is Map && data['verified'] != null) {
-                final v = data['verified'];
-                if (v is bool) verified = v;
-                else verified = v.toString().toLowerCase() == 'true' || v.toString() == '1';
-              } else if (decoded['verified'] != null) {
-                final v = decoded['verified'];
-                if (v is bool) verified = v;
-                else verified = v.toString().toLowerCase() == 'true' || v.toString() == '1';
-              }
-            }
-            if (mounted) setState(() => _kycVerifiedLocal = verified);
-            if (verified && !_model.isVerified) setState(() => _model.isVerified = true);
-          } catch (e) {
-            if (kDebugMode) debugPrint('Failed parse kyc/status: $e');
-          }
-        }
-      } catch (e) {
-        if (kDebugMode) debugPrint('KYC status fetch failed: $e');
-      }
+      // Fetch authoritative KYC status (do not block profile load)
+      Future.microtask(() async {
+        try {
+          await _fetchAuthoritativeKycStatus();
+        } catch (_) {}
+      });
 
       // Compute completion percentage using both user profile and artisan-specific profile
       _computeProfileCompletion();
@@ -603,52 +581,42 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
     }
   }
 
-  void _computeProfileCompletion() {
-    // If the authenticated user hasn't created an artisan profile document,
-    // treat profile completion as 0% (this prevents identity-only prefills from
-    // inflating the artisan profile completion shown on the dashboard).
-    if (!_hasArtisanProfile) {
-      if (mounted) setState(() => _profileCompletion = 0.0);
-      return;
+  // Fetch authoritative KYC status from server without blocking profile load
+  Future<void> _fetchAuthoritativeKycStatus() async {
+    try {
+      final kycUri = Uri.parse('$API_BASE_URL/api/kyc/status');
+      final resp = await ApiClient.get(kycUri.toString(), headers: {'Content-Type': 'application/json'});
+      final status = resp['status'] as int? ?? 0;
+      final body = resp['body']?.toString() ?? '';
+      if (status >= 200 && status < 300 && body.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(body);
+          bool verified = false;
+          if (decoded is Map) {
+            final data = decoded['data'] ?? decoded;
+            if (data is Map && data['verified'] != null) {
+              final v = data['verified'];
+              if (v is bool) verified = v;
+              else verified = v.toString().toLowerCase() == 'true' || v.toString() == '1';
+            } else if (decoded['verified'] != null) {
+              final v = decoded['verified'];
+              if (v is bool) verified = v;
+              else verified = v.toString().toLowerCase() == 'true' || v.toString() == '1';
+            }
+          }
+          if (mounted) {
+            setState(() => _kycVerifiedLocal = verified);
+            if (verified && !_model.isVerified) setState(() => _model.isVerified = true);
+            // Recompute profile completion so UI updates immediately when KYC status changes
+            try { _computeProfileCompletion(); } catch (_) {}
+          }
+        } catch (e) {
+          if (kDebugMode) debugPrint('Failed parse kyc/status: $e');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('KYC status fetch failed: $e');
     }
-
-    // Define a set of key checks representing important profile fields
-    final checks = <bool>[];
-
-    // user-level fields
-    final pd = _model.profileData ?? {};
-    checks.add((pd['name'] ?? pd['fullName'] ?? pd['username']) != null && pd['name']?.toString().trim().isNotEmpty == true);
-    checks.add((pd['email'] ?? '').toString().trim().isNotEmpty);
-    checks.add((pd['phone'] ?? '').toString().trim().isNotEmpty);
-    final profileImagePresent = (_model.profileImageUrl != null && _model.profileImageUrl.toString().trim().isNotEmpty);
-    checks.add(profileImagePresent);
-
-    // artisan-level fields
-    final ap = _artisanProfile ?? {};
-    checks.add((ap['trade'] != null && ((ap['trade'] is List && (ap['trade'] as List).isNotEmpty) || (ap['trade'] is String && ap['trade'].toString().isNotEmpty))));
-    checks.add((ap['experience'] ?? ap['experienceYears'] ?? ap['yearsExperience']) != null);
-    checks.add((ap['bio'] ?? '').toString().trim().isNotEmpty);
-    // pricing
-    final pricing = ap['pricing'] ?? ap['pricingStructure'] ?? ap['rates'];
-    checks.add(pricing != null && ((pricing is Map && pricing.isNotEmpty) || pricing.toString().isNotEmpty));
-    // availability
-    checks.add((ap['availability'] is List && (ap['availability'] as List).isNotEmpty) || (ap['availability'] is String && ap['availability'].toString().isNotEmpty));
-    // serviceArea
-    final sa = ap['serviceArea'] ?? ap['service_area'] ?? {};
-    checks.add(sa != null && ((sa is Map && (sa['address'] != null || (sa['coordinates'] != null))) || (sa.toString().isNotEmpty)));
-    // portfolio
-    checks.add((ap['portfolio'] is List && (ap['portfolio'] as List).isNotEmpty) || (ap['portfolioImages'] is List && (ap['portfolioImages'] as List).isNotEmpty));
-
-    // KYC flag counts as completing verification but not required for profile completeness; include as bonus
-    if (_kycVerifiedLocal || _model.isVerified) {
-      checks.add(true); // bonus
-    }
-
-    final total = checks.length;
-    final passed = checks.where((c) => c).length;
-    final percent = total == 0 ? 0.0 : (passed / total);
-
-    if (mounted) setState(() => _profileCompletion = percent.clamp(0.0, 1.0));
   }
 
   Future<void> _loadDashboardData() async {
@@ -1716,29 +1684,36 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                   context: context,
                                   icon: Icons.person_outline,
                                   // If the artisan does not yet have an artisan profile document,
-                                  // route the user to the complete-profile flow. Otherwise go to edit.
-                                  title: !_hasArtisanProfile
-                                      ? 'Create Artisan Profile'
-                                      : (_profileCompletion >= 1.0 ? 'Edit Profile' : 'Complete Profile'),
-                                  subtitle: !_hasArtisanProfile
-                                      ? 'Set up your artisan profile to start getting jobs'
-                                      : (_profileCompletion >= 1.0 ? 'Completed' : '${(_profileCompletion * 100).toInt()}% complete'),
-                                  onTap: () async {
-                                    try {
-                                      if (!_hasArtisanProfile) {
-                                        // Previously routed to the complete-profile flow; now send user to the
-                                        // artisan profile update/create widget per requested change.
-                                        await context.pushNamed(ArtisanProfileupdateWidget.routeName);
-                                      } else {
-                                        // Edit existing profile
-                                        await context.pushNamed(ArtisanProfileupdateWidget.routeName);
-                                      }
-                                      await _refreshData();
-                                    } catch (_) {}
-                                  },
-                                  iconColor: !_hasArtisanProfile
-                                      ? colorScheme.primary
-                                      : (_profileCompletion >= 1.0 ? ff.success : colorScheme.onSurface.withOpacity(0.5)),
+                                  // route the user to the complete-profile flow. Otherwise show
+                                  // that the profile is present and offer an Edit action
+                                  title: !_hasArtisanProfile ? 'Create Artisan Profile' : 'Edit Profile',
+                                  subtitle: !_hasArtisanProfile ? 'Set up your artisan profile to start getting jobs' : 'Completed',
+                                   onTap: () async {
+                                     try {
+                                       // Navigate to profile create/edit and capture the result.
+                                       final res = await context.pushNamed(ArtisanProfileupdateWidget.routeName);
+
+                                       // If the create/edit flow returned `true` (success), try to apply
+                                       // the cached dashboard profile that the flow writes so the UI
+                                       // can immediately show the Completed / Edit state.
+                                       try {
+                                         if (res == true) {
+                                           final cached = await TokenStorage.getDashboardProfile();
+                                           if (cached != null && mounted) {
+                                             setState(() {
+                                               _artisanProfile = Map<String, dynamic>.from(cached);
+                                               _hasArtisanProfile = true;
+                                             });
+                                             try { _computeProfileCompletion(); } catch (_) {}
+                                           }
+                                         }
+                                       } catch (_) {}
+
+                                       // Still refresh authoritative data in background
+                                       await _refreshData();
+                                     } catch (_) {}
+                                   },
+                                  iconColor: !_hasArtisanProfile ? colorScheme.primary : ff.success,
                                 ),
                                 Padding(
                                   padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -2304,5 +2279,78 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
         });
       },
     );
+  }
+
+  // Compute profile completion using server-provided `profileProgress` when available,
+  // otherwise compute using rules from artisan_profile_progress.md:
+  // - KYC completed = 40%
+  // - Profile fields (name, phone, bio, avatar, categories) = 40%
+  // When no artisan profile exists, compute a partial score from user-level fields
+  void _computeProfileCompletion() {
+    try {
+      // Prefer server-side authoritative value if available
+      final serverProgress = _artisanProfile?['profileProgress'];
+      if (serverProgress != null) {
+        double parsed = 0.0;
+        try {
+          if (serverProgress is num) parsed = serverProgress.toDouble();
+          else parsed = double.tryParse(serverProgress.toString()) ?? 0.0;
+        } catch (_) {
+          parsed = 0.0;
+        }
+        if (parsed > 1.0) parsed = parsed / 100.0; // normalise percentages
+        parsed = parsed.clamp(0.0, 1.0);
+        if (mounted) setState(() => _profileCompletion = parsed);
+        return;
+      }
+
+      // Determine KYC state (local cache or model flag) - only count when fully verified
+      final bool kycDone = (_kycVerifiedLocal || _model.isVerified == true);
+      final double kycScore = kycDone ? 0.40 : 0.0;
+
+      final pd = _model.profileData ?? <String, dynamic>{};
+      final ap = _artisanProfile ?? <String, dynamic>{};
+
+      // If there's no artisan document yet, show partial progress from user-level fields
+      if (!_hasArtisanProfile) {
+        int present = 0;
+        const int totalUserFields = 3; // name, phone, avatar
+
+        // name
+        final namePresent = ((pd['name'] ?? pd['fullName'] ?? pd['username'])?.toString().trim().isNotEmpty) == true;
+        if (namePresent) present++;
+
+        // phone
+        final phonePresent = ((pd['phone'] ?? pd['telephone'] ?? pd['contact'])?.toString().trim().isNotEmpty) == true;
+        if (phonePresent) present++;
+
+        // avatar
+        final avatarPresent = ((_model.profileImageUrl != null && _model.profileImageUrl.toString().trim().isNotEmpty) || (pd['profileImage'] != null && pd['profileImage']?.toString().isNotEmpty == true));
+        if (avatarPresent) present++;
+
+        final double profilePortion = (present / totalUserFields) * 0.40; // profile weight is 40%
+        double total = (kycScore + profilePortion).clamp(0.0, 1.0);
+        // if kyc done and user-level fields all present, consider fully verified
+        if (kycDone && present == totalUserFields) total = 1.0;
+        if (mounted) setState(() => _profileCompletion = total);
+        return;
+      }
+
+      // With an artisan profile present, compute full artisan profile completion
+      // Profile fields to check: name, phone, bio, avatar, categories
+      // Since creating an artisan profile does not require admin approval,
+      // treat the existence of the artisan document as the profile portion
+      // being complete immediately (grant the full 40% profile score). The
+      // KYC portion still requires authoritative approval and is handled
+      // separately.
+      final double profilePortion = 0.40;
+      double total = (kycScore + profilePortion).clamp(0.0, 1.0);
+      // If both KYC and profile are done, mark as fully verified (100%).
+      if (kycDone) total = (1.0).clamp(0.0, 1.0);
+      if (mounted) setState(() => _profileCompletion = total);
+    } catch (e) {
+      if (kDebugMode) debugPrint('Error computing profile completion: $e');
+      if (mounted) setState(() => _profileCompletion = 0.0);
+    }
   }
 }

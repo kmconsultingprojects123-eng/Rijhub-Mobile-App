@@ -155,9 +155,9 @@ class _BookingDetailsWidgetState extends State<BookingDetailsWidget> {
             ),
             const SizedBox(width: 12),
             ElevatedButton.icon(
-              onPressed: () {
+              onPressed: () async {
                 try {
-                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => BookingPageWidget()));
+                  await NavigationUtils.safePush(context, BookingPageWidget());
                 } catch (_) {}
               },
               icon: const Icon(Icons.list_alt),
@@ -165,7 +165,7 @@ class _BookingDetailsWidgetState extends State<BookingDetailsWidget> {
             ),
             const SizedBox(width: 12),
             if (widget.paymentPayload != null) ElevatedButton.icon(
-              onPressed: () {
+              onPressed: () async {
                 try {
                   final pm = Map<String, dynamic>.from(widget.paymentPayload!);
                   try {
@@ -178,7 +178,7 @@ class _BookingDetailsWidgetState extends State<BookingDetailsWidget> {
                       pm['bookingSource'] = pm['bookingSource'] ?? 'quote';
                     }
                   } catch (_) {}
-                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => PaymentInitPageWidget(payment: pm)));
+                  await NavigationUtils.safePush(context, PaymentInitPageWidget(payment: pm));
                 } catch (_) {}
               },
               icon: const Icon(Icons.payment),
@@ -233,24 +233,25 @@ class _BookingDetailsWidgetState extends State<BookingDetailsWidget> {
           onPressed: () async {
             // Open chat — pass context information so the chat screen can initialize quickly
             try {
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => MessageClientWidget(
+              await NavigationUtils.safePush(context, MessageClientWidget(
                 bookingId: widget.bookingId,
                 threadId: _threadId,
                 jobTitle: _jobTitle ?? title,
                 bookingPrice: _bookingPrice ?? price,
                 bookingDateTime: _bookingDateTime ?? schedule,
-              )));
+              ));
             } catch (_) {}
           },
           icon: const Icon(Icons.message),
           label: const Text('Chat with Artisan'),
         ),
+
         const SizedBox(height: 12),
         ElevatedButton.icon(
           onPressed: () async {
             // Navigate to the bookings list/page
             try {
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => BookingPageWidget()));
+              await NavigationUtils.safePush(context, BookingPageWidget());
             } catch (_) {
               // fallback: do nothing
             }
@@ -274,9 +275,9 @@ class _BookingDetailsWidgetState extends State<BookingDetailsWidget> {
               if (widget.paymentPayload != null) ...[
                 const SizedBox(width: 12),
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     // Navigate to payment initialization page (retry) - PaymentInitPageWidget expects 'payment'
-                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => PaymentInitPageWidget(payment: widget.paymentPayload!)));
+                    await NavigationUtils.safePush(context, PaymentInitPageWidget(payment: widget.paymentPayload!));
                   },
                   child: const Text('Retry Payment'),
                 ),

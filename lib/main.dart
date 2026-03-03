@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
 
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'dart:async';
@@ -22,6 +23,7 @@ import 'utils/navigation_utils.dart';
 import 'services/health_service.dart';
 import 'widgets/health_snackbar.dart';
 import 'state/auth_notifier.dart';
+import 'state/app_state_notifier.dart';
 
 import 'dart:io';
 import 'package:flutter/services.dart' show PlatformAssetBundle;
@@ -146,7 +148,18 @@ void main() async {
 
   // Use a zone to intercept print() calls and silence them for security
   runZonedGuarded(() {
-    runApp(MyApp());
+    runApp(
+      MultiProvider(
+        providers: [
+          // Expose the existing singletons via Provider so widgets can use
+          // context.read/watch and we can migrate away from direct static
+          // access to the singletons over time.
+          ChangeNotifierProvider.value(value: AppStateNotifier.instance),
+          ChangeNotifierProvider.value(value: AuthNotifier.instance),
+        ],
+        child: MyApp(),
+      ),
+    );
   }, (error, stack) {
     // Forward to Flutter error handlers without printing stacktrace to terminal
     try {
@@ -381,6 +394,8 @@ class _NavBarPageState extends State<NavBarPage> {
   late Widget? _currentPage;
   String? _lastKnownRole;
 
+  AppStateNotifier? _appState; // captured notifier for listener management
+
   // Helper to show the guest sign-in prompt; returns true if the user chose Sign in, false for Continue as guest or null if dismissed.
   Future<bool?> _showGuestPrompt() async {
     if (!mounted) return false;
@@ -488,15 +503,22 @@ class _NavBarPageState extends State<NavBarPage> {
     // Listen for app state changes (login/logout/role changes) so we can
     // rebuild the nav bar and tabs accordingly and prevent role leakage.
     try {
-      _lastKnownRole = AppStateNotifier.instance.profile?['role']?.toString();
-      AppStateNotifier.instance.addListener(_onAppStateChanged);
+      // Capture notifier via Provider to ensure we remove the same listener in dispose
+      _appState = AppStateNotifier.instance; // fallback if Provider not ready yet
+      try {
+        final withProvider = Provider.of<AppStateNotifier?>(context, listen: false);
+        if (withProvider != null) _appState = withProvider;
+      } catch (_) {}
+
+      _lastKnownRole = _appState?.profile?['role']?.toString();
+      _appState?.addListener(_onAppStateChanged);
     } catch (_) {}
   }
 
   void _onAppStateChanged() {
     // Only rebuild when the user's role or auth state changes to avoid
     // unnecessary rebuilds.
-    final currentRole = AppStateNotifier.instance.profile?['role']?.toString();
+    final currentRole = _appState?.profile?['role']?.toString();
     if (currentRole != _lastKnownRole) {
       _lastKnownRole = currentRole;
       // Reset current page to ensure tabs are recomputed for new role.
@@ -513,7 +535,7 @@ class _NavBarPageState extends State<NavBarPage> {
   void dispose() {
     // Clean up the listener on dispose to prevent memory leaks.
     try {
-      AppStateNotifier.instance.removeListener(_onAppStateChanged);
+      _appState?.removeListener(_onAppStateChanged);
     } catch (_) {}
     super.dispose();
   }
@@ -523,11 +545,8 @@ class _NavBarPageState extends State<NavBarPage> {
     // Choose nav items and order depending on role.
     // Client & Guest: Home, Job, Discover, Booking, Profile
     // Artisan: Home, Job, Booking, Profile (Discover hidden)
-    final bool isArtisan = (AppStateNotifier.instance.profile?['role']
-            ?.toString()
-            .toLowerCase()
-            .contains('artisan') ??
-        false);
+    final profile = context.watch<AppStateNotifier>().profile;
+    final bool isArtisan = (profile?['role']?.toString().toLowerCase().contains('artisan') ?? false);
     // Discover is shown only when both the widget allows it and the user is not an artisan.
     final bool shouldShowDiscover = widget.showDiscover && !isArtisan;
 
@@ -564,7 +583,7 @@ class _NavBarPageState extends State<NavBarPage> {
 
     // Determine whether current cached profile represents a guest so we can dim restricted tabs visually
     final bool isGuestNow = (() {
-      final p = AppStateNotifier.instance.profile;
+      final p = profile;
       if (p == null) return true;
       if (p['isGuest'] == true) return true;
       final role = p['role'];

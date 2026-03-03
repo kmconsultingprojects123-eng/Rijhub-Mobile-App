@@ -10,6 +10,7 @@ import '../../services/token_storage.dart';
 import '../../utils/navigation_utils.dart';
 import '../../utils/awesome_dialogs.dart';
 import '../../state/auth_notifier.dart';
+import '../../state/app_state_notifier.dart';
 export 'splash_screen_page2_model.dart';
 
 class SplashScreenPage2Widget extends StatefulWidget {
@@ -434,7 +435,8 @@ class _SplashScreenPage2WidgetState extends State<SplashScreenPage2Widget> with 
 
                                       // Update both notifiers so other parts of the app reflect guest state
                                       try { await AuthNotifier.instance.setProfile(userProfile); } catch (_) {}
-                                      try { AppStateNotifier.instance.token = token; } catch (_) {}
+                                      // Use the public setter to persist token and notify listeners
+                                      try { await AppStateNotifier.instance.setToken(token); } catch (_) {}
                                       try { AppStateNotifier.instance.setProfile(userProfile); } catch (_) {}
 
                                       // Navigate to /homePage using go_router as requested.

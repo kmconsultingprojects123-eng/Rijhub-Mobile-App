@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'token_storage.dart';
 
 /// Minimal, reusable API error handling and safe http wrappers for the project.
 ///
@@ -186,7 +187,17 @@ class ApiClient {
 
   Future<ApiResponse> safeGet(String url, {Map<String, String>? headers, BuildContext? context}) async {
     try {
-      final resp = await http.get(Uri.parse(url), headers: {...defaultHeaders, ...?headers}).timeout(timeout);
+      final token = await TokenStorage.getToken();
+      // Build merged headers and include Authorization if available
+      final mergedHeaders = {...defaultHeaders, ...?headers};
+      if (token != null && token.isNotEmpty) mergedHeaders['Authorization'] = 'Bearer $token';
+      // Log token presence (redacted) for debugging
+      try {
+        final redacted = (token == null || token.isEmpty) ? '<missing>' : (token.length > 8 ? '${token.substring(0,4)}...${token.substring(token.length-4)}' : '${token.substring(0,2)}...');
+        debugPrint('ApiClient.safeGet token: $redacted');
+      } catch (_) {}
+
+      final resp = await http.get(Uri.parse(url), headers: mergedHeaders).timeout(timeout);
       final result = ApiErrorHandler.fromHttpResponse(resp, url: url);
       if (!result.ok && context != null) ApiErrorHandler.showUserMessage(context, result.message);
       return result;
@@ -199,7 +210,13 @@ class ApiClient {
 
   Future<ApiResponse> safePost(String url, {Map<String, String>? headers, dynamic body, BuildContext? context}) async {
     try {
+      final token = await TokenStorage.getToken();
       final Map<String, String> h = {...defaultHeaders, ...?headers};
+      if (token != null && token.isNotEmpty) h['Authorization'] = 'Bearer $token';
+      try {
+        final redacted = (token == null || token.isEmpty) ? '<missing>' : (token.length > 8 ? '${token.substring(0,4)}...${token.substring(token.length-4)}' : '${token.substring(0,2)}...');
+        debugPrint('ApiClient.safePost token: $redacted');
+      } catch (_) {}
       if (body != null && body is! String && !h.containsKey('Content-Type')) {
         h['Content-Type'] = 'application/json';
       }
@@ -218,7 +235,13 @@ class ApiClient {
 
   Future<ApiResponse> safePut(String url, {Map<String, String>? headers, dynamic body, BuildContext? context}) async {
     try {
+      final token = await TokenStorage.getToken();
       final Map<String, String> h = {...defaultHeaders, ...?headers};
+      if (token != null && token.isNotEmpty) h['Authorization'] = 'Bearer $token';
+      try {
+        final redacted = (token == null || token.isEmpty) ? '<missing>' : (token.length > 8 ? '${token.substring(0,4)}...${token.substring(token.length-4)}' : '${token.substring(0,2)}...');
+        debugPrint('ApiClient.safePut token: $redacted');
+      } catch (_) {}
       if (body != null && body is! String && !h.containsKey('Content-Type')) {
         h['Content-Type'] = 'application/json';
       }
@@ -237,7 +260,14 @@ class ApiClient {
 
   Future<ApiResponse> safeDelete(String url, {Map<String, String>? headers, BuildContext? context}) async {
     try {
-      final resp = await http.delete(Uri.parse(url), headers: {...defaultHeaders, ...?headers}).timeout(timeout);
+      final token = await TokenStorage.getToken();
+      final merged = {...defaultHeaders, ...?headers};
+      if (token != null && token.isNotEmpty) merged['Authorization'] = 'Bearer $token';
+      try {
+        final redacted = (token == null || token.isEmpty) ? '<missing>' : (token.length > 8 ? '${token.substring(0,4)}...${token.substring(token.length-4)}' : '${token.substring(0,2)}...');
+        debugPrint('ApiClient.safeDelete token: $redacted');
+      } catch (_) {}
+      final resp = await http.delete(Uri.parse(url), headers: merged).timeout(timeout);
       final result = ApiErrorHandler.fromHttpResponse(resp, url: url);
       if (!result.ok && context != null) ApiErrorHandler.showUserMessage(context, result.message);
       return result;
@@ -260,7 +290,14 @@ class ApiClient {
     try {
       final uri = Uri.parse(url);
       final req = http.MultipartRequest('POST', uri);
-      req.headers.addAll({...defaultHeaders, ...?headers});
+      final token = await TokenStorage.getToken();
+      final merged = {...defaultHeaders, ...?headers};
+      if (token != null && token.isNotEmpty) merged['Authorization'] = 'Bearer $token';
+      try {
+        final redacted = (token == null || token.isEmpty) ? '<missing>' : (token.length > 8 ? '${token.substring(0,4)}...${token.substring(token.length-4)}' : '${token.substring(0,2)}...');
+        debugPrint('ApiClient.safeMultipartUpload token: $redacted');
+      } catch (_) {}
+      req.headers.addAll(merged);
       if (fields != null) req.fields.addAll(fields);
 
       if (files != null) {
