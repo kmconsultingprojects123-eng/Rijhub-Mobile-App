@@ -11,6 +11,7 @@ import '../job_history_page/job_history_page_widget.dart';
 import '../../utils/app_notification.dart';
 import '../../utils/error_messages.dart';
 import '../../utils/navigation_utils.dart';
+import '../../services/navigation_service.dart';
 // ...existing code... (removed rootBundle/json import)
 export 'create_job_page1_model.dart';
 
@@ -118,6 +119,24 @@ class _CreateJobPage1WidgetState extends State<CreateJobPage1Widget> {
         try {
           GoRouter.of(context).go('/splash');
         } catch (_) {
+          try {
+            await NavigationService.instance.go(context, '/splash');
+          } catch (_) {
+            if (appNavigatorKey.currentState != null) {
+              appNavigatorKey.currentState!.pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const SplashScreenPage2Widget()),
+                    (Route<dynamic> route) => false,
+              );
+            }
+          }
+        }
+        return;
+      }
+    } catch (_) {
+      if (mounted) {
+        try {
+          await NavigationService.instance.go(context, '/splash');
+        } catch (_) {
           if (appNavigatorKey.currentState != null) {
             appNavigatorKey.currentState!.pushAndRemoveUntil(
               MaterialPageRoute(builder: (_) => const SplashScreenPage2Widget()),
@@ -125,14 +144,6 @@ class _CreateJobPage1WidgetState extends State<CreateJobPage1Widget> {
             );
           }
         }
-        return;
-      }
-    } catch (_) {
-      if (mounted && appNavigatorKey.currentState != null) {
-        appNavigatorKey.currentState!.pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const SplashScreenPage2Widget()),
-              (Route<dynamic> route) => false,
-        );
       }
     } finally {
       if (mounted) {

@@ -9,6 +9,20 @@ import 'package:path/path.dart' as p;
 import 'upload_service.dart';
 import 'user_service.dart';
 
+/// Safely parse a JSON string and convert any Map results into Map<String,dynamic>.
+/// Returns List or Map<String,dynamic> or primitive as appropriate, or null on parse error.
+dynamic _safeJsonParse(String? raw) {
+  if (raw == null || raw.isEmpty) return null;
+  try {
+    final parsed = jsonDecode(raw);
+    if (parsed is Map) return Map<String, dynamic>.from(parsed.cast<String, dynamic>());
+    if (parsed is List) return parsed;
+    return parsed;
+  } catch (_) {
+    return null;
+  }
+}
+
 class MultipartRejectedException implements Exception {
   final String message;
   MultipartRejectedException(this.message);

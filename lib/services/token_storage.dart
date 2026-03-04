@@ -18,6 +18,8 @@ class TokenStorage {
   static const _keyRecentName = 'recent_name';
   static const _keyRecentEmail = 'recent_email';
   static const _keyRecentPhone = 'recent_phone';
+  // Store provider reference (e.g. SendChamp 'reference') returned during registration
+  static const _keyRecentReference = 'recent_reference';
   // Key for storing a cached Google profile (JSON encoded)
   static const _keyGoogleProfile = 'google_profile';
   static const _keyRefreshToken = 'refresh_token';
@@ -67,7 +69,7 @@ class TokenStorage {
     try {
       _secureStorage = const FlutterSecureStorage();
       return _secureStorage;
-    } catch (e, st) {
+    } catch (e) {
       // TokenStorage: secure storage init failed; do not print to terminal for security.
       _secureAvailable = false;
       _secureStorage = null;
@@ -434,24 +436,27 @@ class TokenStorage {
   // Persist a small set of recently-registered user contact fields so
   // UI can show name/email/phone immediately after registration before
   // the backend profile has been fetched.
-  static Future<void> saveRecentRegistration({String? name, String? email, String? phone}) async {
+  static Future<void> saveRecentRegistration({String? name, String? email, String? phone, String? reference}) async {
     try {
       if (kIsWeb) {
         final prefs = await SharedPreferences.getInstance();
         if (name != null) await prefs.setString(_keyRecentName, name);
         if (email != null) await prefs.setString(_keyRecentEmail, email);
         if (phone != null) await prefs.setString(_keyRecentPhone, phone);
+        if (reference != null) await prefs.setString(_keyRecentReference, reference);
       } else {
         final s = await _getSecureStorage();
         if (s != null) {
           if (name != null) await s.write(key: _keyRecentName, value: name);
           if (email != null) await s.write(key: _keyRecentEmail, value: email);
           if (phone != null) await s.write(key: _keyRecentPhone, value: phone);
+          if (reference != null) await s.write(key: _keyRecentReference, value: reference);
         } else {
           final prefs = await SharedPreferences.getInstance();
           if (name != null) await prefs.setString(_keyRecentName, name);
           if (email != null) await prefs.setString(_keyRecentEmail, email);
           if (phone != null) await prefs.setString(_keyRecentPhone, phone);
+          if (reference != null) await prefs.setString(_keyRecentReference, reference);
         }
       }
     } catch (e) {
@@ -463,29 +468,33 @@ class TokenStorage {
     String? name;
     String? email;
     String? phone;
+    String? reference;
     try {
       if (kIsWeb) {
         final prefs = await SharedPreferences.getInstance();
         name = prefs.getString(_keyRecentName);
         email = prefs.getString(_keyRecentEmail);
         phone = prefs.getString(_keyRecentPhone);
+        reference = prefs.getString(_keyRecentReference);
       } else {
         final s = await _getSecureStorage();
         if (s != null) {
           name = await s.read(key: _keyRecentName);
           email = await s.read(key: _keyRecentEmail);
           phone = await s.read(key: _keyRecentPhone);
+          reference = await s.read(key: _keyRecentReference);
         } else {
           final prefs = await SharedPreferences.getInstance();
           name = prefs.getString(_keyRecentName);
           email = prefs.getString(_keyRecentEmail);
           phone = prefs.getString(_keyRecentPhone);
+          reference = prefs.getString(_keyRecentReference);
         }
       }
     } catch (e) {
       debugPrint('TokenStorage: getRecentRegistration failed: $e');
     }
-    return {'name': name, 'email': email, 'phone': phone};
+    return {'name': name, 'email': email, 'phone': phone, 'reference': reference};
   }
 
   // Persist a small one-time flag indicating we've shown the onboarding reminder
@@ -882,7 +891,6 @@ class TokenStorage {
   /// Persist a simple KYC status string (e.g. 'pending','approved','rejected').
   /// This lets the app know when the user's submission is awaiting admin review.
   static Future<void> saveKycStatus(String status) async {
-    if (status == null) return;
     try {
       if (kIsWeb) {
         final prefs = await SharedPreferences.getInstance();

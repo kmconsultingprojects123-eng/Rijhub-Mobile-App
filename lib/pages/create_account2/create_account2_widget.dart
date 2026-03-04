@@ -7,14 +7,173 @@ import '/services/auth_service.dart';
 import '/services/token_storage.dart';
 import '../../state/auth_notifier.dart';
 import '../../utils/awesome_dialogs.dart';
-import 'package:flutter/foundation.dart'; // Import foundation library for kDebugMode
+import 'package:flutter/foundation.dart';
 import '../../utils/navigation_utils.dart';
-import '../../utils/account_creation_navigator.dart';
 import 'package:flutter/gestures.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../pages/verify_otp/verify_otp_widget.dart';
+import '../../utils/phone_utils.dart';
 
 export 'create_account2_model.dart';
 
+// ========== Constants ==========
+class AuthConstants {
+  static const int passwordMinLength = 6;
+  static const Duration apiTimeout = Duration(seconds: 30);
+  static const Duration toastDuration = Duration(seconds: 2);
+  static const Duration dialogDelay = Duration(milliseconds: 300);
+
+  static const String defaultRole = 'customer';
+  static const String clientRole = 'client';
+  static const String artisanRole = 'artisan';
+
+  static const String termsUrl = 'https://www.rijhub.com/terms-and-conditions';
+  static const String privacyUrl = 'https://www.rijhub.com/privacy-policy';
+  static const Color primaryColor = Color(0xFFA20025);
+}
+
+// ========== Role Utilities ==========
+class RoleUtils {
+  static String normalize(String? role) {
+    if (role == null) return AuthConstants.defaultRole;
+    final normalized = role.trim().toLowerCase();
+    if (normalized == AuthConstants.clientRole) return AuthConstants.defaultRole;
+    return normalized;
+  }
+
+  static bool isArtisan(String? role) => normalize(role) == AuthConstants.artisanRole;
+  static String getDisplayName(String? role) =>
+      isArtisan(role) ? 'Artisan Account' : 'Client Account';
+  static IconData getIcon(String? role) =>
+      isArtisan(role) ? Icons.handyman_outlined : Icons.person_outline;
+}
+
+// ========== Validators ==========
+class Validators {
+  static String? validateName(String? value) {
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) return 'Please enter your full name';
+    if (trimmed.length < 2) return 'Name must be at least 2 characters';
+    return null;
+  }
+
+  static String? validateEmail(String? value) {
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) return 'Please enter your email';
+
+    final emailRegex = RegExp(r'^[a-zA-Z0-9.]+@[a-zA-Z0-9]+\.[a-zA-Z]+$');
+    if (!emailRegex.hasMatch(trimmed)) return 'Please enter a valid email';
+    return null;
+  }
+
+  static String? validatePhone(String? value) {
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) return 'Please enter your phone number';
+
+    final digitsOnly = trimmed.replaceAll(RegExp(r'\D'), '');
+    if (digitsOnly.length < 10 || digitsOnly.length > 15) {
+      return 'Please enter a valid phone number (10-15 digits)';
+    }
+    return null;
+  }
+
+  static String? validatePassword(String? value) {
+    if (value == null || value.isEmpty) return 'Password is required';
+    if (value.length < AuthConstants.passwordMinLength) {
+      return 'Password must be at least ${AuthConstants.passwordMinLength} characters';
+    }
+    if (!value.contains(RegExp(r'[A-Z]'))) {
+      return 'Password must contain at least one uppercase letter';
+    }
+    if (!value.contains(RegExp(r'[0-9]'))) {
+      return 'Password must contain at least one number';
+    }
+    return null;
+  }
+}
+
+// ========== Navigation Service ==========
+class AuthNavigationService {
+  static Future<void> goToVerification({
+    required BuildContext context,
+    required String phone,
+    String? reference,
+    String? email,
+  }) async {
+    try {
+      await Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => VerifyOtpWidget(
+            phone: phone,
+            reference: reference,
+            email: email,
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('Navigation error: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Account created. Please verify your phone number.'),
+            duration: AuthConstants.toastDuration,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  static Future<void> goToLogin(BuildContext context) async {
+    try {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginAccountWidget()),
+      );
+    } catch (e) {
+      debugPrint('Login navigation error: $e');
+      if (context.mounted) {
+        NavigationUtils.safePushNoAuth(context, const LoginAccountWidget());
+      }
+    }
+  }
+}
+
+// ========== Error Handler ==========
+class AuthErrorHandler {
+  static String getFriendlyMessage(dynamic error) {
+    if (error is Map<String, dynamic>) {
+      final code = error['code']?.toString().toLowerCase();
+      final message = error['message']?.toString();
+
+      switch (code) {
+        case 'email-already-in-use':
+          return 'This email is already registered. Try logging in instead.';
+        case 'invalid-email':
+          return 'Please enter a valid email address.';
+        case 'weak-password':
+          return 'Please choose a stronger password.';
+        case 'phone-already-exists':
+          return 'This phone number is already registered.';
+        default:
+          return message ?? 'An error occurred. Please try again.';
+      }
+    }
+    if (error is String) return error;
+    return 'Something went wrong. Please try again later.';
+  }
+
+  static void showErrorDialog(BuildContext context, dynamic error) {
+    showAppErrorDialog(
+      context,
+      title: 'Error',
+      desc: getFriendlyMessage(error),
+    );
+  }
+}
+
+// ========== Main Widget ==========
 class CreateAccount2Widget extends StatefulWidget {
   const CreateAccount2Widget({super.key, this.initialRole});
 
@@ -29,88 +188,74 @@ class CreateAccount2Widget extends StatefulWidget {
 
 class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
   late CreateAccount2Model _model;
-  String? _effectiveRole;
-  bool _navigateScheduled = false;
-  bool _isCreatingAccount = false;
-  bool _passwordVisible = false;
-  bool _acceptedTos = false; // must accept T&C and Privacy to create account
-  // Holds Google profile info (if user signed in with Google during this flow)
-  Map<String, dynamic>? _googleProfile;
-
-  // Tap recognizers for T&C and Privacy links
+  late TextEditingController _phoneController;
+  late FocusNode _phoneFocusNode;
+  late TextEditingController _passwordController;
+  late FocusNode _passwordFocusNode;
   late TapGestureRecognizer _tncRecognizer;
   late TapGestureRecognizer _privacyRecognizer;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final _formKey = GlobalKey<FormState>();
 
-  late TextEditingController _phoneController;
-  late FocusNode _phoneFocusNode;
-  late TextEditingController _passwordController;
-  late FocusNode _passwordFocusNode;
+  String? _effectiveRole;
+  bool _navigateScheduled = false;
+  bool _isCreatingAccount = false;
+  bool _passwordVisible = false;
+  bool _acceptedTos = false;
+  Map<String, dynamic>? _googleProfile;
 
   @override
   void initState() {
     super.initState();
+    _initializeControllers();
+    _initializeRecognizers();
+    _loadGoogleProfile();
+    _resolveEffectiveRole();
+  }
+
+  void _initializeControllers() {
     _model = createModel(context, () => CreateAccount2Model());
-
-    // Initialize link recognizers
-    _tncRecognizer = TapGestureRecognizer()
-      ..onTap = () {
-        _openUrl('https://www.rijhub.com/terms-and-conditions');
-      };
-    _privacyRecognizer = TapGestureRecognizer()
-      ..onTap = () {
-        _openUrl('https://www.rijhub.com/privacy-policy');
-      };
-
     _model.fullNameTextController ??= TextEditingController();
     _model.fullNameFocusNode ??= FocusNode();
-
     _model.emailAddressTextController ??= TextEditingController();
     _model.emailAddressFocusNode ??= FocusNode();
-
     _phoneController = TextEditingController();
     _phoneFocusNode = FocusNode();
     _passwordController = TextEditingController();
     _passwordFocusNode = FocusNode();
+  }
 
-    // Restore any previously cached Google profile so the button can reflect it
-    TokenStorage.getGoogleProfile().then((p) {
-      if (p != null && mounted) {
-        setState(() {
-          _googleProfile = p;
-          _model.fullNameTextController?.text = (p['name'] ?? '').toString();
-          _model.emailAddressTextController?.text =
-              (p['email'] ?? '').toString();
-        });
-      }
-    });
+  void _initializeRecognizers() {
+    _tncRecognizer = TapGestureRecognizer()..onTap = () => _openUrl(AuthConstants.termsUrl);
+    _privacyRecognizer = TapGestureRecognizer()..onTap = () => _openUrl(AuthConstants.privacyUrl);
+  }
 
-    // Set initial effective role from constructor so UI can display it immediately.
-    _effectiveRole = widget.initialRole;
-    if (kDebugMode)
-      debugPrint('CreateAccount2 initState initialRole=${widget.initialRole}');
+  Future<void> _loadGoogleProfile() async {
+    final profile = await TokenStorage.getGoogleProfile();
+    if (profile != null && mounted) {
+      setState(() {
+        _googleProfile = profile;
+        _model.fullNameTextController?.text = (profile['name'] ?? '').toString();
+        _model.emailAddressTextController?.text = (profile['email'] ?? '').toString();
+      });
+    }
+  }
 
-    // Determine the effective role for this flow. The role can come from the
-    // widget constructor (when using generated routes), or from previous
-    // navigation via Navigator/RouteSettings.arguments. We use a post frame
-    // callback to safely access ModalRoute and avoid issues when called in
-    // initState.
+  void _resolveEffectiveRole() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+
       String? role = widget.initialRole;
       try {
         final args = ModalRoute.of(context)?.settings.arguments;
         if (args is Map) {
-          if (args['initialRole'] != null) {
-            role = args['initialRole']?.toString();
-          } else if (args['role'] != null) {
-            role = args['role']?.toString();
-          }
+          role = args['initialRole']?.toString() ?? args['role']?.toString() ?? role;
         }
       } catch (_) {}
 
+      role = RoleUtils.normalize(role);
+      if (kDebugMode) debugPrint('CreateAccount2 resolved role: $role');
       // Normalize some common synonyms (client -> customer)
       if (role != null) {
         final v = role.trim().toLowerCase();
@@ -128,14 +273,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
 
   @override
   void dispose() {
-    // dispose recognizers
-    try {
-      _tncRecognizer.dispose();
-    } catch (_) {}
-    try {
-      _privacyRecognizer.dispose();
-    } catch (_) {}
-
+    _tncRecognizer.dispose();
+    _privacyRecognizer.dispose();
     _model.dispose();
     _phoneController.dispose();
     _phoneFocusNode.dispose();
@@ -144,107 +283,52 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
     super.dispose();
   }
 
-  // Helper to open external URLs safely
   Future<void> _openUrl(String url) async {
     try {
       final uri = Uri.parse(url);
-      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-        // Fallback: show an error dialog if opening fails
-        if (!mounted) return;
-        await showAppErrorDialog(context,
-            title: 'Unable to open link',
-            desc: 'Could not open the link. Please try again.');
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
+        await showAppErrorDialog(
+          context,
+          title: 'Unable to open link',
+          desc: 'Could not open the link. Please try again.',
+        );
       }
     } catch (e) {
-      if (!mounted) return;
-      await showAppErrorDialog(context,
+      if (mounted) {
+        await showAppErrorDialog(
+          context,
           title: 'Unable to open link',
-          desc: 'Could not open the link. Please try again.');
+          desc: 'Could not open the link. Please try again.',
+        );
+      }
     }
   }
 
-  String? _validateName(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'Please enter your full name';
-    }
-    return null;
-  }
-
-  String? _validateEmail(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'Please enter your email';
-    }
-    final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+');
-    if (!emailRegex.hasMatch(value.trim())) {
-      return 'Please enter a valid email';
-    }
-    return null;
-  }
-
-  String? _validatePhone(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'Please enter your phone number';
-    }
-    // Basic phone validation - adjust as needed
-    final phoneRegex = RegExp(r'^[0-9+\-\s()]{10,}$');
-    if (!phoneRegex.hasMatch(value.trim())) {
-      return 'Please enter a valid phone number';
-    }
-    return null;
-  }
-
-  String? _validatePassword(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Password is required';
-    }
-    if (value.length < 6) {
-      return 'Password must be at least 6 characters';
-    }
-    return null;
-  }
-
+  // ========== Google Sign-In ==========
   Future<void> _handleGoogleSignIn() async {
-    // If we already have a cached token, treat this as already authenticated and continue.
     try {
       final token = await TokenStorage.getToken();
-      if (token != null && token.isNotEmpty) {
-        // Quick UX: if token exists, navigate straight away using direct route
-        // to avoid reliance on named routes/onGenerateRoute.
-        if (!mounted) return;
-        await NavigationUtils.safePushReplacement(context, HomePageWidget());
+      if (token?.isNotEmpty ?? false) {
+        if (mounted) await NavigationUtils.safePushReplacement(context, HomePageWidget());
         return;
       }
     } catch (_) {}
 
-    // Otherwise proceed with the interactive Google sign-in flow.
     showAppLoadingDialog(context);
-
-    final res = await AuthService.signInWithGoogle(
-      role: _effectiveRole ?? widget.initialRole,
-    );
+    final res = await AuthService.signInWithGoogle(role: _effectiveRole ?? widget.initialRole);
 
     if (!mounted) return;
     Navigator.of(context, rootNavigator: true).pop();
 
     if (res['success'] == true) {
-      final profile = res['profile'] as Map<String, dynamic>?;
-      // Save profile to state so we can show it in the button
-      if (profile != null) {
-        setState(() {
-          _googleProfile = profile;
-        });
-        // persist to TokenStorage so it survives app restarts
-        try {
-          await TokenStorage.saveGoogleProfile(profile);
-        } catch (_) {}
-      }
-      if (profile != null) {
-        _model.fullNameTextController?.text =
-            (profile['name'] ?? '').toString();
-        _model.emailAddressTextController?.text =
-            (profile['email'] ?? '').toString();
-      }
+      await _processGoogleSignInSuccess(res);
+    } else {
+      _handleGoogleSignInError(res);
+    }
+  }
 
+  Future<void> _processGoogleSignInSuccess(Map<String, dynamic> res) async {
+    final profile = res['profile'] as Map<String, dynamic>?;
       final data = res['data'];
       if (data != null &&
           data is Map &&
@@ -307,27 +391,44 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
         return;
       }
 
-      await showAppSuccessDialog(
-        context,
-        title: 'Google signed in',
-        desc:
-            'We prefilled your name and email. Complete the form to finish creating your account.',
-      );
-    } else {
-      final err = res['error'];
-      final message = (err is Map && err['message'] != null)
-          ? err['message'].toString()
-          : (err != null ? err.toString() : 'Google sign-in failed');
-
-      if (!mounted) return;
-      await showAppErrorDialog(
-        context,
-        title: 'Sign-in error',
-        desc: message,
-      );
+    if (profile != null) {
+      setState(() {
+        _googleProfile = profile;
+        _model.fullNameTextController?.text = (profile['name'] ?? '').toString();
+        _model.emailAddressTextController?.text = (profile['email'] ?? '').toString();
+      });
+      await TokenStorage.saveGoogleProfile(profile);
     }
+
+    final reference = _extractSendchampReference(res);
+    final data = res['data'];
+    final phone = _phoneController.text.trim();
+
+    if (data != null && phone.isNotEmpty) {
+      await _navigateToVerification(
+        phone: phone,
+        reference: reference,
+        email: _model.emailAddressTextController?.text.trim(),
+      );
+      return;
+    }
+
+    await _saveRecentRegistration(reference);
+    if (!mounted) return;
+
+    await showAppSuccessDialog(
+      context,
+      title: 'Google signed in',
+      desc: 'We prefilled your name and email. Complete the form to finish creating your account.',
+      onOk: () => _handlePartialRegistrationNavigation(reference),
+    );
   }
 
+  void _handleGoogleSignInError(Map<String, dynamic> res) {
+    final err = res['error'];
+    final message = (err is Map && err['message'] != null)
+        ? err['message'].toString()
+        : (err != null ? err.toString() : 'Google sign-in failed');
   Future<void> _handleAppleSignIn() async {
     // Only available on iOS
     if (!Platform.isIOS) return;
@@ -429,181 +530,173 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
   Future<void> _handleCreateAccount() async {
     if (_isCreatingAccount) return;
 
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (mounted) AuthErrorHandler.showErrorDialog(context, message);
+  }
 
-    // Enforce acceptance of T&C and Privacy Policy
+  // ========== Account Creation ==========
+  Future<void> _handleCreateAccount() async {
+    if (_isCreatingAccount || !_formKey.currentState!.validate()) return;
+
     if (!_acceptedTos) {
-      await showAppErrorDialog(context,
-          title: 'Terms required',
-          desc:
-              'You must accept the Terms & Conditions and Privacy Policy to create an account.');
+      await showAppErrorDialog(
+        context,
+        title: 'Terms required',
+        desc: 'You must accept the Terms & Conditions and Privacy Policy to create an account.',
+      );
       return;
     }
 
     setState(() => _isCreatingAccount = true);
 
     try {
-      String normalizeRole(String? r) {
-        if (r == null) return 'customer';
-        final val = r.trim().toLowerCase();
-        if (val == 'client' || val == 'customer') return 'customer';
-        return val;
-      }
-
-      // Use the effective role (from constructor/route args) if available,
-      // otherwise fallback to the widget.initialRole and finally 'customer'.
-      final normalizedRole =
-          normalizeRole(_effectiveRole ?? widget.initialRole);
-
+      final normalizedRole = RoleUtils.normalize(_effectiveRole ?? widget.initialRole);
       final res = await AuthService.register(
         name: _model.fullNameTextController?.text.trim() ?? '',
         email: _model.emailAddressTextController?.text.trim() ?? '',
-        // Send the raw password (DO NOT trim/modify). Trimming here could
-        // change the user's chosen password and cause later login failures.
         password: _passwordController.text,
         role: normalizedRole,
-        phone: _phoneController.text.trim(),
-      ).timeout(const Duration(seconds: 30));
+        phone: normalizePhoneForApi(_phoneController.text.trim()),
+        persist: false,
+      ).timeout(AuthConstants.apiTimeout);
 
       if (res['success'] == true) {
-        await _processSuccessfulRegistration(res, normalizedRole);
+        await _processSuccessfulRegistration(res);
       } else {
-        _handleRegistrationError(res);
+        AuthErrorHandler.showErrorDialog(context, res['error']);
       }
     } catch (e) {
-      _handleGenericError(e);
+      AuthErrorHandler.showErrorDialog(context, e);
     } finally {
-      if (mounted) {
-        setState(() => _isCreatingAccount = false);
-      }
+      if (mounted) setState(() => _isCreatingAccount = false);
     }
   }
 
-  Future<void> _processSuccessfulRegistration(
-    Map<String, dynamic> res,
-    String normalizedRole,
-  ) async {
+  Future<void> _processSuccessfulRegistration(Map<String, dynamic> res) async {
+    final reference = _extractSendchampReference(res);
+    await _saveRecentRegistration(reference);
+
+    final serverMessage = _extractServerMessage(res);
+    final phone = _phoneController.text.trim();
+    final email = _model.emailAddressTextController?.text.trim();
+
+    if (serverMessage != null && mounted) {
+      await showAppSuccessDialog(
+        context,
+        title: 'Registration',
+        desc: serverMessage,
+        onOk: () => _handleSuccessfulRegistrationNavigation(phone, reference, email),
+      );
+    } else {
+      await _showSuccessToastAndNavigate(phone, reference, email);
+    }
+  }
+
+  // ========== Helper Methods ==========
+  String? _extractSendchampReference(Map<String, dynamic> res) {
+    try {
+      if (res['reference'] != null) return res['reference'].toString();
+      final data = res['data'];
+      if (data is Map) {
+        return (data['reference'] ?? data['sendchamp']?['reference'] ?? data['delivered']?['reference'])?.toString();
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  String? _extractServerMessage(Map<String, dynamic> res) {
+    try {
+      if (res['message'] is String) return res['message'] as String;
+      if (res['data'] is Map && res['data']['message'] is String) {
+        return res['data']['message'] as String;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> _saveRecentRegistration(String? reference) async {
     try {
       await TokenStorage.saveRecentRegistration(
         name: _model.fullNameTextController?.text.trim(),
         email: _model.emailAddressTextController?.text.trim(),
-        phone: _phoneController.text.trim(),
+        phone: normalizePhoneForApi(_phoneController.text.trim()),
+        reference: reference,
       );
     } catch (_) {}
+  }
 
-    if (!_navigateScheduled) {
-      _navigateScheduled = true;
+  void _handlePartialRegistrationNavigation(String? reference) {
+    Future.microtask(() async {
+      if (!mounted || _navigateScheduled) return;
+      final phone = _phoneController.text.trim();
+      if (phone.isNotEmpty) {
+        await _navigateToVerification(
+          phone: phone,
+          reference: reference,
+          email: _model.emailAddressTextController?.text.trim(),
+        );
+      }
+    });
+  }
 
-      // Show a short, non-blocking success toast then navigate to the welcome page
-      // Use a green, floating SnackBar with a check icon to indicate success
-      final successMsg = 'Account created successfully';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle, color: Colors.white, size: 20),
-              const SizedBox(width: 8),
-              Expanded(child: Text(successMsg)),
-            ],
-          ),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+  void _handleSuccessfulRegistrationNavigation(String phone, String? reference, String? email) {
+    Future.microtask(() async {
+      if (!mounted || _navigateScheduled) return;
+      await _navigateToVerification(phone: phone, reference: reference, email: email);
+    });
+  }
+
+  Future<void> _showSuccessToastAndNavigate(String phone, String? reference, String? email) async {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.white, size: 20),
+            SizedBox(width: 8),
+            Expanded(child: Text('Account created successfully')),
+          ],
         ),
-      );
-      // Wait briefly (match previous overlay duration) so the welcome page shows after the toast
-      await Future.delayed(const Duration(seconds: 3));
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        duration: AuthConstants.toastDuration,
+      ),
+    );
 
-      // Navigate to the WelcomeAfterSignup page and pass the role and the user's name
-      final name = _model.fullNameTextController?.text.trim();
-      // Schedule navigation after a short delay to avoid calling Navigator while
-      // it's locked (this can happen when previous dialogs/snackbars are still
-      // animating). Using a small delay is a robust cross-device solution.
-      Future.delayed(const Duration(milliseconds: 300), () async {
-        if (!mounted) return;
-
-        // Ensure the app in-memory state knows about the token immediately so
-        // subsequent pages (dashboard/home) can fetch the user's profile.
-        try {
-          String? token;
-          final body = res['data'];
-          if (res['token'] != null) token = res['token']?.toString();
-          if (token == null && body is Map) {
-            token = (body['token'] ?? body['data']?['token'])?.toString();
-          }
-          // NOTE: move setting token until after navigation to the welcome page
-          // so the router does not auto-redirect before the welcome screen is shown.
-
-          // Navigate to the welcome page passing role and name.
-          final welcome =
-              WelcomeAfterSignupWidget(role: normalizedRole, name: name);
-          try {
-            // Use the AccountCreationNavigator helper which detects GoRouter/pages API
-            await AccountCreationNavigator.navigateAfterSignup(
-              context,
-              welcome,
-              goRoute: WelcomeAfterSignupWidget.routePath,
-              preferImperative: true,
-            );
-
-            // Now apply token so router redirects (when appropriate) happen only
-            // after the welcome screen is presented.
-            if (token != null && token.isNotEmpty) {
-              await AuthNotifier.instance.setToken(token);
-            }
-          } catch (e) {
-            // Fallback to existing navigation util if helper fails
-            try {
-              await NavigationUtils.safeReplaceAllWith(context, welcome);
-              if (token != null && token.isNotEmpty) {
-                await AuthNotifier.instance.setToken(token);
-              }
-            } catch (_) {}
-          }
-        } catch (_) {}
-      });
-    }
+    await Future.delayed(AuthConstants.dialogDelay);
+    if (!mounted || _navigateScheduled) return;
+    await _navigateToVerification(phone: phone, reference: reference, email: email);
   }
 
-  void _handleRegistrationError(Map<String, dynamic> res) {
-    final err = res['error'];
-    String message = 'Failed to create account';
+  Future<void> _navigateToVerification({
+    required String phone,
+    String? reference,
+    String? email,
+  }) async {
+    if (_navigateScheduled) return;
+    _navigateScheduled = true;
 
-    if (err is Map && err['message'] != null) {
-      message = err['message'].toString();
-    } else if (err != null) {
-      message = err.toString();
-    }
-
-    showAppErrorDialog(
-      context,
-      title: 'Error',
-      desc: message,
+    await AuthNavigationService.goToVerification(
+      context: context,
+      phone: phone,
+      reference: reference,
+      email: email,
     );
   }
 
-  void _handleGenericError(dynamic e) {
-    final errorMessage = 'An error occurred. Please try again.';
-    showAppErrorDialog(
-      context,
-      title: 'Error',
-      desc: errorMessage,
-    );
-  }
+  void _navigateBack() => Navigator.of(context).maybePop();
 
-  void _navigateBack() {
-    Navigator.of(context).pop();
-  }
+  // ========== UI Helpers ==========
+  Color get _primaryColor => AuthConstants.primaryColor;
+  Color _getSurfaceAlpha(double opacity) => Theme.of(context).colorScheme.onSurface.withOpacity(opacity);
+  bool get _isButtonDisabled => _isCreatingAccount;
 
+  // ========== Build Methods ==========
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-    // Use app primary color (not default blue)
-    final Color primaryColor = const Color(0xFFA20025);
 
     return Scaffold(
       key: scaffoldKey,
@@ -611,104 +704,312 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
       body: SafeArea(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Top spacing and back button
-                const SizedBox(height: 40.0),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: IconButton(
-                    icon: const Icon(Icons.chevron_left_rounded),
-                    color: colorScheme.onSurface.withAlpha((0.6 * 255).toInt()),
-                    onPressed: _navigateBack,
-                    iconSize: 32,
-                  ),
-                ),
+          padding: const EdgeInsets.symmetric(horizontal: 32.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              _buildHeader(),
+              if (_effectiveRole != null) _buildRoleIndicator(),
+              const SizedBox(height: 40.0),
+              _buildForm(theme, isDark),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-                // Brand/Logo Area
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: primaryColor.withAlpha((0.1 * 255).toInt()),
-                  ),
-                  child: Icon(
-                    Icons.person_add,
-                    size: 40,
-                    color: primaryColor,
-                  ),
-                ),
+  Widget _buildHeader() {
+    return Column(
+      children: [
+        const SizedBox(height: 40.0),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: IconButton(
+            icon: const Icon(Icons.chevron_left_rounded),
+            color: _getSurfaceAlpha(0.6),
+            onPressed: _navigateBack,
+            iconSize: 32,
+          ),
+        ),
+        _buildIcon(),
+        const SizedBox(height: 32.0),
+        _buildTitle(),
+        const SizedBox(height: 8.0),
+        _buildSubtitle(),
+      ],
+    );
+  }
 
-                // Title
-                const SizedBox(height: 32.0),
-                Text(
-                  'Create an account',
-                  style: theme.textTheme.headlineLarge?.copyWith(
-                    fontWeight: FontWeight.w300,
-                    letterSpacing: -0.5,
-                  ),
-                ),
+  Widget _buildIcon() {
+    return Container(
+      width: 80,
+      height: 80,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: _primaryColor.withOpacity(0.1),
+      ),
+      child: Icon(Icons.person_add, size: 40, color: _primaryColor),
+    );
+  }
 
-                const SizedBox(height: 8.0),
-                Text(
-                  'Let\'s get started by filling out the form below.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurface
-                        .withAlpha((0.5 * 255).toInt()),
-                    fontWeight: FontWeight.w300,
-                  ),
-                ),
+  Widget _buildTitle() {
+    return Text(
+      'Create an account',
+      style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+        fontWeight: FontWeight.w300,
+        letterSpacing: -0.5,
+      ),
+    );
+  }
 
-                // Role Indicator (if present). Use the resolved _effectiveRole so
-                // role is shown regardless of whether it arrived via the
-                // constructor or route arguments.
-                if (_effectiveRole != null) ...[
-                  const SizedBox(height: 16.0),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: _effectiveRole!.toLowerCase() == 'artisan'
-                          ? primaryColor.withAlpha((0.1 * 255).toInt())
-                          : colorScheme.secondary
-                              .withAlpha((0.1 * 255).toInt()),
-                      borderRadius: BorderRadius.circular(20),
+  Widget _buildSubtitle() {
+    return Text(
+      'Let\'s get started by filling out the form below.',
+      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+        color: _getSurfaceAlpha(0.5),
+        fontWeight: FontWeight.w300,
+      ),
+    );
+  }
+
+  Widget _buildRoleIndicator() {
+    final isArtisan = RoleUtils.isArtisan(_effectiveRole);
+    final color = isArtisan ? _primaryColor : Theme.of(context).colorScheme.secondary;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 16.0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(RoleUtils.getIcon(_effectiveRole), color: color, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              RoleUtils.getDisplayName(_effectiveRole),
+              style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 14),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildForm(ThemeData theme, bool isDark) {
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildNameField(theme, isDark),
+          const SizedBox(height: 20.0),
+          _buildEmailField(theme, isDark),
+          const SizedBox(height: 20.0),
+          _buildPhoneField(theme, isDark),
+          const SizedBox(height: 20.0),
+          _buildPasswordField(theme, isDark),
+          const SizedBox(height: 32.0),
+          _buildTermsCheckbox(),
+          _buildCreateAccountButton(),
+          const SizedBox(height: 48.0),
+          _buildDivider(theme),
+          const SizedBox(height: 24.0),
+          _buildGoogleSignInButton(),
+          const SizedBox(height: 24.0),
+          _buildLoginLink(),
+          const SizedBox(height: 60.0),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLabel(String text) {
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+        color: _getSurfaceAlpha(0.6),
+        letterSpacing: 1.0,
+      ),
+    );
+  }
+
+  Widget _buildNameField(ThemeData theme, bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel('FULL NAME'),
+        const SizedBox(height: 8.0),
+        TextFormField(
+          controller: _model.fullNameTextController,
+          focusNode: _model.fullNameFocusNode,
+          autofillHints: const [AutofillHints.name],
+          decoration: _buildInputDecoration(theme, isDark, 'John Doe'),
+          style: const TextStyle(fontSize: 16),
+          textInputAction: TextInputAction.next,
+          validator: Validators.validateName,
+          onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_model.emailAddressFocusNode),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmailField(ThemeData theme, bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel('EMAIL'),
+        const SizedBox(height: 8.0),
+        TextFormField(
+          controller: _model.emailAddressTextController,
+          focusNode: _model.emailAddressFocusNode,
+          autofillHints: const [AutofillHints.email],
+          keyboardType: TextInputType.emailAddress,
+          decoration: _buildInputDecoration(theme, isDark, 'your@email.com'),
+          style: const TextStyle(fontSize: 16),
+          textInputAction: TextInputAction.next,
+          validator: Validators.validateEmail,
+          onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_phoneFocusNode),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPhoneField(ThemeData theme, bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel('PHONE NUMBER'),
+        const SizedBox(height: 8.0),
+        TextFormField(
+          controller: _phoneController,
+          focusNode: _phoneFocusNode,
+          autofillHints: const [AutofillHints.telephoneNumber],
+          keyboardType: TextInputType.phone,
+          decoration: _buildInputDecoration(theme, isDark, '+234'),
+          style: const TextStyle(fontSize: 16),
+          textInputAction: TextInputAction.next,
+          validator: Validators.validatePhone,
+          onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_passwordFocusNode),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPasswordField(ThemeData theme, bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildLabel('PASSWORD'),
+        const SizedBox(height: 8.0),
+        TextFormField(
+          controller: _passwordController,
+          focusNode: _passwordFocusNode,
+          obscureText: !_passwordVisible,
+          decoration: _buildInputDecoration(
+            theme,
+            isDark,
+            '••••••••',
+            suffixIcon: IconButton(
+              icon: Icon(
+                _passwordVisible ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                color: _getSurfaceAlpha(0.4),
+                size: 20,
+              ),
+              onPressed: () => setState(() => _passwordVisible = !_passwordVisible),
+            ),
+          ),
+          style: const TextStyle(fontSize: 16),
+          textInputAction: TextInputAction.done,
+          validator: Validators.validatePassword,
+          onFieldSubmitted: (_) => _handleCreateAccount(),
+        ),
+      ],
+    );
+  }
+
+  InputDecoration _buildInputDecoration(
+      ThemeData theme,
+      bool isDark,
+      String hintText, {
+        Widget? suffixIcon,
+      }) {
+    return InputDecoration(
+      hintText: hintText,
+      hintStyle: TextStyle(color: _getSurfaceAlpha(0.3)),
+      filled: true,
+      fillColor: isDark ? Colors.grey[900] : Colors.grey[50],
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12.0),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12.0),
+        borderSide: BorderSide(color: _primaryColor, width: 1.5),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12.0),
+        borderSide: BorderSide(color: theme.colorScheme.error, width: 1.0),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+      suffixIcon: suffixIcon,
+    );
+  }
+
+  Widget _buildTermsCheckbox() {
+    return Center(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Checkbox(
+            value: _acceptedTos,
+            onChanged: (v) => setState(() => _acceptedTos = v ?? false),
+            fillColor: WidgetStateProperty.resolveWith<Color?>((states) {
+              if (states.contains(WidgetState.selected)) return _primaryColor;
+              return Colors.transparent;
+            }),
+            checkColor: Colors.white,
+            side: const BorderSide(color: Colors.white),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () => setState(() => _acceptedTos = !_acceptedTos),
+            child: Text.rich(
+              TextSpan(
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 11),
+                children: [
+                  const TextSpan(text: 'I accept the '),
+                  TextSpan(
+                    text: 'T&C',
+                    recognizer: _tncRecognizer,
+                    style: TextStyle(
+                      color: _primaryColor,
+                      fontWeight: FontWeight.w600,
+                      decoration: TextDecoration.underline,
+                      fontSize: 11,
                     ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16.0,
-                      vertical: 8.0,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          _effectiveRole!.toLowerCase() == 'artisan'
-                              ? Icons.handyman_outlined
-                              : Icons.person_outline,
-                          color: _effectiveRole!.toLowerCase() == 'artisan'
-                              ? primaryColor
-                              : colorScheme.secondary,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          _effectiveRole!.toLowerCase() == 'artisan'
-                              ? 'Artisan Account'
-                              : 'Client Account',
-                          style: TextStyle(
-                            color: _effectiveRole!.toLowerCase() == 'artisan'
-                                ? primaryColor
-                                : colorScheme.secondary,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
+                  ),
+                  const TextSpan(text: ' and the '),
+                  TextSpan(
+                    text: 'Privacy Policy',
+                    recognizer: _privacyRecognizer,
+                    style: TextStyle(
+                      color: _primaryColor,
+                      fontWeight: FontWeight.w600,
+                      decoration: TextDecoration.underline,
+                      fontSize: 11,
                     ),
                   ),
+                  const TextSpan(text: ' of Rijhub'),
                 ],
+              ),
 
                 // Form
                 const SizedBox(height: 40.0),
@@ -1277,7 +1578,103 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCreateAccountButton() {
+    return ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: _primaryColor,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+        padding: const EdgeInsets.symmetric(vertical: 18.0),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
+        elevation: 0,
+      ),
+      onPressed: _isButtonDisabled ? null : _handleCreateAccount,
+      child: _isCreatingAccount
+          ? const SizedBox(
+        height: 20,
+        width: 20,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      )
+          : const Text(
+        'CREATE ACCOUNT',
+        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, letterSpacing: 0.5),
+      ),
+    );
+  }
+
+  Widget _buildDivider(ThemeData theme) {
+    return Row(
+      children: [
+        Expanded(child: Divider(color: _getSurfaceAlpha(0.1), thickness: 1)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Text('OR', style: TextStyle(color: _getSurfaceAlpha(0.3), fontSize: 12)),
         ),
+        Expanded(child: Divider(color: _getSurfaceAlpha(0.1), thickness: 1)),
+      ],
+    );
+  }
+
+  Widget _buildGoogleSignInButton() {
+    return OutlinedButton(
+      style: OutlinedButton.styleFrom(
+        side: BorderSide(color: _primaryColor),
+        padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 12.0),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
+      ),
+      onPressed: _handleGoogleSignIn,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            height: 24,
+            width: 24,
+            child: _buildGoogleIcon(),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            'Continue with Google',
+            style: TextStyle(color: _primaryColor, fontSize: 15, fontWeight: FontWeight.w500),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGoogleIcon() {
+    try {
+      return Image.asset(
+        'assets/images/google.webp',
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => Icon(Icons.g_mobiledata, color: _primaryColor, size: 20),
+      );
+    } catch (_) {
+      return Icon(Icons.g_mobiledata, color: _primaryColor, size: 20);
+    }
+  }
+
+  Widget _buildLoginLink() {
+    return Center(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Already have an account? ',
+            style: TextStyle(color: _getSurfaceAlpha(0.7), fontSize: 14),
+          ),
+          TextButton(
+            onPressed: () => AuthNavigationService.goToLogin(context),
+            style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 4.0)),
+            child: Text(
+              'Log in',
+              style: TextStyle(color: _primaryColor, fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
       ),
     );
   }
