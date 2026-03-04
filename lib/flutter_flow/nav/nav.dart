@@ -368,6 +368,7 @@ GoRouter createRouter(AuthNotifier auth) {
             // remains reachable immediately after successful verification.
             builder: (context, params) => WelcomeAfterSignupWidget(
               role: params.getParam<String>('role', ParamType.String),
+              name: params.getParam<String>('name', ParamType.String),
             ),
           ),
           FFRoute(

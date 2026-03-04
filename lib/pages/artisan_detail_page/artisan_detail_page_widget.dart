@@ -2512,39 +2512,29 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                           padding: EdgeInsets.symmetric(
                               vertical: isSmallScreen ? 14 : 16),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(isSmallScreen ? 10 : 12),
+                            borderRadius:
+                                BorderRadius.circular(isSmallScreen ? 10 : 12),
                           ),
                           elevation: 0,
                           shadowColor: Colors.transparent,
                         ),
-                        onPressed: () => _showHireSheet(context),
+                        onPressed: () async {
+                          if (!await ensureSignedInForAction(context)) return;
+                          _showHireSheet(context);
+                        },
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.calendar_today_outlined,
-                                size: isSmallScreen ? 18 : 20),
+                            Icon(
+                              Icons.calendar_today_outlined,
+                              size: isSmallScreen ? 18 : 20,
+                            ),
                             SizedBox(width: isSmallScreen ? 8 : 10),
                             Text(
                               'Book Now',
                               style: TextStyle(
                                 fontSize: bodyFontSize,
                                 fontWeight: FontWeight.w600,
-                          onPressed: () async {
-                            if (!await ensureSignedInForAction(context)) return;
-                            _showHireSheet(context);
-                          },
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.calendar_today_outlined,
-                                  size: isSmallScreen ? 18 : 20),
-                              SizedBox(width: isSmallScreen ? 8 : 10),
-                              Text(
-                                'Book Now',
-                                style: TextStyle(
-                                  fontSize: bodyFontSize,
-                                  fontWeight: FontWeight.w600,
-                                ),
                               ),
                             ),
                           ],

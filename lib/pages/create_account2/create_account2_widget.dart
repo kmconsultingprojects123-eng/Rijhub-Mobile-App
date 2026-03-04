@@ -333,60 +333,65 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
       if (data != null &&
           data is Map &&
           (data['token'] != null || (data['user'] != null))) {
-        // Extract token if present and set it on AppState so subsequent pages can
-        // fetch profile data. Then navigate to the welcome-after-signup flow so
-        // the user sees the onboarding screen before the dashboard.
-        Future.microtask(() async {
+        // Extract token if present. Navigate to welcome-after-signup before
+        // setting token so onboarding shows first.
+        String? token;
+        if (res['token'] != null) token = res['token']?.toString();
+        if (token == null)
+          token = (data['token'] ?? data['data']?['token'])?.toString();
+
+        final name =
+            profile != null ? (profile['name']?.toString() ?? '') : '';
+
+        // Use the backend-returned role (from the user object) so that
+        // existing users see the correct welcome message. Fall back to
+        // the locally-selected role only for genuinely new accounts.
+        String role = _effectiveRole ?? widget.initialRole ?? 'customer';
+        try {
+          final userData = data['user'] ?? data['data'];
+          if (userData is Map && userData['role'] != null) {
+            final backendRole = userData['role'].toString().toLowerCase();
+            if (backendRole == 'artisan' || backendRole == 'customer') {
+              role = backendRole;
+            }
+          }
+        } catch (_) {}
+
+        // Use post-frame callback so navigation runs after loading dialog is
+        // fully dismissed and the tree has settled. Future.microtask can run
+        // while the navigator is still processing the pop, or the widget can
+        // be unmounted when returning from external OAuth (e.g. Google).
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
           if (!mounted) return;
           try {
-            String? token;
-            if (res['token'] != null) token = res['token']?.toString();
-            if (token == null)
-              token = (data['token'] ?? data['data']?['token'])?.toString();
-            // NOTE: previously we set the token here which could trigger app-wide
-            // router redirects (to home/dashboard) before the WelcomeAfterSignup
-            // page had a chance to show. Move token persistence until after we
-            // successfully navigate to the welcome page below.
+            // Prefer GoRouter for navigation — more reliable when returning
+            // from background (Google OAuth) and avoids imperative navigator races.
+            final router = GoRouter.maybeOf(context);
+            if (router != null) {
+              final path = WelcomeAfterSignupWidget.routePath;
+              final q = <String, String>{
+                if (role.isNotEmpty) 'role': role,
+                if (name.isNotEmpty) 'name': name,
+              };
+              final uri = Uri(path: path, queryParameters: q);
+              router.go(uri.toString());
+            } else {
+              await NavigationUtils.safePushReplacement(
+                context,
+                WelcomeAfterSignupWidget(role: role, name: name),
+              );
+            }
 
-            final name =
-                profile != null ? (profile['name']?.toString() ?? '') : '';
-
-            // Use the backend-returned role (from the user object) so that
-            // existing users see the correct welcome message. Fall back to
-            // the locally-selected role only for genuinely new accounts.
-            String role = _effectiveRole ?? widget.initialRole ?? 'customer';
-            try {
-              final userData = data['user'] ?? data['data'];
-              if (userData is Map && userData['role'] != null) {
-                final backendRole = userData['role'].toString().toLowerCase();
-                if (backendRole == 'artisan' || backendRole == 'customer') {
-                  role = backendRole;
-                }
-              }
-            } catch (_) {}
-
-            final welcome = WelcomeAfterSignupWidget(role: role, name: name);
-            await AccountCreationNavigator.navigateAfterSignup(
-              context,
-              welcome,
-              goRoute: WelcomeAfterSignupWidget.routePath,
-              preferImperative: true,
-            );
-
-            // Only after the welcome page was pushed should we apply the token
-            // to the app state so that automatic router redirects will happen
-            // when the user proceeds from the welcome screen. This preserves
-            // the UX of showing onboarding first.
             if (token != null && token.isNotEmpty) {
               await AuthNotifier.instance.setToken(token);
             }
           } catch (_) {
-            // Fallback to safer replacement to home if something goes wrong
             try {
-              NavigationUtils.safePushReplacement(context, HomePageWidget());
+              if (mounted) {
+                await NavigationUtils.safePushReplacement(context, HomePageWidget());
+              }
             } catch (_) {}
           }
-          return;
         });
         return;
       }
@@ -401,10 +406,10 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
     }
 
     final reference = _extractSendchampReference(res);
-    final data = res['data'];
+    final pendingRegistrationData = res['data'];
     final phone = _phoneController.text.trim();
 
-    if (data != null && phone.isNotEmpty) {
+    if (pendingRegistrationData != null && phone.isNotEmpty) {
       await _navigateToVerification(
         phone: phone,
         reference: reference,
@@ -429,6 +434,11 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
     final message = (err is Map && err['message'] != null)
         ? err['message'].toString()
         : (err != null ? err.toString() : 'Google sign-in failed');
+    if (!mounted) return;
+    if (message == 'Google sign-in cancelled') return;
+    AuthErrorHandler.showErrorDialog(context, message);
+  }
+
   Future<void> _handleAppleSignIn() async {
     // Only available on iOS
     if (!Platform.isIOS) return;
@@ -456,49 +466,54 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
       if (data != null &&
           data is Map &&
           (data['token'] != null || (data['user'] != null))) {
-        // Navigate to welcome screen
-        Future.microtask(() async {
+        String? token;
+        if (res['token'] != null) token = res['token']?.toString();
+        if (token == null)
+          token = (data['token'] ?? data['data']?['token'])?.toString();
+
+        final name =
+            profile != null ? (profile['name']?.toString() ?? '') : '';
+
+        String role = _effectiveRole ?? widget.initialRole ?? 'customer';
+        try {
+          final userData = data['user'] ?? data['data'];
+          if (userData is Map && userData['role'] != null) {
+            final backendRole = userData['role'].toString().toLowerCase();
+            if (backendRole == 'artisan' || backendRole == 'customer') {
+              role = backendRole;
+            }
+          }
+        } catch (_) {}
+
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
           if (!mounted) return;
           try {
-            String? token;
-            if (res['token'] != null) token = res['token']?.toString();
-            if (token == null)
-              token = (data['token'] ?? data['data']?['token'])?.toString();
-
-            final name =
-                profile != null ? (profile['name']?.toString() ?? '') : '';
-
-            // Use the backend-returned role (from the user object) so that
-            // existing users see the correct welcome message. Fall back to
-            // the locally-selected role only for genuinely new accounts.
-            String role = _effectiveRole ?? widget.initialRole ?? 'customer';
-            try {
-              final userData = data['user'] ?? data['data'];
-              if (userData is Map && userData['role'] != null) {
-                final backendRole = userData['role'].toString().toLowerCase();
-                if (backendRole == 'artisan' || backendRole == 'customer') {
-                  role = backendRole;
-                }
-              }
-            } catch (_) {}
-
-            final welcome = WelcomeAfterSignupWidget(role: role, name: name);
-            await AccountCreationNavigator.navigateAfterSignup(
-              context,
-              welcome,
-              goRoute: WelcomeAfterSignupWidget.routePath,
-              preferImperative: true,
-            );
+            final router = GoRouter.maybeOf(context);
+            if (router != null) {
+              final path = WelcomeAfterSignupWidget.routePath;
+              final q = <String, String>{
+                if (role.isNotEmpty) 'role': role,
+                if (name.isNotEmpty) 'name': name,
+              };
+              final uri = Uri(path: path, queryParameters: q);
+              router.go(uri.toString());
+            } else {
+              await NavigationUtils.safePushReplacement(
+                context,
+                WelcomeAfterSignupWidget(role: role, name: name),
+              );
+            }
 
             if (token != null && token.isNotEmpty) {
               await AuthNotifier.instance.setToken(token);
             }
           } catch (_) {
             try {
-              NavigationUtils.safePushReplacement(context, HomePageWidget());
+              if (mounted) {
+                await NavigationUtils.safePushReplacement(context, HomePageWidget());
+              }
             } catch (_) {}
           }
-          return;
         });
         return;
       }
@@ -525,12 +540,6 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
         );
       }
     }
-  }
-
-  Future<void> _handleCreateAccount() async {
-    if (_isCreatingAccount) return;
-
-    if (mounted) AuthErrorHandler.showErrorDialog(context, message);
   }
 
   // ========== Account Creation ==========
@@ -1011,7 +1020,14 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                 ],
               ),
 
-                // Form
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /*
                 const SizedBox(height: 40.0),
                 Form(
                   key: _formKey,
@@ -1582,6 +1598,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
       ),
     );
   }
+
+*/
 
   Widget _buildCreateAccountButton() {
     return ElevatedButton(

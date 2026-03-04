@@ -498,9 +498,11 @@ class _NavBarPageState extends State<NavBarPage> {
     // rebuild the nav bar and tabs accordingly and prevent role leakage.
     try {
       // Capture notifier via Provider to ensure we remove the same listener in dispose
-      _appState = AppStateNotifier.instance; // fallback if Provider not ready yet
+      _appState =
+          AppStateNotifier.instance; // fallback if Provider not ready yet
       try {
-        final withProvider = Provider.of<AppStateNotifier?>(context, listen: false);
+        final withProvider =
+            Provider.of<AppStateNotifier?>(context, listen: false);
         if (withProvider != null) _appState = withProvider;
       } catch (_) {}
 
@@ -540,7 +542,9 @@ class _NavBarPageState extends State<NavBarPage> {
     // Client & Guest: Home, Job, Discover, Booking, Profile
     // Artisan: Home, Job, Booking, Profile (Discover hidden)
     final profile = context.watch<AppStateNotifier>().profile;
-    final bool isArtisan = (profile?['role']?.toString().toLowerCase().contains('artisan') ?? false);
+    final bool isArtisan =
+        (profile?['role']?.toString().toLowerCase().contains('artisan') ??
+            false);
     // Discover is shown only when both the widget allows it and the user is not an artisan.
     final bool shouldShowDiscover = widget.showDiscover && !isArtisan;
 
@@ -665,58 +669,70 @@ class _NavBarPageState extends State<NavBarPage> {
             ) &&
             tabs.length > 1 &&
             !_isNestedNavBar,
-        child: FloatingNavbar(
-          currentIndex: currentIndex,
-          onTap: (i) async {
-            // Handle taps asynchronously because we may need to check guest session and prompt sign-in
-            final key = tabs.keys.toList()[i];
-            final restrictedKeysForGuests = [
-              'JobPostPage',
-              'BookingPage',
-              'profile'
-            ];
-            final guest = await isGuestSession();
+        child: Container(
+          color: FlutterFlowTheme.of(context).secondaryBackground,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FloatingNavbar(
+                currentIndex: currentIndex,
+                onTap: (i) async {
+                  // Handle taps asynchronously because we may need to check guest session and prompt sign-in
+                  final key = tabs.keys.toList()[i];
+                  final restrictedKeysForGuests = [
+                    'JobPostPage',
+                    'BookingPage',
+                    'profile'
+                  ];
+                  final guest = await isGuestSession();
 
-            if (guest && restrictedKeysForGuests.contains(key)) {
-              // For guests: show the themed guest prompt (immediately on tap) and respect choice
-              final res = await _showGuestPrompt();
-              if (res == true) {
-                try {
-                  NavigationUtils.safePush(context, const LoginAccountWidget());
-                } catch (_) {}
-              }
-              return;
-            }
+                  if (guest && restrictedKeysForGuests.contains(key)) {
+                    // For guests: show the themed guest prompt (immediately on tap) and respect choice
+                    final res = await _showGuestPrompt();
+                    if (res == true) {
+                      try {
+                        NavigationUtils.safePush(
+                            context, const LoginAccountWidget());
+                      } catch (_) {}
+                    }
+                    return;
+                  }
 
-            // Not a guest or allowed: proceed to change tab
-            safeSetState(() {
-              _currentPage = null;
-              // If user taps Home and is an artisan, ensure we show the artisan dashboard
-              if (key == 'homePage' && isArtisan) {
-                _currentPageName = 'homePage';
-                _currentPage = ArtisanDashboardPageWidget();
-              } else {
-                // Final guard: ensure the tapped key exists in the computed tabs.
-                if (tabs.containsKey(key)) {
-                  _currentPageName = key;
-                } else {
-                  // Fallback to first allowed tab.
-                  _currentPageName = tabs.keys.first;
-                }
-              }
-            });
-          },
-          backgroundColor: FlutterFlowTheme.of(context).secondaryBackground,
-          selectedItemColor: FlutterFlowTheme.of(context).primary,
-          unselectedItemColor: FlutterFlowTheme.of(context).secondaryText,
-          selectedBackgroundColor: const Color(0x00000000),
-          borderRadius: 0.0,
-          itemBorderRadius: 0.0,
-          margin: const EdgeInsets.all(0.0),
-          padding: const EdgeInsetsDirectional.fromSTEB(0.0, 15.0, 0.0, 15.0),
-          width: double.infinity,
-          elevation: 0.0,
-          items: navItems,
+                  // Not a guest or allowed: proceed to change tab
+                  safeSetState(() {
+                    _currentPage = null;
+                    // If user taps Home and is an artisan, ensure we show the artisan dashboard
+                    if (key == 'homePage' && isArtisan) {
+                      _currentPageName = 'homePage';
+                      _currentPage = ArtisanDashboardPageWidget();
+                    } else {
+                      // Final guard: ensure the tapped key exists in the computed tabs.
+                      if (tabs.containsKey(key)) {
+                        _currentPageName = key;
+                      } else {
+                        // Fallback to first allowed tab.
+                        _currentPageName = tabs.keys.first;
+                      }
+                    }
+                  });
+                },
+                backgroundColor:
+                    FlutterFlowTheme.of(context).secondaryBackground,
+                selectedItemColor: FlutterFlowTheme.of(context).primary,
+                unselectedItemColor: FlutterFlowTheme.of(context).secondaryText,
+                selectedBackgroundColor: const Color(0x00000000),
+                borderRadius: 0.0,
+                itemBorderRadius: 0.0,
+                margin: const EdgeInsets.all(0.0),
+                padding:
+                    const EdgeInsetsDirectional.fromSTEB(0.0, 15.0, 0.0, 15.0),
+                width: double.infinity,
+                elevation: 0.0,
+                items: navItems,
+              ),
+              SizedBox(height: MediaQuery.of(context).padding.bottom),
+            ],
+          ),
         ),
       ),
     );
