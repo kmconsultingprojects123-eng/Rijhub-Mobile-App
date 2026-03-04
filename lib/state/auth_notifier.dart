@@ -72,9 +72,11 @@ class AuthNotifier extends ChangeNotifier {
       _status = AuthStatus.authenticatedClient;
     }
 
-    // Attempt to register device for push notifications if we have a valid token
+    // For returning users: register device if we already have FCM token (from previous session).
+    // Do NOT request permission here — that is deferred to login/create-account (Apple Guideline 4.5.4).
     if (_token != null && _token!.isNotEmpty) {
-      NotificationController.registerDevice(_token);
+      NotificationController.registerDeviceWithStoredJwt(reason: 'refreshAuth')
+          .catchError((_) {});
     }
   }
 
@@ -99,10 +101,7 @@ class AuthNotifier extends ChangeNotifier {
         if (prof != null) _profile = Map<String, dynamic>.from(prof);
       } catch (_) {}
 
-      // Register device for push notifications
-      if (_token != null && _token!.isNotEmpty) {
-        NotificationController.registerDevice(_token);
-      }
+      // Notification permission is requested via pre-permission dialog in login UI (Apple Guideline 4.5.4)
     } catch (_) {
       // ignore
     } finally {
@@ -122,6 +121,7 @@ class AuthNotifier extends ChangeNotifier {
       } else {
         await TokenStorage.saveToken(token);
         await _refreshProfileAndSetStatus();
+        // Notification permission requested via pre-permission dialog in welcome UI (Apple Guideline 4.5.4)
       }
     } catch (_) {
       // ignore

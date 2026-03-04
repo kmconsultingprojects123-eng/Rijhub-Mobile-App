@@ -48,19 +48,13 @@ void main() async {
   // Register background message handler (required for background/terminated data messages).
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
-  // Initialize Awesome Notifications
+  // Initialize Awesome Notifications (no permission request here — deferred until after login per Apple Guideline 4.5.4)
   await NotificationController.initializeNotifications();
   await NotificationController.startListeningNotificationEvents();
 
-  // Request notification permissions
-  await NotificationController.requestNotificationPermissions();
-
-  // Request FCM token and print it
-  await NotificationController.requestFirebaseToken();
-
   print('');
   print('═══════════════════════════════════════════════════════════');
-  print('✅ NOTIFICATION SETUP COMPLETE - LISTENING FOR PUSH');
+  print('✅ NOTIFICATION SETUP COMPLETE - PERMISSION DEFERRED TO LOGIN');
   print('═══════════════════════════════════════════════════════════');
   print('');
 

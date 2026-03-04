@@ -3,6 +3,7 @@ import '/flutter_flow/nav/nav.dart';
 import '/index.dart';
 import '../../state/auth_notifier.dart';
 import '../../utils/navigation_utils.dart';
+import '../../utils/notification_permission_dialog.dart';
 import 'package:flutter/material.dart';
 
 class WelcomeAfterSignupWidget extends StatefulWidget {
@@ -26,7 +27,6 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
   final Color _purpleColor = const Color(0xFF6366F1);
 
   // State variables
-  Timer? _autoNavTimer;
   bool _navigated = false;
   String _role = 'customer';
   String? _name;
@@ -62,12 +62,14 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
     // Start progress animation
     _startProgressAnimation();
 
-    // Auto-navigation after delay (reduced to 2 seconds)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _autoNavTimer = Timer(const Duration(seconds: 2), () {
-        if (!mounted || _navigated) return;
-        _navigateToDashboard();
-      });
+    // Show notification permission dialog after a brief moment so user sees welcome, then navigate when dismissed
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || _navigated) return;
+      await Future.delayed(const Duration(milliseconds: 600));
+      if (!mounted || _navigated) return;
+      await showNotificationPermissionDialog(context, role: _role);
+      if (!mounted || _navigated) return;
+      _navigateToDashboard();
     });
   }
 
@@ -87,14 +89,12 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
 
   @override
   void dispose() {
-    _autoNavTimer?.cancel();
     super.dispose();
   }
 
   void _navigateToDashboard() {
     if (_navigated) return;
     _navigated = true;
-    _autoNavTimer?.cancel();
 
     // Reset progress to full to give visual feedback that action is taken
     if (mounted) {
@@ -132,13 +132,16 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
   }
 
   /// Waits for auth to be ready (token set, profile loaded) before navigating.
-  /// GoRouter redirects unauthenticated users to Splash2, so we must wait
-  /// for the signup flow's setToken to complete before calling go().
+  /// Capped at 2 seconds to match the progress bar — never blocks longer.
+  /// If auth isn't ready by then, we proceed anyway; setToken continues in
+  /// background and the user isn't stuck.
   Future<void> _waitForAuthReady() async {
     if (AuthNotifier.instance.isAuthenticated) return;
-    for (var i = 0; i < 40; i++) {
+    const maxWaitMs = 2000; // 2 seconds, matches progress animation
+    const stepMs = 100;
+    for (var i = 0; i < maxWaitMs ~/ stepMs; i++) {
       if (AuthNotifier.instance.isAuthenticated) return;
-      await Future.delayed(const Duration(milliseconds: 100));
+      await Future.delayed(const Duration(milliseconds: stepMs));
     }
   }
 
@@ -349,16 +352,7 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
                           ),
                           SizedBox(height: isSmallScreen ? 8 : 12),
                           Text(
-                            'Redirecting in ${(2 * (1 - _progressValue)).ceil()} seconds',
-                            style: TextStyle(
-                              fontSize: isSmallScreen ? 13 : 14,
-                              fontWeight: FontWeight.w500,
-                              color: _getTextSecondary(context),
-                            ),
-                          ),
-                          SizedBox(height: isSmallScreen ? 8 : 12),
-                          Text(
-                            'Tap anywhere to skip',
+                            'Tap anywhere to continue',
                             style: TextStyle(
                               fontSize: isSmallScreen ? 12 : 13,
                               color: _getTextSecondary(context),
