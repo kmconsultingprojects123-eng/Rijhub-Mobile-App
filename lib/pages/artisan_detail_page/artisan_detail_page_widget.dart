@@ -13,6 +13,7 @@ import '../../services/artist_service.dart';
 import '../../services/my_service_service.dart';
 import '../../pages/payment_init/payment_init_page_widget.dart';
 import '../../utils/app_notification.dart';
+import '../../utils/auth_guard.dart';
 
 class ArtisanDetailPageWidget extends StatefulWidget {
   const ArtisanDetailPageWidget(
@@ -2528,6 +2529,22 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                               style: TextStyle(
                                 fontSize: bodyFontSize,
                                 fontWeight: FontWeight.w600,
+                          onPressed: () async {
+                            if (!await ensureSignedInForAction(context)) return;
+                            _showHireSheet(context);
+                          },
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.calendar_today_outlined,
+                                  size: isSmallScreen ? 18 : 20),
+                              SizedBox(width: isSmallScreen ? 8 : 10),
+                              Text(
+                                'Book Now',
+                                style: TextStyle(
+                                  fontSize: bodyFontSize,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ],

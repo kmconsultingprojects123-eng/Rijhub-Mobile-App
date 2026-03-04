@@ -165,6 +165,11 @@ class NotificationController {
     }
   }
 
+  /// Check if notifications are already allowed (no dialog shown).
+  static Future<bool> isNotificationAllowed() async {
+    return AwesomeNotifications().isNotificationAllowed();
+  }
+
   /// Request notification permissions
   static Future<bool> requestNotificationPermissions() async {
     print('🔔 [NOTIFICATION] Checking notification permissions...');

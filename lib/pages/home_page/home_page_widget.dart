@@ -14,6 +14,7 @@ import '../../state/app_state_notifier.dart';
 import '../../services/user_service.dart';
 import '../../api_config.dart';
 import '../../utils/navigation_utils.dart';
+import '../../utils/auth_guard.dart';
 import '../../widgets/network_error_widget.dart';
 import '../../services/token_storage.dart';
 import 'package:flutter/services.dart'; // <-- added
@@ -434,7 +435,8 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
                         ),
                         icon: Icon(Icons.edit_location_outlined),
                         label: Text('Edit profile address', style: theme.textTheme.bodyLarge),
-                        onPressed: () {
+                        onPressed: () async {
+                          if (!await ensureSignedInForAction(ctx)) return;
                           Navigator.of(ctx).pop();
                           NavigationUtils.safePush(context, EditProfileUserWidget());
                         },

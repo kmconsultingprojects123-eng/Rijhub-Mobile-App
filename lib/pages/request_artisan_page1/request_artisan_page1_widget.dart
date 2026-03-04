@@ -8,6 +8,7 @@ import '/index.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
+import '../../utils/auth_guard.dart';
 import 'request_artisan_page1_model.dart';
 export 'request_artisan_page1_model.dart';
 
@@ -999,6 +1000,7 @@ class _RequestArtisanPage1WidgetState extends State<RequestArtisanPage1Widget> {
                   ),
                   FFButtonWidget(
                     onPressed: () async {
+                      if (!await ensureSignedInForAction(context)) return;
                       context.pushNamed(QuoteSummaryPage2Widget.routeName);
                     },
                     text: 'Submit Quote Request',

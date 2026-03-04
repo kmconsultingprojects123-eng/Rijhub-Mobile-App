@@ -1,6 +1,7 @@
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
 import 'package:flutter/material.dart';
+import 'dart:io' show Platform;
 import 'create_account2_model.dart';
 import '/services/auth_service.dart';
 import '/services/token_storage.dart';
@@ -255,6 +256,17 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
 
       role = RoleUtils.normalize(role);
       if (kDebugMode) debugPrint('CreateAccount2 resolved role: $role');
+      // Normalize some common synonyms (client -> customer)
+      if (role != null) {
+        final v = role.trim().toLowerCase();
+        if (v == 'client') role = 'customer';
+      }
+
+      // Debug log to help trace navigation role propagation during testing
+      if (kDebugMode)
+        debugPrint(
+            'CreateAccount2 resolved role: $role (widget.initialRole=${widget.initialRole})');
+
       if (mounted) setState(() => _effectiveRole = role);
     });
   }
@@ -317,6 +329,67 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
 
   Future<void> _processGoogleSignInSuccess(Map<String, dynamic> res) async {
     final profile = res['profile'] as Map<String, dynamic>?;
+      final data = res['data'];
+      if (data != null &&
+          data is Map &&
+          (data['token'] != null || (data['user'] != null))) {
+        // Extract token if present and set it on AppState so subsequent pages can
+        // fetch profile data. Then navigate to the welcome-after-signup flow so
+        // the user sees the onboarding screen before the dashboard.
+        Future.microtask(() async {
+          if (!mounted) return;
+          try {
+            String? token;
+            if (res['token'] != null) token = res['token']?.toString();
+            if (token == null)
+              token = (data['token'] ?? data['data']?['token'])?.toString();
+            // NOTE: previously we set the token here which could trigger app-wide
+            // router redirects (to home/dashboard) before the WelcomeAfterSignup
+            // page had a chance to show. Move token persistence until after we
+            // successfully navigate to the welcome page below.
+
+            final name =
+                profile != null ? (profile['name']?.toString() ?? '') : '';
+
+            // Use the backend-returned role (from the user object) so that
+            // existing users see the correct welcome message. Fall back to
+            // the locally-selected role only for genuinely new accounts.
+            String role = _effectiveRole ?? widget.initialRole ?? 'customer';
+            try {
+              final userData = data['user'] ?? data['data'];
+              if (userData is Map && userData['role'] != null) {
+                final backendRole = userData['role'].toString().toLowerCase();
+                if (backendRole == 'artisan' || backendRole == 'customer') {
+                  role = backendRole;
+                }
+              }
+            } catch (_) {}
+
+            final welcome = WelcomeAfterSignupWidget(role: role, name: name);
+            await AccountCreationNavigator.navigateAfterSignup(
+              context,
+              welcome,
+              goRoute: WelcomeAfterSignupWidget.routePath,
+              preferImperative: true,
+            );
+
+            // Only after the welcome page was pushed should we apply the token
+            // to the app state so that automatic router redirects will happen
+            // when the user proceeds from the welcome screen. This preserves
+            // the UX of showing onboarding first.
+            if (token != null && token.isNotEmpty) {
+              await AuthNotifier.instance.setToken(token);
+            }
+          } catch (_) {
+            // Fallback to safer replacement to home if something goes wrong
+            try {
+              NavigationUtils.safePushReplacement(context, HomePageWidget());
+            } catch (_) {}
+          }
+          return;
+        });
+        return;
+      }
 
     if (profile != null) {
       setState(() {
@@ -356,6 +429,106 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
     final message = (err is Map && err['message'] != null)
         ? err['message'].toString()
         : (err != null ? err.toString() : 'Google sign-in failed');
+  Future<void> _handleAppleSignIn() async {
+    // Only available on iOS
+    if (!Platform.isIOS) return;
+
+    showAppLoadingDialog(context);
+
+    final res = await AuthService.signInWithApple(
+      role: _effectiveRole ?? widget.initialRole,
+    );
+
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+
+    if (res['success'] == true) {
+      final profile = res['profile'] as Map<String, dynamic>?;
+      // Save profile to state so we can show it in the button
+      if (profile != null) {
+        _model.fullNameTextController?.text =
+            (profile['name'] ?? '').toString();
+        _model.emailAddressTextController?.text =
+            (profile['email'] ?? '').toString();
+      }
+
+      final data = res['data'];
+      if (data != null &&
+          data is Map &&
+          (data['token'] != null || (data['user'] != null))) {
+        // Navigate to welcome screen
+        Future.microtask(() async {
+          if (!mounted) return;
+          try {
+            String? token;
+            if (res['token'] != null) token = res['token']?.toString();
+            if (token == null)
+              token = (data['token'] ?? data['data']?['token'])?.toString();
+
+            final name =
+                profile != null ? (profile['name']?.toString() ?? '') : '';
+
+            // Use the backend-returned role (from the user object) so that
+            // existing users see the correct welcome message. Fall back to
+            // the locally-selected role only for genuinely new accounts.
+            String role = _effectiveRole ?? widget.initialRole ?? 'customer';
+            try {
+              final userData = data['user'] ?? data['data'];
+              if (userData is Map && userData['role'] != null) {
+                final backendRole = userData['role'].toString().toLowerCase();
+                if (backendRole == 'artisan' || backendRole == 'customer') {
+                  role = backendRole;
+                }
+              }
+            } catch (_) {}
+
+            final welcome = WelcomeAfterSignupWidget(role: role, name: name);
+            await AccountCreationNavigator.navigateAfterSignup(
+              context,
+              welcome,
+              goRoute: WelcomeAfterSignupWidget.routePath,
+              preferImperative: true,
+            );
+
+            if (token != null && token.isNotEmpty) {
+              await AuthNotifier.instance.setToken(token);
+            }
+          } catch (_) {
+            try {
+              NavigationUtils.safePushReplacement(context, HomePageWidget());
+            } catch (_) {}
+          }
+          return;
+        });
+        return;
+      }
+
+      await showAppSuccessDialog(
+        context,
+        title: 'Apple signed in',
+        desc:
+            'We prefilled your name and email. Complete the form to finish creating your account.',
+      );
+    } else {
+      final err = res['error'];
+      final message = (err is Map && err['message'] != null)
+          ? err['message'].toString()
+          : (err != null ? err.toString() : 'Apple sign-in failed');
+
+      // Don't show error dialog for user cancellation
+      if (message != 'Apple sign-in cancelled') {
+        if (!mounted) return;
+        await showAppErrorDialog(
+          context,
+          title: 'Sign-in error',
+          desc: message,
+        );
+      }
+    }
+  }
+
+  Future<void> _handleCreateAccount() async {
+    if (_isCreatingAccount) return;
 
     if (mounted) AuthErrorHandler.showErrorDialog(context, message);
   }
@@ -837,6 +1010,572 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                   const TextSpan(text: ' of Rijhub'),
                 ],
               ),
+
+                // Form
+                const SizedBox(height: 40.0),
+                Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Full Name Field
+                      Text(
+                        'FULL NAME',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: theme.colorScheme.onSurface
+                              .withAlpha((0.6 * 255).toInt()),
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                      const SizedBox(height: 8.0),
+                      TextFormField(
+                        controller: _model.fullNameTextController,
+                        focusNode: _model.fullNameFocusNode,
+                        autofillHints: const [AutofillHints.name],
+                        decoration: InputDecoration(
+                          hintText: 'John Doe',
+                          hintStyle: TextStyle(
+                            color: theme.colorScheme.onSurface
+                                .withAlpha((0.3 * 255).toInt()),
+                          ),
+                          filled: true,
+                          fillColor:
+                              isDark ? Colors.grey[900] : Colors.grey[50],
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12.0),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12.0),
+                            borderSide: BorderSide(
+                              color: primaryColor,
+                              width: 1.5,
+                            ),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12.0),
+                            borderSide: BorderSide(
+                              color: theme.colorScheme.error,
+                              width: 1.0,
+                            ),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16.0,
+                            vertical: 16.0,
+                          ),
+                        ),
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface,
+                          fontSize: 16,
+                        ),
+                        textInputAction: TextInputAction.next,
+                        validator: _validateName,
+                        onFieldSubmitted: (_) => FocusScope.of(context)
+                            .requestFocus(_model.emailAddressFocusNode),
+                      ),
+
+                      const SizedBox(height: 20.0),
+
+                      // Email Field
+                      Text(
+                        'EMAIL',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: theme.colorScheme.onSurface
+                              .withAlpha((0.6 * 255).toInt()),
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                      const SizedBox(height: 8.0),
+                      TextFormField(
+                        controller: _model.emailAddressTextController,
+                        focusNode: _model.emailAddressFocusNode,
+                        autofillHints: const [AutofillHints.email],
+                        keyboardType: TextInputType.emailAddress,
+                        decoration: InputDecoration(
+                          hintText: 'your@email.com',
+                          hintStyle: TextStyle(
+                            color: theme.colorScheme.onSurface
+                                .withAlpha((0.3 * 255).toInt()),
+                          ),
+                          filled: true,
+                          fillColor:
+                              isDark ? Colors.grey[900] : Colors.grey[50],
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12.0),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12.0),
+                            borderSide: BorderSide(
+                              color: primaryColor,
+                              width: 1.5,
+                            ),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12.0),
+                            borderSide: BorderSide(
+                              color: theme.colorScheme.error,
+                              width: 1.0,
+                            ),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16.0,
+                            vertical: 16.0,
+                          ),
+                        ),
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface,
+                          fontSize: 16,
+                        ),
+                        textInputAction: TextInputAction.next,
+                        validator: _validateEmail,
+                        onFieldSubmitted: (_) => FocusScope.of(context)
+                            .requestFocus(_phoneFocusNode),
+                      ),
+
+                      const SizedBox(height: 20.0),
+
+                      // Phone Number Field
+                      Text(
+                        'PHONE NUMBER',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: theme.colorScheme.onSurface
+                              .withAlpha((0.6 * 255).toInt()),
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                      const SizedBox(height: 8.0),
+                      TextFormField(
+                        controller: _phoneController,
+                        focusNode: _phoneFocusNode,
+                        autofillHints: const [AutofillHints.telephoneNumber],
+                        keyboardType: TextInputType.phone,
+                        decoration: InputDecoration(
+                          hintText: '+1234567890',
+                          hintStyle: TextStyle(
+                            color: theme.colorScheme.onSurface
+                                .withAlpha((0.3 * 255).toInt()),
+                          ),
+                          filled: true,
+                          fillColor:
+                              isDark ? Colors.grey[900] : Colors.grey[50],
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12.0),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12.0),
+                            borderSide: BorderSide(
+                              color: primaryColor,
+                              width: 1.5,
+                            ),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12.0),
+                            borderSide: BorderSide(
+                              color: theme.colorScheme.error,
+                              width: 1.0,
+                            ),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16.0,
+                            vertical: 16.0,
+                          ),
+                        ),
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface,
+                          fontSize: 16,
+                        ),
+                        textInputAction: TextInputAction.next,
+                        validator: _validatePhone,
+                        onFieldSubmitted: (_) => FocusScope.of(context)
+                            .requestFocus(_passwordFocusNode),
+                      ),
+
+                      const SizedBox(height: 20.0),
+
+                      // Password Field
+                      Text(
+                        'PASSWORD',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: theme.colorScheme.onSurface
+                              .withAlpha((0.6 * 255).toInt()),
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                      const SizedBox(height: 8.0),
+                      TextFormField(
+                        controller: _passwordController,
+                        focusNode: _passwordFocusNode,
+                        obscureText: !_passwordVisible,
+                        decoration: InputDecoration(
+                          hintText: '••••••••',
+                          hintStyle: TextStyle(
+                            color: theme.colorScheme.onSurface
+                                .withAlpha((0.3 * 255).toInt()),
+                          ),
+                          filled: true,
+                          fillColor:
+                              isDark ? Colors.grey[900] : Colors.grey[50],
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12.0),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12.0),
+                            borderSide: BorderSide(
+                              color: primaryColor,
+                              width: 1.5,
+                            ),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12.0),
+                            borderSide: BorderSide(
+                              color: theme.colorScheme.error,
+                              width: 1.0,
+                            ),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16.0,
+                            vertical: 16.0,
+                          ),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _passwordVisible
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                              color: theme.colorScheme.onSurface
+                                  .withAlpha((0.4 * 255).toInt()),
+                              size: 20,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _passwordVisible = !_passwordVisible;
+                              });
+                            },
+                          ),
+                        ),
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface,
+                          fontSize: 16,
+                        ),
+                        textInputAction: TextInputAction.done,
+                        validator: _validatePassword,
+                        onFieldSubmitted: (_) => _handleCreateAccount(),
+                      ),
+
+                      // Create Account Button
+                      const SizedBox(height: 32.0),
+
+                      // Accept T&C and Privacy Policy (required)
+                      Center(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Checkbox(
+                              value: _acceptedTos,
+                              onChanged: (v) {
+                                if (!mounted) return;
+                                setState(() => _acceptedTos = v ?? false);
+                              },
+                              // Unchecked: white outline & transparent fill. Checked: primaryColor fill, white tick.
+                              fillColor:
+                                  MaterialStateProperty.resolveWith<Color?>(
+                                      (states) {
+                                if (states.contains(MaterialState.selected))
+                                  return primaryColor;
+                                return Colors.transparent;
+                              }),
+                              checkColor: Colors.white,
+                              side: BorderSide(
+                                  color: isDark ? Colors.white : Colors.black,
+                                  width: 1.5),
+                            ),
+                            // const SizedBox(width: 5),
+                            // Tap non-link text to toggle the checkbox; link spans still open URLs.
+                            GestureDetector(
+                              onTap: () {
+                                if (!mounted) return;
+                                setState(() => _acceptedTos = !_acceptedTos);
+                              },
+                              child: Text.rich(
+                                TextSpan(
+                                  style: TextStyle(
+                                    color: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.color,
+                                    fontSize:
+                                        11, // slightly smaller to keep whole text on one line
+                                  ),
+                                  children: [
+                                    const TextSpan(text: 'I accept the '),
+                                    TextSpan(
+                                      text: 'T&C',
+                                      recognizer: _tncRecognizer,
+                                      style: TextStyle(
+                                        color: primaryColor,
+                                        fontWeight: FontWeight.w600,
+                                        decoration: TextDecoration.underline,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                    const TextSpan(text: ' and the '),
+                                    TextSpan(
+                                      text: 'Privacy Policy',
+                                      recognizer: _privacyRecognizer,
+                                      style: TextStyle(
+                                        color: primaryColor,
+                                        fontWeight: FontWeight.w600,
+                                        decoration: TextDecoration.underline,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                    const TextSpan(text: ' of Rijhub'),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          foregroundColor: colorScheme.onPrimary,
+                          padding: const EdgeInsets.symmetric(vertical: 18.0),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12.0),
+                          ),
+                          elevation: 0,
+                        ),
+                        onPressed:
+                            _isCreatingAccount ? null : _handleCreateAccount,
+                        child: _isCreatingAccount
+                            ? SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation(
+                                    colorScheme.onPrimary,
+                                  ),
+                                ),
+                              )
+                            : Text(
+                                'CREATE ACCOUNT',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                      ),
+
+                      // Divider
+                      const SizedBox(height: 48.0),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Divider(
+                              color: theme.colorScheme.onSurface
+                                  .withAlpha((0.1 * 255).toInt()),
+                              thickness: 1,
+                            ),
+                          ),
+                          Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 16.0),
+                            child: Text(
+                              'OR',
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurface
+                                    .withAlpha((0.3 * 255).toInt()),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: Divider(
+                              color: theme.colorScheme.onSurface
+                                  .withAlpha((0.1 * 255).toInt()),
+                              thickness: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      // Google Sign In Button
+                      const SizedBox(height: 24.0),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(
+                            color: primaryColor,
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 12.0, horizontal: 12.0),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12.0),
+                          ),
+                        ),
+                        // Google Sign-In enabled
+                        onPressed: _handleGoogleSignIn,
+                        child: LayoutBuilder(builder: (context, constraints) {
+                          // Keep content constrained to avoid overflow on narrow screens
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // Match login page: 24x24 asset icon and centered label
+                              SizedBox(
+                                height: 24,
+                                width: 24,
+                                child: Builder(builder: (ctx) {
+                                  try {
+                                    return Image.asset(
+                                      'assets/images/google.webp',
+                                      fit: BoxFit.contain,
+                                      errorBuilder:
+                                          (context, error, stackTrace) {
+                                        return Icon(
+                                          Icons.g_mobiledata,
+                                          color: primaryColor,
+                                          size: 20,
+                                        );
+                                      },
+                                    );
+                                  } catch (_) {
+                                    return Icon(
+                                      Icons.g_mobiledata,
+                                      color: primaryColor,
+                                      size: 20,
+                                    );
+                                  }
+                                }),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Continue with Google',
+                                style: TextStyle(
+                                  color: primaryColor,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          );
+                        }),
+                      ),
+
+                      // Apple Sign In Button (iOS only)
+                      if (Platform.isIOS) ...[
+                        const SizedBox(height: 12.0),
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(
+                                color: isDark ? Colors.white : Colors.black),
+                            backgroundColor:
+                                isDark ? Colors.white : Colors.black,
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 12.0, horizontal: 12.0),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12.0),
+                            ),
+                          ),
+                          onPressed: _handleAppleSignIn,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.apple,
+                                color: isDark ? Colors.black : Colors.white,
+                                size: 24,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Continue with Apple',
+                                style: TextStyle(
+                                  color: isDark ? Colors.black : Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+
+                      // Already have an account? Log in
+                      const SizedBox(height: 24.0),
+                      Center(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Already have an account?',
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurface
+                                    .withAlpha((0.7 * 255).toInt()),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                // Direct navigation to Login page so tap immediately routes there.
+                                if (!mounted) return;
+                                try {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const LoginAccountWidget(),
+                                    ),
+                                  );
+                                } catch (e) {
+                                  // Fallback to safe helpers if direct push fails for any reason
+                                  try {
+                                    NavigationUtils.safePushNoAuth(
+                                        context, const LoginAccountWidget());
+                                  } catch (_) {
+                                    try {
+                                      NavigationUtils.safePush(
+                                          context, const LoginAccountWidget());
+                                    } catch (_) {}
+                                  }
+                                }
+                              },
+                              style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 4.0)),
+                              child: Text(
+                                'Log in',
+                                style: TextStyle(
+                                  color: primaryColor,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Bottom spacing
+                      const SizedBox(height: 60.0),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ],

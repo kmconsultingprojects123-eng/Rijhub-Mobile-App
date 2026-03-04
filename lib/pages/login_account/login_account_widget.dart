@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import '/services/auth_service.dart';
 import '../forget_password/forget_password_widget.dart';
@@ -17,6 +18,7 @@ import '../../services/token_storage.dart';
 import '../create_account2/create_account2_widget.dart';
 import '/main.dart';
 import '../../utils/navigation_utils.dart';
+import '../../utils/notification_permission_dialog.dart';
 export 'login_account_model.dart';
 
 class LoginAccountWidget extends StatefulWidget {
@@ -41,6 +43,8 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
   bool _isNavigating = false;
   // Google sign-in in progress
   bool _isGoogleSigningIn = false;
+  // Apple sign-in in progress
+  bool _isAppleSigningIn = false;
   // Remember-me flag (persisted)
   bool _rememberMe = false;
 
@@ -236,44 +240,23 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
     AppNotification.showSuccess(context, 'Logged in successfully');
     await Future.delayed(const Duration(milliseconds: 200));
 
-    // Try dismissing any pushed overlays (Navigator.push) that could be
-    // sitting on top of the GoRouter-managed stack. Pop up to a few times
-    // to recover from various push patterns used across the app.
-    try {
-      var popCount = 0;
-      while (Navigator.of(context).canPop() && popCount < 6) {
-        Navigator.of(context).pop();
-        popCount += 1;
-        await Future.delayed(const Duration(milliseconds: 40));
-      }
-    } catch (_) {}
-
-    // Allow router a short moment to process refreshListenable and redirect.
-    await Future.delayed(const Duration(milliseconds: 300));
-
+    // Show friendly notification permission dialog before navigating (Apple Guideline 4.5.4)
     if (!mounted) return;
-
-    // If the router did not navigate away (for example the login page was
-    // the current declarative location), fall back to role-based navigation.
-    try {
-      // Some versions of go_router don't expose a top-level `location` getter
-      // on the GoRouter object; inspect the routerDelegate configuration string
-      // instead which contains the current location information. This is the
-      // same approach used elsewhere in the project to avoid depending on
-      // package internals.
-      final router = GoRouter.of(context);
-      final dynamic cfg = router.routerDelegate.currentConfiguration;
-      final String cfgStr = cfg?.toString() ?? '';
-      if (cfgStr.startsWith(LoginAccountWidget.routePath) ||
-          cfgStr.contains(LoginAccountWidget.routePath)) {
-        // Imperative fallback to ensure user is taken to their landing page.
-        await _navigateBasedOnRole();
-      }
-    } catch (_) {
-      // As a last-resort fallback try the role-based navigator which has
-      // multiple fallback strategies.
-      await _navigateBasedOnRole();
+    var roleForDialog = parsedRole ?? '';
+    if (roleForDialog.isEmpty) {
+      final prof = AuthNotifier.instance.profile;
+      roleForDialog = (prof?['role'] ?? prof?['type'] ?? 'customer').toString();
     }
+    await showNotificationPermissionDialog(context, role: roleForDialog.isNotEmpty ? roleForDialog : 'customer');
+
+    // Do NOT pop the route stack here. When login is reached via Navigator.push
+    // (e.g. from create_account2 or splash_screen_page2), popping would pop back
+    // through create_account2 to splash, leaving the user on the splash screen
+    // instead of home. The GoRouter redirect also does not apply when login was
+    // pushed (GoRouter's location stays at the underlying route). Always use
+    // imperative role-based navigation to ensure the user reaches home/dashboard.
+    if (!mounted) return;
+    await _navigateBasedOnRole();
   }
 
   String? _extractToken(dynamic data) {
@@ -509,6 +492,115 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
     }
   }
 
+  Future<void> _handleAppleSignIn() async {
+    // Only available on iOS
+    if (!Platform.isIOS) {
+      AppNotification.showError(
+          context, 'Apple Sign-In is only available on iOS');
+      return;
+    }
+
+    if (_isAppleSigningIn || _isNavigating) return;
+    setState(() => _isAppleSigningIn = true);
+
+    try {
+      final res = await AuthService.signInWithApple();
+
+      if (!mounted) return;
+
+      if (res['success'] == true) {
+        // Notify user
+        AppNotification.showSuccess(context, 'Logged in with Apple');
+        await Future.delayed(const Duration(milliseconds: 200));
+
+        // Extract token and role from response
+        final data = res['data'];
+        String? token;
+        String? parsedRole;
+
+        if (data is Map) {
+          token = (data['token'] ?? data['data']?['token'])?.toString();
+          parsedRole =
+              (data['role'] ?? data['user']?['role'] ?? data['data']?['role'])
+                  ?.toString();
+        }
+
+        // Set auth state
+        if (parsedRole != null && parsedRole.isNotEmpty) {
+          await AuthNotifier.instance
+              .login(parsedRole.toLowerCase(), token: token);
+        } else if (token != null) {
+          await AuthNotifier.instance.setToken(token);
+        } else {
+          await AuthNotifier.instance.refreshAuth();
+        }
+
+        // Wait briefly for profile
+        final timeout = DateTime.now().add(Duration(seconds: 2));
+        while (DateTime.now().isBefore(timeout)) {
+          if (AuthNotifier.instance.profile != null) break;
+          await Future.delayed(Duration(milliseconds: 100));
+        }
+
+        if (!mounted) return;
+        await _navigateBasedOnRole();
+      } else {
+        final err = res['error'];
+        final message = (err is Map && err['message'] != null)
+            ? err['message'].toString()
+            : (err != null ? err.toString() : 'Apple sign-in failed');
+        if (message != 'Apple sign-in cancelled') {
+          AppNotification.showError(context, message);
+        }
+      }
+    } catch (e) {
+      AppNotification.showError(context, ErrorMessages.humanize(e));
+    } finally {
+      if (mounted) setState(() => _isAppleSigningIn = false);
+    }
+  }
+
+  Future<void> _navigateToSignUp() async {
+    if (_isNavigating) return;
+    if (!mounted) return;
+    setState(() => _isNavigating = true);
+
+    try {
+      final navigator = Navigator.of(context);
+      var navigated = false;
+
+      // Prefer direct MaterialPageRoute navigation to avoid reliance on
+      // Navigator.onGenerateRoute / named routes that may not be configured.
+      try {
+        await NavigationUtils.safePushNoAuth(context, CreateAccount2Widget());
+        navigated = true;
+      } catch (_) {}
+
+      // If the direct push failed for any reason, try named routes as a fallback
+      if (!navigated) {
+        try {
+          await NavigationUtils.safePushNoAuth(context, CreateAccount2Widget());
+          navigated = true;
+        } catch (_) {}
+      }
+
+      if (!navigated) {
+        try {
+          await NavigationUtils.safePushNoAuth(context, CreateAccount2Widget());
+          navigated = true;
+        } catch (_) {}
+      }
+    } catch (e, st) {
+      // Show a friendly error and log stacktrace if navigation fails
+      AppNotification.showError(
+          context, 'Could not open Sign up: ${ErrorMessages.humanize(e)}');
+      // Optionally: print to console for debugging
+      if (kDebugMode)
+        debugPrint('Navigation error in _navigateToSignUp: $e\n$st');
+    } finally {
+      if (mounted) setState(() => _isNavigating = false);
+    }
+  }
 
   // Show a bottom sheet prompting user to choose a role (artisan or client)
   Future<void> _showRoleSelectionSheet() async {
@@ -978,13 +1070,22 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                                 if (!mounted) return;
                                 setState(() => _rememberMe = v ?? false);
                               },
-                              fillColor: MaterialStateProperty.resolveWith<Color?>((states) {
+                              fillColor:
+                                  MaterialStateProperty.resolveWith<Color?>(
+                                      (states) {
                                 if (states.contains(MaterialState.selected))
                                   return primaryColor;
-                                return Colors.transparent;
+                                return isDark
+                                    ? Colors.grey[800]
+                                    : Colors.grey[100];
                               }),
                               checkColor: Colors.white,
-                              side: const BorderSide(color: Colors.white),
+                              side: BorderSide(
+                                color: _rememberMe
+                                    ? primaryColor
+                                    : theme.colorScheme.outline,
+                                width: 1.5,
+                              ),
                             ),
                             Expanded(
                                 child: Text('Remember me',
@@ -1118,12 +1219,59 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                                 style: TextStyle(
                                   color: primaryColor,
                                   fontSize: 15,
-                                  fontWeight: FontWeight.w500,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ],
                           ),
                   ),
+
+                  // Apple Sign In Button (iOS only)
+                  if (Platform.isIOS) ...[
+                    const SizedBox(height: 12.0),
+                    OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(
+                            color: isDark ? Colors.white : Colors.black),
+                        backgroundColor: isDark ? Colors.white : Colors.black,
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 14.0, horizontal: 12.0),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12.0),
+                        ),
+                      ),
+                      onPressed: _isAppleSigningIn ? null : _handleAppleSignIn,
+                      child: _isAppleSigningIn
+                          ? SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation(
+                                    isDark ? Colors.black : Colors.white),
+                              ),
+                            )
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.apple,
+                                  color: isDark ? Colors.black : Colors.white,
+                                  size: 24,
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  'Continue with Apple',
+                                  style: TextStyle(
+                                    color: isDark ? Colors.black : Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ],
 
                   // Sign Up - Minimal
                   const SizedBox(height: 32.0),

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import '/flutter_flow/flutter_flow_theme.dart';
 import '/index.dart';
 import '../state/auth_notifier.dart';
 import '../pages/login_account/login_account_widget.dart';
+import '../pages/splash_screen_page2/splash_screen_page2_widget.dart';
 import 'navigation_utils.dart';
 
 /// Lightweight auth guard utilities.
@@ -19,6 +22,98 @@ Future<bool> isGuestSession() async {
   } catch (_) {
     return true;
   }
+}
+
+/// Returns true if the current user needs to sign in (guest or unauthenticated).
+/// Use this to guard actions that require a signed-in user.
+bool needsSignInForAction() {
+  try {
+    return !AuthNotifier.instance.isAuthenticated;
+  } catch (_) {
+    return true;
+  }
+}
+
+/// Shows a dialog prompting guest/unauthenticated users to login or sign up.
+/// On Login: clears guest session and navigates to login page.
+/// On Sign Up: clears guest session and navigates to splash/role selection.
+/// Returns a Future that completes when the dialog is dismissed.
+Future<void> showGuestAuthRequiredDialog(
+  BuildContext context, {
+  String title = 'Sign in required',
+  String message = 'You need to sign in or create an account to continue.',
+}) async {
+  final theme = FlutterFlowTheme.of(context);
+  final isGuest = AuthNotifier.instance.isGuest;
+
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    barrierColor: Colors.black.withAlpha((0.4 * 255).round()),
+    builder: (ctx) {
+      return AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('Cancel', style: TextStyle(color: theme.secondaryText)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              if (isGuest) {
+                try {
+                  await AuthNotifier.instance.logout();
+                } catch (_) {}
+              }
+              if (!ctx.mounted) return;
+              try {
+                ctx.go(LoginAccountWidget.routePath);
+              } catch (_) {
+                NavigationUtils.safePushNoAuth(ctx, const LoginAccountWidget());
+              }
+            },
+            child: Text('Login', style: TextStyle(fontWeight: FontWeight.w600, color: theme.primary)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              if (isGuest) {
+                try {
+                  await AuthNotifier.instance.logout();
+                } catch (_) {}
+              }
+              if (!ctx.mounted) return;
+              try {
+                ctx.go(SplashScreenPage2Widget.routePath);
+              } catch (_) {
+                NavigationUtils.safePushNoAuth(ctx, const SplashScreenPage2Widget());
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: theme.primary,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Sign Up'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+/// Ensures the user is signed in (not guest, not unauthenticated) before
+/// performing an action. If the user needs to sign in, shows the auth dialog
+/// and returns false. Returns true if the user is properly authenticated.
+/// Usage: if (!await ensureSignedInForAction(context)) return;
+Future<bool> ensureSignedInForAction(
+  BuildContext context, {
+  String? message,
+}) async {
+  if (!needsSignInForAction()) return true;
+  await showGuestAuthRequiredDialog(context, message: message ?? 'You need to sign in or create an account to continue.');
+  return false;
 }
 
 Future<bool> ensureAuthenticatedOrPrompt(BuildContext context, {String title = 'Sign in required', String message = 'You need to sign in to continue. Sign in now to access this feature.'}) async {

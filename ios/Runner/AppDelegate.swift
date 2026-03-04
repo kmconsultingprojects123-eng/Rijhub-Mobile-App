@@ -5,26 +5,15 @@ import GoogleMaps
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
-  // Create a FlutterEngine early and register plugins on it. This ensures plugin
-  // registration runs before any platform views (like Google Maps) are created,
-  // preventing 'unregistered_view_type' errors.
-  lazy var flutterEngine: FlutterEngine = {
-    let engine = FlutterEngine(name: "shared_engine")
-    engine.run()
-    // Register generated plugins with this engine
-    GeneratedPluginRegistrant.register(with: engine)
-    return engine
-  }()
-
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    // Register plugins with the default Flutter engine
+    GeneratedPluginRegistrant.register(with: self)
+    
     // Provide Google Maps API key for iOS native SDK
     GMSServices.provideAPIKey("AIzaSyAjdDayJe-TVV8Cz6a-kHFCoJm6oNgeix8")
-
-    // Ensure the engine is instantiated and plugins registered early
-    _ = flutterEngine
 
     // Configure GoogleSignIn client ID if present in Info.plist
     if let clientID = Bundle.main.object(forInfoDictionaryKey: "GIDClientID") as? String {
