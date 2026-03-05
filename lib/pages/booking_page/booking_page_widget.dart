@@ -76,6 +76,14 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
       final headers = <String, String>{'Content-Type': 'application/json', 'Authorization': 'Bearer $token'};
       final uri = Uri.parse('$API_BASE_URL/api/chat/booking/$bookingId');
       final resp = await http.get(uri, headers: headers).timeout(const Duration(seconds: 12));
+      if (kDebugMode) {
+        debugPrint('--- Chat Thread API Request ---');
+        debugPrint('URL: $uri');
+        debugPrint('Headers: $headers');
+        debugPrint('Status Code: ${resp.statusCode}');
+        debugPrint('Response Body: ${resp.body}');
+        debugPrint('-------------------------------');
+      }
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
         if (kDebugMode) debugPrint('fetchThreadIdForBooking non-2xx ${resp.statusCode} ${resp.body}');
         return null;
@@ -367,8 +375,15 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
       final url = _isArtisan
           ? '$API_BASE_URL/api/bookings/artisan/$pid?page=$_page&limit=$effectiveLimit$qParam'
           : '$API_BASE_URL/api/bookings/customer/$pid?page=$_page&limit=$effectiveLimit$qParam';
-
       final response = await http.get(Uri.parse(url), headers: headers).timeout(const Duration(seconds: 8));
+      if (kDebugMode) {
+        debugPrint('--- Booking API Request ---');
+        debugPrint('URL: $url');
+        debugPrint('Headers: $headers');
+        debugPrint('Status Code: ${response.statusCode}');
+        debugPrint('Response Body: ${response.body}');
+        debugPrint('---------------------------');
+      }
       if (response.statusCode >= 200 && response.statusCode < 300 && response.body.isNotEmpty) {
         final decoded = jsonDecode(response.body);
         dynamic data = decoded is Map ? (decoded['data'] ?? decoded) : decoded;
@@ -458,8 +473,15 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
       final url = _isArtisan
           ? '$API_BASE_URL/api/bookings/artisan/$pid?page=1&limit=$effectiveLimit$qParam'
           : '$API_BASE_URL/api/bookings/customer/$pid?page=1&limit=$effectiveLimit$qParam';
-
       final response = await http.get(Uri.parse(url), headers: headers).timeout(const Duration(seconds: 8));
+      if (kDebugMode) {
+        debugPrint('--- Booking Background API Request ---');
+        debugPrint('URL: $url');
+        debugPrint('Headers: $headers');
+        debugPrint('Status Code: ${response.statusCode}');
+        debugPrint('Response Body: ${response.body}');
+        debugPrint('--------------------------------------');
+      }
       if (response.statusCode >= 200 && response.statusCode < 300 && response.body.isNotEmpty) {
         final decoded = jsonDecode(response.body);
         dynamic data = decoded is Map ? (decoded['data'] ?? decoded) : decoded;
@@ -505,6 +527,14 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
       if (token != null && token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
       final url = '$API_BASE_URL/api/users/$userId';
       final res = await http.get(Uri.parse(url), headers: headers).timeout(const Duration(seconds:6));
+      if (kDebugMode) {
+        debugPrint('--- User Details API Request ---');
+        debugPrint('URL: $url');
+        debugPrint('Headers: $headers');
+        debugPrint('Status Code: ${res.statusCode}');
+        debugPrint('Response Body: ${res.body}');
+        debugPrint('---------------------------------');
+      }
       if (res.statusCode >=200 && res.statusCode <300 && res.body.isNotEmpty) {
         final d = jsonDecode(res.body);
         if (d is Map) {

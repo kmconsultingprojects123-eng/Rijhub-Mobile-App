@@ -15,7 +15,8 @@ dynamic _safeJsonParse(String? raw) {
   if (raw == null || raw.isEmpty) return null;
   try {
     final parsed = jsonDecode(raw);
-    if (parsed is Map) return Map<String, dynamic>.from(parsed.cast<String, dynamic>());
+    if (parsed is Map)
+      return Map<String, dynamic>.from(parsed.cast<String, dynamic>());
     if (parsed is List) return parsed;
     return parsed;
   } catch (_) {
@@ -39,39 +40,59 @@ class ArtistService {
 
   /// Fetch artisans from backend with optional pagination and query.
   /// Accepts multiple server response shapes and returns a list of artisan maps.
-  static Future<List<Map<String, dynamic>>> fetchArtisans({int page = 1, int limit = 20, String? q, String? trade, String? name, String? location, double? lat, double? lon, int? radiusKm}) async {
+  static Future<List<Map<String, dynamic>>> fetchArtisans(
+      {int page = 1,
+      int limit = 20,
+      String? q,
+      String? trade,
+      String? name,
+      String? location,
+      double? lat,
+      double? lon,
+      int? radiusKm}) async {
     final token = await TokenStorage.getToken();
     final headers = <String, String>{'Content-Type': 'application/json'};
     if (token != null) headers['Authorization'] = 'Bearer $token';
-    final qParams = <String, String>{'role': 'artisan', 'page': page.toString(), 'limit': limit.toString()};
+    final qParams = <String, String>{
+      'role': 'artisan',
+      'page': page.toString(),
+      'limit': limit.toString()
+    };
     if (q != null && q.isNotEmpty) qParams['q'] = q;
     if (trade != null && trade.isNotEmpty) qParams['trade'] = trade;
     // Only use `name` as a q fallback when `q` is not provided to avoid accidentally overriding an explicit `q`.
-    if ((q == null || q.isEmpty) && name != null && name.isNotEmpty) qParams['q'] = name;
+    if ((q == null || q.isEmpty) && name != null && name.isNotEmpty)
+      qParams['q'] = name;
     if (location != null && location.isNotEmpty) qParams['location'] = location;
     if (lat != null) qParams['lat'] = lat.toString();
     if (lon != null) qParams['lon'] = lon.toString();
     if (radiusKm != null) qParams['radiusKm'] = radiusKm.toString();
 
     // Prefer the dedicated artisans endpoint per API docs
-    final uri = Uri.parse('$API_BASE_URL/api/artisans').replace(queryParameters: qParams);
-    
+    final uri = Uri.parse('$API_BASE_URL/api/artisans')
+        .replace(queryParameters: qParams);
+
     print('┌────────────────── DISCOVER/HOME SERVICE LOGS ──────────────────');
     print('│ [SERVICE REQUEST] ArtistService.fetchArtisans');
     print('│ URL: ${uri.toString()}');
     print('│ PARAMS: $qParams');
     print('└────────────────────────────────────────────────────────────────');
-    
+
     final respMap = await ApiClient.get(uri.toString(), headers: headers);
-    
+
     print('┌────────────────── SERVICE RESPONSE ──────────────────');
     print('│ STATUS: ${respMap['status']}');
     print('└──────────────────────────────────────────────────────');
 
-    if ((respMap['status'] is int) && (respMap['status'] as int) >= 200 && (respMap['status'] as int) < 300) {
+    if ((respMap['status'] is int) &&
+        (respMap['status'] as int) >= 200 &&
+        (respMap['status'] as int) < 300) {
       dynamic body;
       try {
-        body = respMap['json'] ?? (respMap['body']?.isNotEmpty == true ? jsonDecode(respMap['body'] as String) : null);
+        body = respMap['json'] ??
+            (respMap['body']?.isNotEmpty == true
+                ? jsonDecode(respMap['body'] as String)
+                : null);
       } catch (e) {
         // If the server returned non-json (HTML error page or empty), return empty list
         // attempt a very small recovery: if body contains a JSON-like array substring, try to extract it
@@ -91,33 +112,50 @@ class ArtistService {
       if (body == null) return [];
 
       // If the body itself is a list
-      if (body is List) return List<Map<String, dynamic>>.from(body.map((e) => Map<String, dynamic>.from(e)));
+      if (body is List)
+        return List<Map<String, dynamic>>.from(
+            body.map((e) => Map<String, dynamic>.from(e)));
 
       // Common response shapes
       // 1) { success: true, data: [ ... ] }
-      if (body is Map && body['data'] is List) return List<Map<String, dynamic>>.from((body['data'] as List).map((e) => Map<String, dynamic>.from(e)));
+      if (body is Map && body['data'] is List)
+        return List<Map<String, dynamic>>.from(
+            (body['data'] as List).map((e) => Map<String, dynamic>.from(e)));
 
       // 2) { success: true, data: { docs: [...] } }
       if (body is Map && body['data'] is Map) {
         final d = body['data'] as Map<String, dynamic>;
-        if (d['docs'] is List) return List<Map<String, dynamic>>.from((d['docs'] as List).map((e) => Map<String, dynamic>.from(e)));
-        if (d['items'] is List) return List<Map<String, dynamic>>.from((d['items'] as List).map((e) => Map<String, dynamic>.from(e)));
-        if (d['users'] is List) return List<Map<String, dynamic>>.from((d['users'] as List).map((e) => Map<String, dynamic>.from(e)));
+        if (d['docs'] is List)
+          return List<Map<String, dynamic>>.from(
+              (d['docs'] as List).map((e) => Map<String, dynamic>.from(e)));
+        if (d['items'] is List)
+          return List<Map<String, dynamic>>.from(
+              (d['items'] as List).map((e) => Map<String, dynamic>.from(e)));
+        if (d['users'] is List)
+          return List<Map<String, dynamic>>.from(
+              (d['users'] as List).map((e) => Map<String, dynamic>.from(e)));
       }
 
       // 3) { users: [...] }
-      if (body is Map && body['users'] is List) return List<Map<String, dynamic>>.from((body['users'] as List).map((e) => Map<String, dynamic>.from(e)));
+      if (body is Map && body['users'] is List)
+        return List<Map<String, dynamic>>.from(
+            (body['users'] as List).map((e) => Map<String, dynamic>.from(e)));
 
       // 4) sometimes server nests under 'result' or 'results'
-      if (body is Map && body['result'] is List) return List<Map<String, dynamic>>.from((body['result'] as List).map((e) => Map<String, dynamic>.from(e)));
-      if (body is Map && body['results'] is List) return List<Map<String, dynamic>>.from((body['results'] as List).map((e) => Map<String, dynamic>.from(e)));
+      if (body is Map && body['result'] is List)
+        return List<Map<String, dynamic>>.from(
+            (body['result'] as List).map((e) => Map<String, dynamic>.from(e)));
+      if (body is Map && body['results'] is List)
+        return List<Map<String, dynamic>>.from(
+            (body['results'] as List).map((e) => Map<String, dynamic>.from(e)));
 
       // 5) if data is an object with single array-like property, try to find first List value
       if (body is Map) {
         for (final entry in body.entries) {
           if (entry.value is List) {
             try {
-              return List<Map<String, dynamic>>.from((entry.value as List).map((e) => Map<String, dynamic>.from(e)));
+              return List<Map<String, dynamic>>.from((entry.value as List)
+                  .map((e) => Map<String, dynamic>.from(e)));
             } catch (_) {
               // continue
             }
@@ -127,7 +165,8 @@ class ArtistService {
             for (final e2 in m.entries) {
               if (e2.value is List) {
                 try {
-                  return List<Map<String, dynamic>>.from((e2.value as List).map((e) => Map<String, dynamic>.from(e)));
+                  return List<Map<String, dynamic>>.from((e2.value as List)
+                      .map((e) => Map<String, dynamic>.from(e)));
                 } catch (_) {}
               }
             }
@@ -138,20 +177,31 @@ class ArtistService {
       // If we couldn't find a list in the primary response, try alternative endpoints before giving up.
       try {
         // 1) Try search endpoint
-        final searchUri = Uri.parse('$API_BASE_URL/api/artisans/search').replace(queryParameters: qParams);
-        print('┌────────────────── DISCOVER/HOME FALLBACK 1 (SEARCH) ──────────────────');
+        final searchUri = Uri.parse('$API_BASE_URL/api/artisans/search')
+            .replace(queryParameters: qParams);
+        print(
+            '┌────────────────── DISCOVER/HOME FALLBACK 1 (SEARCH) ──────────────────');
         print('│ URL: ${searchUri.toString()}');
-        
-        final searchResp = await http.get(searchUri, headers: headers).timeout(const Duration(seconds: 15));
-        
-        print('│ STATUS: ${searchResp.statusCode}');
-        print('└───────────────────────────────────────────────────────────────────────');
 
-        if (searchResp.statusCode >= 200 && searchResp.statusCode < 300 && searchResp.body.isNotEmpty) {
+        final searchResp = await http
+            .get(searchUri, headers: headers)
+            .timeout(const Duration(seconds: 15));
+
+        print('│ STATUS: ${searchResp.statusCode}');
+        print(
+            '└───────────────────────────────────────────────────────────────────────');
+
+        if (searchResp.statusCode >= 200 &&
+            searchResp.statusCode < 300 &&
+            searchResp.body.isNotEmpty) {
           try {
             final sb = jsonDecode(searchResp.body);
-            if (sb is List) return List<Map<String, dynamic>>.from(sb.map((e) => Map<String, dynamic>.from(e)));
-            if (sb is Map && sb['data'] is List) return List<Map<String, dynamic>>.from((sb['data'] as List).map((e) => Map<String, dynamic>.from(e)));
+            if (sb is List)
+              return List<Map<String, dynamic>>.from(
+                  sb.map((e) => Map<String, dynamic>.from(e)));
+            if (sb is Map && sb['data'] is List)
+              return List<Map<String, dynamic>>.from((sb['data'] as List)
+                  .map((e) => Map<String, dynamic>.from(e)));
           } catch (e) {
             print('│ ERROR PARSING FALLBACK 1: $e');
             // search decode failed
@@ -159,20 +209,34 @@ class ArtistService {
         }
 
         // 2) Try generic users endpoint as last resort (without role filter)
-        final usersUri = Uri.parse('$API_BASE_URL/api/users').replace(queryParameters: {'page': page.toString(), 'limit': (limit * 2).toString()});
-        print('┌────────────────── DISCOVER/HOME FALLBACK 2 (USERS) ──────────────────');
+        final usersUri = Uri.parse('$API_BASE_URL/api/users').replace(
+            queryParameters: {
+              'page': page.toString(),
+              'limit': (limit * 2).toString()
+            });
+        print(
+            '┌────────────────── DISCOVER/HOME FALLBACK 2 (USERS) ──────────────────');
         print('│ URL: ${usersUri.toString()}');
-        
-        final usersResp = await http.get(usersUri, headers: headers).timeout(const Duration(seconds: 15));
-        
-        print('│ STATUS: ${usersResp.statusCode}');
-        print('└───────────────────────────────────────────────────────────────────────');
 
-        if (usersResp.statusCode >= 200 && usersResp.statusCode < 300 && usersResp.body.isNotEmpty) {
+        final usersResp = await http
+            .get(usersUri, headers: headers)
+            .timeout(const Duration(seconds: 15));
+
+        print('│ STATUS: ${usersResp.statusCode}');
+        print(
+            '└───────────────────────────────────────────────────────────────────────');
+
+        if (usersResp.statusCode >= 200 &&
+            usersResp.statusCode < 300 &&
+            usersResp.body.isNotEmpty) {
           try {
             final ub = jsonDecode(usersResp.body);
-            if (ub is List) return List<Map<String, dynamic>>.from(ub.map((e) => Map<String, dynamic>.from(e)));
-            if (ub is Map && ub['data'] is List) return List<Map<String, dynamic>>.from((ub['data'] as List).map((e) => Map<String, dynamic>.from(e)));
+            if (ub is List)
+              return List<Map<String, dynamic>>.from(
+                  ub.map((e) => Map<String, dynamic>.from(e)));
+            if (ub is Map && ub['data'] is List)
+              return List<Map<String, dynamic>>.from((ub['data'] as List)
+                  .map((e) => Map<String, dynamic>.from(e)));
           } catch (e) {
             print('│ ERROR PARSING FALLBACK 2: $e');
             // users decode failed
@@ -188,20 +252,29 @@ class ArtistService {
     // Non-2xx responses: log and try alternative endpoints before giving up
     // non-ok response
     try {
-      final altSearchUri = Uri.parse('$API_BASE_URL/api/artisans/search').replace(queryParameters: qParams);
+      final altSearchUri = Uri.parse('$API_BASE_URL/api/artisans/search')
+          .replace(queryParameters: qParams);
       print('┌────────────────── NON-2XX SEARCH FALLBACK ──────────────────');
       print('│ URL: ${altSearchUri.toString()}');
-      
-      final altResp = await http.get(altSearchUri, headers: headers).timeout(const Duration(seconds: 10));
-      
+
+      final altResp = await http
+          .get(altSearchUri, headers: headers)
+          .timeout(const Duration(seconds: 10));
+
       print('│ STATUS: ${altResp.statusCode}');
       print('└─────────────────────────────────────────────────────────────');
 
-      if (altResp.statusCode >= 200 && altResp.statusCode < 300 && altResp.body.isNotEmpty) {
+      if (altResp.statusCode >= 200 &&
+          altResp.statusCode < 300 &&
+          altResp.body.isNotEmpty) {
         try {
           final body = jsonDecode(altResp.body);
-          if (body is List) return List<Map<String, dynamic>>.from(body.map((e) => Map<String, dynamic>.from(e)));
-          if (body is Map && body['data'] is List) return List<Map<String, dynamic>>.from((body['data'] as List).map((e) => Map<String, dynamic>.from(e)));
+          if (body is List)
+            return List<Map<String, dynamic>>.from(
+                body.map((e) => Map<String, dynamic>.from(e)));
+          if (body is Map && body['data'] is List)
+            return List<Map<String, dynamic>>.from((body['data'] as List)
+                .map((e) => Map<String, dynamic>.from(e)));
         } catch (e) {
           print('│ ERROR PARSING ALT SEARCH: $e');
         }
@@ -213,24 +286,41 @@ class ArtistService {
   }
 
   /// Fallback: fetch users without forcing role=artisan in case the server ignores that filter
-  static Future<List<Map<String, dynamic>>> fetchAllUsers({int page = 1, int limit = 50, String? q}) async {
+  static Future<List<Map<String, dynamic>>> fetchAllUsers(
+      {int page = 1, int limit = 50, String? q}) async {
     final token = await TokenStorage.getToken();
     final headers = <String, String>{'Content-Type': 'application/json'};
     if (token != null) headers['Authorization'] = 'Bearer $token';
-    final qParams = <String, String>{'page': page.toString(), 'limit': limit.toString()};
+    final qParams = <String, String>{
+      'page': page.toString(),
+      'limit': limit.toString()
+    };
     if (q != null && q.isNotEmpty) qParams['q'] = q;
 
-    final uri = Uri.parse('$API_BASE_URL/api/users').replace(queryParameters: qParams);
+    final uri =
+        Uri.parse('$API_BASE_URL/api/users').replace(queryParameters: qParams);
     final respMap = await ApiClient.get(uri.toString(), headers: headers);
-    if ((respMap['status'] is int) && (respMap['status'] as int) >= 200 && (respMap['status'] as int) < 300) {
-      final body = respMap['json'] ?? (respMap['body']?.isNotEmpty == true ? jsonDecode(respMap['body'] as String) : null);
+    if ((respMap['status'] is int) &&
+        (respMap['status'] as int) >= 200 &&
+        (respMap['status'] as int) < 300) {
+      final body = respMap['json'] ??
+          (respMap['body']?.isNotEmpty == true
+              ? jsonDecode(respMap['body'] as String)
+              : null);
       if (body == null) return [];
-      if (body is List) return List<Map<String, dynamic>>.from(body.map((e) => Map<String, dynamic>.from(e)));
-      if (body is Map && body['data'] is List) return List<Map<String, dynamic>>.from((body['data'] as List).map((e) => Map<String, dynamic>.from(e)));
+      if (body is List)
+        return List<Map<String, dynamic>>.from(
+            body.map((e) => Map<String, dynamic>.from(e)));
+      if (body is Map && body['data'] is List)
+        return List<Map<String, dynamic>>.from(
+            (body['data'] as List).map((e) => Map<String, dynamic>.from(e)));
       if (body is Map) {
         for (final entry in body.entries) {
           if (entry.value is List) {
-            try { return List<Map<String, dynamic>>.from((entry.value as List).map((e) => Map<String, dynamic>.from(e))); } catch (_) {}
+            try {
+              return List<Map<String, dynamic>>.from((entry.value as List)
+                  .map((e) => Map<String, dynamic>.from(e)));
+            } catch (_) {}
           }
         }
       }
@@ -242,32 +332,53 @@ class ArtistService {
 
   /// Fetch bookings assigned to a specific artisan (protected endpoint)
   /// Returns a list of objects that may contain booking and customerUser keys (per API docs).
-  static Future<List<Map<String, dynamic>>> fetchArtisanBookings(String artisanId, {int page = 1, int limit = 20, String? status}) async {
+  static Future<List<Map<String, dynamic>>> fetchArtisanBookings(
+      String artisanId,
+      {int page = 1,
+      int limit = 20,
+      String? status}) async {
     final token = await TokenStorage.getToken();
     final headers = <String, String>{'Content-Type': 'application/json'};
-    if (token != null && token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
+    if (token != null && token.isNotEmpty)
+      headers['Authorization'] = 'Bearer $token';
 
     if (token == null || token.isEmpty) {
       return [];
     }
 
-    final qParams = <String, String>{'page': page.toString(), 'limit': limit.toString()};
+    final qParams = <String, String>{
+      'page': page.toString(),
+      'limit': limit.toString()
+    };
     if (status != null && status.isNotEmpty) qParams['status'] = status;
 
     // Primary endpoint
-    final primaryUri = Uri.parse('$API_BASE_URL/api/bookings/artisan/$artisanId').replace(queryParameters: qParams);
-    final respMap = await ApiClient.get(primaryUri.toString(), headers: headers);
-    if ((respMap['status'] is int) && (respMap['status'] as int) >= 200 && (respMap['status'] as int) < 300) {
-      final body = respMap['json'] ?? (respMap['body']?.isNotEmpty == true ? jsonDecode(respMap['body'] as String) : null);
+    final primaryUri =
+        Uri.parse('$API_BASE_URL/api/bookings/artisan/$artisanId')
+            .replace(queryParameters: qParams);
+    final respMap =
+        await ApiClient.get(primaryUri.toString(), headers: headers);
+    if ((respMap['status'] is int) &&
+        (respMap['status'] as int) >= 200 &&
+        (respMap['status'] as int) < 300) {
+      final body = respMap['json'] ??
+          (respMap['body']?.isNotEmpty == true
+              ? jsonDecode(respMap['body'] as String)
+              : null);
       if (body == null) return [];
-      if (body is List) return List<Map<String, dynamic>>.from(body.map((e) => Map<String, dynamic>.from(e)));
-      if (body is Map && body['data'] is List) return List<Map<String, dynamic>>.from((body['data'] as List).map((e) => Map<String, dynamic>.from(e)));
+      if (body is List)
+        return List<Map<String, dynamic>>.from(
+            body.map((e) => Map<String, dynamic>.from(e)));
+      if (body is Map && body['data'] is List)
+        return List<Map<String, dynamic>>.from(
+            (body['data'] as List).map((e) => Map<String, dynamic>.from(e)));
       // try nested shapes
       if (body is Map) {
         for (final entry in body.entries) {
           if (entry.value is List) {
             try {
-              return List<Map<String, dynamic>>.from((entry.value as List).map((e) => Map<String, dynamic>.from(e)));
+              return List<Map<String, dynamic>>.from((entry.value as List)
+                  .map((e) => Map<String, dynamic>.from(e)));
             } catch (_) {}
           }
         }
@@ -278,23 +389,44 @@ class ArtistService {
     // If primary endpoint fails, try fallbacks: query /api/bookings?artisanId=...
     // primary endpoint non-ok; try fallbacks
     final fallbacks = [
-      Uri.parse('$API_BASE_URL/api/bookings').replace(queryParameters: {'artisanId': artisanId, 'page': page.toString(), 'limit': limit.toString()}),
-      Uri.parse('$API_BASE_URL/api/bookings').replace(queryParameters: {'artisan': artisanId, 'page': page.toString(), 'limit': limit.toString()}),
-      Uri.parse('$API_BASE_URL/api/bookings').replace(queryParameters: {'artisan_id': artisanId, 'page': page.toString(), 'limit': limit.toString()}),
+      Uri.parse('$API_BASE_URL/api/bookings').replace(queryParameters: {
+        'artisanId': artisanId,
+        'page': page.toString(),
+        'limit': limit.toString()
+      }),
+      Uri.parse('$API_BASE_URL/api/bookings').replace(queryParameters: {
+        'artisan': artisanId,
+        'page': page.toString(),
+        'limit': limit.toString()
+      }),
+      Uri.parse('$API_BASE_URL/api/bookings').replace(queryParameters: {
+        'artisan_id': artisanId,
+        'page': page.toString(),
+        'limit': limit.toString()
+      }),
     ];
 
     for (final uri in fallbacks) {
       try {
-        final r2 = await http.get(uri, headers: headers).timeout(const Duration(seconds: 12));
+        final r2 = await http
+            .get(uri, headers: headers)
+            .timeout(const Duration(seconds: 12));
         if (r2.statusCode >= 200 && r2.statusCode < 300) {
           final body = r2.body.isNotEmpty ? jsonDecode(r2.body) : null;
           if (body == null) return [];
-          if (body is List) return List<Map<String, dynamic>>.from(body.map((e) => Map<String, dynamic>.from(e)));
-          if (body is Map && body['data'] is List) return List<Map<String, dynamic>>.from((body['data'] as List).map((e) => Map<String, dynamic>.from(e)));
+          if (body is List)
+            return List<Map<String, dynamic>>.from(
+                body.map((e) => Map<String, dynamic>.from(e)));
+          if (body is Map && body['data'] is List)
+            return List<Map<String, dynamic>>.from((body['data'] as List)
+                .map((e) => Map<String, dynamic>.from(e)));
           if (body is Map) {
             for (final entry in body.entries) {
               if (entry.value is List) {
-                try { return List<Map<String, dynamic>>.from((entry.value as List).map((e) => Map<String, dynamic>.from(e))); } catch (_) {}
+                try {
+                  return List<Map<String, dynamic>>.from((entry.value as List)
+                      .map((e) => Map<String, dynamic>.from(e)));
+                } catch (_) {}
               }
             }
           }
@@ -309,18 +441,29 @@ class ArtistService {
   }
 
   /// Fetch reviews for a given artisanId (GET /api/reviews?artisanId=...)
-  static Future<List<Map<String, dynamic>>> fetchReviewsForArtisan(String artisanId, {int page = 1, int limit = 10}) async {
+  static Future<List<Map<String, dynamic>>> fetchReviewsForArtisan(
+      String artisanId,
+      {int page = 1,
+      int limit = 10}) async {
     final token = await TokenStorage.getToken();
     final headers = <String, String>{'Content-Type': 'application/json'};
-    if (token != null && token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
+    if (token != null && token.isNotEmpty)
+      headers['Authorization'] = 'Bearer $token';
 
     // Primary query params (some servers may expect targetId instead of artisanId)
-    final qParams = {'artisanId': artisanId, 'page': page.toString(), 'limit': limit.toString()};
-    final uri = Uri.parse('$API_BASE_URL/api/reviews').replace(queryParameters: qParams);
+    final qParams = {
+      'artisanId': artisanId,
+      'page': page.toString(),
+      'limit': limit.toString()
+    };
+    final uri = Uri.parse('$API_BASE_URL/api/reviews')
+        .replace(queryParameters: qParams);
     if (kDebugMode) {
       try {
-        debugPrint('ArtistService.fetchReviewsForArtisan -> uri: ${uri.toString()}');
-        debugPrint('ArtistService.fetchReviewsForArtisan -> queryParams: $qParams');
+        debugPrint(
+            'ArtistService.fetchReviewsForArtisan -> uri: ${uri.toString()}');
+        debugPrint(
+            'ArtistService.fetchReviewsForArtisan -> queryParams: $qParams');
       } catch (_) {}
     }
     // debugPrint(qParams as String?);
@@ -328,7 +471,8 @@ class ArtistService {
     final respMap = await ApiClient.get(uri.toString(), headers: headers);
     if (kDebugMode) {
       try {
-        debugPrint('ArtistService.fetchReviewsForArtisan -> respMap.status=${respMap["status"]}');
+        debugPrint(
+            'ArtistService.fetchReviewsForArtisan -> respMap.status=${respMap["status"]}');
       } catch (_) {}
     }
     // debugPrint(respMap as String?);String
@@ -336,23 +480,38 @@ class ArtistService {
     List<Map<String, dynamic>> _extractListFromBody(dynamic body) {
       try {
         if (body == null) return [];
-        if (body is List) return List<Map<String, dynamic>>.from(body.map((e) => Map<String, dynamic>.from(e)));
-        if (body is Map && body['data'] is List) return List<Map<String, dynamic>>.from((body['data'] as List).map((e) => Map<String, dynamic>.from(e)));
+        if (body is List)
+          return List<Map<String, dynamic>>.from(
+              body.map((e) => Map<String, dynamic>.from(e)));
+        if (body is Map && body['data'] is List)
+          return List<Map<String, dynamic>>.from(
+              (body['data'] as List).map((e) => Map<String, dynamic>.from(e)));
         if (body is Map && body['data'] is Map) {
           final d = body['data'] as Map<String, dynamic>;
-          if (d['docs'] is List) return List<Map<String, dynamic>>.from((d['docs'] as List).map((e) => Map<String, dynamic>.from(e)));
-          if (d['items'] is List) return List<Map<String, dynamic>>.from((d['items'] as List).map((e) => Map<String, dynamic>.from(e)));
-          if (d['results'] is List) return List<Map<String, dynamic>>.from((d['results'] as List).map((e) => Map<String, dynamic>.from(e)));
+          if (d['docs'] is List)
+            return List<Map<String, dynamic>>.from(
+                (d['docs'] as List).map((e) => Map<String, dynamic>.from(e)));
+          if (d['items'] is List)
+            return List<Map<String, dynamic>>.from(
+                (d['items'] as List).map((e) => Map<String, dynamic>.from(e)));
+          if (d['results'] is List)
+            return List<Map<String, dynamic>>.from((d['results'] as List)
+                .map((e) => Map<String, dynamic>.from(e)));
         }
-        if (body is Map && body['docs'] is List) return List<Map<String, dynamic>>.from((body['docs'] as List).map((e) => Map<String, dynamic>.from(e)));
-        if (body is Map && body['results'] is List) return List<Map<String, dynamic>>.from((body['results'] as List).map((e) => Map<String, dynamic>.from(e)));
+        if (body is Map && body['docs'] is List)
+          return List<Map<String, dynamic>>.from(
+              (body['docs'] as List).map((e) => Map<String, dynamic>.from(e)));
+        if (body is Map && body['results'] is List)
+          return List<Map<String, dynamic>>.from((body['results'] as List)
+              .map((e) => Map<String, dynamic>.from(e)));
 
         if (body is Map) {
           // Try to find the first List value in the map (fallback)
           for (final entry in body.entries) {
             if (entry.value is List) {
               try {
-                return List<Map<String, dynamic>>.from((entry.value as List).map((e) => Map<String, dynamic>.from(e)));
+                return List<Map<String, dynamic>>.from((entry.value as List)
+                    .map((e) => Map<String, dynamic>.from(e)));
               } catch (_) {}
             }
             if (entry.value is Map) {
@@ -360,7 +519,8 @@ class ArtistService {
               for (final e2 in m.entries) {
                 if (e2.value is List) {
                   try {
-                    return List<Map<String, dynamic>>.from((e2.value as List).map((e) => Map<String, dynamic>.from(e)));
+                    return List<Map<String, dynamic>>.from((e2.value as List)
+                        .map((e) => Map<String, dynamic>.from(e)));
                   } catch (_) {}
                 }
               }
@@ -372,11 +532,19 @@ class ArtistService {
     }
 
     // Filter extracted reviews so they only target the supplied artisanId.
-    List<Map<String, dynamic>> _filterByArtisanId(List<Map<String, dynamic>> list, String artisanId) {
+    List<Map<String, dynamic>> _filterByArtisanId(
+        List<Map<String, dynamic>> list, String artisanId) {
       try {
         if (list.isEmpty) return [];
         final keysToCheck = [
-          'artisanId', 'targetId', 'target', 'artisan', 'artisan_id', 'target_id', 'userId', 'user_id'
+          'artisanId',
+          'targetId',
+          'target',
+          'artisan',
+          'artisan_id',
+          'target_id',
+          'userId',
+          'user_id'
         ];
         final filtered = <Map<String, dynamic>>[];
         for (final r in list) {
@@ -385,20 +553,43 @@ class ArtistService {
             for (final k in keysToCheck) {
               if (!r.containsKey(k) || r[k] == null) continue;
               final v = r[k];
-              if (v is String && v == artisanId) { matched = true; break; }
-              if (v is Map && v['_id'] != null && v['_id'].toString() == artisanId) { matched = true; break; }
+              if (v is String && v == artisanId) {
+                matched = true;
+                break;
+              }
+              if (v is Map &&
+                  v['_id'] != null &&
+                  v['_id'].toString() == artisanId) {
+                matched = true;
+                break;
+              }
               // handle numeric/string mismatch
-              if (v.toString() == artisanId) { matched = true; break; }
+              if (v.toString() == artisanId) {
+                matched = true;
+                break;
+              }
             }
             // Also check nested fields that might contain the target (e.g., r['target'] = { 'user': { '_id': ... } })
             if (!matched) {
               for (final entry in r.entries) {
                 final val = entry.value;
                 if (val is Map) {
-                  if (val['_id'] != null && val['_id'].toString() == artisanId) { matched = true; break; }
+                  if (val['_id'] != null &&
+                      val['_id'].toString() == artisanId) {
+                    matched = true;
+                    break;
+                  }
                   for (final sub in val.values) {
-                    if (sub is Map && sub['_id'] != null && sub['_id'].toString() == artisanId) { matched = true; break; }
-                    if (sub is String && sub == artisanId) { matched = true; break; }
+                    if (sub is Map &&
+                        sub['_id'] != null &&
+                        sub['_id'].toString() == artisanId) {
+                      matched = true;
+                      break;
+                    }
+                    if (sub is String && sub == artisanId) {
+                      matched = true;
+                      break;
+                    }
                   }
                 }
               }
@@ -414,10 +605,15 @@ class ArtistService {
       }
     }
 
-    if ((respMap['status'] is int) && (respMap['status'] as int) >= 200 && (respMap['status'] as int) < 300) {
+    if ((respMap['status'] is int) &&
+        (respMap['status'] as int) >= 200 &&
+        (respMap['status'] as int) < 300) {
       dynamic body;
       try {
-        body = respMap['json'] ?? (respMap['body']?.isNotEmpty == true ? jsonDecode(respMap['body'] as String) : null);
+        body = respMap['json'] ??
+            (respMap['body']?.isNotEmpty == true
+                ? jsonDecode(respMap['body'] as String)
+                : null);
       } catch (e) {
         // attempt a small recovery for non-json HTML responses that embed an array
         final s = respMap['body'] as String? ?? '';
@@ -435,7 +631,8 @@ class ArtistService {
       final filtered = _filterByArtisanId(extracted, artisanId);
       if (kDebugMode) {
         try {
-          debugPrint('ArtistService.fetchReviewsForArtisan -> extracted ${extracted.length} reviews from primary response, filtered to ${filtered.length} by artisanId=$artisanId');
+          debugPrint(
+              'ArtistService.fetchReviewsForArtisan -> extracted ${extracted.length} reviews from primary response, filtered to ${filtered.length} by artisanId=$artisanId');
         } catch (_) {}
       }
       if (filtered.isNotEmpty) return filtered;
@@ -445,22 +642,43 @@ class ArtistService {
 
     // Try alternative query parameter names in case server expects a different key (targetId, artisan, artisan_id)
     final altParamSets = [
-      {'targetId': artisanId, 'page': page.toString(), 'limit': limit.toString()},
-      {'artisan': artisanId, 'page': page.toString(), 'limit': limit.toString()},
-      {'artisan_id': artisanId, 'page': page.toString(), 'limit': limit.toString()},
+      {
+        'targetId': artisanId,
+        'page': page.toString(),
+        'limit': limit.toString()
+      },
+      {
+        'artisan': artisanId,
+        'page': page.toString(),
+        'limit': limit.toString()
+      },
+      {
+        'artisan_id': artisanId,
+        'page': page.toString(),
+        'limit': limit.toString()
+      },
     ];
 
     for (final params in altParamSets) {
       try {
-        final altUri = Uri.parse('$API_BASE_URL/api/reviews').replace(queryParameters: params);
+        final altUri = Uri.parse('$API_BASE_URL/api/reviews')
+            .replace(queryParameters: params);
         if (kDebugMode) {
-          try { debugPrint('ArtistService.fetchReviewsForArtisan -> trying alt params uri: ${altUri.toString()}'); } catch (_) {}
+          try {
+            debugPrint(
+                'ArtistService.fetchReviewsForArtisan -> trying alt params uri: ${altUri.toString()}');
+          } catch (_) {}
         }
         final r2map = await ApiClient.get(altUri.toString(), headers: headers);
-        if ((r2map['status'] is int) && (r2map['status'] as int) >= 200 && (r2map['status'] as int) < 300) {
+        if ((r2map['status'] is int) &&
+            (r2map['status'] as int) >= 200 &&
+            (r2map['status'] as int) < 300) {
           dynamic body;
           try {
-            body = r2map['json'] ?? (r2map['body']?.isNotEmpty == true ? jsonDecode(r2map['body'] as String) : null);
+            body = r2map['json'] ??
+                (r2map['body']?.isNotEmpty == true
+                    ? jsonDecode(r2map['body'] as String)
+                    : null);
           } catch (_) {}
           final extracted = _extractListFromBody(body);
           final filtered = _filterByArtisanId(extracted, artisanId);
@@ -471,20 +689,35 @@ class ArtistService {
 
     // As a last resort, try the generic reviews endpoint without query (may return all and we can filter client-side)
     try {
-      final uriAll = Uri.parse('$API_BASE_URL/api/reviews').replace(queryParameters: {'page': page.toString(), 'limit': limit.toString()});
+      final uriAll = Uri.parse('$API_BASE_URL/api/reviews').replace(
+          queryParameters: {
+            'page': page.toString(),
+            'limit': limit.toString()
+          });
       if (kDebugMode) {
-        try { debugPrint('ArtistService.fetchReviewsForArtisan -> falling back to unfiltered uriAll: ${uriAll.toString()}'); } catch (_) {}
+        try {
+          debugPrint(
+              'ArtistService.fetchReviewsForArtisan -> falling back to unfiltered uriAll: ${uriAll.toString()}');
+        } catch (_) {}
       }
       final allMap = await ApiClient.get(uriAll.toString(), headers: headers);
-      if ((allMap['status'] is int) && (allMap['status'] as int) >= 200 && (allMap['status'] as int) < 300) {
+      if ((allMap['status'] is int) &&
+          (allMap['status'] as int) >= 200 &&
+          (allMap['status'] as int) < 300) {
         dynamic body;
         try {
-          body = allMap['json'] ?? (allMap['body']?.isNotEmpty == true ? jsonDecode(allMap['body'] as String) : null);
+          body = allMap['json'] ??
+              (allMap['body']?.isNotEmpty == true
+                  ? jsonDecode(allMap['body'] as String)
+                  : null);
         } catch (_) {}
         final extracted = _extractListFromBody(body);
         final filtered = _filterByArtisanId(extracted, artisanId);
         if (kDebugMode) {
-          try { debugPrint('ArtistService.fetchReviewsForArtisan -> uriAll extracted ${extracted.length} reviews, filtered to ${filtered.length}'); } catch (_) {}
+          try {
+            debugPrint(
+                'ArtistService.fetchReviewsForArtisan -> uriAll extracted ${extracted.length} reviews, filtered to ${filtered.length}');
+          } catch (_) {}
         }
         if (filtered.isNotEmpty) return filtered;
       }
@@ -506,11 +739,15 @@ class ArtistService {
             break;
           }
         }
-        if ((userId == null || userId.isEmpty) && userProfile['user'] is Map && userProfile['user']['_id'] != null) {
+        if ((userId == null || userId.isEmpty) &&
+            userProfile['user'] is Map &&
+            userProfile['user']['_id'] != null) {
           userId = userProfile['user']['_id'].toString();
         }
         if (userId != null && userId.isNotEmpty) {
-          if (kDebugMode) debugPrint('ArtistService.getMyProfile -> calling getByUserId($userId)');
+          if (kDebugMode)
+            debugPrint(
+                'ArtistService.getMyProfile -> calling getByUserId($userId)');
           return await getByUserId(userId);
         }
       }
@@ -525,7 +762,9 @@ class ArtistService {
   /// If [fileMap] is provided the files will be uploaded via JSON/base64 using
   /// `uploadFilesToAttachments` and the returned URLs will be injected into the
   /// payload before sending a JSON request to the server.
-  static Future<Map<String, dynamic>?> createMyProfile(Map<String, dynamic> payload, {Map<String, List<String>>? fileMap}) async {
+  static Future<Map<String, dynamic>?> createMyProfile(
+      Map<String, dynamic> payload,
+      {Map<String, List<String>>? fileMap}) async {
     try {
       // Instead of attempting multipart which may be rejected by nginx with 413
       // (Request Entity Too Large), upload local files via the attachments
@@ -547,23 +786,41 @@ class ArtistService {
           payload.forEach((k, v) {
             try {
               if (v == null) return;
-              if (v is String || v is num || v is bool) fields[k] = v.toString();
-              else fields[k] = jsonEncode(v);
+              if (v is String || v is num || v is bool)
+                fields[k] = v.toString();
+              else
+                fields[k] = jsonEncode(v);
             } catch (_) {}
           });
 
           final uri = '$API_BASE_URL/api/artisans';
-          if (kDebugMode) debugPrint('createMyProfile -> sending multipart to $uri fields=${fields.keys.toList()} fileMapKeys=${fileMap.keys.toList()}');
-          final resp = await ApiClient.postMultipart(uri, headers: {'Content-Type': 'multipart/form-data'}, fields: fields, fileMap: fileMap, method: 'POST');
-          final int? status = (resp['status'] is int) ? resp['status'] as int : null;
-          if (kDebugMode) debugPrint('ArtistService.createMyProfile (multipart) -> $uri status=$status body=${resp['body']}');
+          if (kDebugMode)
+            debugPrint(
+                'createMyProfile -> sending multipart to $uri fields=${fields.keys.toList()} fileMapKeys=${fileMap.keys.toList()}');
+          final resp = await ApiClient.postMultipart(uri,
+              headers: {'Content-Type': 'multipart/form-data'},
+              fields: fields,
+              fileMap: fileMap,
+              method: 'POST');
+          final int? status =
+              (resp['status'] is int) ? resp['status'] as int : null;
+          if (kDebugMode)
+            debugPrint(
+                'ArtistService.createMyProfile (multipart) -> $uri status=$status body=${resp['body']}');
           if (status != null && status >= 200 && status < 300) {
-            final body = resp['body'] != null && (resp['body'] is String) && (resp['body'] as String).isNotEmpty ? jsonDecode(resp['body']) : resp['json'];
-            if (body is Map && body['data'] is Map) return Map<String, dynamic>.from(body['data']);
+            final body = resp['body'] != null &&
+                    (resp['body'] is String) &&
+                    (resp['body'] as String).isNotEmpty
+                ? jsonDecode(resp['body'])
+                : resp['json'];
+            if (body is Map && body['data'] is Map)
+              return Map<String, dynamic>.from(body['data']);
             if (body is Map) return Map<String, dynamic>.from(body);
           } else {
             // Fall through to existing JSON path as a fallback
-            if (kDebugMode) debugPrint('createMyProfile multipart failed, falling back to JSON path');
+            if (kDebugMode)
+              debugPrint(
+                  'createMyProfile multipart failed, falling back to JSON path');
           }
         } catch (e) {
           if (kDebugMode) debugPrint('createMyProfile multipart exception: $e');
@@ -575,16 +832,27 @@ class ArtistService {
           if (paths.isEmpty) continue;
           try {
             final uploaded = await uploadFilesToAttachments(paths);
-            if (kDebugMode) debugPrint('createMyProfile: uploaded results for $fieldName -> $uploaded');
-            final urls = uploaded.map((it) => (it['url'] ?? '').toString()).where((u) => u.isNotEmpty).toList();
+            if (kDebugMode)
+              debugPrint(
+                  'createMyProfile: uploaded results for $fieldName -> $uploaded');
+            final urls = uploaded
+                .map((it) => (it['url'] ?? '').toString())
+                .where((u) => u.isNotEmpty)
+                .toList();
             if (urls.isEmpty) continue;
             if (fieldName.toLowerCase().contains('portfolio')) {
-              payload['portfolio'] = urls.map((u) => {'title': '', 'images': [u]}).toList();
+              payload['portfolio'] = urls
+                  .map((u) => {
+                        'title': '',
+                        'images': [u]
+                      })
+                  .toList();
             } else {
               payload[fieldName] = urls;
             }
           } catch (e) {
-            if (kDebugMode) debugPrint('createMyProfile: upload for $fieldName failed: $e');
+            if (kDebugMode)
+              debugPrint('createMyProfile: upload for $fieldName failed: $e');
           }
         }
       }
@@ -600,21 +868,31 @@ class ArtistService {
 
       // Ensure portfolio doesn't contain raw/base64 strings before sending
       _sanitizePortfolio(payload);
-      if (kDebugMode) debugPrint('createMyProfile: payload after sanitization -> ${payload['portfolio']}');
+      if (kDebugMode)
+        debugPrint(
+            'createMyProfile: payload after sanitization -> ${payload['portfolio']}');
       final uri = '$API_BASE_URL/api/artisans';
-      final resp = await ApiClient.post(uri, headers: {'Content-Type': 'application/json'}, body: jsonEncode(payload));
-      final int? status = (resp['status'] is int) ? resp['status'] as int : null;
-      if (kDebugMode) debugPrint('ArtistService.createMyProfile -> $uri status=$status body=${resp['body']}');
+      final resp = await ApiClient.post(uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(payload));
+      final int? status =
+          (resp['status'] is int) ? resp['status'] as int : null;
+      if (kDebugMode)
+        debugPrint(
+            'ArtistService.createMyProfile -> $uri status=$status body=${resp['body']}');
       if (status != null && status >= 200 && status < 300) {
         final body = jsonDecode(resp['body']);
-        if (body is Map && body['data'] is Map) return Map<String, dynamic>.from(body['data']);
+        if (body is Map && body['data'] is Map)
+          return Map<String, dynamic>.from(body['data']);
         if (body is Map) return Map<String, dynamic>.from(body);
       } else {
         final b = resp['body']?.toString() ?? '';
         String msg = 'Server responded with status ${status ?? 'unknown'}';
         try {
           final parsed = b.isNotEmpty ? jsonDecode(b) : null;
-          if (parsed is Map && (parsed['message'] != null || parsed['error'] != null)) msg = (parsed['message'] ?? parsed['error']).toString();
+          if (parsed is Map &&
+              (parsed['message'] != null || parsed['error'] != null))
+            msg = (parsed['message'] ?? parsed['error']).toString();
           else if (b.isNotEmpty) msg = b;
         } catch (_) {
           if (b.isNotEmpty) msg = b;
@@ -631,7 +909,9 @@ class ArtistService {
   }
 
   /// Update the artisan profile for the authenticated user (PUT /api/artisans/me)
-  static Future<Map<String, dynamic>?> updateMyProfile(Map<String, dynamic> payload, {Map<String, List<String>>? fileMap}) async {
+  static Future<Map<String, dynamic>?> updateMyProfile(
+      Map<String, dynamic> payload,
+      {Map<String, List<String>>? fileMap}) async {
     try {
       // If files provided, upload them (JSON/base64) and attach returned URLs
       if (fileMap != null && fileMap.isNotEmpty) {
@@ -642,21 +922,39 @@ class ArtistService {
           payload.forEach((k, v) {
             try {
               if (v == null) return;
-              if (v is String || v is num || v is bool) fields[k] = v.toString();
-              else fields[k] = jsonEncode(v);
+              if (v is String || v is num || v is bool)
+                fields[k] = v.toString();
+              else
+                fields[k] = jsonEncode(v);
             } catch (_) {}
           });
           final uri = '$API_BASE_URL/api/artisans/me';
-          if (kDebugMode) debugPrint('updateMyProfile -> sending multipart to $uri fields=${fields.keys.toList()} fileMapKeys=${fileMap.keys.toList()}');
-          final resp = await ApiClient.postMultipart(uri, headers: {'Content-Type': 'multipart/form-data'}, fields: fields, fileMap: fileMap, method: 'PUT');
-          final int? status = (resp['status'] is int) ? resp['status'] as int : null;
-          if (kDebugMode) debugPrint('ArtistService.updateMyProfile (multipart) -> $uri status=$status body=${resp['body']}');
+          if (kDebugMode)
+            debugPrint(
+                'updateMyProfile -> sending multipart to $uri fields=${fields.keys.toList()} fileMapKeys=${fileMap.keys.toList()}');
+          final resp = await ApiClient.postMultipart(uri,
+              headers: {'Content-Type': 'multipart/form-data'},
+              fields: fields,
+              fileMap: fileMap,
+              method: 'PUT');
+          final int? status =
+              (resp['status'] is int) ? resp['status'] as int : null;
+          if (kDebugMode)
+            debugPrint(
+                'ArtistService.updateMyProfile (multipart) -> $uri status=$status body=${resp['body']}');
           if (status != null && status >= 200 && status < 300) {
-            final body = resp['body'] != null && (resp['body'] is String) && (resp['body'] as String).isNotEmpty ? jsonDecode(resp['body']) : resp['json'];
-            if (body is Map && body['data'] is Map) return Map<String, dynamic>.from(body['data']);
+            final body = resp['body'] != null &&
+                    (resp['body'] is String) &&
+                    (resp['body'] as String).isNotEmpty
+                ? jsonDecode(resp['body'])
+                : resp['json'];
+            if (body is Map && body['data'] is Map)
+              return Map<String, dynamic>.from(body['data']);
             if (body is Map) return Map<String, dynamic>.from(body);
           } else {
-            if (kDebugMode) debugPrint('updateMyProfile multipart failed, falling back to JSON path');
+            if (kDebugMode)
+              debugPrint(
+                  'updateMyProfile multipart failed, falling back to JSON path');
           }
         } catch (e) {
           if (kDebugMode) debugPrint('updateMyProfile multipart exception: $e');
@@ -667,16 +965,27 @@ class ArtistService {
           if (paths.isEmpty) continue;
           try {
             final uploaded = await uploadFilesToAttachments(paths);
-            if (kDebugMode) debugPrint('updateMyProfile: uploaded results for $fieldName -> $uploaded');
-            final urls = uploaded.map((it) => (it['url'] ?? '').toString()).where((u) => u.isNotEmpty).toList();
+            if (kDebugMode)
+              debugPrint(
+                  'updateMyProfile: uploaded results for $fieldName -> $uploaded');
+            final urls = uploaded
+                .map((it) => (it['url'] ?? '').toString())
+                .where((u) => u.isNotEmpty)
+                .toList();
             if (urls.isEmpty) continue;
             if (fieldName.toLowerCase().contains('portfolio')) {
-              payload['portfolio'] = urls.map((u) => {'title': '', 'images': [u]}).toList();
+              payload['portfolio'] = urls
+                  .map((u) => {
+                        'title': '',
+                        'images': [u]
+                      })
+                  .toList();
             } else {
               payload[fieldName] = urls;
             }
           } catch (e) {
-            if (kDebugMode) debugPrint('updateMyProfile: upload for $fieldName failed: $e');
+            if (kDebugMode)
+              debugPrint('updateMyProfile: upload for $fieldName failed: $e');
           }
         }
       }
@@ -692,14 +1001,22 @@ class ArtistService {
 
       // Ensure portfolio doesn't contain raw/base64 strings before sending
       _sanitizePortfolio(payload);
-      if (kDebugMode) debugPrint('updateMyProfile: payload after sanitization -> ${payload['portfolio']}');
+      if (kDebugMode)
+        debugPrint(
+            'updateMyProfile: payload after sanitization -> ${payload['portfolio']}');
       final uri = '$API_BASE_URL/api/artisans/me';
-      final resp = await ApiClient.put(uri, headers: {'Content-Type': 'application/json'}, body: jsonEncode(payload));
-       final int? status = (resp['status'] is int) ? resp['status'] as int : null;
-      if (kDebugMode) debugPrint('ArtistService.updateMyProfile -> $uri status=$status body=${resp['body']}');
+      final resp = await ApiClient.put(uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(payload));
+      final int? status =
+          (resp['status'] is int) ? resp['status'] as int : null;
+      if (kDebugMode)
+        debugPrint(
+            'ArtistService.updateMyProfile -> $uri status=$status body=${resp['body']}');
       if (status != null && status >= 200 && status < 300) {
         final body = jsonDecode(resp['body']);
-        if (body is Map && body['data'] is Map) return Map<String, dynamic>.from(body['data']);
+        if (body is Map && body['data'] is Map)
+          return Map<String, dynamic>.from(body['data']);
         if (body is Map) return Map<String, dynamic>.from(body);
       } else {
         // Non-successful response: attempt to parse friendly message and if resource
@@ -708,30 +1025,48 @@ class ArtistService {
         String friendly = 'Server responded with status ${status ?? 'unknown'}';
         try {
           final parsed = b.isNotEmpty ? jsonDecode(b) : null;
-          if (parsed is Map && (parsed['message'] != null || parsed['error'] != null)) friendly = (parsed['message'] ?? parsed['error']).toString();
+          if (parsed is Map &&
+              (parsed['message'] != null || parsed['error'] != null))
+            friendly = (parsed['message'] ?? parsed['error']).toString();
           else if (b.isNotEmpty) friendly = b;
         } catch (_) {
           if (b.isNotEmpty) friendly = b;
         }
 
         // If server indicates that the artisan profile does not exist, attempt to create it
-        if (status == 404 || friendly.toLowerCase().contains('artisan profile not found') || friendly.toLowerCase().contains('artisan not found')) {
-          if (kDebugMode) debugPrint('ArtistService.updateMyProfile -> profile not found, attempting to create artisan profile... payload=$payload');
+        if (status == 404 ||
+            friendly.toLowerCase().contains('artisan profile not found') ||
+            friendly.toLowerCase().contains('artisan not found')) {
+          if (kDebugMode)
+            debugPrint(
+                'ArtistService.updateMyProfile -> profile not found, attempting to create artisan profile... payload=$payload');
           try {
             final createUri = '$API_BASE_URL/api/artisans';
-            final createResp = await ApiClient.post(createUri, headers: {'Content-Type': 'application/json'}, body: jsonEncode(payload));
-            final int? createStatus = (createResp['status'] is int) ? createResp['status'] as int : null;
-            if (kDebugMode) debugPrint('ArtistService.createMyProfile -> $createUri status=$createStatus body=${createResp['body']}');
-            if (createStatus != null && createStatus >= 200 && createStatus < 300) {
+            final createResp = await ApiClient.post(createUri,
+                headers: {'Content-Type': 'application/json'},
+                body: jsonEncode(payload));
+            final int? createStatus = (createResp['status'] is int)
+                ? createResp['status'] as int
+                : null;
+            if (kDebugMode)
+              debugPrint(
+                  'ArtistService.createMyProfile -> $createUri status=$createStatus body=${createResp['body']}');
+            if (createStatus != null &&
+                createStatus >= 200 &&
+                createStatus < 300) {
               final createdBody = jsonDecode(createResp['body']);
-              if (createdBody is Map && createdBody['data'] is Map) return Map<String, dynamic>.from(createdBody['data']);
-              if (createdBody is Map) return Map<String, dynamic>.from(createdBody);
+              if (createdBody is Map && createdBody['data'] is Map)
+                return Map<String, dynamic>.from(createdBody['data']);
+              if (createdBody is Map)
+                return Map<String, dynamic>.from(createdBody);
             }
             final cb = createResp['body']?.toString() ?? '';
             String cmsg = 'Failed to create artisan profile';
             try {
               final parsed = cb.isNotEmpty ? jsonDecode(cb) : null;
-              if (parsed is Map && (parsed['message'] != null || parsed['error'] != null)) cmsg = (parsed['message'] ?? parsed['error']).toString();
+              if (parsed is Map &&
+                  (parsed['message'] != null || parsed['error'] != null))
+                cmsg = (parsed['message'] ?? parsed['error']).toString();
               else if (cb.isNotEmpty) cmsg = cb;
             } catch (_) {
               if (cb.isNotEmpty) cmsg = cb;
@@ -751,15 +1086,18 @@ class ArtistService {
     }
 
     return null;
-   }
+  }
 
   /// Upload local files to a dedicated attachments endpoint. Tries common
   /// candidate endpoints and returns a list of maps { 'localPath': ..., 'url': ... }
   /// Throws MultipartRejectedException if server consistently rejects multipart.
-  static Future<List<Map<String, String>>> uploadFilesToAttachments(List<String> localPaths, {int maxFileSizeBytes = 10 * 1024 * 1024}) async {
+  static Future<List<Map<String, String>>> uploadFilesToAttachments(
+      List<String> localPaths,
+      {int maxFileSizeBytes = 10 * 1024 * 1024}) async {
     final token = await TokenStorage.getToken();
     final headers = <String, String>{'Content-Type': 'application/json'};
-    if (token != null && token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
+    if (token != null && token.isNotEmpty)
+      headers['Authorization'] = 'Bearer $token';
 
     final candidateEndpoints = [
       '$API_BASE_URL/api/uploads',
@@ -771,7 +1109,8 @@ class ArtistService {
     // Prepare file payloads for attachments endpoints (small files only). Also
     // collect all existing local files to attempt direct signed uploads if
     // attachments endpoints reject multipart.
-    final filesPayload = <Map<String, String>>[]; // for JSON POST to attachments endpoints
+    final filesPayload =
+        <Map<String, String>>[]; // for JSON POST to attachments endpoints
     final allExistingFiles = <String>[]; // used for direct Cloudinary uploads
     for (final path in localPaths) {
       try {
@@ -780,16 +1119,21 @@ class ArtistService {
         allExistingFiles.add(path);
         final bytes = await f.readAsBytes();
         if (bytes.lengthInBytes > maxFileSizeBytes) {
-          if (kDebugMode) debugPrint('uploadFilesToAttachments: will skip attachments JSON for $path - size ${bytes.lengthInBytes} bytes > $maxFileSizeBytes, but will try direct signed upload');
+          if (kDebugMode)
+            debugPrint(
+                'uploadFilesToAttachments: will skip attachments JSON for $path - size ${bytes.lengthInBytes} bytes > $maxFileSizeBytes, but will try direct signed upload');
           continue; // don't add to JSON payload, but keep for direct upload
         }
         final b64 = base64Encode(bytes);
         filesPayload.add({'name': p.basename(path), 'content': b64});
       } catch (e) {
-        if (kDebugMode) debugPrint('uploadFilesToAttachments: failed to prepare $path: $e');
+        if (kDebugMode)
+          debugPrint('uploadFilesToAttachments: failed to prepare $path: $e');
       }
     }
-    if (kDebugMode) debugPrint('uploadFilesToAttachments -> prepared filesPayload count=${filesPayload.length} allExistingFiles count=${allExistingFiles.length}');
+    if (kDebugMode)
+      debugPrint(
+          'uploadFilesToAttachments -> prepared filesPayload count=${filesPayload.length} allExistingFiles count=${allExistingFiles.length}');
 
     // If we have no small files for attachments endpoints, we still may
     // attempt direct signed uploads below using allExistingFiles.
@@ -800,8 +1144,10 @@ class ArtistService {
     for (final endpoint in candidateEndpoints) {
       try {
         final body = jsonEncode({'files': filesPayload});
-        final resp = await ApiClient.post(endpoint, headers: headers, body: body);
-        final int? status = (resp['status'] is int) ? resp['status'] as int : null;
+        final resp =
+            await ApiClient.post(endpoint, headers: headers, body: body);
+        final int? status =
+            (resp['status'] is int) ? resp['status'] as int : null;
         if (status != null && status >= 200 && status < 300) {
           final respBody = resp['body']?.toString() ?? '';
           if (respBody.isEmpty) return [];
@@ -828,65 +1174,88 @@ class ArtistService {
                   result.add({'url': API_BASE_URL + s});
                 } else {
                   // not a valid URL - treat as unexpected
-                  endpointErrors.add('$endpoint -> returned non-url string (possibly base64)');
+                  endpointErrors.add(
+                      '$endpoint -> returned non-url string (possibly base64)');
                 }
               } else if (it is Map && it['url'] != null) {
                 final s = it['url'].toString().trim();
-                if (s.startsWith('http://') || s.startsWith('https://')) result.add({'url': s});
-                else if (s.startsWith('/')) result.add({'url': API_BASE_URL + s});
-                else endpointErrors.add('$endpoint -> returned non-url in map.url');
+                if (s.startsWith('http://') || s.startsWith('https://'))
+                  result.add({'url': s});
+                else if (s.startsWith('/'))
+                  result.add({'url': API_BASE_URL + s});
+                else
+                  endpointErrors
+                      .add('$endpoint -> returned non-url in map.url');
               } else if (it is Map && it['path'] != null) {
                 final s = it['path'].toString().trim();
-                if (s.startsWith('http://') || s.startsWith('https://')) result.add({'url': s});
-                else if (s.startsWith('/')) result.add({'url': API_BASE_URL + s});
-                else endpointErrors.add('$endpoint -> returned non-url in map.path');
+                if (s.startsWith('http://') || s.startsWith('https://'))
+                  result.add({'url': s});
+                else if (s.startsWith('/'))
+                  result.add({'url': API_BASE_URL + s});
+                else
+                  endpointErrors
+                      .add('$endpoint -> returned non-url in map.path');
               }
             }
           } else if (parsed is Map) {
-             // common: { data: [ { url: ... } ] }
-             if (parsed['data'] is List) {
-               for (final it in parsed['data']) {
-                 if (it is Map && it['url'] != null) {
-                   final s = it['url'].toString().trim();
-                   if (s.startsWith('http://') || s.startsWith('https://')) result.add({'url': s});
-                   else if (s.startsWith('/')) result.add({'url': API_BASE_URL + s});
-                 } else if (it is Map && it['path'] != null) {
-                   final s = it['path'].toString().trim();
-                   if (s.startsWith('http://') || s.startsWith('https://')) result.add({'url': s});
-                   else if (s.startsWith('/')) result.add({'url': API_BASE_URL + s});
-                 }
-               }
-             } else if (parsed['urls'] is List) {
-               for (final u in parsed['urls']) {
-                 if (u is String) {
-                   final s = u.trim();
-                   if (s.startsWith('http://') || s.startsWith('https://')) result.add({'url': s});
-                   else if (s.startsWith('/')) result.add({'url': API_BASE_URL + s});
-                   else endpointErrors.add('$endpoint -> returned non-url in urls list');
-                 }
-               }
-              } else if (parsed['url'] is String) {
-               final s = parsed['url'].toString().trim();
-               if (s.startsWith('http://') || s.startsWith('https://')) result.add({'url': s});
-               else if (s.startsWith('/')) result.add({'url': API_BASE_URL + s});
-              } else if (parsed['path'] is String) {
-               final s = parsed['path'].toString().trim();
-               if (s.startsWith('http://') || s.startsWith('https://')) result.add({'url': s});
-               else if (s.startsWith('/')) result.add({'url': API_BASE_URL + s});
-             }
-           }
+            // common: { data: [ { url: ... } ] }
+            if (parsed['data'] is List) {
+              for (final it in parsed['data']) {
+                if (it is Map && it['url'] != null) {
+                  final s = it['url'].toString().trim();
+                  if (s.startsWith('http://') || s.startsWith('https://'))
+                    result.add({'url': s});
+                  else if (s.startsWith('/'))
+                    result.add({'url': API_BASE_URL + s});
+                } else if (it is Map && it['path'] != null) {
+                  final s = it['path'].toString().trim();
+                  if (s.startsWith('http://') || s.startsWith('https://'))
+                    result.add({'url': s});
+                  else if (s.startsWith('/'))
+                    result.add({'url': API_BASE_URL + s});
+                }
+              }
+            } else if (parsed['urls'] is List) {
+              for (final u in parsed['urls']) {
+                if (u is String) {
+                  final s = u.trim();
+                  if (s.startsWith('http://') || s.startsWith('https://'))
+                    result.add({'url': s});
+                  else if (s.startsWith('/'))
+                    result.add({'url': API_BASE_URL + s});
+                  else
+                    endpointErrors
+                        .add('$endpoint -> returned non-url in urls list');
+                }
+              }
+            } else if (parsed['url'] is String) {
+              final s = parsed['url'].toString().trim();
+              if (s.startsWith('http://') || s.startsWith('https://'))
+                result.add({'url': s});
+              else if (s.startsWith('/')) result.add({'url': API_BASE_URL + s});
+            } else if (parsed['path'] is String) {
+              final s = parsed['path'].toString().trim();
+              if (s.startsWith('http://') || s.startsWith('https://'))
+                result.add({'url': s});
+              else if (s.startsWith('/')) result.add({'url': API_BASE_URL + s});
+            }
+          }
 
           if (result.isNotEmpty) return result;
           endpointErrors.add('$endpoint -> unexpected JSON shape');
         } else {
           final b = resp['body']?.toString() ?? '';
-          endpointErrors.add('$endpoint -> status ${status ?? 'unknown'} body: ${b.length > 200 ? b.substring(0,200) + "..." : b}');
-          if (b.contains('502') || b.contains('Bad Gateway') || b.contains('<html')) {
+          endpointErrors.add(
+              '$endpoint -> status ${status ?? 'unknown'} body: ${b.length > 200 ? b.substring(0, 200) + "..." : b}');
+          if (b.contains('502') ||
+              b.contains('Bad Gateway') ||
+              b.contains('<html')) {
             continue;
           }
         }
       } catch (e) {
-        if (kDebugMode) debugPrint('uploadFilesToAttachments: endpoint $endpoint failed: $e');
+        if (kDebugMode)
+          debugPrint('uploadFilesToAttachments: endpoint $endpoint failed: $e');
         endpointErrors.add('$endpoint -> exception: $e');
         // try next endpoint
         continue;
@@ -900,27 +1269,37 @@ class ArtistService {
     for (final localPath in allExistingFiles) {
       try {
         final file = File(localPath);
-        if (!file.existsSync()) { fileErrors.add('$localPath -> file not found'); continue; }
+        if (!file.existsSync()) {
+          fileErrors.add('$localPath -> file not found');
+          continue;
+        }
         // request signature from server (UploadService takes care of the POST)
         Map<String, dynamic> signData;
         try {
           signData = await UploadService.requestSignature(folder: 'artisans');
         } catch (e) {
-          if (kDebugMode) debugPrint('uploadFilesToAttachments: signature request failed: $e');
+          if (kDebugMode)
+            debugPrint(
+                'uploadFilesToAttachments: signature request failed: $e');
           fileErrors.add('signature request failed: $e');
           break; // no point continuing if signature request fails
         }
         // attempt direct upload
-        final uploaded = await UploadService.uploadFileDirect(file: file, signData: signData);
-        final url = (uploaded['url'] as String?) ?? (uploaded['raw']?['secure_url'] as String?);
-        final publicId = (uploaded['public_id'] as String?) ?? (uploaded['raw']?['public_id'] as String?);
+        final uploaded = await UploadService.uploadFileDirect(
+            file: file, signData: signData);
+        final url = (uploaded['url'] as String?) ??
+            (uploaded['raw']?['secure_url'] as String?);
+        final publicId = (uploaded['public_id'] as String?) ??
+            (uploaded['raw']?['public_id'] as String?);
         if (url != null && url.isNotEmpty) {
           directResults.add({'url': url, 'public_id': publicId ?? ''});
         } else {
           fileErrors.add('$localPath -> cloud upload returned no url');
         }
       } catch (e) {
-        if (kDebugMode) debugPrint('uploadFilesToAttachments: direct upload for $localPath failed: $e');
+        if (kDebugMode)
+          debugPrint(
+              'uploadFilesToAttachments: direct upload for $localPath failed: $e');
         fileErrors.add('$localPath -> $e');
         // continue to next file
         continue;
@@ -931,161 +1310,185 @@ class ArtistService {
 
     // If we get here, no endpoint succeeded - construct a helpful message
     final details = <String>[];
-    if (endpointErrors.isNotEmpty) details.add('endpoint errors:\n' + endpointErrors.join('\n'));
-    if (fileErrors.isNotEmpty) details.add('file errors:\n' + fileErrors.join('\n'));
+    if (endpointErrors.isNotEmpty)
+      details.add('endpoint errors:\n' + endpointErrors.join('\n'));
+    if (fileErrors.isNotEmpty)
+      details.add('file errors:\n' + fileErrors.join('\n'));
     final combined = details.isNotEmpty ? details.join('\n') : 'unknown error';
-    throw MultipartRejectedException('Failed to upload files to attachments endpoints. Details: $combined');
+    throw MultipartRejectedException(
+        'Failed to upload files to attachments endpoints. Details: $combined');
   }
 
   /// Detect any embedded data URI images in payload['portfolio'], write them to
   /// temporary files, upload them using attachments/direct upload, and replace
   /// the embedded data URIs with returned URLs in-place. This prevents sending
   /// raw base64 data to the server.
-  static Future<void> _processEmbeddedDataUris(Map<String, dynamic> payload) async {
-     try {
-       if (payload['portfolio'] is! List) return;
-       final list = payload['portfolio'] as List;
-       final tempFiles = <String>[]; // list of temp file paths we create
-       final mapping = <String, String>{}; // tempPath -> uploadedUrl
+  static Future<void> _processEmbeddedDataUris(
+      Map<String, dynamic> payload) async {
+    try {
+      if (payload['portfolio'] is! List) return;
+      final list = payload['portfolio'] as List;
+      final tempFiles = <String>[]; // list of temp file paths we create
+      final mapping = <String, String>{}; // tempPath -> uploadedUrl
 
-       // Collect all data URI images and write to temp files
-       for (var itemIndex = 0; itemIndex < list.length; itemIndex++) {
-         final item = list[itemIndex];
-         if (item is! Map) continue;
-         if (item['images'] is! List) continue;
-         final images = item['images'] as List;
-         for (var imgIndex = 0; imgIndex < images.length; imgIndex++) {
-           final img = images[imgIndex];
-           if (img is String && img.trim().startsWith('data:')) {
-             final s = img.trim();
-             try {
-               // data:[<mime type>][;base64],<data>
-               final parts = s.split(',');
-               if (parts.length < 2) continue;
-               final meta = parts[0];
-               final b64 = parts.sublist(1).join(',');
-               final data = base64Decode(b64);
-               // determine extension from mime
-               String ext = '.jpg';
-               if (meta.contains('image/png')) ext = '.png';
-               else if (meta.contains('image/webp')) ext = '.webp';
-               else if (meta.contains('image/gif')) ext = '.gif';
-               else if (meta.contains('image/svg+xml')) ext = '.svg';
+      // Collect all data URI images and write to temp files
+      for (var itemIndex = 0; itemIndex < list.length; itemIndex++) {
+        final item = list[itemIndex];
+        if (item is! Map) continue;
+        if (item['images'] is! List) continue;
+        final images = item['images'] as List;
+        for (var imgIndex = 0; imgIndex < images.length; imgIndex++) {
+          final img = images[imgIndex];
+          if (img is String && img.trim().startsWith('data:')) {
+            final s = img.trim();
+            try {
+              // data:[<mime type>][;base64],<data>
+              final parts = s.split(',');
+              if (parts.length < 2) continue;
+              final meta = parts[0];
+              final b64 = parts.sublist(1).join(',');
+              final data = base64Decode(b64);
+              // determine extension from mime
+              String ext = '.jpg';
+              if (meta.contains('image/png'))
+                ext = '.png';
+              else if (meta.contains('image/webp'))
+                ext = '.webp';
+              else if (meta.contains('image/gif'))
+                ext = '.gif';
+              else if (meta.contains('image/svg+xml')) ext = '.svg';
 
-               final tmp = File('${Directory.systemTemp.path}/rijhub_datauri_${DateTime.now().microsecondsSinceEpoch}_${tempFiles.length}$ext');
-               await tmp.writeAsBytes(data, flush: true);
-               tempFiles.add(tmp.path);
+              final tmp = File(
+                  '${Directory.systemTemp.path}/rijhub_datauri_${DateTime.now().microsecondsSinceEpoch}_${tempFiles.length}$ext');
+              await tmp.writeAsBytes(data, flush: true);
+              tempFiles.add(tmp.path);
 
-               // replace the data URI in-place with a temporary placeholder (we will replace again with URL)
-               images[imgIndex] = tmp.path;
-             } catch (e) {
-               if (kDebugMode) debugPrint('Failed to process embedded data URI: $e');
-               // Leave the original data URI for now; it will be sanitized out later
-             }
-           }
-         }
-       }
+              // replace the data URI in-place with a temporary placeholder (we will replace again with URL)
+              images[imgIndex] = tmp.path;
+            } catch (e) {
+              if (kDebugMode)
+                debugPrint('Failed to process embedded data URI: $e');
+              // Leave the original data URI for now; it will be sanitized out later
+            }
+          }
+        }
+      }
 
-       if (tempFiles.isEmpty) return;
+      if (tempFiles.isEmpty) return;
 
-       // Attempt to upload all created temp files using existing attachment/direct upload flow
-       List<Map<String, String>> uploaded = [];
-       try {
-         uploaded = await uploadFilesToAttachments(tempFiles);
-       } catch (e) {
-         if (kDebugMode) debugPrint('uploadFilesToAttachments for embedded data URIs failed: $e');
-         // Attempt per-file direct upload as a last resort
-         for (final pth in tempFiles) {
-           try {
-             final file = File(pth);
-             if (!file.existsSync()) continue;
-             final signData = await UploadService.requestSignature(folder: 'artisans');
-             final up = await UploadService.uploadFileDirect(file: file, signData: signData);
-             final url = (up['url'] as String?) ?? (up['raw']?['secure_url'] as String?);
-             if (url != null && url.isNotEmpty) uploaded.add({'url': url});
-           } catch (e2) {
-             if (kDebugMode) debugPrint('Direct upload for embedded file $pth failed: $e2');
-           }
-         }
-       }
+      // Attempt to upload all created temp files using existing attachment/direct upload flow
+      List<Map<String, String>> uploaded = [];
+      try {
+        uploaded = await uploadFilesToAttachments(tempFiles);
+      } catch (e) {
+        if (kDebugMode)
+          debugPrint(
+              'uploadFilesToAttachments for embedded data URIs failed: $e');
+        // Attempt per-file direct upload as a last resort
+        for (final pth in tempFiles) {
+          try {
+            final file = File(pth);
+            if (!file.existsSync()) continue;
+            final signData =
+                await UploadService.requestSignature(folder: 'artisans');
+            final up = await UploadService.uploadFileDirect(
+                file: file, signData: signData);
+            final url =
+                (up['url'] as String?) ?? (up['raw']?['secure_url'] as String?);
+            if (url != null && url.isNotEmpty) uploaded.add({'url': url});
+          } catch (e2) {
+            if (kDebugMode)
+              debugPrint('Direct upload for embedded file $pth failed: $e2');
+          }
+        }
+      }
 
-       // Map uploaded results back to temp files. uploadFilesToAttachments preserves order
-       // in most cases; we map by index.
-       for (var i = 0; i < tempFiles.length && i < uploaded.length; i++) {
-         final t = tempFiles[i];
-         final u = uploaded[i];
-         final url = (u['url'] ?? '').toString();
-         if (url.isNotEmpty) mapping[t] = url;
-       }
+      // Map uploaded results back to temp files. uploadFilesToAttachments preserves order
+      // in most cases; we map by index.
+      for (var i = 0; i < tempFiles.length && i < uploaded.length; i++) {
+        final t = tempFiles[i];
+        final u = uploaded[i];
+        final url = (u['url'] ?? '').toString();
+        if (url.isNotEmpty) mapping[t] = url;
+      }
 
-       // Replace temporary file paths in payload (we previously replaced data URIs with tmp paths)
-       for (var itemIndex = 0; itemIndex < list.length; itemIndex++) {
-         final item = list[itemIndex];
-         if (item is! Map) continue;
-         if (item['images'] is! List) continue;
-         final images = item['images'] as List;
-         for (var imgIndex = 0; imgIndex < images.length; imgIndex++) {
-           final img = images[imgIndex];
-           if (img is String && mapping.containsKey(img)) {
-             images[imgIndex] = mapping[img];
-           } else if (img is String && img.startsWith(Directory.systemTemp.path) && !mapping.containsKey(img)) {
-             // upload failed for this temp file -> remove it from list to avoid sending base64
-             images[imgIndex] = null;
-           }
-         }
-         // Remove null entries and non-string entries
-         item['images'] = images.whereType<String>().where((e) => e.isNotEmpty).toList();
-       }
+      // Replace temporary file paths in payload (we previously replaced data URIs with tmp paths)
+      for (var itemIndex = 0; itemIndex < list.length; itemIndex++) {
+        final item = list[itemIndex];
+        if (item is! Map) continue;
+        if (item['images'] is! List) continue;
+        final images = item['images'] as List;
+        for (var imgIndex = 0; imgIndex < images.length; imgIndex++) {
+          final img = images[imgIndex];
+          if (img is String && mapping.containsKey(img)) {
+            images[imgIndex] = mapping[img];
+          } else if (img is String &&
+              img.startsWith(Directory.systemTemp.path) &&
+              !mapping.containsKey(img)) {
+            // upload failed for this temp file -> remove it from list to avoid sending base64
+            images[imgIndex] = null;
+          }
+        }
+        // Remove null entries and non-string entries
+        item['images'] =
+            images.whereType<String>().where((e) => e.isNotEmpty).toList();
+      }
 
-       // Clean up temp files
-       for (final t in tempFiles) {
-         try {
-           final f = File(t);
-           if (await f.exists()) await f.delete();
-         } catch (_) {}
-       }
-     } catch (e) {
-       if (kDebugMode) debugPrint('Error in _processEmbeddedDataUris: $e');
-     }
-   }
+      // Clean up temp files
+      for (final t in tempFiles) {
+        try {
+          final f = File(t);
+          if (await f.exists()) await f.delete();
+        } catch (_) {}
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('Error in _processEmbeddedDataUris: $e');
+    }
+  }
 
   // Helper: keep only valid URLs in payload['portfolio'] to avoid sending raw base64 strings
   static void _sanitizePortfolio(Map<String, dynamic> payload) {
-     try {
-       if (payload['portfolio'] is List) {
-         final list = payload['portfolio'] as List;
-         final sanitized = <Map<String, dynamic>>[];
-         for (final item in list) {
-           try {
-             if (item is Map) {
-               final title = item['title']?.toString() ?? '';
-               final images = <String>[];
-               if (item['images'] is List) {
-                 for (final img in item['images']) {
-                   if (img is String) {
-                     final s = img.trim();
-                     // Accept: absolute http(s) URLs or server-relative paths
-                     final looksLikeUrl = s.startsWith('http://') || s.startsWith('https://') || s.startsWith('/');
-                     // Detect obvious base64/data-URI patterns: data:*;base64, or long strings composed only of base64 chars
-                     final isDataUri = s.startsWith('data:') || s.contains('base64,');
-                     final base64Only = RegExp(r'^[A-Za-z0-9+/=\r\n]+$');
-                     final looksLikeLongBase64 = s.length > 300 && base64Only.hasMatch(s.replaceAll('\n', ''));
-                     final looksLikeBase64 = isDataUri || looksLikeLongBase64;
-                     if (looksLikeUrl && !looksLikeBase64) {
-                       if (s.startsWith('/')) images.add(API_BASE_URL + s);
-                       else images.add(s);
-                     }
-                   }
-                 }
-               }
-               sanitized.add({'title': title, 'images': images});
-             }
-           } catch (_) {}
-         }
-         payload['portfolio'] = sanitized;
-       }
-     } catch (_) {}
-   }
+    try {
+      if (payload['portfolio'] is List) {
+        final list = payload['portfolio'] as List;
+        final sanitized = <Map<String, dynamic>>[];
+        for (final item in list) {
+          try {
+            if (item is Map) {
+              final title = item['title']?.toString() ?? '';
+              final images = <String>[];
+              if (item['images'] is List) {
+                for (final img in item['images']) {
+                  if (img is String) {
+                    final s = img.trim();
+                    // Accept: absolute http(s) URLs or server-relative paths
+                    final looksLikeUrl = s.startsWith('http://') ||
+                        s.startsWith('https://') ||
+                        s.startsWith('/');
+                    // Detect obvious base64/data-URI patterns: data:*;base64, or long strings composed only of base64 chars
+                    final isDataUri =
+                        s.startsWith('data:') || s.contains('base64,');
+                    final base64Only = RegExp(r'^[A-Za-z0-9+/=\r\n]+$');
+                    final looksLikeLongBase64 = s.length > 300 &&
+                        base64Only.hasMatch(s.replaceAll('\n', ''));
+                    final looksLikeBase64 = isDataUri || looksLikeLongBase64;
+                    if (looksLikeUrl && !looksLikeBase64) {
+                      if (s.startsWith('/'))
+                        images.add(API_BASE_URL + s);
+                      else
+                        images.add(s);
+                    }
+                  }
+                }
+              }
+              sanitized.add({'title': title, 'images': images});
+            }
+          } catch (_) {}
+        }
+        payload['portfolio'] = sanitized;
+      }
+    } catch (_) {}
+  }
 
   // Recursively walk payload and remove any string values that are data URIs (start with 'data:')
   static void _stripDataUrisFromPayload(dynamic node) {
@@ -1129,11 +1532,20 @@ class ArtistService {
     final url = '$API_BASE_URL/api/artisans/user/$userId';
     try {
       if (kDebugMode) debugPrint('ArtistService.getByUserId -> trying $url');
-      final resp = await ApiClient.get(url, headers: {'Content-Type': 'application/json'});
-      if (kDebugMode) debugPrint('ArtistService.getByUserId -> resp status=${resp['status']}');
-      if (resp['status'] is int && resp['status'] >= 200 && resp['status'] < 300) {
+      final resp = await ApiClient.get(url,
+          headers: {'Content-Type': 'application/json'});
+      if (kDebugMode)
+        debugPrint(
+            'ArtistService.getByUserId -> resp status=${resp['status']}');
+      if (resp['status'] is int &&
+          resp['status'] >= 200 &&
+          resp['status'] < 300) {
         _lastGetByUserIdHad200 = true;
-        dynamic body = (resp['body'] != null && resp['body'] is String && (resp['body'] as String).isNotEmpty) ? jsonDecode(resp['body']) : resp['json'];
+        dynamic body = (resp['body'] != null &&
+                resp['body'] is String &&
+                (resp['body'] as String).isNotEmpty)
+            ? jsonDecode(resp['body'])
+            : resp['json'];
         if (body == null) return null;
 
         // helper to check whether an artisan/map belongs to the requested userId
@@ -1142,10 +1554,14 @@ class ArtistService {
             if (candidate == null || candidate is! Map) return false;
             final m = Map<String, dynamic>.from(Map.castFrom(candidate));
             final ids = <String>[];
-            if (m.containsKey('userId') && m['userId'] != null) ids.add(m['userId'].toString());
-            if (m.containsKey('user_id') && m['user_id'] != null) ids.add(m['user_id'].toString());
-            if (m.containsKey('_id') && m['_id'] != null) ids.add(m['_id'].toString());
-            if (m['user'] is Map && m['user']['_id'] != null) ids.add(m['user']['_id'].toString());
+            if (m.containsKey('userId') && m['userId'] != null)
+              ids.add(m['userId'].toString());
+            if (m.containsKey('user_id') && m['user_id'] != null)
+              ids.add(m['user_id'].toString());
+            if (m.containsKey('_id') && m['_id'] != null)
+              ids.add(m['_id'].toString());
+            if (m['user'] is Map && m['user']['_id'] != null)
+              ids.add(m['user']['_id'].toString());
             return ids.any((id) => id == userId);
           } catch (_) {
             return false;
@@ -1157,7 +1573,8 @@ class ArtistService {
           if (body.isEmpty) return null; // explicit: empty list => not found
           for (final it in body) {
             try {
-              if (it is Map && _matchesRequestedUser(it)) return Map<String, dynamic>.from(Map.castFrom(it));
+              if (it is Map && _matchesRequestedUser(it))
+                return Map<String, dynamic>.from(Map.castFrom(it));
             } catch (_) {}
           }
           return null;
@@ -1169,7 +1586,8 @@ class ArtistService {
           if (lst.isEmpty) return null;
           for (final it in lst) {
             try {
-              if (it is Map && _matchesRequestedUser(it)) return Map<String, dynamic>.from(Map.castFrom(it));
+              if (it is Map && _matchesRequestedUser(it))
+                return Map<String, dynamic>.from(Map.castFrom(it));
             } catch (_) {}
           }
           return null;
@@ -1190,7 +1608,8 @@ class ArtistService {
         }
       }
     } catch (e) {
-      if (kDebugMode) debugPrint('ArtistService.getByUserId -> $url failed: $e');
+      if (kDebugMode)
+        debugPrint('ArtistService.getByUserId -> $url failed: $e');
     }
     return null;
   }

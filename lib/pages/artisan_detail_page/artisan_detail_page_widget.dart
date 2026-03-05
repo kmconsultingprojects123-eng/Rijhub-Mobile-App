@@ -98,7 +98,9 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
       try {
         final wa = widget.artisan;
         if (wa is Map) {
-          if (wa.containsKey('_id') || wa.containsKey('id') || wa.containsKey('artisanId')) {
+          if (wa.containsKey('_id') ||
+              wa.containsKey('id') ||
+              wa.containsKey('artisanId')) {
             looksLikeArtisanId = true;
           }
         }
@@ -113,8 +115,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
           : (_resolvedArtisanId() ?? id!);
       _unawaited(Future.delayed(
           const Duration(milliseconds: 400),
-              () => _loadReviewsForArtisan(resolvedForReviews!, token: _authToken)
-      ));
+          () =>
+              _loadReviewsForArtisan(resolvedForReviews!, token: _authToken)));
     }
   }
 
@@ -173,43 +175,53 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
 
       if (resp.statusCode == 200) {
         final body = _safeParseJson(resp.body);
-        if (body is Map && (body['success'] == true || body.containsKey('data'))) {
+        if (body is Map &&
+            (body['success'] == true || body.containsKey('data'))) {
           final data = body['data'] ?? body;
           if (data is Map) {
             if (!mounted) return;
             setState(() {
-              _artisanData = Map<String, dynamic>.from(data.cast<String, dynamic>());
+              _artisanData =
+                  Map<String, dynamic>.from(data.cast<String, dynamic>());
             });
 
             // Ensure we pass a Map<String, dynamic> (decoded JSON may be Map<dynamic,dynamic>)
-            _fetchReferencedUserName(Map<String, dynamic>.from(data.cast<String, dynamic>()), token: token);
+            _fetchReferencedUserName(
+                Map<String, dynamic>.from(data.cast<String, dynamic>()),
+                token: token);
             return;
           }
         }
 
         if (_artisanData == null) {
           setState(() => _errorMessage = 'Unable to load artisan details.');
-          debugPrint('Artisan fetch unexpected response: ${resp.statusCode} ${resp.body}');
+          debugPrint(
+              'Artisan fetch unexpected response: ${resp.statusCode} ${resp.body}');
         } else {
           // We already have data to display; don't overwrite UI with an error banner.
-          debugPrint('Artisan fetch unexpected response (kept existing data): ${resp.statusCode} ${resp.body}');
+          debugPrint(
+              'Artisan fetch unexpected response (kept existing data): ${resp.statusCode} ${resp.body}');
         }
       } else {
         _handleFetchError(resp);
       }
     } on TimeoutException {
       if (_artisanData == null) {
-        setState(() => _errorMessage = 'Network timeout while loading artisan details.');
+        setState(() =>
+            _errorMessage = 'Network timeout while loading artisan details.');
       } else {
-        debugPrint('Network timeout while refreshing artisan details (kept existing data)');
+        debugPrint(
+            'Network timeout while refreshing artisan details (kept existing data)');
       }
     } catch (e, st) {
       debugPrint('Error fetching artisan: $e\n$st');
       if (_artisanData == null) {
-        setState(() => _errorMessage = 'An unexpected error occurred while loading artisan details.');
+        setState(() => _errorMessage =
+            'An unexpected error occurred while loading artisan details.');
       } else {
         // Keep existing UI; log the failure for diagnostics.
-        debugPrint('Unexpected error while refreshing artisan (kept existing data)');
+        debugPrint(
+            'Unexpected error while refreshing artisan (kept existing data)');
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -251,12 +263,23 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
       String? _buildNameFromMap(Map m) {
         try {
           // Direct name fields
-          final direct = (m['name'] ?? m['fullName'] ?? m['displayName'] ?? m['username'] ?? m['nameFull']);
-          if (direct != null && direct.toString().trim().isNotEmpty) return direct.toString().trim();
+          final direct = (m['name'] ??
+              m['fullName'] ??
+              m['displayName'] ??
+              m['username'] ??
+              m['nameFull']);
+          if (direct != null && direct.toString().trim().isNotEmpty)
+            return direct.toString().trim();
 
           // first + last variants
-          final first = (m['firstName'] ?? m['firstname'] ?? m['first_name'] ?? m['givenName']);
-          final last = (m['lastName'] ?? m['lastname'] ?? m['last_name'] ?? m['familyName']);
+          final first = (m['firstName'] ??
+              m['firstname'] ??
+              m['first_name'] ??
+              m['givenName']);
+          final last = (m['lastName'] ??
+              m['lastname'] ??
+              m['last_name'] ??
+              m['familyName']);
           if (first != null || last != null) {
             final f = first?.toString().trim() ?? '';
             final l = last?.toString().trim() ?? '';
@@ -281,7 +304,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
           }
 
           final phone = m['phone'] ?? m['telephone'] ?? m['phoneNumber'];
-          if (phone != null && phone.toString().trim().isNotEmpty) return phone.toString().trim();
+          if (phone != null && phone.toString().trim().isNotEmpty)
+            return phone.toString().trim();
         } catch (_) {}
         return null;
       }
@@ -292,10 +316,12 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
 
         // If the reference is already a nested object with a readable name, use it.
         if (v is Map) {
-          final possibleName = _buildNameFromMap(v) ?? (v['name'] ?? v['fullName'] ?? v['displayName'])?.toString();
+          final possibleName = _buildNameFromMap(v) ??
+              (v['name'] ?? v['fullName'] ?? v['displayName'])?.toString();
           if (possibleName != null && possibleName.trim().isNotEmpty) {
             // Determine a stable id to cache under: prefer nested id, else try to find any user ref id
-            final nestedIdForCache = _extractIdFromMap(v) ?? _findUserReferenceId(artMap) ?? k;
+            final nestedIdForCache =
+                _extractIdFromMap(v) ?? _findUserReferenceId(artMap) ?? k;
             if (mounted) {
               setState(() {
                 _userNameCache[nestedIdForCache] = possibleName.trim();
@@ -303,13 +329,16 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                 // so the UI shows the name immediately.
                 if (_artisanData == null) {
                   try {
-                    final baseWidgetMap = _coerceToMap(widget.artisan) ?? Map<String, dynamic>.from(artMap);
+                    final baseWidgetMap = _coerceToMap(widget.artisan) ??
+                        Map<String, dynamic>.from(artMap);
                     _artisanData = Map<String, dynamic>.from(baseWidgetMap);
                   } catch (_) {
                     _artisanData = Map<String, dynamic>.from(artMap);
                   }
                 }
-                if (_artisanData != null && (_artisanData!['name'] == null || _artisanData!['name'].toString().trim().isEmpty)) {
+                if (_artisanData != null &&
+                    (_artisanData!['name'] == null ||
+                        _artisanData!['name'].toString().trim().isEmpty)) {
                   _artisanData!['name'] = possibleName.trim();
                 }
               });
@@ -339,7 +368,9 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
               if (!mounted) return;
               setState(() {
                 _userNameCache[resolvedId] = name!;
-                if (_artisanData != null && (_artisanData!['name'] == null || _artisanData!['name'].toString().trim().isEmpty)) {
+                if (_artisanData != null &&
+                    (_artisanData!['name'] == null ||
+                        _artisanData!['name'].toString().trim().isEmpty)) {
                   _artisanData!['name'] = name;
                 }
               });
@@ -362,8 +393,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
     });
 
     try {
-      final fetched = await ArtistService.fetchReviewsForArtisan(
-          artisanId, page: 1, limit: _maxPreviewReviews);
+      final fetched = await ArtistService.fetchReviewsForArtisan(artisanId,
+          page: 1, limit: _maxPreviewReviews);
 
       if (!mounted) return;
 
@@ -381,7 +412,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
     }
   }
 
-  void _prefetchReviewerNames(List<Map<String, dynamic>> reviews, {String? token}) {
+  void _prefetchReviewerNames(List<Map<String, dynamic>> reviews,
+      {String? token}) {
     try {
       final ids = <String>{};
       int prefetchCount = 0;
@@ -397,10 +429,12 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
         final idStr = reviewerId is String
             ? reviewerId
             : (reviewerId is Map && reviewerId['_id'] != null
-            ? reviewerId['_id'].toString()
-            : reviewerId.toString());
+                ? reviewerId['_id'].toString()
+                : reviewerId.toString());
 
-        if (idStr.isNotEmpty && !_userNameCache.containsKey(idStr) && prefetchCount < 10) {
+        if (idStr.isNotEmpty &&
+            !_userNameCache.containsKey(idStr) &&
+            prefetchCount < 10) {
           ids.add(idStr);
           prefetchCount++;
         }
@@ -458,7 +492,9 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
 
       final resp = await http.get(uri, headers: headers).timeout(_timeout);
 
-      if (resp.statusCode >= 200 && resp.statusCode < 300 && resp.body.isNotEmpty) {
+      if (resp.statusCode >= 200 &&
+          resp.statusCode < 300 &&
+          resp.body.isNotEmpty) {
         final body = _safeParseJson(resp.body);
         Map<String, dynamic>? data;
         if (body is Map && body['data'] is Map) {
@@ -469,9 +505,10 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
 
         if (data != null) {
           final name = (data['name'] ??
-              data['fullName'] ??
-              data['displayName'] ??
-              data['username'])?.toString();
+                  data['fullName'] ??
+                  data['displayName'] ??
+                  data['username'])
+              ?.toString();
           if (name?.trim().isNotEmpty ?? false) return name!.trim();
         }
       }
@@ -492,7 +529,15 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
     try {
       if (node == null) return null;
       if (node is Map) {
-        for (final k in ['_id', 'id', 'userId', 'user_id', 'owner', 'customerId', 'customer_id']) {
+        for (final k in [
+          '_id',
+          'id',
+          'userId',
+          'user_id',
+          'owner',
+          'customerId',
+          'customer_id'
+        ]) {
           if (node[k] != null) {
             final v = node[k];
             if (v is String && v.isNotEmpty) return v;
@@ -500,7 +545,14 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
           }
         }
 
-        for (final k in ['user', 'userInfo', 'artisanUser', 'owner', 'createdBy', 'customer']) {
+        for (final k in [
+          'user',
+          'userInfo',
+          'artisanUser',
+          'owner',
+          'createdBy',
+          'customer'
+        ]) {
           if (node[k] != null) {
             final v = node[k];
             if (v is String && v.isNotEmpty) return v;
@@ -540,7 +592,12 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
         return top.toString().trim();
       }
 
-      final authKeys = ['artisanAuthDetails', 'artisanAuthdDetails', 'artisanAuthdetails', 'artisan_auth_details'];
+      final authKeys = [
+        'artisanAuthDetails',
+        'artisanAuthdDetails',
+        'artisanAuthdetails',
+        'artisan_auth_details'
+      ];
       for (final k in authKeys) {
         final a = src[k];
         if (a is Map && a['name']?.toString().trim().isNotEmpty == true) {
@@ -548,7 +605,13 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
         }
       }
 
-      final possibleKeys = ['user', 'userId', 'owner', 'artisan', 'artisanUser'];
+      final possibleKeys = [
+        'user',
+        'userId',
+        'owner',
+        'artisan',
+        'artisanUser'
+      ];
       for (final k in possibleKeys) {
         final p = src[k];
         if (p is Map && p['name']?.toString().trim().isNotEmpty == true) {
@@ -572,7 +635,13 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
 
   String? _extractProfileImage(Map<String, dynamic> src) {
     try {
-      final directKeys = ['profilePicture', 'profileImage', 'avatar', 'photo', 'image'];
+      final directKeys = [
+        'profilePicture',
+        'profileImage',
+        'avatar',
+        'photo',
+        'image'
+      ];
       for (final k in directKeys) {
         final url = _toAbsoluteImageUrl(src[k]);
         if (url != null) return url;
@@ -612,7 +681,17 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
   String _displayLocation() {
     final src = _artisan;
     try {
-      for (final k in ['location', 'city', 'town', 'address', 'state', 'lga', 'area', 'region', 'country']) {
+      for (final k in [
+        'location',
+        'city',
+        'town',
+        'address',
+        'state',
+        'lga',
+        'area',
+        'region',
+        'country'
+      ]) {
         final v = src[k];
         if (v != null) {
           final s = v.toString().trim();
@@ -622,7 +701,14 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
 
       if (src['user'] is Map) {
         final u = src['user'] as Map<String, dynamic>;
-        for (final k in ['location', 'city', 'address', 'state', 'area', 'region']) {
+        for (final k in [
+          'location',
+          'city',
+          'address',
+          'state',
+          'area',
+          'region'
+        ]) {
           final v = u[k];
           if (v?.toString().trim().isNotEmpty == true) {
             return v.toString().trim();
@@ -642,14 +728,23 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
         }
       }
 
-      final possible = _findKey(src, ['location', 'address', 'city', 'state', 'area']);
+      final possible =
+          _findKey(src, ['location', 'address', 'city', 'state', 'area']);
       if (possible != null) {
         if (possible is String) {
           final s = possible.trim();
           if (s.isNotEmpty) return s;
         } else if (possible is Map) {
           final parts = <String>[];
-          for (final k in ['city', 'town', 'state', 'lga', 'area', 'country', 'address']) {
+          for (final k in [
+            'city',
+            'town',
+            'state',
+            'lga',
+            'area',
+            'country',
+            'address'
+          ]) {
             final v = possible[k];
             if (v?.toString().trim().isNotEmpty == true) {
               parts.add(v.toString().trim());
@@ -714,14 +809,27 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
         if (v is bool) return v;
         if (v is num) return v == 1 || v == 1.0;
         final s = v.toString().toLowerCase();
-        return s == 'true' || s == 'verified' || s == 'kyc_verified' ||
-            s == 'kyc' || s == 'complete' || s == 'completed' ||
-            s == 'approved' || s == 'active';
+        return s == 'true' ||
+            s == 'verified' ||
+            s == 'kyc_verified' ||
+            s == 'kyc' ||
+            s == 'complete' ||
+            s == 'completed' ||
+            s == 'approved' ||
+            s == 'active';
       }
 
-      final keys = ['isVerified', 'verified', 'kycVerified', 'kyc_verified',
-        'kycStatus', 'verificationStatus', 'is_kyc_verified',
-        'isKycVerified', 'status'];
+      final keys = [
+        'isVerified',
+        'verified',
+        'kycVerified',
+        'kyc_verified',
+        'kycStatus',
+        'verificationStatus',
+        'is_kyc_verified',
+        'isKycVerified',
+        'status'
+      ];
 
       for (final k in keys) {
         if (src.containsKey(k) && check(src[k])) return true;
@@ -748,8 +856,17 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
   String? _getTrade() {
     try {
       final src = _artisan;
-      final keys = ['trade', 'profession', 'speciality', 'specialty',
-        'skill', 'skills', 'occupation', 'title', 'category'];
+      final keys = [
+        'trade',
+        'profession',
+        'speciality',
+        'specialty',
+        'skill',
+        'skills',
+        'occupation',
+        'title',
+        'category'
+      ];
 
       for (final k in keys) {
         if (src[k] != null) {
@@ -790,10 +907,12 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
     try {
       final src = _artisanData ?? widget.artisan;
       if (src is Map) {
-        if (src['userId']?.toString().isNotEmpty == true) return src['userId'].toString();
+        if (src['userId']?.toString().isNotEmpty == true)
+          return src['userId'].toString();
         if (src['user'] is Map) {
           final u = src['user'] as Map<String, dynamic>;
-          if ((u['_id'] ?? u['id']) != null) return (u['_id'] ?? u['id']).toString();
+          if ((u['_id'] ?? u['id']) != null)
+            return (u['_id'] ?? u['id']).toString();
         }
         for (final k in ['_id', 'id', 'artisanId', 'customerId']) {
           if (src.containsKey(k) && src[k] != null) return src[k].toString();
@@ -856,9 +975,13 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: theme.bodySmall.copyWith(color: theme.secondaryText)),
+                Text(title,
+                    style:
+                        theme.bodySmall.copyWith(color: theme.secondaryText)),
                 const SizedBox(height: 4),
-                Text(value, style: theme.bodyMedium.copyWith(fontWeight: FontWeight.w500)),
+                Text(value,
+                    style:
+                        theme.bodyMedium.copyWith(fontWeight: FontWeight.w500)),
               ],
             ),
           ),
@@ -877,7 +1000,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
       await _loadArtisanDataIfNeeded();
 
       // Fetch services (job subcategories) merged with artisan-specific prices when available
-      final List<Map<String, dynamic>> services = await _fetchJobSubcategoriesForArtisan(artisan, ctx);
+      final List<Map<String, dynamic>> services =
+          await _fetchJobSubcategoriesForArtisan(artisan, ctx);
 
       // showModalBottomSheet returns dynamic; we'll return a Map with services+schedule when Pay is pressed
       final result = await showModalBottomSheet<Map<String, dynamic>>(
@@ -906,10 +1030,12 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
           num _computeTotal() {
             num sum = 0;
             for (final s in services) {
-              final tid = (s['tempId'] ?? s['_id'] ?? s['id'])?.toString() ?? '';
+              final tid =
+                  (s['tempId'] ?? s['_id'] ?? s['id'])?.toString() ?? '';
               if (tid.isEmpty) continue;
               if (!selected.contains(tid)) continue;
-              final unit = _toNum(s['price'] ?? s['unitPrice'] ?? s['amount'] ?? 0);
+              final unit =
+                  _toNum(s['price'] ?? s['unitPrice'] ?? s['amount'] ?? 0);
               sum += unit;
             }
             return sum;
@@ -917,13 +1043,15 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
 
           String _formatCurrency(num v) {
             try {
-              return NumberFormat.currency(symbol: '₦', decimalDigits: 0).format(v);
+              return NumberFormat.currency(symbol: '₦', decimalDigits: 0)
+                  .format(v);
             } catch (_) {
               return '₦$v';
             }
           }
 
-          Future<void> _pickDateTime(BuildContext ctx, StateSetter setModalState) async {
+          Future<void> _pickDateTime(
+              BuildContext ctx, StateSetter setModalState) async {
             final now = DateTime.now();
             final date = await showDatePicker(
               context: ctx,
@@ -965,20 +1093,30 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
             );
             if (time == null) return;
 
-            final dt = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+            final dt = DateTime(
+                date.year, date.month, date.day, time.hour, time.minute);
             setModalState(() {
               chosenDateTime = dt;
-              _scheduleCtrl.text = DateFormat('EEE, MMM d, yyyy • h:mm a').format(dt);
+              _scheduleCtrl.text =
+                  DateFormat('EEE, MMM d, yyyy • h:mm a').format(dt);
               _showDateTimeError = false;
             });
           }
 
-          Widget _buildServiceRow(Map<String, dynamic> s, StateSetter setModalState) {
+          Widget _buildServiceRow(
+              Map<String, dynamic> s, StateSetter setModalState) {
             final tid = (s['tempId'] ?? s['_id'] ?? s['id'])?.toString() ?? '';
 
             String _resolveName(Map<String, dynamic> src) {
               try {
-                final directKeys = ['name', 'title', 'label', 'serviceName', 'subCategoryName', 'subCategoryTitle'];
+                final directKeys = [
+                  'name',
+                  'title',
+                  'label',
+                  'serviceName',
+                  'subCategoryName',
+                  'subCategoryTitle'
+                ];
                 for (final k in directKeys) {
                   final v = src[k];
                   if (v != null) {
@@ -987,7 +1125,9 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                   }
                 }
 
-                final nested = src['subCategory'] ?? src['sub_category'] ?? src['subCategoryObj'];
+                final nested = src['subCategory'] ??
+                    src['sub_category'] ??
+                    src['subCategoryObj'];
                 if (nested is Map) {
                   for (final k in ['name', 'title', 'label']) {
                     final v = nested[k];
@@ -1002,10 +1142,14 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                 try {
                   final raw = src['raw'] ?? src;
                   if (raw is Map) {
-                    final sc = raw['subCategoryId'] ?? raw['sub_category_id'] ?? raw['subCategory'] ?? raw['sub'];
+                    final sc = raw['subCategoryId'] ??
+                        raw['sub_category_id'] ??
+                        raw['subCategory'] ??
+                        raw['sub'];
                     if (sc is Map) {
                       final v = sc['name'] ?? sc['title'] ?? sc['label'];
-                      if (v != null && v.toString().trim().isNotEmpty) return v.toString().trim();
+                      if (v != null && v.toString().trim().isNotEmpty)
+                        return v.toString().trim();
                     }
                   }
                 } catch (_) {}
@@ -1015,14 +1159,18 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
             }
 
             final name = _resolveName(s);
-            final unit = _toNum(s['price'] ?? s['unitPrice'] ?? s['amount'] ?? 0);
-            final priceText = unit > 0 ? _formatCurrency(unit) : 'Price not set';
+            final unit =
+                _toNum(s['price'] ?? s['unitPrice'] ?? s['amount'] ?? 0);
+            final priceText =
+                unit > 0 ? _formatCurrency(unit) : 'Price not set';
             final isSelected = selected.contains(tid);
 
             return Container(
               margin: const EdgeInsets.only(bottom: 8),
               decoration: BoxDecoration(
-                color: isSelected ? primaryColor.withOpacity(0.05) : Colors.transparent,
+                color: isSelected
+                    ? primaryColor.withOpacity(0.05)
+                    : Colors.transparent,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: isSelected ? primaryColor : _borderColor(),
@@ -1043,7 +1191,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                   },
                   borderRadius: BorderRadius.circular(12),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 12, horizontal: 12),
                     child: Row(
                       children: [
                         Container(
@@ -1051,14 +1200,18 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                           height: 24,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: isSelected ? primaryColor : Colors.transparent,
+                            color:
+                                isSelected ? primaryColor : Colors.transparent,
                             border: Border.all(
-                              color: isSelected ? primaryColor : Colors.grey.shade400,
+                              color: isSelected
+                                  ? primaryColor
+                                  : Colors.grey.shade400,
                               width: 2,
                             ),
                           ),
                           child: isSelected
-                              ? const Icon(Icons.check, size: 16, color: Colors.white)
+                              ? const Icon(Icons.check,
+                                  size: 16, color: Colors.white)
                               : null,
                         ),
                         const SizedBox(width: 12),
@@ -1069,7 +1222,9 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                               Text(
                                 name,
                                 style: theme.bodyMedium.copyWith(
-                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
                                   color: isSelected ? primaryColor : null,
                                 ),
                               ),
@@ -1077,8 +1232,12 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                               Text(
                                 priceText,
                                 style: theme.bodySmall.copyWith(
-                                  color: isSelected ? primaryColor : theme.secondaryText,
-                                  fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
+                                  color: isSelected
+                                      ? primaryColor
+                                      : theme.secondaryText,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w500
+                                      : FontWeight.normal,
                                 ),
                               ),
                             ],
@@ -1103,7 +1262,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                     height: 40,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: stepIndex >= 0 ? primaryColor : Colors.grey.shade300,
+                      color:
+                          stepIndex >= 0 ? primaryColor : Colors.grey.shade300,
                     ),
                     child: Center(
                       child: Text(
@@ -1125,7 +1285,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                     height: 40,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: stepIndex >= 1 ? primaryColor : Colors.grey.shade300,
+                      color:
+                          stepIndex >= 1 ? primaryColor : Colors.grey.shade300,
                     ),
                     child: Center(
                       child: Text(
@@ -1180,15 +1341,16 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                         ),
                       ),
                     )
-                   else
-                     ConstrainedBox(
-                       constraints: const BoxConstraints(maxHeight: 340),
-                       child: ListView.builder(
-                         shrinkWrap: true,
-                         itemCount: services.length,
-                         itemBuilder: (context, idx) => _buildServiceRow(services[idx], setModalState),
-                       ),
-                     ),
+                  else
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 340),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: services.length,
+                        itemBuilder: (context, idx) =>
+                            _buildServiceRow(services[idx], setModalState),
+                      ),
+                    ),
                   const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(16),
@@ -1202,7 +1364,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                       children: [
                         Text(
                           'Selected Total',
-                          style: theme.bodyLarge.copyWith(fontWeight: FontWeight.w600),
+                          style: theme.bodyLarge
+                              .copyWith(fontWeight: FontWeight.w600),
                         ),
                         Text(
                           _formatCurrency(_computeTotal()),
@@ -1334,7 +1497,10 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [primaryColor.withOpacity(0.1), Colors.transparent],
+                      colors: [
+                        primaryColor.withOpacity(0.1),
+                        Colors.transparent
+                      ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
@@ -1346,7 +1512,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                     children: [
                       Text(
                         'Total Amount',
-                        style: theme.bodyLarge.copyWith(fontWeight: FontWeight.w600),
+                        style: theme.bodyLarge
+                            .copyWith(fontWeight: FontWeight.w600),
                       ),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
@@ -1360,7 +1527,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                           ),
                           Text(
                             '${selected.length} service${selected.length != 1 ? 's' : ''}',
-                            style: theme.bodySmall.copyWith(color: theme.secondaryText),
+                            style: theme.bodySmall
+                                .copyWith(color: theme.secondaryText),
                           ),
                         ],
                       ),
@@ -1411,264 +1579,395 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                     onPressed: (stepIndex == 0 && selected.isEmpty)
                         ? null
                         : (stepIndex == 1 && _scheduleCtrl.text.isEmpty)
-                        ? null
-                        : () async {
-                      if (stepIndex == 0) {
-                        setModalState(() => stepIndex = 1);
-                        return;
-                      }
+                            ? null
+                            : () async {
+                                if (stepIndex == 0) {
+                                  setModalState(() => stepIndex = 1);
+                                  return;
+                                }
 
-                      // Validate date/time is selected
-                      if (_scheduleCtrl.text.isEmpty || chosenDateTime == null) {
-                        setModalState(() => _showDateTimeError = true);
-                        return;
-                      }
+                                // Validate date/time is selected
+                                if (_scheduleCtrl.text.isEmpty ||
+                                    chosenDateTime == null) {
+                                  setModalState(
+                                      () => _showDateTimeError = true);
+                                  return;
+                                }
 
-                      // Build payload and submit booking
-                      // We build two lists: one minimal shape the server expects (subCategoryId, quantity)
-                      // and a richer client-side metadata list (name, price) used for UI and payment metadata.
-                      final payloadServices = <Map<String, dynamic>>[]; // client metadata
-                      final serverServices = <Map<String, dynamic>>[]; // server-friendly shape
-                      String? categoryIdForBody;
+                                // Build payload and submit booking
+                                // We build two lists: one minimal shape the server expects (subCategoryId, quantity)
+                                // and a richer client-side metadata list (name, price) used for UI and payment metadata.
+                                final payloadServices =
+                                    <Map<String, dynamic>>[]; // client metadata
+                                final serverServices = <Map<String,
+                                    dynamic>>[]; // server-friendly shape
+                                String? categoryIdForBody;
 
-                      for (final s in services) {
-                        final tid = (s['tempId'] ?? s['_id'] ?? s['id'])?.toString() ?? '';
-                        if (tid.isEmpty) continue;
-                        if (!selected.contains(tid)) continue;
+                                for (final s in services) {
+                                  final tid =
+                                      (s['tempId'] ?? s['_id'] ?? s['id'])
+                                              ?.toString() ??
+                                          '';
+                                  if (tid.isEmpty) continue;
+                                  if (!selected.contains(tid)) continue;
 
-                        final realSubId = (s['subCategoryId'] ?? s['sub_category_id'] ?? s['subCategory'] ?? s['sub'] ?? null)?.toString() ?? tid;
+                                  final realSubId = (s['subCategoryId'] ??
+                                              s['sub_category_id'] ??
+                                              s['subCategory'] ??
+                                              s['sub'] ??
+                                              null)
+                                          ?.toString() ??
+                                      tid;
 
-                        // Try to capture categoryId from the service entry if available
-                        try {
-                          final c = s['categoryId'] ?? s['category'] ?? s['docCategoryId'] ?? s['categoryIdRaw'];
-                          if (c != null && (categoryIdForBody == null || categoryIdForBody.isEmpty)) {
-                            categoryIdForBody = c is Map ? (c['_id'] ?? c['id'])?.toString() : c.toString();
-                          }
-                          // also inspect raw object
-                          final raw = s['raw'];
-                          if ((categoryIdForBody == null || categoryIdForBody.isEmpty) && raw is Map) {
-                            final rc = raw['categoryId'] ?? raw['category'] ?? raw['mainCategory'];
-                            if (rc != null) categoryIdForBody = rc is Map ? (rc['_id'] ?? rc['id'])?.toString() : rc.toString();
-                          }
-                        } catch (_) {}
+                                  // Try to capture categoryId from the service entry if available
+                                  try {
+                                    final c = s['categoryId'] ??
+                                        s['category'] ??
+                                        s['docCategoryId'] ??
+                                        s['categoryIdRaw'];
+                                    if (c != null &&
+                                        (categoryIdForBody == null ||
+                                            categoryIdForBody.isEmpty)) {
+                                      categoryIdForBody = c is Map
+                                          ? (c['_id'] ?? c['id'])?.toString()
+                                          : c.toString();
+                                    }
+                                    // also inspect raw object
+                                    final raw = s['raw'];
+                                    if ((categoryIdForBody == null ||
+                                            categoryIdForBody.isEmpty) &&
+                                        raw is Map) {
+                                      final rc = raw['categoryId'] ??
+                                          raw['category'] ??
+                                          raw['mainCategory'];
+                                      if (rc != null)
+                                        categoryIdForBody = rc is Map
+                                            ? (rc['_id'] ?? rc['id'])
+                                                ?.toString()
+                                            : rc.toString();
+                                    }
+                                  } catch (_) {}
 
-                        // Resolve a friendly service name, preferring the raw subCategoryId.name when available
-                        String? svcName;
-                        try {
-                          final raw = s['raw'];
-                          if (raw is Map) {
-                            final sc = raw['subCategoryId'] ?? raw['sub_category_id'] ?? raw['subCategory'] ?? raw['sub'];
-                            if (sc is Map) {
-                              svcName = (sc['name'] ?? sc['title'] ?? sc['label'])?.toString();
-                            }
-                          }
-                        } catch (_) {}
-                        svcName = svcName ?? (s['name'] ?? s['serviceName'] ?? s['subCategoryName'])?.toString();
+                                  // Resolve a friendly service name, preferring the raw subCategoryId.name when available
+                                  String? svcName;
+                                  try {
+                                    final raw = s['raw'];
+                                    if (raw is Map) {
+                                      final sc = raw['subCategoryId'] ??
+                                          raw['sub_category_id'] ??
+                                          raw['subCategory'] ??
+                                          raw['sub'];
+                                      if (sc is Map) {
+                                        svcName = (sc['name'] ??
+                                                sc['title'] ??
+                                                sc['label'])
+                                            ?.toString();
+                                      }
+                                    }
+                                  } catch (_) {}
+                                  svcName = svcName ??
+                                      (s['name'] ??
+                                              s['serviceName'] ??
+                                              s['subCategoryName'])
+                                          ?.toString();
 
-                        // Include price so client-side checkout can list accurate amounts
-                        num price = 0;
-                        try {
-                          final p = s['price'] ?? s['unitPrice'] ?? s['amount'] ?? s['rate'] ?? 0;
-                          if (p is num) price = p;
-                          else price = num.tryParse(p.toString()) ?? 0;
-                        } catch (_) {}
+                                  // Include price so client-side checkout can list accurate amounts
+                                  num price = 0;
+                                  try {
+                                    final p = s['price'] ??
+                                        s['unitPrice'] ??
+                                        s['amount'] ??
+                                        s['rate'] ??
+                                        0;
+                                    if (p is num)
+                                      price = p;
+                                    else
+                                      price = num.tryParse(p.toString()) ?? 0;
+                                  } catch (_) {}
 
-                        final clientEntry = <String, dynamic>{
-                          'subCategoryId': realSubId,
-                          if (svcName != null) 'name': svcName,
-                          'price': price,
-                        };
+                                  final clientEntry = <String, dynamic>{
+                                    'subCategoryId': realSubId,
+                                    if (svcName != null) 'name': svcName,
+                                    'price': price,
+                                  };
 
-                        final serverEntry = <String, dynamic>{
-                          'subCategoryId': realSubId,
-                          'quantity': 1,
-                        };
+                                  final serverEntry = <String, dynamic>{
+                                    'subCategoryId': realSubId,
+                                    'quantity': 1,
+                                  };
 
-                        payloadServices.add(clientEntry);
-                        serverServices.add(serverEntry);
-                      }
+                                  payloadServices.add(clientEntry);
+                                  serverServices.add(serverEntry);
+                                }
 
-                      // Show loading indicator
-                      setModalState(() {});
+                                // Show loading indicator
+                                setModalState(() {});
 
-                      try {
-                        // Ensure we have auth token
-                        String? token = _authToken;
-                        if (token == null || token.isEmpty) {
-                          token = await TokenStorage.getToken();
-                          _authToken = token;
-                        }
+                                try {
+                                  // Ensure we have auth token
+                                  String? token = _authToken;
+                                  if (token == null || token.isEmpty) {
+                                    token = await TokenStorage.getToken();
+                                    _authToken = token;
+                                  }
 
-                        // Build request body. Use server-friendly services shape (subCategoryId + quantity)
-                        final body = <String, dynamic>{
-                          'artisanId': artisan['_id'] ?? artisan['id'] ?? artisan['artisanId'] ?? artisan['userId'],
-                          'services': serverServices,
-                          'schedule': chosenDateTime!.toUtc().toIso8601String(),
-                          'clientTotal': _computeTotal(),
-                        };
-                        if (categoryIdForBody != null && categoryIdForBody.isNotEmpty) {
-                          body['categoryId'] = categoryIdForBody;
-                        }
+                                  // Build request body. Use server-friendly services shape (subCategoryId + quantity)
+                                  // Booking API expects userId (user._id), not artisan document _id
+                                  final body = <String, dynamic>{
+                                    'artisanId': artisan['userId'] ??
+                                        (artisan['user'] is Map
+                                            ? (artisan['user'] as Map)['_id']
+                                            : null) ??
+                                        artisan['_id'] ??
+                                        artisan['id'] ??
+                                        artisan['artisanId'],
+                                    'services': serverServices,
+                                    'schedule': chosenDateTime!
+                                        .toUtc()
+                                        .toIso8601String(),
+                                    'clientTotal': _computeTotal(),
+                                  };
+                                  if (categoryIdForBody != null &&
+                                      categoryIdForBody.isNotEmpty) {
+                                    body['categoryId'] = categoryIdForBody;
+                                  }
 
-                        // Add email if available
-                        try {
-                          final profile = await UserService.getProfile();
-                          final email = profile?['email']?.toString();
-                          if (email != null && email.isNotEmpty) body['email'] = email;
-                        } catch (_) {}
+                                  // Add email if available
+                                  try {
+                                    final profile =
+                                        await UserService.getProfile();
+                                    final email = profile?['email']?.toString();
+                                    if (email != null && email.isNotEmpty)
+                                      body['email'] = email;
+                                  } catch (_) {}
 
-                        final headers = <String, String>{
-                          'Content-Type': 'application/json',
-                        };
-                        if (token != null && token.isNotEmpty) {
-                          headers['Authorization'] = 'Bearer $token';
-                        }
+                                  final headers = <String, String>{
+                                    'Content-Type': 'application/json',
+                                  };
+                                  if (token != null && token.isNotEmpty) {
+                                    headers['Authorization'] = 'Bearer $token';
+                                  }
 
-                        final normalizedBase = _normalizeBaseUrl(API_BASE_URL);
-                        final uri = Uri.parse('$normalizedBase/api/bookings/hire');
+                                  final normalizedBase =
+                                      _normalizeBaseUrl(API_BASE_URL);
+                                  final uri = Uri.parse(
+                                      '$normalizedBase/api/bookings/hire');
 
-                        // Log request details (avoid printing Authorization token value)
-                        try {
-                          final headersForLog = Map<String, String>.from(headers);
-                          if (headersForLog.containsKey('Authorization')) {
-                            headersForLog['Authorization'] = '<REDACTED>';
-                          }
-                          debugPrint('Booking POST -> uri: $uri');
-                          debugPrint('Booking POST -> headers: ${jsonEncode(headersForLog)}');
-                          // Also log client-side service objects (names/prices) selected in the bottom sheet
-                          try { debugPrint('Booking POST -> payloadServices: ${jsonEncode(payloadServices)}'); } catch (_) {}
-                          debugPrint('Booking POST -> body: ${jsonEncode(body)}');
-                        } catch (_) {}
+                                  // Log request details (avoid printing Authorization token value)
+                                  try {
+                                    final headersForLog =
+                                        Map<String, String>.from(headers);
+                                    if (headersForLog
+                                        .containsKey('Authorization')) {
+                                      headersForLog['Authorization'] =
+                                          '<REDACTED>';
+                                    }
+                                    debugPrint('Booking POST -> uri: $uri');
+                                    debugPrint(
+                                        'Booking POST -> headers: ${jsonEncode(headersForLog)}');
+                                    // Also log client-side service objects (names/prices) selected in the bottom sheet
+                                    try {
+                                      debugPrint(
+                                          'Booking POST -> payloadServices: ${jsonEncode(payloadServices)}');
+                                    } catch (_) {}
+                                    debugPrint(
+                                        'Booking POST -> body: ${jsonEncode(body)}');
+                                  } catch (_) {}
 
-                        // Show a non-dismissible processing dialog while the request is being sent
-                        try {
-                          showDialog<void>(
-                            context: context,
-                            barrierDismissible: false,
-                            builder: (ctx) => WillPopScope(
-                              onWillPop: () async => false,
-                              child: Dialog(
-                                insetPadding: const EdgeInsets.symmetric(horizontal: 40),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(20.0),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const CircularProgressIndicator(),
-                                      const SizedBox(width: 16),
-                                      Expanded(child: Text('Processing booking...', style: FlutterFlowTheme.of(ctx).bodyMedium)),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        } catch (_) {}
+                                  // Show a non-dismissible processing dialog while the request is being sent
+                                  try {
+                                    showDialog<void>(
+                                      context: context,
+                                      barrierDismissible: false,
+                                      builder: (ctx) => WillPopScope(
+                                        onWillPop: () async => false,
+                                        child: Dialog(
+                                          insetPadding:
+                                              const EdgeInsets.symmetric(
+                                                  horizontal: 40),
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(20.0),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const CircularProgressIndicator(),
+                                                const SizedBox(width: 16),
+                                                Expanded(
+                                                    child: Text(
+                                                        'Processing booking...',
+                                                        style:
+                                                            FlutterFlowTheme.of(
+                                                                    ctx)
+                                                                .bodyMedium)),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  } catch (_) {}
 
-                        http.Response resp;
-                        try {
-                          resp = await http.post(
-                            uri,
-                            headers: headers,
-                            body: jsonEncode(body),
-                          ).timeout(const Duration(seconds: 12));
-                        } finally {
-                          // Ensure we close the processing dialog even if request throws
-                          try { Navigator.of(context, rootNavigator: true).pop(); } catch (_) {}
-                        }
+                                  http.Response resp;
+                                  try {
+                                    resp = await http
+                                        .post(
+                                          uri,
+                                          headers: headers,
+                                          body: jsonEncode(body),
+                                        )
+                                        .timeout(const Duration(seconds: 12));
+                                  } finally {
+                                    // Ensure we close the processing dialog even if request throws
+                                    try {
+                                      Navigator.of(context, rootNavigator: true)
+                                          .pop();
+                                    } catch (_) {}
+                                  }
 
-                        if (resp.statusCode >= 200 && resp.statusCode < 300) {
-                          // Log the raw HTTP response so we can trace server behavior from the client
-                          try { debugPrint('Booking submission response -> status=${resp.statusCode} body=${resp.body}'); } catch (_) {}
-                          final decoded = _safeParseJson(resp.body);
-                          Map<String, dynamic>? paymentNode;
-                          Map<String, dynamic>? bookingNode;
+                                  if (resp.statusCode >= 200 &&
+                                      resp.statusCode < 300) {
+                                    // Log the raw HTTP response so we can trace server behavior from the client
+                                    try {
+                                      debugPrint(
+                                          'Booking submission response -> status=${resp.statusCode} body=${resp.body}');
+                                    } catch (_) {}
+                                    final decoded = _safeParseJson(resp.body);
+                                    Map<String, dynamic>? paymentNode;
+                                    Map<String, dynamic>? bookingNode;
 
-                          if (decoded is Map) {
-                            if (decoded['data'] is Map) {
-                              final data = decoded['data'] as Map;
-                              bookingNode = Map<String, dynamic>.from(data);
-                              if (data['payment'] is Map) {
-                                paymentNode = Map<String, dynamic>.from(data['payment']);
-                              }
-                            } else {
-                              bookingNode = Map<String, dynamic>.from(decoded);
-                              if (decoded['payment'] is Map) {
-                                paymentNode = Map<String, dynamic>.from(decoded['payment']);
-                              }
-                            }
-                          }
+                                    if (decoded is Map) {
+                                      if (decoded['data'] is Map) {
+                                        final data = decoded['data'] as Map;
+                                        bookingNode =
+                                            Map<String, dynamic>.from(data);
+                                        if (data['payment'] is Map) {
+                                          paymentNode =
+                                              Map<String, dynamic>.from(
+                                                  data['payment']);
+                                        }
+                                      } else {
+                                        bookingNode =
+                                            Map<String, dynamic>.from(decoded);
+                                        if (decoded['payment'] is Map) {
+                                          paymentNode =
+                                              Map<String, dynamic>.from(
+                                                  decoded['payment']);
+                                        }
+                                      }
+                                    }
 
-                          // Log parsed nodes to help trace why navigation to payment may not happen
-                          try {
-                            debugPrint('Booking parsed paymentNode: ${paymentNode != null ? jsonEncode(paymentNode) : '<null>'}');
-                          } catch (_) { try { debugPrint('Booking parsed paymentNode: <unserializable>'); } catch (_) {} }
-                          try {
-                            debugPrint('Booking parsed bookingNode: ${bookingNode != null ? jsonEncode(bookingNode) : '<null>'}');
-                          } catch (_) { try { debugPrint('Booking parsed bookingNode: <unserializable>'); } catch (_) {} }
+                                    // Log parsed nodes to help trace why navigation to payment may not happen
+                                    try {
+                                      debugPrint(
+                                          'Booking parsed paymentNode: ${paymentNode != null ? jsonEncode(paymentNode) : '<null>'}');
+                                    } catch (_) {
+                                      try {
+                                        debugPrint(
+                                            'Booking parsed paymentNode: <unserializable>');
+                                      } catch (_) {}
+                                    }
+                                    try {
+                                      debugPrint(
+                                          'Booking parsed bookingNode: ${bookingNode != null ? jsonEncode(bookingNode) : '<null>'}');
+                                    } catch (_) {
+                                      try {
+                                        debugPrint(
+                                            'Booking parsed bookingNode: <unserializable>');
+                                      } catch (_) {}
+                                    }
 
-                          // Close the modal
-                          Navigator.of(context).pop();
+                                    // Close the modal
+                                    Navigator.of(context).pop();
 
-                          if (paymentNode != null && paymentNode.isNotEmpty) {
-                            // Attach selected services and client total to payment/booking nodes so checkout can render them
-                            try {
-                              paymentNode['metadata'] = (paymentNode['metadata'] is Map) ? Map<String, dynamic>.from(paymentNode['metadata']) : <String, dynamic>{};
-                              paymentNode['metadata']['services'] = payloadServices;
-                              paymentNode['metadata']['clientTotal'] = body['clientTotal'];
-                            } catch (_) {}
+                                    if (paymentNode != null &&
+                                        paymentNode.isNotEmpty) {
+                                      // Attach selected services and client total to payment/booking nodes so checkout can render them
+                                      try {
+                                        paymentNode['metadata'] =
+                                            (paymentNode['metadata'] is Map)
+                                                ? Map<String, dynamic>.from(
+                                                    paymentNode['metadata'])
+                                                : <String, dynamic>{};
+                                        paymentNode['metadata']['services'] =
+                                            payloadServices;
+                                        paymentNode['metadata']['clientTotal'] =
+                                            body['clientTotal'];
+                                      } catch (_) {}
 
-                            try {
-                              if (bookingNode == null) bookingNode = <String, dynamic>{};
-                              bookingNode!['services'] = payloadServices;
-                              bookingNode!['clientTotal'] = body['clientTotal'];
-                            } catch (_) {}
+                                      try {
+                                        if (bookingNode == null)
+                                          bookingNode = <String, dynamic>{};
+                                        bookingNode!['services'] =
+                                            payloadServices;
+                                        bookingNode!['clientTotal'] =
+                                            body['clientTotal'];
+                                      } catch (_) {}
 
-                            try {
-                              // Log the exact payload being passed to the payment page
-                              try { debugPrint('Navigating to PaymentInitPageWidget with payment metadata: ${jsonEncode(paymentNode)}'); } catch (_) {}
-                              // Inform the user they'll be redirected to payment
-                              try { AppNotification.showInfo(context, 'Redirecting to payment...'); } catch (_) {}
-                              await Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => PaymentInitPageWidget(
-                                    payment: paymentNode!,
-                                    booking: bookingNode,
-                                  ),
-                                ),
-                              );
-                              // After returning from payment page, optionally inform user
-                              try { AppNotification.showInfo(context, 'Returned from payment flow'); } catch (_) {}
-                            } catch (e) {
-                              debugPrint('Navigation to PaymentInitPageWidget failed: $e');
-                              rethrow;
-                            }
-                          } else {
-                            // No payment required or payment node not returned; still attach services to booking node for downstream UI
-                            try {
-                              if (bookingNode == null) bookingNode = <String, dynamic>{};
-                              bookingNode!['services'] = payloadServices;
-                              bookingNode!['clientTotal'] = body['clientTotal'];
-                            } catch (_) {}
-                            AppNotification.showSuccess(context, 'Booking created successfully');
-                          }
-                        } else {
-                          String message = 'Failed to create booking';
-                          try {
-                            final errorBody = jsonDecode(resp.body);
-                            if (errorBody is Map && errorBody['message'] != null) {
-                              message = errorBody['message'].toString();
-                            }
-                          } catch (_) {}
-                          AppNotification.showError(context, message);
-                        }
-                      } on TimeoutException {
-                        AppNotification.showError(context, 'Network timeout. Please try again.');
-                      } catch (e, st) {
-                        debugPrint('Booking submission error: $e\n$st');
-                        AppNotification.showError(context, 'An error occurred. Please try again.');
-                      }
-                    },
+                                      try {
+                                        // Log the exact payload being passed to the payment page
+                                        try {
+                                          debugPrint(
+                                              'Navigating to PaymentInitPageWidget with payment metadata: ${jsonEncode(paymentNode)}');
+                                        } catch (_) {}
+                                        // Inform the user they'll be redirected to payment
+                                        try {
+                                          AppNotification.showInfo(context,
+                                              'Redirecting to payment...');
+                                        } catch (_) {}
+                                        await Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) =>
+                                                PaymentInitPageWidget(
+                                              payment: paymentNode!,
+                                              booking: bookingNode,
+                                            ),
+                                          ),
+                                        );
+                                        // After returning from payment page, optionally inform user
+                                        try {
+                                          AppNotification.showInfo(context,
+                                              'Returned from payment flow');
+                                        } catch (_) {}
+                                      } catch (e) {
+                                        debugPrint(
+                                            'Navigation to PaymentInitPageWidget failed: $e');
+                                        rethrow;
+                                      }
+                                    } else {
+                                      // No payment required or payment node not returned; still attach services to booking node for downstream UI
+                                      try {
+                                        if (bookingNode == null)
+                                          bookingNode = <String, dynamic>{};
+                                        bookingNode!['services'] =
+                                            payloadServices;
+                                        bookingNode!['clientTotal'] =
+                                            body['clientTotal'];
+                                      } catch (_) {}
+                                      AppNotification.showSuccess(context,
+                                          'Booking created successfully');
+                                    }
+                                  } else {
+                                    String message = 'Failed to create booking';
+                                    try {
+                                      final errorBody = jsonDecode(resp.body);
+                                      if (errorBody is Map &&
+                                          errorBody['message'] != null) {
+                                        message =
+                                            errorBody['message'].toString();
+                                      }
+                                    } catch (_) {}
+                                    AppNotification.showError(context, message);
+                                  }
+                                } on TimeoutException {
+                                  AppNotification.showError(context,
+                                      'Network timeout. Please try again.');
+                                } catch (e, st) {
+                                  debugPrint(
+                                      'Booking submission error: $e\n$st');
+                                  AppNotification.showError(context,
+                                      'An error occurred. Please try again.');
+                                }
+                              },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primaryColor,
                       foregroundColor: Colors.white,
@@ -1680,13 +1979,13 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                     ),
                     child: stepIndex == 0
                         ? Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text('Next (${selected.length} selected)'),
-                        const SizedBox(width: 8),
-                        const Icon(Icons.arrow_forward, size: 18),
-                      ],
-                    )
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text('Next (${selected.length} selected)'),
+                              const SizedBox(width: 8),
+                              const Icon(Icons.arrow_forward, size: 18),
+                            ],
+                          )
                         : Text('Pay ${_formatCurrency(_computeTotal())}'),
                   ),
                 ),
@@ -1816,7 +2115,9 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
   }
 
   /// Fetch job subcategories for the artisan's primary category and merge any artisan-specific prices.
-  Future<List<Map<String, dynamic>>> _fetchJobSubcategoriesForArtisan(Map<String, dynamic> artisan, BuildContext context, {String? token}) async {
+  Future<List<Map<String, dynamic>>> _fetchJobSubcategoriesForArtisan(
+      Map<String, dynamic> artisan, BuildContext context,
+      {String? token}) async {
     token ??= _authToken;
 
     try {
@@ -1850,31 +2151,51 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
               // This is an ArtisanService-style doc: flatten its nested services
               final doc = Map<String, dynamic>.from(e.cast<String, dynamic>());
               final artisanServiceId = (doc['_id'] ?? doc['id'])?.toString();
-              final dynamic categoryRaw = doc['categoryId'] ?? doc['mainCategory'] ?? doc['category'];
+              final dynamic categoryRaw =
+                  doc['categoryId'] ?? doc['mainCategory'] ?? doc['category'];
               String? categoryId;
-              if (categoryRaw is Map) categoryId = (categoryRaw['_id'] ?? categoryRaw['id'])?.toString();
-              else categoryId = categoryRaw?.toString();
+              if (categoryRaw is Map)
+                categoryId =
+                    (categoryRaw['_id'] ?? categoryRaw['id'])?.toString();
+              else
+                categoryId = categoryRaw?.toString();
 
               final servicesArr = doc['services'] as List<dynamic>;
               for (final s in servicesArr) {
                 if (s == null || s is! Map) continue;
-                final sub = Map<String, dynamic>.from(s.cast<String, dynamic>());
-                final subRaw = sub['subCategoryId'] ?? sub['sub_category_id'] ?? sub['subCategory'] ?? sub['sub'] ?? sub['_id'] ?? sub['id'];
+                final sub =
+                    Map<String, dynamic>.from(s.cast<String, dynamic>());
+                final subRaw = sub['subCategoryId'] ??
+                    sub['sub_category_id'] ??
+                    sub['subCategory'] ??
+                    sub['sub'] ??
+                    sub['_id'] ??
+                    sub['id'];
                 String? subId;
-                String? subName = (sub['name'] ?? sub['title'] ?? sub['label'])?.toString();
+                String? subName =
+                    (sub['name'] ?? sub['title'] ?? sub['label'])?.toString();
                 if (subRaw is Map) {
                   subId = (subRaw['_id'] ?? subRaw['id'])?.toString();
-                  subName = subName ?? (subRaw['name'] ?? subRaw['title'])?.toString();
+                  subName = subName ??
+                      (subRaw['name'] ?? subRaw['title'])?.toString();
                 } else {
                   subId = subRaw == null ? null : subRaw.toString();
                 }
-                final rawPrice = sub['price'] ?? sub['amount'] ?? sub['unitPrice'] ?? sub['rate'] ?? sub['cost'];
+                final rawPrice = sub['price'] ??
+                    sub['amount'] ??
+                    sub['unitPrice'] ??
+                    sub['rate'] ??
+                    sub['cost'];
                 num? price;
                 if (rawPrice != null) {
-                  if (rawPrice is num) price = rawPrice;
-                  else price = num.tryParse(rawPrice.toString());
+                  if (rawPrice is num)
+                    price = rawPrice;
+                  else
+                    price = num.tryParse(rawPrice.toString());
                 }
-                final tempId = (subId != null && subId.isNotEmpty) ? subId : ('artisan_${artisan['_id'] ?? artisan['id'] ?? DateTime.now().millisecondsSinceEpoch}__${(sub['_id'] ?? sub['id'])?.toString() ?? DateTime.now().microsecondsSinceEpoch.toString()}');
+                final tempId = (subId != null && subId.isNotEmpty)
+                    ? subId
+                    : ('artisan_${artisan['_id'] ?? artisan['id'] ?? DateTime.now().millisecondsSinceEpoch}__${(sub['_id'] ?? sub['id'])?.toString() ?? DateTime.now().microsecondsSinceEpoch.toString()}');
                 extracted.add({
                   'tempId': tempId,
                   if (subId != null) 'subCategoryId': subId,
@@ -1901,33 +2222,59 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
             String? currency;
             String? artisanServiceId;
 
-            subId = (m['subCategoryId'] ?? m['sub_category_id'] ?? m['subCategory'] ?? m['sub'] ?? m['id'] ?? m['_id'])?.toString();
-            name = (m['name'] ?? m['title'] ?? m['label'] ?? m['subCategoryName'])?.toString();
+            subId = (m['subCategoryId'] ??
+                    m['sub_category_id'] ??
+                    m['subCategory'] ??
+                    m['sub'] ??
+                    m['id'] ??
+                    m['_id'])
+                ?.toString();
+            name =
+                (m['name'] ?? m['title'] ?? m['label'] ?? m['subCategoryName'])
+                    ?.toString();
 
-            final nestedSub = m['subCategory'] ?? m['sub_category'] ?? m['subCategoryObj'];
+            final nestedSub =
+                m['subCategory'] ?? m['sub_category'] ?? m['subCategoryObj'];
             if ((subId == null || subId.isEmpty) && nestedSub is Map) {
               subId = (nestedSub['_id'] ?? nestedSub['id'])?.toString();
-              name = name ?? (nestedSub['name'] ?? nestedSub['title'])?.toString();
+              name =
+                  name ?? (nestedSub['name'] ?? nestedSub['title'])?.toString();
             }
 
-            final rawPrice = m['price'] ?? m['amount'] ?? m['unitPrice'] ?? m['rate'] ?? m['cost'];
+            final rawPrice = m['price'] ??
+                m['amount'] ??
+                m['unitPrice'] ??
+                m['rate'] ??
+                m['cost'];
             num? svcPrice;
             if (rawPrice != null) {
-              if (rawPrice is num) svcPrice = rawPrice;
-              else svcPrice = num.tryParse(rawPrice.toString());
+              if (rawPrice is num)
+                svcPrice = rawPrice;
+              else
+                svcPrice = num.tryParse(rawPrice.toString());
             }
-            currency = (m['currency'] ?? m['curr'] ?? m['currencyCode'])?.toString() ?? 'NGN';
-            artisanServiceId = (m['artisanServiceId'] ?? m['artisanService'] ?? m['parentId'])?.toString();
+            currency =
+                (m['currency'] ?? m['curr'] ?? m['currencyCode'])?.toString() ??
+                    'NGN';
+            artisanServiceId =
+                (m['artisanServiceId'] ?? m['artisanService'] ?? m['parentId'])
+                    ?.toString();
 
-            final tempId = (subId != null && subId.isNotEmpty) ? subId : ('artisan_${artisan['_id'] ?? artisan['id'] ?? DateTime.now().millisecondsSinceEpoch}__${(m['serviceEntryId'] ?? m['id'] ?? m['_id'])?.toString() ?? DateTime.now().microsecondsSinceEpoch.toString()}');
+            final tempId = (subId != null && subId.isNotEmpty)
+                ? subId
+                : ('artisan_${artisan['_id'] ?? artisan['id'] ?? DateTime.now().millisecondsSinceEpoch}__${(m['serviceEntryId'] ?? m['id'] ?? m['_id'])?.toString() ?? DateTime.now().microsecondsSinceEpoch.toString()}');
 
             extracted.add({
               'tempId': tempId,
               if (subId != null) 'subCategoryId': subId,
-              'name': name ?? m['serviceName'] ?? m['subCategoryName'] ?? 'Unnamed service',
+              'name': name ??
+                  m['serviceName'] ??
+                  m['subCategoryName'] ??
+                  'Unnamed service',
               if (svcPrice != null) 'price': svcPrice,
               'currency': currency,
-              if (artisanServiceId != null) 'artisanServiceId': artisanServiceId,
+              if (artisanServiceId != null)
+                'artisanServiceId': artisanServiceId,
               'raw': m,
             });
           }
@@ -1937,7 +2284,13 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
 
       // No per-artisan offerings present in payload — fall back to the global subcategories fetch
       String? categoryId;
-      for (final k in ['categoryId', 'category', 'jobCategory', 'category_id', 'jobCategoryId']) {
+      for (final k in [
+        'categoryId',
+        'category',
+        'jobCategory',
+        'category_id',
+        'jobCategoryId'
+      ]) {
         final v = artisan[k];
         if (v == null) continue;
         if (v is String && v.isNotEmpty) {
@@ -1953,10 +2306,15 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
 
       // Try to fetch per-artisan offerings from public ArtisanService endpoints
       try {
-        String? artisanId = (artisan['_id'] ?? artisan['id'] ?? artisan['artisanId'] ?? artisan['userId'])?.toString();
+        String? artisanId = (artisan['_id'] ??
+                artisan['id'] ??
+                artisan['artisanId'] ??
+                artisan['userId'])
+            ?.toString();
         if (artisanId == null || artisanId.isEmpty) {
           final userObj = artisan['user'];
-          if (userObj is Map) artisanId = (userObj['_id'] ?? userObj['id'])?.toString();
+          if (userObj is Map)
+            artisanId = (userObj['_id'] ?? userObj['id'])?.toString();
         }
 
         if (artisanId != null && artisanId.isNotEmpty) {
@@ -1965,14 +2323,21 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
           Future<List<Map<String, dynamic>>> tryQuery({String? catId}) async {
             try {
               final queryParam = catId != null ? '&categoryId=$catId' : '';
-              final qUri = Uri.parse('$base/api/artisan-services?artisanId=$artisanId$queryParam');
-              final qResp = await http.get(qUri).timeout(const Duration(seconds: 10));
-              if (qResp.statusCode >= 200 && qResp.statusCode < 300 && qResp.body.isNotEmpty) {
+              final qUri = Uri.parse(
+                  '$base/api/artisan-services?artisanId=$artisanId$queryParam');
+              final qResp =
+                  await http.get(qUri).timeout(const Duration(seconds: 10));
+              if (qResp.statusCode >= 200 &&
+                  qResp.statusCode < 300 &&
+                  qResp.body.isNotEmpty) {
                 final body = jsonDecode(qResp.body);
                 List<dynamic>? docs;
-                if (body is List) docs = body;
-                else if (body is Map && body['data'] is List) docs = List<dynamic>.from(body['data']);
-                else if (body is Map && body['items'] is List) docs = List<dynamic>.from(body['items']);
+                if (body is List)
+                  docs = body;
+                else if (body is Map && body['data'] is List)
+                  docs = List<dynamic>.from(body['data']);
+                else if (body is Map && body['items'] is List)
+                  docs = List<dynamic>.from(body['items']);
                 else if (body is Map && body['services'] is List) docs = [body];
 
                 if (docs != null && docs.isNotEmpty) {
@@ -1980,33 +2345,63 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                   for (final doc in docs) {
                     if (doc == null) continue;
                     if (doc is! Map) continue;
-                    final d = Map<String, dynamic>.from(doc.cast<String, dynamic>());
+                    final d =
+                        Map<String, dynamic>.from(doc.cast<String, dynamic>());
                     final artisanServiceId = (d['_id'] ?? d['id'])?.toString();
-                    final docCategoryId = (d['categoryId'] ?? d['mainCategory'] ?? d['category']) is Map
-                        ? ((d['categoryId'] ?? d['mainCategory'] ?? d['category'])['_id'] ?? (d['categoryId'] ?? d['mainCategory'] ?? d['category'])['id'])?.toString()
-                        : (d['categoryId'] ?? d['mainCategory'] ?? d['category'])?.toString();
-                    final servicesArr = d['services'] ?? d['serviceList'] ?? d['items'];
+                    final docCategoryId = (d['categoryId'] ??
+                            d['mainCategory'] ??
+                            d['category']) is Map
+                        ? ((d['categoryId'] ??
+                                    d['mainCategory'] ??
+                                    d['category'])['_id'] ??
+                                (d['categoryId'] ??
+                                    d['mainCategory'] ??
+                                    d['category'])['id'])
+                            ?.toString()
+                        : (d['categoryId'] ??
+                                d['mainCategory'] ??
+                                d['category'])
+                            ?.toString();
+                    final servicesArr =
+                        d['services'] ?? d['serviceList'] ?? d['items'];
                     if (servicesArr is List) {
                       for (final s in servicesArr) {
                         if (s == null || s is! Map) continue;
-                        final sub = Map<String, dynamic>.from(s.cast<String, dynamic>());
-                        final subRaw = sub['subCategoryId'] ?? sub['sub_category_id'] ?? sub['_id'] ?? sub['id'];
+                        final sub = Map<String, dynamic>.from(
+                            s.cast<String, dynamic>());
+                        final subRaw = sub['subCategoryId'] ??
+                            sub['sub_category_id'] ??
+                            sub['_id'] ??
+                            sub['id'];
                         String? subId;
-                        String? subName = (sub['name'] ?? sub['title'] ?? sub['label'])?.toString();
+                        String? subName =
+                            (sub['name'] ?? sub['title'] ?? sub['label'])
+                                ?.toString();
                         if (subRaw is Map) {
                           subId = (subRaw['_id'] ?? subRaw['id'])?.toString();
-                          subName = subName ?? (subRaw['name'] ?? subRaw['title'])?.toString();
+                          subName = subName ??
+                              (subRaw['name'] ?? subRaw['title'])?.toString();
                         } else {
                           subId = subRaw?.toString();
                         }
-                        final rawPrice = sub['price'] ?? sub['amount'] ?? sub['unitPrice'] ?? sub['rate'] ?? sub['cost'];
+                        final rawPrice = sub['price'] ??
+                            sub['amount'] ??
+                            sub['unitPrice'] ??
+                            sub['rate'] ??
+                            sub['cost'];
                         num? price;
                         if (rawPrice != null) {
-                          if (rawPrice is num) price = rawPrice;
-                          else price = num.tryParse(rawPrice.toString());
+                          if (rawPrice is num)
+                            price = rawPrice;
+                          else
+                            price = num.tryParse(rawPrice.toString());
                         }
-                        final tempId = (subId != null && subId.isNotEmpty) ? subId : ('artisan_${artisanId}__${(sub['_id'] ?? sub['id'])?.toString() ?? DateTime.now().microsecondsSinceEpoch.toString()}');
-                        if (catId != null && docCategoryId != null && docCategoryId != catId) continue;
+                        final tempId = (subId != null && subId.isNotEmpty)
+                            ? subId
+                            : ('artisan_${artisanId}__${(sub['_id'] ?? sub['id'])?.toString() ?? DateTime.now().microsecondsSinceEpoch.toString()}');
+                        if (catId != null &&
+                            docCategoryId != null &&
+                            docCategoryId != catId) continue;
                         flattened.add({
                           'tempId': tempId,
                           if (subId != null) 'subCategoryId': subId,
@@ -2036,37 +2431,62 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
 
           try {
             final qUri = Uri.parse('$base/api/artisan-services/$artisanId');
-            final qResp = await http.get(qUri).timeout(const Duration(seconds: 10));
-            if (qResp.statusCode >= 200 && qResp.statusCode < 300 && qResp.body.isNotEmpty) {
+            final qResp =
+                await http.get(qUri).timeout(const Duration(seconds: 10));
+            if (qResp.statusCode >= 200 &&
+                qResp.statusCode < 300 &&
+                qResp.body.isNotEmpty) {
               final body = jsonDecode(qResp.body);
               if (body is Map && body['data'] is Map) {
                 final d = Map<String, dynamic>.from(body['data']);
                 final artisanServiceId = (d['_id'] ?? d['id'])?.toString();
-                final docCategoryId = (d['categoryId'] ?? d['mainCategory'] ?? d['category']) is Map
-                    ? ((d['categoryId'] ?? d['mainCategory'] ?? d['category'])['_id'] ?? (d['categoryId'] ?? d['mainCategory'] ?? d['category'])['id'])?.toString()
-                    : (d['categoryId'] ?? d['mainCategory'] ?? d['category'])?.toString();
-                final servicesArr = d['services'] ?? d['serviceList'] ?? d['items'];
+                final docCategoryId = (d['categoryId'] ??
+                        d['mainCategory'] ??
+                        d['category']) is Map
+                    ? ((d['categoryId'] ??
+                                d['mainCategory'] ??
+                                d['category'])['_id'] ??
+                            (d['categoryId'] ??
+                                d['mainCategory'] ??
+                                d['category'])['id'])
+                        ?.toString()
+                    : (d['categoryId'] ?? d['mainCategory'] ?? d['category'])
+                        ?.toString();
+                final servicesArr =
+                    d['services'] ?? d['serviceList'] ?? d['items'];
                 if (servicesArr is List) {
                   final flattened = <Map<String, dynamic>>[];
                   for (final s in servicesArr) {
                     if (s == null || s is! Map) continue;
-                    final sub = Map<String, dynamic>.from(s.cast<String, dynamic>());
-                    final subRaw = sub['subCategoryId'] ?? sub['sub_category_id'] ?? sub['_id'] ?? sub['id'];
+                    final sub =
+                        Map<String, dynamic>.from(s.cast<String, dynamic>());
+                    final subRaw = sub['subCategoryId'] ??
+                        sub['sub_category_id'] ??
+                        sub['_id'] ??
+                        sub['id'];
                     String? subId;
-                    String? subName = (sub['name'] ?? sub['title'] ?? sub['label'])?.toString();
+                    String? subName =
+                        (sub['name'] ?? sub['title'] ?? sub['label'])
+                            ?.toString();
                     if (subRaw is Map) {
                       subId = (subRaw['_id'] ?? subRaw['id'])?.toString();
-                      subName = subName ?? (subRaw['name'] ?? subRaw['title'])?.toString();
+                      subName = subName ??
+                          (subRaw['name'] ?? subRaw['title'])?.toString();
                     } else {
                       subId = subRaw?.toString();
                     }
-                    final rawPrice = sub['price'] ?? sub['amount'] ?? sub['unitPrice'];
+                    final rawPrice =
+                        sub['price'] ?? sub['amount'] ?? sub['unitPrice'];
                     num? price;
                     if (rawPrice != null) {
-                      if (rawPrice is num) price = rawPrice;
-                      else price = num.tryParse(rawPrice.toString());
+                      if (rawPrice is num)
+                        price = rawPrice;
+                      else
+                        price = num.tryParse(rawPrice.toString());
                     }
-                    final tempId = (subId != null && subId.isNotEmpty) ? subId : ('artisan_${artisanId}__${(sub['_id'] ?? sub['id'])?.toString() ?? DateTime.now().microsecondsSinceEpoch.toString()}');
+                    final tempId = (subId != null && subId.isNotEmpty)
+                        ? subId
+                        : ('artisan_${artisanId}__${(sub['_id'] ?? sub['id'])?.toString() ?? DateTime.now().microsecondsSinceEpoch.toString()}');
                     flattened.add({
                       'tempId': tempId,
                       if (subId != null) 'subCategoryId': subId,
@@ -2087,51 +2507,74 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
       } catch (_) {}
 
       // If we still have nothing, try MyServiceService.fetchMyServices() as a last-resort
-      String? resolvedAid = (artisan['_id'] ?? artisan['id'] ?? artisan['artisanId'] ?? artisan['userId'])?.toString();
+      String? resolvedAid = (artisan['_id'] ??
+              artisan['id'] ??
+              artisan['artisanId'] ??
+              artisan['userId'])
+          ?.toString();
       if (resolvedAid == null || resolvedAid.isEmpty) {
         final userObj = artisan['user'];
-        if (userObj is Map) resolvedAid = (userObj['_id'] ?? userObj['id'])?.toString();
+        if (userObj is Map)
+          resolvedAid = (userObj['_id'] ?? userObj['id'])?.toString();
       }
       try {
         final mySvc = MyServiceService();
         final apiResp = await mySvc.fetchMyServices(context: context);
         if (apiResp.ok && apiResp.data != null) {
           List<dynamic>? docs;
-          if (apiResp.data is List) docs = apiResp.data as List<dynamic>;
-          else if (apiResp.data is Map && apiResp.data['data'] is List) docs = List<dynamic>.from(apiResp.data['data']);
-          else if (apiResp.data is Map && apiResp.data['items'] is List) docs = List<dynamic>.from(apiResp.data['items']);
-          else if (apiResp.data is Map && apiResp.data['services'] is List) docs = [apiResp.data];
+          if (apiResp.data is List)
+            docs = apiResp.data as List<dynamic>;
+          else if (apiResp.data is Map && apiResp.data['data'] is List)
+            docs = List<dynamic>.from(apiResp.data['data']);
+          else if (apiResp.data is Map && apiResp.data['items'] is List)
+            docs = List<dynamic>.from(apiResp.data['items']);
+          else if (apiResp.data is Map && apiResp.data['services'] is List)
+            docs = [apiResp.data];
 
           if (docs != null && docs.isNotEmpty) {
             final List<Map<String, dynamic>> flattened = [];
             for (final doc in docs) {
               if (doc == null || doc is! Map) continue;
               final d = Map<String, dynamic>.from(doc.cast<String, dynamic>());
-              final servicesArr = d['services'] ?? d['serviceList'] ?? d['items'];
+              final servicesArr =
+                  d['services'] ?? d['serviceList'] ?? d['items'];
               final artisanServiceId = (d['_id'] ?? d['id'])?.toString();
               final docCategoryId = (d['categoryId'] ?? d['category']) is Map
-                  ? ((d['categoryId'] ?? d['category'])['_id'] ?? (d['categoryId'] ?? d['category'])['id'])?.toString()
+                  ? ((d['categoryId'] ?? d['category'])['_id'] ??
+                          (d['categoryId'] ?? d['category'])['id'])
+                      ?.toString()
                   : (d['categoryId'] ?? d['category'])?.toString();
               if (servicesArr is List) {
                 for (final s in servicesArr) {
                   if (s == null || s is! Map) continue;
-                  final sub = Map<String, dynamic>.from(s.cast<String, dynamic>());
-                  final subRaw = sub['subCategoryId'] ?? sub['sub_category_id'] ?? sub['_id'] ?? sub['id'];
+                  final sub =
+                      Map<String, dynamic>.from(s.cast<String, dynamic>());
+                  final subRaw = sub['subCategoryId'] ??
+                      sub['sub_category_id'] ??
+                      sub['_id'] ??
+                      sub['id'];
                   String? subId;
-                  String? subName = (sub['name'] ?? sub['title'] ?? sub['label'])?.toString();
+                  String? subName =
+                      (sub['name'] ?? sub['title'] ?? sub['label'])?.toString();
                   if (subRaw is Map) {
                     subId = (subRaw['_id'] ?? subRaw['id'])?.toString();
-                    subName = subName ?? (subRaw['name'] ?? subRaw['title'])?.toString();
+                    subName = subName ??
+                        (subRaw['name'] ?? subRaw['title'])?.toString();
                   } else {
                     subId = subRaw?.toString();
                   }
-                  final rawPrice = sub['price'] ?? sub['amount'] ?? sub['unitPrice'];
+                  final rawPrice =
+                      sub['price'] ?? sub['amount'] ?? sub['unitPrice'];
                   num? price;
                   if (rawPrice != null) {
-                    if (rawPrice is num) price = rawPrice;
-                    else price = num.tryParse(rawPrice.toString());
+                    if (rawPrice is num)
+                      price = rawPrice;
+                    else
+                      price = num.tryParse(rawPrice.toString());
                   }
-                  final tempId = (subId != null && subId.isNotEmpty) ? subId : ('artisan_${resolvedAid ?? 'me'}__${(sub['_id'] ?? sub['id'])?.toString() ?? DateTime.now().microsecondsSinceEpoch.toString()}');
+                  final tempId = (subId != null && subId.isNotEmpty)
+                      ? subId
+                      : ('artisan_${resolvedAid ?? 'me'}__${(sub['_id'] ?? sub['id'])?.toString() ?? DateTime.now().microsecondsSinceEpoch.toString()}');
                   flattened.add({
                     'tempId': tempId,
                     if (subId != null) 'subCategoryId': subId,
@@ -2180,8 +2623,10 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
     final smallFontSize = isSmallScreen ? 12.0 : (isLargeScreen ? 14.0 : 13.0);
 
     // Responsive padding
-    final horizontalPadding = isSmallScreen ? 16.0 : (isLargeScreen ? 24.0 : 20.0);
-    final verticalPadding = isSmallScreen ? 16.0 : (isLargeScreen ? 24.0 : 20.0);
+    final horizontalPadding =
+        isSmallScreen ? 16.0 : (isLargeScreen ? 24.0 : 20.0);
+    final verticalPadding =
+        isSmallScreen ? 16.0 : (isLargeScreen ? 24.0 : 20.0);
 
     // Responsive spacing
     final smallSpacing = isSmallScreen ? 8.0 : 12.0;
@@ -2189,7 +2634,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
     final largeSpacing = isSmallScreen ? 16.0 : 24.0;
 
     // Responsive image size
-    final profileImageSize = isSmallScreen ? 70.0 : (isLargeScreen ? 90.0 : 80.0);
+    final profileImageSize =
+        isSmallScreen ? 70.0 : (isLargeScreen ? 90.0 : 80.0);
 
     // Helper functions
     String safeToString(dynamic value) {
@@ -2209,7 +2655,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
       }
     }
 
-    String safeGetNestedString(List<String> keys, {String defaultValue = 'Not specified'}) {
+    String safeGetNestedString(List<String> keys,
+        {String defaultValue = 'Not specified'}) {
       try {
         dynamic value = artisan;
         for (final key in keys) {
@@ -2237,24 +2684,30 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
             child: _loading
                 ? const CircularProgressIndicator()
                 : (_errorMessage != null
-                ? Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(_errorMessage!, textAlign: TextAlign.center, style: theme.bodyLarge),
-                  const SizedBox(height: 12),
-                  ElevatedButton(
-                    onPressed: () async {
-                      setState(() { _loading = true; _errorMessage = null; });
-                      await _fetchArtisanById(providedId, token: _authToken);
-                    },
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
-            )
-                : const SizedBox.shrink()),
+                    ? Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(_errorMessage!,
+                                textAlign: TextAlign.center,
+                                style: theme.bodyLarge),
+                            const SizedBox(height: 12),
+                            ElevatedButton(
+                              onPressed: () async {
+                                setState(() {
+                                  _loading = true;
+                                  _errorMessage = null;
+                                });
+                                await _fetchArtisanById(providedId,
+                                    token: _authToken);
+                              },
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      )
+                    : const SizedBox.shrink()),
           ),
         ),
       );
@@ -2267,9 +2720,11 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
           children: [
             // Header
             Container(
-              padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: mediumSpacing),
+              padding: EdgeInsets.symmetric(
+                  horizontal: horizontalPadding, vertical: mediumSpacing),
               decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: _borderColor(), width: 1)),
+                border:
+                    Border(bottom: BorderSide(color: _borderColor(), width: 1)),
               ),
               child: Row(
                 children: [
@@ -2311,7 +2766,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
               Container(
                 width: double.infinity,
                 color: Theme.of(context).colorScheme.error.withOpacity(0.08),
-                padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: smallSpacing),
+                padding: EdgeInsets.symmetric(
+                    horizontal: horizontalPadding, vertical: smallSpacing),
                 child: Text(
                   _errorMessage!,
                   style: TextStyle(
@@ -2336,7 +2792,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                       padding: EdgeInsets.all(mediumSpacing),
                       decoration: BoxDecoration(
                         color: _surfaceColor(),
-                        borderRadius: BorderRadius.circular(isSmallScreen ? 16 : 20),
+                        borderRadius:
+                            BorderRadius.circular(isSmallScreen ? 16 : 20),
                       ),
                       child: Row(
                         children: [
@@ -2347,39 +2804,42 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                             child: ClipOval(
                               child: profileImage != null
                                   ? CachedNetworkImage(
-                                imageUrl: profileImage,
-                                fit: BoxFit.cover,
-                                placeholder: (context, url) => Container(
-                                  color: primaryColor.withOpacity(0.1),
-                                  child: Center(
-                                    child: Icon(
-                                      Icons.person_outline,
-                                      size: isSmallScreen ? 32 : 40,
-                                      color: primaryColor.withOpacity(0.5),
-                                    ),
-                                  ),
-                                ),
-                                errorWidget: (context, url, error) => Container(
-                                  color: primaryColor.withOpacity(0.1),
-                                  child: Center(
-                                    child: Icon(
-                                      Icons.person_outline,
-                                      size: isSmallScreen ? 32 : 40,
-                                      color: primaryColor.withOpacity(0.5),
-                                    ),
-                                  ),
-                                ),
-                              )
+                                      imageUrl: profileImage,
+                                      fit: BoxFit.cover,
+                                      placeholder: (context, url) => Container(
+                                        color: primaryColor.withOpacity(0.1),
+                                        child: Center(
+                                          child: Icon(
+                                            Icons.person_outline,
+                                            size: isSmallScreen ? 32 : 40,
+                                            color:
+                                                primaryColor.withOpacity(0.5),
+                                          ),
+                                        ),
+                                      ),
+                                      errorWidget: (context, url, error) =>
+                                          Container(
+                                        color: primaryColor.withOpacity(0.1),
+                                        child: Center(
+                                          child: Icon(
+                                            Icons.person_outline,
+                                            size: isSmallScreen ? 32 : 40,
+                                            color:
+                                                primaryColor.withOpacity(0.5),
+                                          ),
+                                        ),
+                                      ),
+                                    )
                                   : Container(
-                                color: primaryColor.withOpacity(0.1),
-                                child: Center(
-                                  child: Icon(
-                                    Icons.person_outline,
-                                    size: isSmallScreen ? 32 : 40,
-                                    color: primaryColor.withOpacity(0.5),
-                                  ),
-                                ),
-                              ),
+                                      color: primaryColor.withOpacity(0.1),
+                                      child: Center(
+                                        child: Icon(
+                                          Icons.person_outline,
+                                          size: isSmallScreen ? 32 : 40,
+                                          color: primaryColor.withOpacity(0.5),
+                                        ),
+                                      ),
+                                    ),
                             ),
                           ),
                           SizedBox(width: mediumSpacing),
@@ -2406,7 +2866,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                                     if (_isVerified) ...[
                                       SizedBox(width: isSmallScreen ? 4 : 6),
                                       Container(
-                                        padding: EdgeInsets.all(isSmallScreen ? 2 : 3),
+                                        padding: EdgeInsets.all(
+                                            isSmallScreen ? 2 : 3),
                                         decoration: BoxDecoration(
                                           color: Colors.green.withOpacity(0.12),
                                           shape: BoxShape.circle,
@@ -2439,7 +2900,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                                             vertical: isSmallScreen ? 4 : 6),
                                         decoration: BoxDecoration(
                                           color: primaryColor.withOpacity(0.12),
-                                          borderRadius: BorderRadius.circular(16),
+                                          borderRadius:
+                                              BorderRadius.circular(16),
                                         ),
                                         child: Text(
                                           trade,
@@ -2460,7 +2922,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                                 Row(
                                   children: [
                                     ...List.generate(5, (index) {
-                                      final fullStars = (_averageRating ?? 0).floor();
+                                      final fullStars =
+                                          (_averageRating ?? 0).floor();
                                       return Icon(
                                         index < fullStars
                                             ? Icons.star_rounded
@@ -2474,15 +2937,16 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                                       SizedBox(
                                           width: 16,
                                           height: 16,
-                                          child: CircularProgressIndicator(strokeWidth: 2)),
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2)),
                                     SizedBox(width: isSmallScreen ? 4 : 6),
                                     Flexible(
                                       child: Text(
                                         _averageRating != null
                                             ? '${_averageRating!.toStringAsFixed(1)} (${_reviewCount} reviews)'
                                             : (_loadingReviews
-                                            ? 'Loading'
-                                            : 'No reviews yet'),
+                                                ? 'Loading'
+                                                : 'No reviews yet'),
                                         style: theme.bodyMedium.copyWith(
                                           color: _secondaryTextColor(),
                                           fontSize: smallFontSize,
@@ -2561,12 +3025,14 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                       padding: EdgeInsets.all(mediumSpacing),
                       decoration: BoxDecoration(
                         color: _surfaceColor(),
-                        borderRadius: BorderRadius.circular(isSmallScreen ? 12 : 16),
+                        borderRadius:
+                            BorderRadius.circular(isSmallScreen ? 12 : 16),
                         border: Border.all(color: _borderColor(), width: 1.5),
                       ),
                       child: Text(
                         safeGetString('bio',
-                            defaultValue: 'No bio available. This artisan hasn\'t added a description yet.'),
+                            defaultValue:
+                                'No bio available. This artisan hasn\'t added a description yet.'),
                         style: theme.bodyLarge?.copyWith(
                           color: _textColor(0.85),
                           height: 1.6,
@@ -2641,7 +3107,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                       children: [
                         if (_loadingReviews) ...[
                           Padding(
-                            padding: EdgeInsets.symmetric(vertical: mediumSpacing),
+                            padding:
+                                EdgeInsets.symmetric(vertical: mediumSpacing),
                             child: Center(
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
@@ -2651,7 +3118,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                           ),
                         ] else if (_reviews.isEmpty) ...[
                           Padding(
-                            padding: EdgeInsets.symmetric(vertical: mediumSpacing),
+                            padding:
+                                EdgeInsets.symmetric(vertical: mediumSpacing),
                             child: Center(
                               child: Text(
                                 'No reviews yet',
@@ -2664,24 +3132,30 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                           ),
                         ] else ...[
                           ..._reviews.map((review) {
-                            final reviewerId = review['customerId'] ?? review['userId'];
+                            final reviewerId =
+                                review['customerId'] ?? review['userId'];
                             final reviewerName = reviewerId != null &&
-                                reviewerId.toString().isNotEmpty
-                                ? (_userNameCache[reviewerId.toString()] ?? 'User')
+                                    reviewerId.toString().isNotEmpty
+                                ? (_userNameCache[reviewerId.toString()] ??
+                                    'User')
                                 : 'User';
                             String reviewDate = 'Unknown date';
                             try {
                               if (review['createdAt'] != null) {
-                                reviewDate = DateFormat('MMM d, yyyy')
-                                    .format(DateTime.parse(review['createdAt'].toString()));
+                                reviewDate = DateFormat('MMM d, yyyy').format(
+                                    DateTime.parse(
+                                        review['createdAt'].toString()));
                               }
                             } catch (_) {}
-                            final reviewRating = review['rating'] ?? review['stars'] ?? 0;
+                            final reviewRating =
+                                review['rating'] ?? review['stars'] ?? 0;
                             final reviewComment = (review['comment'] ??
-                                review['review'] ??
-                                review['content'] ??
-                                review['message'] ??
-                                review['text'] ?? '').toString();
+                                    review['review'] ??
+                                    review['content'] ??
+                                    review['message'] ??
+                                    review['text'] ??
+                                    '')
+                                .toString();
 
                             return Padding(
                               padding: EdgeInsets.only(bottom: smallSpacing),
@@ -2689,8 +3163,10 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                                 padding: EdgeInsets.all(mediumSpacing),
                                 decoration: BoxDecoration(
                                   color: _surfaceColor(),
-                                  borderRadius: BorderRadius.circular(isSmallScreen ? 12 : 16),
-                                  border: Border.all(color: _borderColor(), width: 1),
+                                  borderRadius: BorderRadius.circular(
+                                      isSmallScreen ? 12 : 16),
+                                  border: Border.all(
+                                      color: _borderColor(), width: 1),
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2701,18 +3177,21 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                                           width: isSmallScreen ? 36 : 40,
                                           height: isSmallScreen ? 36 : 40,
                                           decoration: BoxDecoration(
-                                            color: primaryColor.withOpacity(0.1),
+                                            color:
+                                                primaryColor.withOpacity(0.1),
                                             shape: BoxShape.circle,
                                           ),
                                           child: Center(
                                             child: Text(
                                               reviewerName.isNotEmpty
-                                                  ? reviewerName[0].toUpperCase()
+                                                  ? reviewerName[0]
+                                                      .toUpperCase()
                                                   : 'U',
                                               style: TextStyle(
                                                 color: primaryColor,
                                                 fontWeight: FontWeight.w600,
-                                                fontSize: isSmallScreen ? 14 : 16,
+                                                fontSize:
+                                                    isSmallScreen ? 14 : 16,
                                               ),
                                             ),
                                           ),
@@ -2720,11 +3199,13 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                                         SizedBox(width: smallSpacing),
                                         Expanded(
                                           child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
                                               Text(
                                                 reviewerName,
-                                                style: theme.bodyMedium.copyWith(
+                                                style:
+                                                    theme.bodyMedium.copyWith(
                                                   fontWeight: FontWeight.w600,
                                                   fontSize: bodyFontSize,
                                                 ),
@@ -2734,18 +3215,27 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                                                 children: [
                                                   ...List.generate(5, (index) {
                                                     return Icon(
-                                                      index < reviewRating.floor()
+                                                      index <
+                                                              reviewRating
+                                                                  .floor()
                                                           ? Icons.star
                                                           : Icons.star_border,
-                                                      size: isSmallScreen ? 14 : 16,
+                                                      size: isSmallScreen
+                                                          ? 14
+                                                          : 16,
                                                       color: Colors.amber,
                                                     );
                                                   }),
-                                                  SizedBox(width: isSmallScreen ? 6 : 8),
+                                                  SizedBox(
+                                                      width: isSmallScreen
+                                                          ? 6
+                                                          : 8),
                                                   Text(
                                                     reviewDate,
-                                                    style: theme.bodySmall.copyWith(
-                                                      color: _secondaryTextColor(),
+                                                    style: theme.bodySmall
+                                                        .copyWith(
+                                                      color:
+                                                          _secondaryTextColor(),
                                                       fontSize: smallFontSize,
                                                     ),
                                                   ),
@@ -2789,7 +3279,6 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
   }
 }
 
-
 // MARK: - Global Helpers
 String _normalizeBaseUrl(String raw) {
   var base = (raw ?? '').toString().trim();
@@ -2800,19 +3289,24 @@ String _normalizeBaseUrl(String raw) {
   base = base.replaceFirst(RegExp(r'^/+'), '');
 
   // Fix common malformed schemes like 'http:/example.com' or 'https:/example.com'
-  if (base.startsWith('http:/') && !base.startsWith('http://')) base = base.replaceFirst('http:/', 'http://');
-  if (base.startsWith('https:/') && !base.startsWith('https://')) base = base.replaceFirst('https:/', 'https://');
+  if (base.startsWith('http:/') && !base.startsWith('http://'))
+    base = base.replaceFirst('http:/', 'http://');
+  if (base.startsWith('https:/') && !base.startsWith('https://'))
+    base = base.replaceFirst('https:/', 'https://');
 
   // If scheme missing, prepend https://
-  if (!RegExp(r'^https?://', caseSensitive: false).hasMatch(base)) base = 'https://$base';
+  if (!RegExp(r'^https?://', caseSensitive: false).hasMatch(base))
+    base = 'https://$base';
 
   // Collapse repeated scheme prefixes like 'https://https://example.com'
   try {
     final m = RegExp(r'^(https?://)+', caseSensitive: false).firstMatch(base);
     if (m != null) {
       final prefix = m.group(0) ?? '';
-      if (base.toLowerCase().startsWith('https')) base = base.replaceFirst(prefix, 'https://');
-      else base = base.replaceFirst(prefix, 'http://');
+      if (base.toLowerCase().startsWith('https'))
+        base = base.replaceFirst(prefix, 'https://');
+      else
+        base = base.replaceFirst(prefix, 'http://');
     }
   } catch (_) {}
 
@@ -2872,10 +3366,12 @@ dynamic _safeParseJson(String? raw) {
   if (raw == null || raw.isEmpty) return null;
   try {
     final parsed = jsonDecode(raw);
-    if (parsed is Map) return Map<String, dynamic>.from(parsed.cast<String, dynamic>());
+    if (parsed is Map)
+      return Map<String, dynamic>.from(parsed.cast<String, dynamic>());
     if (parsed is List) {
       return parsed.map((e) {
-        if (e is Map) return Map<String, dynamic>.from(e.cast<String, dynamic>());
+        if (e is Map)
+          return Map<String, dynamic>.from(e.cast<String, dynamic>());
         return e;
       }).toList();
     }
@@ -2884,4 +3380,3 @@ dynamic _safeParseJson(String? raw) {
     return null;
   }
 }
-
