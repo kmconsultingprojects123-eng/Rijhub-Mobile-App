@@ -14,3 +14,6 @@ Implementation
 
 Usage
 - Clients can display progress bars and prompt artisans to complete missing fields or KYC steps.
+
+API Endpoints
+- Get artisan by linked user id: `GET /api/artisans/user/:userId` (use this when you have the user's id)

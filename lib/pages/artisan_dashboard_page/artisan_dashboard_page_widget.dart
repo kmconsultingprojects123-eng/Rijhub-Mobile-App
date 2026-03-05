@@ -1750,23 +1750,30 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                       child: Column(
                                         children: [
                                           SizedBox(
-                                            width: 72,
-                                            height: 72,
+                                            width: 70,
+                                            height: 70,
                                             child: Stack(
                                               alignment: Alignment.center,
                                               children: [
-                                                CircularProgressIndicator(
-                                                  value:
-                                                      (_model.averageRating / 5)
-                                                          .clamp(0.0, 1.0),
-                                                  strokeWidth: 6,
-                                                  valueColor:
-                                                      AlwaysStoppedAnimation<
-                                                              Color>(
-                                                          colorScheme.primary),
-                                                  backgroundColor: colorScheme
-                                                      .primary
-                                                      .withOpacity(0.12),
+                                                SizedBox(
+                                                  width: 80,
+                                                  height: 80,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                    value:
+                                                        (_model.averageRating /
+                                                                5)
+                                                            .clamp(0.0, 1.0),
+                                                    strokeWidth: 5,
+                                                    valueColor:
+                                                        AlwaysStoppedAnimation<
+                                                                Color>(
+                                                            colorScheme
+                                                                .primary),
+                                                    backgroundColor: colorScheme
+                                                        .primary
+                                                        .withOpacity(0.12),
+                                                  ),
                                                 ),
                                                 Column(
                                                   mainAxisSize:

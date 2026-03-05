@@ -1628,7 +1628,11 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
         if (_loadingArtisans) return;
         setState(() { _loadingArtisans = true; _artisanError = null; });
         try {
+          print('┌────────────────── HOME PAGE ARTISAN LOADING ──────────────────');
+          print('│ [HOME PAGE] Calling ArtistService.fetchArtisans');
           final list = await ArtistService.fetchArtisans(page: 1, limit: 10);
+          print('│ [HOME PAGE] Found ${list.length} artisans');
+          print('└────────────────────────────────────────────────────────────────');
           if (!mounted) return;
           setState(() {
             _artisans = List<Map<String, dynamic>>.from(list);

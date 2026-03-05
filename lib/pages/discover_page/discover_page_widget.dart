@@ -30,12 +30,13 @@ class DiscoverPageWidget extends StatefulWidget {
   State<DiscoverPageWidget> createState() => _DiscoverPageWidgetState();
 }
 
-class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTickerProviderStateMixin {
-    // UI state
-    final ScrollController _scrollController = ScrollController();
-    gmaps.GoogleMapController? _googleMapController;
-    final TextEditingController _searchController = TextEditingController();
-    final FocusNode _searchFocus = FocusNode();
+class _DiscoverPageWidgetState extends State<DiscoverPageWidget>
+    with SingleTickerProviderStateMixin {
+  // UI state
+  final ScrollController _scrollController = ScrollController();
+  gmaps.GoogleMapController? _googleMapController;
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
 
   List<Map<String, dynamic>> _artisans = [];
   List<Map<String, dynamic>> _cachedArtisans = [];
@@ -44,11 +45,11 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTick
   bool _hasMore = true;
   int _page = 1;
 
-    // Map features state
-    bool _showUserLocation = true;
-    bool _showArtisanMarkers = true;
-    double _mapZoom = 13.0;
-    gmaps.LatLngBounds? _visibleBounds;
+  // Map features state
+  bool _showUserLocation = true;
+  bool _showArtisanMarkers = true;
+  double _mapZoom = 13.0;
+  gmaps.LatLngBounds? _visibleBounds;
 
   // user location
   List<double>? _userCoords;
@@ -63,26 +64,36 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTick
   static const double DEFAULT_LAT = 9.0820;
   static const double DEFAULT_LON = 8.6753;
 
-    @override
-    void initState() {
+  @override
+  void initState() {
     super.initState();
     _searchFocus.addListener(_onSearchFocusChange);
     _scrollController.addListener(_onScroll);
     _init();
-    }
+  }
 
   Future<void> _init() async {
     // load cached artisans if any
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString('cached_artisans_json');
+      print('┌────────────────── DISCOVER PAGE CACHE CHECK ──────────────────');
       if (raw != null && raw.isNotEmpty) {
         final parsed = jsonDecode(raw);
         if (parsed is List) {
-          _cachedArtisans = parsed.map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e)).toList();
+          _cachedArtisans = parsed
+              .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
+              .toList();
+          print('│ FOUND ${_cachedArtisans.length} CACHED ARTISANS');
         }
+      } else {
+        print('│ NO CACHED ARTISANS FOUND');
       }
-    } catch (_) {}
+      print(
+          '└────────────────────────────────────────────────────────────────');
+    } catch (e) {
+      print('│ CACHE ERROR: $e');
+    }
 
     // show cached quickly
     if (_cachedArtisans.isNotEmpty) {
@@ -133,7 +144,8 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTick
       }
       if (permission == LocationPermission.deniedForever) return null;
       final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.best),
+        locationSettings:
+            const LocationSettings(accuracy: LocationAccuracy.best),
       );
       return pos;
     } catch (_) {
@@ -148,7 +160,8 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTick
           final screenH = MediaQuery.of(context).size.height;
           final maxExtent = screenH * 0.55;
           final minExtent = screenH * 0.20;
-          final collapseOffset = (maxExtent - minExtent).clamp(0.0, double.infinity);
+          final collapseOffset =
+              (maxExtent - minExtent).clamp(0.0, double.infinity);
           if (_scrollController.hasClients) {
             _scrollController.animateTo(
               collapseOffset,
@@ -161,7 +174,8 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTick
     } else {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         try {
-          if (_scrollController.hasClients && _scrollController.offset <= 20.0) {
+          if (_scrollController.hasClients &&
+              _scrollController.offset <= 20.0) {
             _scrollController.animateTo(
               0.0,
               duration: const Duration(milliseconds: 300),
@@ -182,16 +196,32 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTick
 
       if (max > 0) {
         final threshold = max * 0.8;
-        if (currentOffset >= threshold && !_isLoadingMore && _hasMore && !_loading) {
+        if (currentOffset >= threshold &&
+            !_isLoadingMore &&
+            _hasMore &&
+            !_loading) {
           _loadArtisans(next: true);
         }
       }
     } catch (_) {}
   }
 
-  Future<void> _loadArtisans({bool next = false, bool showLoading = true}) async {
-    if (showLoading && _loading) return;
-    if (next && !_hasMore) return;
+  Future<void> _loadArtisans(
+      {bool next = false, bool showLoading = true}) async {
+    print('┌────────────────── DISCOVER PAGE LOADING START ──────────────────');
+    print('│ next: $next, showLoading: $showLoading');
+    if (showLoading && _loading) {
+      print('│ Already loading, skipping...');
+      print(
+          '└────────────────────────────────────────────────────────────────');
+      return;
+    }
+    if (next && !_hasMore) {
+      print('│ No more artisans to load, skipping...');
+      print(
+          '└────────────────────────────────────────────────────────────────');
+      return;
+    }
 
     if (showLoading) setState(() => _loading = true);
     if (next) _isLoadingMore = true;
@@ -201,16 +231,23 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTick
       List<Map<String, dynamic>> res = [];
       final q = _query.trim();
       if (q.isNotEmpty) {
-        final byTrade = await ArtistService.fetchArtisans(page: pageToLoad, limit: 20, trade: q);
-        final byLoc = await ArtistService.fetchArtisans(page: pageToLoad, limit: 20, location: q);
+        final byTrade = await ArtistService.fetchArtisans(
+            page: pageToLoad, limit: 20, trade: q);
+        final byLoc = await ArtistService.fetchArtisans(
+            page: pageToLoad, limit: 20, location: q);
         final Map<String, Map<String, dynamic>> merged = {};
         for (final a in byTrade) {
           final id = (a['_id'] ?? a['id'] ?? UniqueKey().toString()).toString();
-          merged[id] = a is Map<String, dynamic> ? Map<String, dynamic>.from(a) : <String, dynamic>{};
+          merged[id] = a is Map<String, dynamic>
+              ? Map<String, dynamic>.from(a)
+              : <String, dynamic>{};
         }
         for (final a in byLoc) {
           final id = (a['_id'] ?? a['id'] ?? UniqueKey().toString()).toString();
-          if (!merged.containsKey(id)) merged[id] = a is Map<String, dynamic> ? Map<String, dynamic>.from(a) : <String, dynamic>{};
+          if (!merged.containsKey(id))
+            merged[id] = a is Map<String, dynamic>
+                ? Map<String, dynamic>.from(a)
+                : <String, dynamic>{};
         }
         res = merged.values.map((e) => Map<String, dynamic>.from(e)).toList();
       } else {
@@ -266,7 +303,7 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTick
     }
   }
 
-    Future<void> _fitMapToArtisans() async {
+  Future<void> _fitMapToArtisans() async {
     final points = <LatLng>[];
     for (final a in _artisans) {
       final c = _extractLatLon(a);
@@ -277,9 +314,11 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTick
         try {
           if (_googleMapController != null) {
             if (_userCoords != null) {
-              _googleMapController!.moveCamera(gmaps.CameraUpdate.newLatLngZoom(gmaps.LatLng(_userCoords![0], _userCoords![1]), 12.0));
+              _googleMapController!.moveCamera(gmaps.CameraUpdate.newLatLngZoom(
+                  gmaps.LatLng(_userCoords![0], _userCoords![1]), 12.0));
             } else {
-              _googleMapController!.moveCamera(gmaps.CameraUpdate.newLatLngZoom(gmaps.LatLng(DEFAULT_LAT, DEFAULT_LON), 6.0));
+              _googleMapController!.moveCamera(gmaps.CameraUpdate.newLatLngZoom(
+                  gmaps.LatLng(DEFAULT_LAT, DEFAULT_LON), 6.0));
             }
           }
         } catch (_) {}
@@ -309,11 +348,16 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTick
     double spanLng = (maxLng - minLng).abs();
     final span = max(spanLat, spanLng);
     double zoom;
-    if (span < 0.01) zoom = 15.0;
-    else if (span < 0.05) zoom = 14.0;
-    else if (span < 0.2) zoom = 12.5;
-    else if (span < 1.0) zoom = 10.5;
-    else zoom = 8.0;
+    if (span < 0.01)
+      zoom = 15.0;
+    else if (span < 0.05)
+      zoom = 14.0;
+    else if (span < 0.2)
+      zoom = 12.5;
+    else if (span < 1.0)
+      zoom = 10.5;
+    else
+      zoom = 8.0;
 
     try {
       if (_googleMapController != null) {
@@ -322,31 +366,37 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget> with SingleTick
           northeast: gmaps.LatLng(maxLat, maxLng),
         );
         // Use a small padding (in pixels) when fitting
-        await _googleMapController!.moveCamera(gmaps.CameraUpdate.newLatLngBounds(bounds, 50));
+        await _googleMapController!
+            .moveCamera(gmaps.CameraUpdate.newLatLngBounds(bounds, 50));
       }
     } catch (_) {}
-    }
+  }
 
-LatLng? _extractLatLon(Map<String, dynamic> a) {
- try {
-   final coords = a['coordinates'] ?? a['coords'] ?? a['locationCoordinates'];
-   if (coords is List && coords.length >= 2) {
-     final v0 = coords[0];
-     final v1 = coords[1];
-     if (v0 is num && v1 is num) return LatLng(v0.toDouble(), v1.toDouble());
-   }
-   final lat = a['latitude'] ?? a['lat'] ?? a['location']?['lat'];
-   final lon = a['longitude'] ?? a['lon'] ?? a['location']?['lng'];
-   if (lat is num && lon is num) return LatLng(lat.toDouble(), lon.toDouble());
- } catch (_) {}
- return null;
- }
+  LatLng? _extractLatLon(Map<String, dynamic> a) {
+    try {
+      final coords =
+          a['coordinates'] ?? a['coords'] ?? a['locationCoordinates'];
+      if (coords is List && coords.length >= 2) {
+        final v0 = coords[0];
+        final v1 = coords[1];
+        if (v0 is num && v1 is num) return LatLng(v0.toDouble(), v1.toDouble());
+      }
+      final lat = a['latitude'] ?? a['lat'] ?? a['location']?['lat'];
+      final lon = a['longitude'] ?? a['lon'] ?? a['location']?['lng'];
+      if (lat is num && lon is num)
+        return LatLng(lat.toDouble(), lon.toDouble());
+    } catch (_) {}
+    return null;
+  }
 
   String _initialsFromName(String name) {
     try {
       final parts = name.trim().split(RegExp(r"\s+"));
       if (parts.isEmpty) return '';
-      if (parts.length == 1) return parts.first.substring(0, min(2, parts.first.length)).toUpperCase();
+      if (parts.length == 1)
+        return parts.first
+            .substring(0, min(2, parts.first.length))
+            .toUpperCase();
       return (parts.first[0] + parts.last[0]).toUpperCase();
     } catch (_) {
       return '';
@@ -357,7 +407,11 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
   Widget _buildMarker(Map<String, dynamic> a) {
     final theme = Theme.of(context);
     final img = _profileImageUrl(a);
-    final isUrl = img.isNotEmpty && (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('data:') || img.startsWith('file://'));
+    final isUrl = img.isNotEmpty &&
+        (img.startsWith('http://') ||
+            img.startsWith('https://') ||
+            img.startsWith('data:') ||
+            img.startsWith('file://'));
     final rating = _extractRating(a);
     final isRated = rating != null && rating >= 4.0;
 
@@ -366,7 +420,8 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
         try {
           await NavigationUtils.safePush(
             context,
-            ArtisanDetailPageWidget(artisan: _artisanWithUserId(a), openHire: true),
+            ArtisanDetailPageWidget(
+                artisan: _artisanWithUserId(a), openHire: true),
           );
         } catch (_) {}
       },
@@ -393,35 +448,37 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
             ClipOval(
               child: isUrl
                   ? Image.network(
-                img,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
-                  color: theme.colorScheme.primaryContainer,
-                  child: Center(
-                    child: Text(
-                      _initialsFromName((a['name'] ?? a['fullName'] ?? '').toString()),
-                      style: TextStyle(
-                        color: theme.colorScheme.onPrimaryContainer,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
+                      img,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        color: theme.colorScheme.primaryContainer,
+                        child: Center(
+                          child: Text(
+                            _initialsFromName(
+                                (a['name'] ?? a['fullName'] ?? '').toString()),
+                            style: TextStyle(
+                              color: theme.colorScheme.onPrimaryContainer,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  : Container(
+                      color: theme.colorScheme.primaryContainer,
+                      child: Center(
+                        child: Text(
+                          _initialsFromName(
+                              (a['name'] ?? a['fullName'] ?? '').toString()),
+                          style: TextStyle(
+                            color: theme.colorScheme.onPrimaryContainer,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-              )
-                  : Container(
-                color: theme.colorScheme.primaryContainer,
-                child: Center(
-                  child: Text(
-                    _initialsFromName((a['name'] ?? a['fullName'] ?? '').toString()),
-                    style: TextStyle(
-                      color: theme.colorScheme.onPrimaryContainer,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              ),
             ),
             if (isRated)
               Positioned(
@@ -432,9 +489,11 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
                   decoration: BoxDecoration(
                     color: Colors.amber,
                     shape: BoxShape.circle,
-                    border: Border.all(color: theme.colorScheme.surface, width: 1),
+                    border:
+                        Border.all(color: theme.colorScheme.surface, width: 1),
                   ),
-                  child: const Icon(Icons.star_rounded, size: 10, color: Colors.white),
+                  child: const Icon(Icons.star_rounded,
+                      size: 10, color: Colors.white),
                 ),
               ),
           ],
@@ -464,8 +523,11 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
           ),
           const SizedBox(height: 8),
           _buildMapFeatureButton(
-            icon: _showArtisanMarkers ? Icons.location_on_rounded : Icons.location_off_rounded,
-            onPressed: () => setState(() => _showArtisanMarkers = !_showArtisanMarkers),
+            icon: _showArtisanMarkers
+                ? Icons.location_on_rounded
+                : Icons.location_off_rounded,
+            onPressed: () =>
+                setState(() => _showArtisanMarkers = !_showArtisanMarkers),
             tooltip: _showArtisanMarkers ? 'Hide markers' : 'Show markers',
           ),
         ],
@@ -503,11 +565,12 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
     );
   }
 
-    void _zoomToUserLocation() {
+  void _zoomToUserLocation() {
     if (_userCoords != null && _googleMapController != null) {
-      _googleMapController!.moveCamera(gmaps.CameraUpdate.newLatLngZoom(gmaps.LatLng(_userCoords![0], _userCoords![1]), 15.0));
+      _googleMapController!.moveCamera(gmaps.CameraUpdate.newLatLngZoom(
+          gmaps.LatLng(_userCoords![0], _userCoords![1]), 15.0));
     }
-    }
+  }
 
   String _normalizeImageUrl(String url) {
     try {
@@ -517,13 +580,17 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
       if (u.startsWith('http://') || u.startsWith('https://')) return u;
       if (u.startsWith('//')) return 'https:$u';
       if (u.startsWith('/')) {
-        final base = API_BASE_URL.endsWith('/') ? API_BASE_URL.substring(0, API_BASE_URL.length - 1) : API_BASE_URL;
+        final base = API_BASE_URL.endsWith('/')
+            ? API_BASE_URL.substring(0, API_BASE_URL.length - 1)
+            : API_BASE_URL;
         if (base.isNotEmpty) return base + u;
         return u;
       }
       final domainLike = RegExp(r'^[\w\.-]+\.[a-zA-Z]{2,}(/|$)');
       if (domainLike.hasMatch(u)) return 'https://' + u;
-      final base = API_BASE_URL.endsWith('/') ? API_BASE_URL.substring(0, API_BASE_URL.length - 1) : API_BASE_URL;
+      final base = API_BASE_URL.endsWith('/')
+          ? API_BASE_URL.substring(0, API_BASE_URL.length - 1)
+          : API_BASE_URL;
       if (base.isNotEmpty) return base + '/' + u;
       return u;
     } catch (_) {
@@ -564,18 +631,24 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
           }
           if (m['photos'] is List && (m['photos'] as List).isNotEmpty) {
             final first = (m['photos'] as List).first;
-            if (first is String && first.isNotEmpty) return _normalizeImageUrl(first);
+            if (first is String && first.isNotEmpty)
+              return _normalizeImageUrl(first);
             if (first is Map) {
               final url = (first['url'] ?? first['src'] ?? first['path']);
-              if (url is String && url.isNotEmpty) return _normalizeImageUrl(url);
+              if (url is String && url.isNotEmpty)
+                return _normalizeImageUrl(url);
             }
           }
           if (m['profileImage'] is Map) {
-            final url = (m['profileImage']['url'] ?? m['profileImage']['src'] ?? m['profileImage']['path']);
+            final url = (m['profileImage']['url'] ??
+                m['profileImage']['src'] ??
+                m['profileImage']['path']);
             if (url is String && url.isNotEmpty) return _normalizeImageUrl(url);
           }
           if (m['avatar'] is Map) {
-            final url = (m['avatar']['url'] ?? m['avatar']['src'] ?? m['avatar']['path']);
+            final url = (m['avatar']['url'] ??
+                m['avatar']['src'] ??
+                m['avatar']['path']);
             if (url is String && url.isNotEmpty) return _normalizeImageUrl(url);
           }
         }
@@ -589,15 +662,19 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
             if (v is String && v.isNotEmpty) return _normalizeImageUrl(v);
           }
           if (m['profileImage'] is Map) {
-            final url = (m['profileImage']['url'] ?? m['profileImage']['src'] ?? m['profileImage']['path']);
+            final url = (m['profileImage']['url'] ??
+                m['profileImage']['src'] ??
+                m['profileImage']['path']);
             if (url is String && url.isNotEmpty) return _normalizeImageUrl(url);
           }
           if (m['photos'] is List && (m['photos'] as List).isNotEmpty) {
             final first = (m['photos'] as List).first;
-            if (first is String && first.isNotEmpty) return _normalizeImageUrl(first);
+            if (first is String && first.isNotEmpty)
+              return _normalizeImageUrl(first);
             if (first is Map) {
               final url = (first['url'] ?? first['src'] ?? first['path']);
-              if (url is String && url.isNotEmpty) return _normalizeImageUrl(url);
+              if (url is String && url.isNotEmpty)
+                return _normalizeImageUrl(url);
             }
           }
         }
@@ -650,18 +727,29 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
         if (v == null) continue;
         if (v is String && v.isNotEmpty) return v;
         if (v is Map) {
-          if (v['_id'] != null && v['_id'].toString().isNotEmpty) return v['_id'].toString();
-          if (v['id'] != null && v['id'].toString().isNotEmpty) return v['id'].toString();
+          if (v['_id'] != null && v['_id'].toString().isNotEmpty)
+            return v['_id'].toString();
+          if (v['id'] != null && v['id'].toString().isNotEmpty)
+            return v['id'].toString();
         }
       }
 
-      final nestedKeys = ['profile', 'artisanAuthDetails', 'userInfo', 'artisan', 'owner'];
+      final nestedKeys = [
+        'profile',
+        'artisanAuthDetails',
+        'userInfo',
+        'artisan',
+        'owner'
+      ];
       for (final nk in nestedKeys) {
         final nv = a[nk];
         if (nv is Map) {
-          if (nv['userId'] is String && nv['userId'].toString().isNotEmpty) return nv['userId'].toString();
-          if (nv['_id'] != null && nv['_id'].toString().isNotEmpty) return nv['_id'].toString();
-          if (nv['user'] is Map && nv['user']['_id'] != null) return nv['user']['_id'].toString();
+          if (nv['userId'] is String && nv['userId'].toString().isNotEmpty)
+            return nv['userId'].toString();
+          if (nv['_id'] != null && nv['_id'].toString().isNotEmpty)
+            return nv['_id'].toString();
+          if (nv['user'] is Map && nv['user']['_id'] != null)
+            return nv['user']['_id'].toString();
         }
       }
 
@@ -701,7 +789,8 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
   Map<String, dynamic> _artisanWithUserId(Map<String, dynamic> a) {
     try {
       final copy = Map<String, dynamic>.from(a);
-      if (copy['userId'] != null && copy['userId'].toString().isNotEmpty) return copy;
+      if (copy['userId'] != null && copy['userId'].toString().isNotEmpty)
+        return copy;
       final uid = _extractUserIdFromArtisan(a);
       if (uid != null && uid.isNotEmpty) copy['userId'] = uid;
       return copy;
@@ -773,7 +862,8 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
     final theme = Theme.of(context);
     final isQueryEmpty = _query.trim().isEmpty;
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + 80.0),
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + 80.0),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -833,7 +923,8 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
 
   @override
   Widget build(BuildContext context) {
-    final bool _isNestedNavBar = context.findAncestorWidgetOfExactType<NavBarPage>() != null;
+    final bool _isNestedNavBar =
+        context.findAncestorWidgetOfExactType<NavBarPage>() != null;
     if (!_isNestedNavBar) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         try {
@@ -857,7 +948,9 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
     final screenH = MediaQuery.of(context).size.height;
     final headerMax = screenH * 0.55;
     final headerMin = screenH * 0.20;
-    final double extraBottom = MediaQuery.of(context).padding.bottom + kBottomNavigationBarHeight + 24.0;
+    final double extraBottom = MediaQuery.of(context).padding.bottom +
+        kBottomNavigationBarHeight +
+        24.0;
 
     return Scaffold(
       backgroundColor: theme.colorScheme.background,
@@ -877,7 +970,8 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
             ),
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -890,7 +984,8 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
                     ),
                     if (_lastMessage != null)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 4),
                         decoration: BoxDecoration(
                           color: theme.colorScheme.primary.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
@@ -916,8 +1011,9 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
             if (_loading && _page == 1)
               SliverList(
                 delegate: SliverChildBuilderDelegate(
-                      (_, __) => Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  (_, __) => Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                     child: _skeletonCard(),
                   ),
                   childCount: 4,
@@ -934,18 +1030,20 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
             else
               SliverList(
                 delegate: SliverChildBuilderDelegate(
-                      (context, index) {
+                  (context, index) {
                     if (index >= _artisans.length) {
                       return _isLoadingMore
                           ? Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                        child: _skeletonCard(),
-                      )
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 20, vertical: 8),
+                              child: _skeletonCard(),
+                            )
                           : const SizedBox.shrink();
                     }
                     final item = _artisans[index];
                     return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 8),
                       child: _artisanCard(item),
                     );
                   },
@@ -1000,29 +1098,29 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
                   child: ClipOval(
                     child: imgUrl.isNotEmpty
                         ? Image.network(
-                      imgUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Center(
-                        child: Text(
-                          _initialsFromName(name),
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: theme.colorScheme.onPrimaryContainer,
-                            fontSize: 18,
-                          ),
-                        ),
-                      ),
-                    )
+                            imgUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Center(
+                              child: Text(
+                                _initialsFromName(name),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: theme.colorScheme.onPrimaryContainer,
+                                  fontSize: 18,
+                                ),
+                              ),
+                            ),
+                          )
                         : Center(
-                      child: Text(
-                        _initialsFromName(name),
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: theme.colorScheme.onPrimaryContainer,
-                          fontSize: 18,
-                        ),
-                      ),
-                    ),
+                            child: Text(
+                              _initialsFromName(name),
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: theme.colorScheme.onPrimaryContainer,
+                                fontSize: 18,
+                              ),
+                            ),
+                          ),
                   ),
                 ),
                 // Rating star badge (moved to top-right to avoid overlap with KYC badge)
@@ -1059,7 +1157,8 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
                       decoration: BoxDecoration(
                         color: Colors.green,
                         shape: BoxShape.circle,
-                        border: Border.all(color: theme.colorScheme.surface, width: 1.5),
+                        border: Border.all(
+                            color: theme.colorScheme.surface, width: 1.5),
                       ),
                       child: const Icon(
                         Icons.verified_rounded,
@@ -1108,8 +1207,10 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
                                     fit: BoxFit.scaleDown,
                                     alignment: Alignment.centerLeft,
                                     child: Text(
-                                      rating.toStringAsFixed(rating % 1 == 0 ? 0 : 1),
-                                      style: theme.textTheme.bodySmall?.copyWith(
+                                      rating.toStringAsFixed(
+                                          rating % 1 == 0 ? 0 : 1),
+                                      style:
+                                          theme.textTheme.bodySmall?.copyWith(
                                         fontWeight: FontWeight.w600,
                                         color: theme.colorScheme.onSurface,
                                       ),
@@ -1136,7 +1237,8 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
                           child: Text(
                             locationText,
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurface.withOpacity(0.7),
+                              color:
+                                  theme.colorScheme.onSurface.withOpacity(0.7),
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -1153,7 +1255,8 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
                       children: trades.take(3).map((t) {
                         final label = _formatTradeLabel(t);
                         return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
                           decoration: BoxDecoration(
                             color: theme.colorScheme.primary.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(12),
@@ -1191,7 +1294,8 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               ),
               child: const Text('View'),
             ),
@@ -1201,8 +1305,8 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
     );
   }
 
-    // Enhanced map widget with Google Maps implementation
-    Widget _buildMap() {
+  // Enhanced map widget with Google Maps implementation
+  Widget _buildMap() {
     final theme = Theme.of(context);
 
     // Build Google Map widget with basic markers. Note: for custom marker widgets (like
@@ -1214,7 +1318,8 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
       markers.add(gmaps.Marker(
         markerId: const gmaps.MarkerId('user_location'),
         position: gmaps.LatLng(_userCoords![0], _userCoords![1]),
-        icon: gmaps.BitmapDescriptor.defaultMarkerWithHue(gmaps.BitmapDescriptor.hueAzure),
+        icon: gmaps.BitmapDescriptor.defaultMarkerWithHue(
+            gmaps.BitmapDescriptor.hueAzure),
         infoWindow: const gmaps.InfoWindow(title: 'You'),
       ));
     }
@@ -1234,7 +1339,8 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
             try {
               await NavigationUtils.safePush(
                 context,
-                ArtisanDetailPageWidget(artisan: _artisanWithUserId(a), openHire: true),
+                ArtisanDetailPageWidget(
+                    artisan: _artisanWithUserId(a), openHire: true),
               );
             } catch (_) {}
           },
@@ -1243,7 +1349,8 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
           try {
             await NavigationUtils.safePush(
               context,
-              ArtisanDetailPageWidget(artisan: _artisanWithUserId(a), openHire: true),
+              ArtisanDetailPageWidget(
+                  artisan: _artisanWithUserId(a), openHire: true),
             );
           } catch (_) {}
         },
@@ -1255,7 +1362,9 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
       children: [
         gmaps.GoogleMap(
           initialCameraPosition: gmaps.CameraPosition(
-            target: _userCoords != null ? gmaps.LatLng(_userCoords![0], _userCoords![1]) : gmaps.LatLng(DEFAULT_LAT, DEFAULT_LON),
+            target: _userCoords != null
+                ? gmaps.LatLng(_userCoords![0], _userCoords![1])
+                : gmaps.LatLng(DEFAULT_LAT, DEFAULT_LON),
             zoom: 13.0,
           ),
           // Enable built-in UI controls so the user has on-map buttons (zoom, compass, toolbar)
@@ -1272,23 +1381,24 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
           tiltGesturesEnabled: true,
           // Ensure the map receives gesture events when nested inside scrollable widgets
           gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-            Factory<OneSequenceGestureRecognizer>(() => EagerGestureRecognizer()),
+            Factory<OneSequenceGestureRecognizer>(
+                () => EagerGestureRecognizer()),
           },
-           markers: markers,
-           onMapCreated: (controller) {
-             _googleMapController = controller;
-           },
-           onCameraMove: (pos) {
-             _mapZoom = pos.zoom;
-           },
-           onCameraIdle: () async {
-             try {
-               if (_googleMapController != null) {
-                 final bounds = await _googleMapController!.getVisibleRegion();
-                 _visibleBounds = bounds;
-               }
-             } catch (_) {}
-           },
+          markers: markers,
+          onMapCreated: (controller) {
+            _googleMapController = controller;
+          },
+          onCameraMove: (pos) {
+            _mapZoom = pos.zoom;
+          },
+          onCameraIdle: () async {
+            try {
+              if (_googleMapController != null) {
+                final bounds = await _googleMapController!.getVisibleRegion();
+                _visibleBounds = bounds;
+              }
+            } catch (_) {}
+          },
         ),
 
         // Zoom indicator
@@ -1303,13 +1413,14 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
             ),
             child: Text(
               'Zoom: ${_mapZoom.toStringAsFixed(1)}',
-              style: theme.textTheme.bodySmall?.copyWith(fontSize: 12, color: theme.colorScheme.onSurface),
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(fontSize: 12, color: theme.colorScheme.onSurface),
             ),
           ),
         ),
       ],
     );
-    }
+  }
 
   Widget _buildSearchBar() {
     final theme = Theme.of(context);
@@ -1321,7 +1432,8 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: theme.colorScheme.onSurface.withOpacity(brightness == Brightness.dark ? 0.3 : 0.1),
+            color: theme.colorScheme.onSurface
+                .withOpacity(brightness == Brightness.dark ? 0.3 : 0.1),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -1338,7 +1450,7 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
           _debounce?.cancel();
           _debounce = Timer(
             const Duration(milliseconds: 400),
-                () => _searchNow(),
+            () => _searchNow(),
           );
         },
         onFieldSubmitted: (v) {
@@ -1367,16 +1479,16 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
           ),
           suffixIcon: _query.isNotEmpty
               ? GestureDetector(
-            onTap: () {
-              _searchController.clear();
-              _query = '';
-              _searchNow();
-            },
-            child: Icon(
-              Icons.clear_rounded,
-              color: theme.colorScheme.onSurface.withOpacity(0.5),
-            ),
-          )
+                  onTap: () {
+                    _searchController.clear();
+                    _query = '';
+                    _searchNow();
+                  },
+                  child: Icon(
+                    Icons.clear_rounded,
+                    color: theme.colorScheme.onSurface.withOpacity(0.5),
+                  ),
+                )
               : null,
         ),
       ),
@@ -1400,30 +1512,37 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
     ];
 
     for (final k in candidates) {
-      if (a[k] != null && a[k].toString().trim().isNotEmpty) return a[k].toString();
+      if (a[k] != null && a[k].toString().trim().isNotEmpty)
+        return a[k].toString();
     }
 
-    final first = (a['firstName'] ?? a['first_name'] ?? a['firstname'])?.toString();
+    final first =
+        (a['firstName'] ?? a['first_name'] ?? a['firstname'])?.toString();
     final last = (a['lastName'] ?? a['last_name'] ?? a['lastname'])?.toString();
-    if ((first?.trim().isNotEmpty ?? false) || (last?.trim().isNotEmpty ?? false)) {
+    if ((first?.trim().isNotEmpty ?? false) ||
+        (last?.trim().isNotEmpty ?? false)) {
       return '${first ?? ''} ${last ?? ''}'.trim();
     }
 
     if (a['user'] is Map) {
       final u = Map<String, dynamic>.from(a['user']);
       for (final k in candidates) {
-        if (u[k] != null && u[k].toString().trim().isNotEmpty) return u[k].toString();
+        if (u[k] != null && u[k].toString().trim().isNotEmpty)
+          return u[k].toString();
       }
-      final uf = (u['firstName'] ?? u['first_name'] ?? u['firstname'])?.toString();
+      final uf =
+          (u['firstName'] ?? u['first_name'] ?? u['firstname'])?.toString();
       final ul = (u['lastName'] ?? u['last_name'] ?? u['lastname'])?.toString();
-      if ((uf?.trim().isNotEmpty ?? false) || (ul?.trim().isNotEmpty ?? false)) {
+      if ((uf?.trim().isNotEmpty ?? false) ||
+          (ul?.trim().isNotEmpty ?? false)) {
         return '${uf ?? ''} ${ul ?? ''}'.trim();
       }
     }
     if (a['profile'] is Map) {
       final p = Map<String, dynamic>.from(a['profile']);
       for (final k in candidates) {
-        if (p[k] != null && p[k].toString().trim().isNotEmpty) return p[k].toString();
+        if (p[k] != null && p[k].toString().trim().isNotEmpty)
+          return p[k].toString();
       }
     }
 
@@ -1432,13 +1551,22 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
 
   List<String> _tradesList(Map<String, dynamic> a) {
     final t = a['trade'] ?? a['trades'] ?? a['skills'] ?? a['categories'];
-    if (t is List) return t.map((e) => e?.toString() ?? '').where((s) => s.isNotEmpty).toList();
+    if (t is List)
+      return t
+          .map((e) => e?.toString() ?? '')
+          .where((s) => s.isNotEmpty)
+          .toList();
     if (t is String) {
-      final parts = t.split(RegExp(r'[;,\|]')).map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      final parts = t
+          .split(RegExp(r'[;,\|]'))
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
       if (parts.isNotEmpty) return parts;
     }
     if (a['profile'] is Map && a['profile']['trade'] != null) {
-      return _tradesList(Map<String, dynamic>.from({'trade': a['profile']['trade']}));
+      return _tradesList(
+          Map<String, dynamic>.from({'trade': a['profile']['trade']}));
     }
     return <String>[];
   }
@@ -1451,14 +1579,18 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
       if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
         final parsed = jsonDecode(trimmed);
         if (parsed is List) {
-          return parsed.map((e) => e?.toString() ?? '').where((s) => s.isNotEmpty).join(', ');
+          return parsed
+              .map((e) => e?.toString() ?? '')
+              .where((s) => s.isNotEmpty)
+              .join(', ');
         }
       }
       return label;
     } catch (_) {
       try {
         final s = t?.toString() ?? '';
-        if (s.startsWith('[') && s.endsWith(']')) return s.substring(1, s.length - 1);
+        if (s.startsWith('[') && s.endsWith(']'))
+          return s.substring(1, s.length - 1);
         return s;
       } catch (_) {
         return t?.toString() ?? '';
@@ -1483,9 +1615,16 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
       if (v is String && v.isNotEmpty) return v;
     }
 
-    final locObj = a['location'] ?? a['address'] ?? a['profile']?['location'] ?? a['profile']?['address'];
+    final locObj = a['location'] ??
+        a['address'] ??
+        a['profile']?['location'] ??
+        a['profile']?['address'];
     if (locObj is Map) {
-      final city = locObj['city'] ?? locObj['town'] ?? locObj['locality'] ?? locObj['name'] ?? locObj['area'];
+      final city = locObj['city'] ??
+          locObj['town'] ??
+          locObj['locality'] ??
+          locObj['name'] ??
+          locObj['area'];
       final state = locObj['state'] ?? locObj['region'] ?? locObj['state_name'];
       if (city != null && state != null) return '$city, $state';
       if (city != null) return city.toString();
@@ -1558,7 +1697,8 @@ LatLng? _extractLatLon(Map<String, dynamic> a) {
         if (v is num && v > 0) return true;
         if (v is String) {
           final lv = v.toLowerCase();
-          if (lv == 'true' || lv == 'verified' || lv == 'yes' || lv == '1') return true;
+          if (lv == 'true' || lv == 'verified' || lv == 'yes' || lv == '1')
+            return true;
         }
       }
 
@@ -1650,7 +1790,8 @@ class MapHeaderDelegate extends SliverPersistentHeaderDelegate {
   }
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
     final t = (shrinkOffset / (maxExtent - minExtent)).clamp(0.0, 1.0);
     final theme = Theme.of(context);
     final overlayEnd = theme.colorScheme.onSurface.withOpacity(0.08 * t);
@@ -1691,7 +1832,8 @@ class MapHeaderDelegate extends SliverPersistentHeaderDelegate {
           if (featuresBuilder != null)
             Positioned(
               right: 12,
-              bottom: 12 + (shrinkOffset * 0.5), // Moves up slightly as header collapses
+              bottom: 12 +
+                  (shrinkOffset * 0.5), // Moves up slightly as header collapses
               child: featuresBuilder!(context),
             ),
         ],

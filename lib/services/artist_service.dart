@@ -55,13 +55,19 @@ class ArtistService {
 
     // Prefer the dedicated artisans endpoint per API docs
     final uri = Uri.parse('$API_BASE_URL/api/artisans').replace(queryParameters: qParams);
-    if (kDebugMode) {
-      try {
-        debugPrint('ArtistService.fetchArtisans -> uri: ${uri.toString()}');
-        debugPrint('ArtistService.fetchArtisans -> queryParams: $qParams');
-      } catch (_) {}
-    }
+    
+    print('┌────────────────── DISCOVER/HOME SERVICE LOGS ──────────────────');
+    print('│ [SERVICE REQUEST] ArtistService.fetchArtisans');
+    print('│ URL: ${uri.toString()}');
+    print('│ PARAMS: $qParams');
+    print('└────────────────────────────────────────────────────────────────');
+    
     final respMap = await ApiClient.get(uri.toString(), headers: headers);
+    
+    print('┌────────────────── SERVICE RESPONSE ──────────────────');
+    print('│ STATUS: ${respMap['status']}');
+    print('└──────────────────────────────────────────────────────');
+
     if ((respMap['status'] is int) && (respMap['status'] as int) >= 200 && (respMap['status'] as int) < 300) {
       dynamic body;
       try {
@@ -133,30 +139,47 @@ class ArtistService {
       try {
         // 1) Try search endpoint
         final searchUri = Uri.parse('$API_BASE_URL/api/artisans/search').replace(queryParameters: qParams);
+        print('┌────────────────── DISCOVER/HOME FALLBACK 1 (SEARCH) ──────────────────');
+        print('│ URL: ${searchUri.toString()}');
+        
         final searchResp = await http.get(searchUri, headers: headers).timeout(const Duration(seconds: 15));
+        
+        print('│ STATUS: ${searchResp.statusCode}');
+        print('└───────────────────────────────────────────────────────────────────────');
+
         if (searchResp.statusCode >= 200 && searchResp.statusCode < 300 && searchResp.body.isNotEmpty) {
           try {
             final sb = jsonDecode(searchResp.body);
             if (sb is List) return List<Map<String, dynamic>>.from(sb.map((e) => Map<String, dynamic>.from(e)));
             if (sb is Map && sb['data'] is List) return List<Map<String, dynamic>>.from((sb['data'] as List).map((e) => Map<String, dynamic>.from(e)));
           } catch (e) {
+            print('│ ERROR PARSING FALLBACK 1: $e');
             // search decode failed
           }
         }
 
         // 2) Try generic users endpoint as last resort (without role filter)
         final usersUri = Uri.parse('$API_BASE_URL/api/users').replace(queryParameters: {'page': page.toString(), 'limit': (limit * 2).toString()});
+        print('┌────────────────── DISCOVER/HOME FALLBACK 2 (USERS) ──────────────────');
+        print('│ URL: ${usersUri.toString()}');
+        
         final usersResp = await http.get(usersUri, headers: headers).timeout(const Duration(seconds: 15));
+        
+        print('│ STATUS: ${usersResp.statusCode}');
+        print('└───────────────────────────────────────────────────────────────────────');
+
         if (usersResp.statusCode >= 200 && usersResp.statusCode < 300 && usersResp.body.isNotEmpty) {
           try {
             final ub = jsonDecode(usersResp.body);
             if (ub is List) return List<Map<String, dynamic>>.from(ub.map((e) => Map<String, dynamic>.from(e)));
             if (ub is Map && ub['data'] is List) return List<Map<String, dynamic>>.from((ub['data'] as List).map((e) => Map<String, dynamic>.from(e)));
           } catch (e) {
+            print('│ ERROR PARSING FALLBACK 2: $e');
             // users decode failed
           }
         }
       } catch (e) {
+        print('│ ERROR IN FALLBACK ATTEMPTS: $e');
         // fallback attempts failed
       }
 
@@ -166,15 +189,26 @@ class ArtistService {
     // non-ok response
     try {
       final altSearchUri = Uri.parse('$API_BASE_URL/api/artisans/search').replace(queryParameters: qParams);
+      print('┌────────────────── NON-2XX SEARCH FALLBACK ──────────────────');
+      print('│ URL: ${altSearchUri.toString()}');
+      
       final altResp = await http.get(altSearchUri, headers: headers).timeout(const Duration(seconds: 10));
+      
+      print('│ STATUS: ${altResp.statusCode}');
+      print('└─────────────────────────────────────────────────────────────');
+
       if (altResp.statusCode >= 200 && altResp.statusCode < 300 && altResp.body.isNotEmpty) {
         try {
           final body = jsonDecode(altResp.body);
           if (body is List) return List<Map<String, dynamic>>.from(body.map((e) => Map<String, dynamic>.from(e)));
           if (body is Map && body['data'] is List) return List<Map<String, dynamic>>.from((body['data'] as List).map((e) => Map<String, dynamic>.from(e)));
-        } catch (_) {}
+        } catch (e) {
+          print('│ ERROR PARSING ALT SEARCH: $e');
+        }
       }
-    } catch (_) {}
+    } catch (e) {
+      print('│ ERROR IN ALT SEARCH FALLBACK: $e');
+    }
     return [];
   }
 
@@ -461,59 +495,27 @@ class ArtistService {
 
   /// Fetch the current user's artisan profile (GET /api/artisans/me)
   static Future<Map<String, dynamic>?> getMyProfile() async {
-    // First attempt: try to find artisan by authenticated user's id. This avoids
-    // servers that validate `:id` and will error on '/me' (e.g. 'params/id must match pattern').
     try {
       final userProfile = await UserService.getProfile();
       if (userProfile != null) {
         String? userId;
         final candidates = ['_id', 'id', 'userId', 'user_id', 'uid'];
         for (final k in candidates) {
-          if (userProfile[k] != null) { userId = userProfile[k].toString(); break; }
+          if (userProfile[k] != null) {
+            userId = userProfile[k].toString();
+            break;
+          }
         }
         if ((userId == null || userId.isEmpty) && userProfile['user'] is Map && userProfile['user']['_id'] != null) {
           userId = userProfile['user']['_id'].toString();
         }
         if (userId != null && userId.isNotEmpty) {
-          if (kDebugMode) debugPrint('ArtistService.getMyProfile -> trying getByUserId($userId) first to avoid /me id validation issues');
-          try {
-            final found = await getByUserId(userId);
-            if (found != null) return found;
-            // If getByUserId returned null but one of the candidate endpoints
-            // returned 200 (empty array), treat this as authoritative 'not found'
-            // and avoid calling /api/artisans/me which some servers don't
-            // implement for GET (and may return validation errors).
-            if (_lastGetByUserIdHad200) {
-              if (kDebugMode) debugPrint('ArtistService.getMyProfile -> getByUserId observed 200 but no match; skipping /api/artisans/me');
-              return null;
-            }
-          } catch (e) {
-            if (kDebugMode) debugPrint('ArtistService.getMyProfile -> getByUserId failed: $e');
-          }
+          if (kDebugMode) debugPrint('ArtistService.getMyProfile -> calling getByUserId($userId)');
+          return await getByUserId(userId);
         }
       }
     } catch (e) {
-      if (kDebugMode) debugPrint('ArtistService.getMyProfile: userProfile lookup failed: $e');
-    }
-
-    // Second attempt: try the canonical /api/artisans/me endpoint (some servers support it)
-    try {
-      final uri = '$API_BASE_URL/api/artisans/me';
-      if (kDebugMode) debugPrint('ArtistService.getMyProfile -> GET $uri');
-      final resp = await ApiClient.get(uri, headers: {'Content-Type': 'application/json'});
-      try {
-        if (kDebugMode) debugPrint('ArtistService.getMyProfile -> resp status=${resp['status']} body=${(resp['body'] is String && (resp['body'] as String).length > 500) ? (resp['body'].toString().substring(0,500) + '...') : resp['body']}');
-      } catch (_) {}
-      if (resp['status'] is int && resp['status'] >= 200 && resp['status'] < 300) {
-        final body = (resp['body'] != null && resp['body'] is String && (resp['body'] as String).isNotEmpty) ? jsonDecode(resp['body']) : resp['json'];
-        if (kDebugMode) debugPrint('ArtistService.getMyProfile -> parsed body type=${body.runtimeType}');
-        if (body is Map && body['data'] is Map) return Map<String, dynamic>.from(body['data']);
-        if (body is Map) return Map<String, dynamic>.from(body);
-      } else {
-        if (kDebugMode) debugPrint('ArtistService.getMyProfile -> non-2xx response or empty body from /api/artisans/me');
-      }
-    } catch (e) {
-      if (kDebugMode) debugPrint('ArtistService.getMyProfile -> exception when calling /api/artisans/me: $e');
+      if (kDebugMode) debugPrint('ArtistService.getMyProfile failed: $e');
     }
 
     return null;
@@ -1122,82 +1124,74 @@ class ArtistService {
   /// authenticated token doesn't map. Tries several endpoints and returns the
   /// first matching artisan map or null.
   static Future<Map<String, dynamic>?> getByUserId(String userId) async {
-     if (userId.isEmpty) return null;
-     _lastGetByUserIdHad200 = false;
-     final candidates = [
-       '$API_BASE_URL/api/artisans?userId=$userId',
-       '$API_BASE_URL/api/artisans/user/$userId',
-       '$API_BASE_URL/api/artisans/$userId',
-     ];
-     for (final url in candidates) {
-       try {
-         if (kDebugMode) debugPrint('ArtistService.getByUserId -> trying $url');
-         final resp = await ApiClient.get(url, headers: {'Content-Type': 'application/json'});
-         if (kDebugMode) debugPrint('ArtistService.getByUserId -> resp status=${resp['status']}');
-         if (resp['status'] is int && resp['status'] >= 200 && resp['status'] < 300) {
-           dynamic body = (resp['body'] != null && resp['body'] is String && (resp['body'] as String).isNotEmpty) ? jsonDecode(resp['body']) : resp['json'];
-           if (body == null) continue;
+    if (userId.isEmpty) return null;
+    _lastGetByUserIdHad200 = false;
+    final url = '$API_BASE_URL/api/artisans/user/$userId';
+    try {
+      if (kDebugMode) debugPrint('ArtistService.getByUserId -> trying $url');
+      final resp = await ApiClient.get(url, headers: {'Content-Type': 'application/json'});
+      if (kDebugMode) debugPrint('ArtistService.getByUserId -> resp status=${resp['status']}');
+      if (resp['status'] is int && resp['status'] >= 200 && resp['status'] < 300) {
+        _lastGetByUserIdHad200 = true;
+        dynamic body = (resp['body'] != null && resp['body'] is String && (resp['body'] as String).isNotEmpty) ? jsonDecode(resp['body']) : resp['json'];
+        if (body == null) return null;
 
-           // helper to check whether an artisan/map belongs to the requested userId
-           bool _matchesRequestedUser(dynamic candidate) {
-             try {
-               if (candidate == null || candidate is! Map) return false;
-               final m = Map<String, dynamic>.from(Map.castFrom(candidate));
-               final ids = <String>[];
-               if (m.containsKey('userId') && m['userId'] != null) ids.add(m['userId'].toString());
-               if (m.containsKey('user_id') && m['user_id'] != null) ids.add(m['user_id'].toString());
-               if (m.containsKey('_id') && m['_id'] != null) ids.add(m['_id'].toString());
-               if (m['user'] is Map && m['user']['_id'] != null) ids.add(m['user']['_id'].toString());
-               return ids.any((id) => id == userId);
-             } catch (_) {
-               return false;
-             }
-           }
+        // helper to check whether an artisan/map belongs to the requested userId
+        bool _matchesRequestedUser(dynamic candidate) {
+          try {
+            if (candidate == null || candidate is! Map) return false;
+            final m = Map<String, dynamic>.from(Map.castFrom(candidate));
+            final ids = <String>[];
+            if (m.containsKey('userId') && m['userId'] != null) ids.add(m['userId'].toString());
+            if (m.containsKey('user_id') && m['user_id'] != null) ids.add(m['user_id'].toString());
+            if (m.containsKey('_id') && m['_id'] != null) ids.add(m['_id'].toString());
+            if (m['user'] is Map && m['user']['_id'] != null) ids.add(m['user']['_id'].toString());
+            return ids.any((id) => id == userId);
+          } catch (_) {
+            return false;
+          }
+        }
 
-           // If the body is a List, search for a matching artisan by user id.
-           if (body is List) {
-             if (body.isEmpty) continue; // explicit: empty list => not found
-             for (final it in body) {
-               try {
-                 if (it is Map && _matchesRequestedUser(it)) return Map<String, dynamic>.from(Map.castFrom(it));
-               } catch (_) {}
-             }
-             // No matching entry found in the returned list -> try next candidate endpoint
-             continue;
-           }
+        // If the body is a List, search for a matching artisan by user id.
+        if (body is List) {
+          if (body.isEmpty) return null; // explicit: empty list => not found
+          for (final it in body) {
+            try {
+              if (it is Map && _matchesRequestedUser(it)) return Map<String, dynamic>.from(Map.castFrom(it));
+            } catch (_) {}
+          }
+          return null;
+        }
 
-           // If body has a data wrapper
-           if (body is Map && body['data'] is List) {
-             final lst = (body['data'] as List);
-             if (lst.isEmpty) continue;
-             for (final it in lst) {
-               try {
-                 if (it is Map && _matchesRequestedUser(it)) return Map<String, dynamic>.from(Map.castFrom(it));
-               } catch (_) {}
-             }
-             continue;
-           }
+        // If body has a data wrapper
+        if (body is Map && body['data'] is List) {
+          final lst = (body['data'] as List);
+          if (lst.isEmpty) return null;
+          for (final it in lst) {
+            try {
+              if (it is Map && _matchesRequestedUser(it)) return Map<String, dynamic>.from(Map.castFrom(it));
+            } catch (_) {}
+          }
+          return null;
+        }
 
-           // If data is a single object inside 'data', verify ownership before returning
-           if (body is Map && body['data'] is Map) {
-             final d = Map<String, dynamic>.from(body['data']);
-             if (_matchesRequestedUser(d)) return d;
-             // not a match -> continue to other endpoints
-             continue;
-           }
+        // If data is a single object inside 'data', verify ownership before returning
+        if (body is Map && body['data'] is Map) {
+          final d = Map<String, dynamic>.from(body['data']);
+          if (_matchesRequestedUser(d)) return d;
+          return null;
+        }
 
-           // If the response is a plain Map that looks like an artisan object, ensure it matches the userId
-           if (body is Map) {
-             final m = Map<String, dynamic>.from(body);
-             if (_matchesRequestedUser(m)) return m;
-             // If it doesn't match, skip and try next candidate
-             continue;
-           }
-         }
-       } catch (e) {
-         if (kDebugMode) debugPrint('ArtistService.getByUserId -> candidate $url failed: $e');
-       }
-     }
-     return null;
-   }
+        // If the response is a plain Map that looks like an artisan object, ensure it matches the userId
+        if (body is Map) {
+          final m = Map<String, dynamic>.from(body);
+          if (_matchesRequestedUser(m)) return m;
+          return null;
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('ArtistService.getByUserId -> $url failed: $e');
+    }
+    return null;
+  }
 }

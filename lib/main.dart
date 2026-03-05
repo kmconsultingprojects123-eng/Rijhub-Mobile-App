@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:math' as math;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 
@@ -140,31 +141,19 @@ void main() async {
     // Removed debugPrint: do not print errors or stack traces to terminal
   }
 
-  // Use a zone to intercept print() calls and silence them for security
-  runZonedGuarded(() {
-    runApp(
-      MultiProvider(
-        providers: [
-          // Expose the existing singletons via Provider so widgets can use
-          // context.read/watch and we can migrate away from direct static
-          // access to the singletons over time.
-          ChangeNotifierProvider.value(value: AppStateNotifier.instance),
-          ChangeNotifierProvider.value(value: AuthNotifier.instance),
-        ],
-        child: MyApp(),
-      ),
-    );
-  }, (error, stack) {
-    // Forward to Flutter error handlers without printing stacktrace to terminal
-    try {
-      FlutterError.reportError(
-          FlutterErrorDetails(exception: error, stack: stack));
-    } catch (_) {}
-  }, zoneSpecification: ZoneSpecification(
-    print: (Zone self, ZoneDelegate parent, Zone zone, String line) {
-      // Intentionally ignore prints to avoid leaking data to terminal
-    },
-  ));
+  // Start the app normally
+  runApp(
+    MultiProvider(
+      providers: [
+        // Expose the existing singletons via Provider so widgets can use
+        // context.read/watch and we can migrate away from direct static
+        // access to the singletons over time.
+        ChangeNotifierProvider.value(value: AppStateNotifier.instance),
+        ChangeNotifierProvider.value(value: AuthNotifier.instance),
+      ],
+      child: MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatefulWidget {
@@ -725,12 +714,12 @@ class _NavBarPageState extends State<NavBarPage> {
                 itemBorderRadius: 0.0,
                 margin: const EdgeInsets.all(0.0),
                 padding:
-                    const EdgeInsetsDirectional.fromSTEB(0.0, 15.0, 0.0, 15.0),
+                    const EdgeInsetsDirectional.fromSTEB(0.0, 10.0, 0.0, 0.0),
                 width: double.infinity,
                 elevation: 0.0,
                 items: navItems,
               ),
-              SizedBox(height: MediaQuery.of(context).padding.bottom),
+              SizedBox(height: math.max(12.0, queryData.padding.bottom)),
             ],
           ),
         ),
