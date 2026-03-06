@@ -649,121 +649,147 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                               if (!ok) return;
                               try {
                                 final result = await _pushEditProfile();
-                              if (result is Map<String, dynamic>) {
-                                // Update cache with new data
-                                _cachedProfileData = Map<String, dynamic>.from(result);
-                                _isCacheStale = false;
+                                if (result is Map<String, dynamic>) {
+                                  // Update cache with new data
+                                  _cachedProfileData = Map<String, dynamic>.from(result);
+                                  _isCacheStale = false;
 
-                                setState(() {
-                                  displayName = (result['name'] ?? result['fullName'] ?? result['username'] ?? result['displayName'])?.toString();
-                                  userEmail = (result['email'] ?? result['contact'] ?? result['username'])?.toString();
-                                  userPhone = (result['phone'] ?? result['phoneNumber'] ?? result['mobile'])?.toString();
-                                  profileImageUrl = (result['profileImage'] is Map)
-                                      ? (result['profileImage']['url']?.toString() ?? '')
-                                      : (result['profileImage'] ?? result['photo'] ?? result['avatar'])?.toString();
-                                  userLocation = (result['location'] ?? result['city'] ?? result['serviceArea']?['address'])?.toString() ?? '';
-                                });
-                              } else {
+                                  setState(() {
+                                    displayName = (result['name'] ?? result['fullName'] ?? result['username'] ?? result['displayName'])?.toString();
+                                    userEmail = (result['email'] ?? result['contact'] ?? result['username'])?.toString();
+                                    userPhone = (result['phone'] ?? result['phoneNumber'] ?? result['mobile'])?.toString();
+                                    profileImageUrl = (result['profileImage'] is Map)
+                                        ? (result['profileImage']['url']?.toString() ?? '')
+                                        : (result['profileImage'] ?? result['photo'] ?? result['avatar'])?.toString();
+                                    userLocation = (result['location'] ?? result['city'] ?? result['serviceArea']?['address'])?.toString() ?? '';
+                                  });
+                                } else {
+                                  await _loadProfile();
+                                }
+                              } catch (_) {
                                 await _loadProfile();
                               }
-                            } catch (_) {
-                              await _loadProfile();
-                            }
                             });
                           },
                           onMyJobs: () {
                             ensureSignedInForAction(context).then((ok) async {
                               if (!ok) return;
                               try {
-                              // Determine role synchronously from cached profile
-                              final profile = AppStateNotifier.instance.profile;
-                              bool isArtisan = false;
-                              try {
-                                if (profile != null) {
-                                  final candidates = [profile['role'], profile['type'], profile['accountType'], profile['userType'], profile['authProvider']];
-                                  for (final c in candidates) {
-                                    if (c == null) continue;
-                                    final s = c.toString().toLowerCase();
-                                    if (s.contains('artisan')) { isArtisan = true; break; }
+                                // Determine role synchronously from cached profile
+                                final profile = AppStateNotifier.instance.profile;
+                                bool isArtisan = false;
+                                try {
+                                  if (profile != null) {
+                                    final candidates = [profile['role'], profile['type'], profile['accountType'], profile['userType'], profile['authProvider']];
+                                    for (final c in candidates) {
+                                      if (c == null) continue;
+                                      final s = c.toString().toLowerCase();
+                                      if (s.contains('artisan')) { isArtisan = true; break; }
+                                    }
+                                  }
+                                } catch (_) {}
+
+                                if (isArtisan) {
+                                  try {
+                                    GoRouter.of(context).pushNamed(ArtisanJobsHistoryWidget.routeName);
+                                    return;
+                                  } catch (_) {
+                                    try { NavigationUtils.safePush(context, const ArtisanJobsHistoryWidget()); return; } catch (_) {}
+                                  }
+                                } else {
+                                  try {
+                                    GoRouter.of(context).pushNamed(JobHistoryPageWidget.routeName);
+                                    return;
+                                  } catch (_) {
+                                    try { NavigationUtils.safePush(context, const JobHistoryPageWidget()); return; } catch (_) {}
                                   }
                                 }
                               } catch (_) {}
-
-                              if (isArtisan) {
-                                try {
-                                  GoRouter.of(context).pushNamed(ArtisanJobsHistoryWidget.routeName);
-                                  return;
-                                } catch (_) {
-                                  try { NavigationUtils.safePush(context, const ArtisanJobsHistoryWidget()); return; } catch (_) {}
-                                }
-                              } else {
-                                try {
-                                  GoRouter.of(context).pushNamed(JobHistoryPageWidget.routeName);
-                                  return;
-                                } catch (_) {
-                                  try { NavigationUtils.safePush(context, const JobHistoryPageWidget()); return; } catch (_) {}
-                                }
-                              }
-                            } catch (_) {}
                             });
                           },
                           onWallet: () {
                             ensureSignedInForAction(context).then((ok) async {
                               if (!ok) return;
-                              try {
-                              GoRouter.of(context).pushNamed(UserWalletpageWidget.routeName);
-                              return;
-                            } catch (e) {
-                              try {
-                                NavigationUtils.safePush(context, const UserWalletpageWidget());
-                                return;
-                              } catch (_) {}
-                            }
+                              try { GoRouter.of(context).pushNamed(UserWalletpageWidget.routeName); return; } catch (e) { try { NavigationUtils.safePush(context, const UserWalletpageWidget()); return; } catch (_) {} }
                             });
                           },
                           onHelpSupport: () {
-                            try {
-                              GoRouter.of(context).pushNamed(SupportPageWidget.routeName);
-                              return;
-                            } catch (e) {
-                              try {
-                                NavigationUtils.safePush(context, const SupportPageWidget());
-                                return;
-                              } catch (_) {}
-                            }
+                            try { GoRouter.of(context).pushNamed(SupportPageWidget.routeName); return; } catch (e) { try { NavigationUtils.safePush(context, const SupportPageWidget()); return; } catch (_) {} }
                           },
                           onAboutUs: () {
-                            try {
-                              GoRouter.of(context).pushNamed(InfoPageWidget.routeName);
-                              return;
-                            } catch (e) {
-                              try {
-                                NavigationUtils.safePush(context, const InfoPageWidget());
-                                return;
-                              } catch (_) {}
-                            }
+                            try { GoRouter.of(context).pushNamed(InfoPageWidget.routeName); return; } catch (e) { try { NavigationUtils.safePush(context, const InfoPageWidget()); return; } catch (_) {} }
                           },
                           onVerification: () {
-                            try {
-                              NavigationUtils.safePush(context, const VerificationPage());
-                              return;
-                            } catch (e) {
-                              try { Navigator.of(context).push(MaterialPageRoute(builder: (_) => const VerificationPage())); return; } catch (_) {}
-                            }
+                            try { NavigationUtils.safePush(context, const VerificationPage()); return; } catch (e) { try { Navigator.of(context).push(MaterialPageRoute(builder: (_) => const VerificationPage())); return; } catch (_) {} }
                           },
                           onMyService: _isArtisanUser
-                               ? () {
-                                   try {
-                                     NavigationUtils.safePush(context, const MyServicePageWidget());
-                                     return;
-                                   } catch (e) {
-                                     try {
-                                       GoRouter.of(context).pushNamed(MyServicePageWidget.routeName);
-                                       return;
-                                     } catch (_) {}
-                                   }
-                                 }
-                               : null,
+                              ? () async {
+                                  // Resolve the artisan *user id* (not the artisan document id) so
+                                  // backend endpoints that expect ?artisanId=<userId> receive the
+                                  // correct identifier. Try cached profile -> token -> cached artisan.
+                                  String? artisanUserId;
+
+                                  try {
+                                    if (_cachedProfileData != null) {
+                                      final candidates = ['_id', 'id', 'userId', 'user_id', 'uid'];
+                                      for (final k in candidates) {
+                                        final v = _cachedProfileData![k];
+                                        if (v != null && v.toString().isNotEmpty) {
+                                          artisanUserId = v.toString();
+                                          break;
+                                        }
+                                      }
+                                      if ((artisanUserId == null || artisanUserId.isEmpty) && _cachedProfileData!['user'] is Map && _cachedProfileData!['user']['_id'] != null) {
+                                        artisanUserId = _cachedProfileData!['user']['_id'].toString();
+                                      }
+                                    }
+                                  } catch (_) {}
+
+                                  // If still missing, try TokenStorage which should contain the login's user id
+                                  if (artisanUserId == null || artisanUserId.isEmpty) {
+                                    try {
+                                      final tid = await TokenStorage.getUserId();
+                                      if (tid != null && tid.isNotEmpty) artisanUserId = tid;
+                                    } catch (_) {}
+                                  }
+
+                                  // If we now have a user id but no artisan record cached, try to fetch the artisan by user id
+                                  if ((artisanUserId != null && artisanUserId.isNotEmpty) && (_cachedArtisanData == null || _cachedArtisanData!['userId'] == null && _cachedArtisanData!['user'] == null)) {
+                                    try {
+                                      final byUser = await ArtistService.getByUserId(artisanUserId);
+                                      if (byUser != null) {
+                                        _cachedArtisanData = Map<String, dynamic>.from(byUser);
+                                      }
+                                    } catch (_) {}
+                                  }
+
+                                  // Navigate passing the user id (this is what's expected by many endpoints)
+                                  try {
+                                    if (artisanUserId != null && artisanUserId.isNotEmpty) {
+                                      try {
+                                        NavigationUtils.safePush(context, MyServicePageWidget(artisanId: artisanUserId));
+                                        return;
+                                      } catch (_) {}
+
+                                      try {
+                                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => MyServicePageWidget(artisanId: artisanUserId)));
+                                        return;
+                                      } catch (_) {}
+                                    }
+                                  } catch (_) {}
+
+                                  // Final fallback: open MyServicePage for current authenticated user
+                                  try {
+                                    NavigationUtils.safePush(context, const MyServicePageWidget());
+                                    return;
+                                  } catch (_) {
+                                    try {
+                                      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyServicePageWidget()));
+                                      return;
+                                    } catch (_) {}
+                                  }
+                                }
+                              : null,
                           theme: theme,
                           colorScheme: colorScheme,
                         ),
@@ -822,16 +848,16 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                         ),
 
                         const SizedBox(height: 40),
-                      ],
+                        ],
                     ),
                   ),
                 ),
               ),
             ),
-          ],
+        ],
         ),
       ),
-    );
+      );
   }
 }
 
@@ -1273,6 +1299,5 @@ class _ProfileMenuSection extends StatelessWidget {
     );
   }
 }
-
 
 

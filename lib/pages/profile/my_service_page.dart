@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import '../../services/my_service_service.dart';
 import '../../services/token_storage.dart';
+import 'package:flutter/foundation.dart';
 
 class MyServicePageWidget extends StatefulWidget {
-  const MyServicePageWidget({Key? key}) : super(key: key);
+  final String? artisanId; // added optional artisanId to allow viewing another artisan's services
+
+  const MyServicePageWidget({Key? key, this.artisanId}) : super(key: key);
 
   static String routeName = 'myServicePage';
   static String routePath = '/my-service';
@@ -47,7 +50,23 @@ class _MyServicePageWidgetState extends State<MyServicePageWidget> {
   Future<void> _loadAll() async {
     setState(() => _loading = true);
     try {
-      if (MyServiceService.endpointsEnabled) {
+      // If an artisanId was passed to this page, fetch that artisan's public services
+      if (widget.artisanId != null && widget.artisanId!.isNotEmpty) {
+        try {
+          final resp = await _svc.fetchArtisanServices(widget.artisanId!);
+          if (resp.ok) {
+            // Normalize using helper
+            _services = MyServiceService.flattenArtisanServices(resp.data);
+            if (kDebugMode) debugPrint('MyServicePage: fetched ${_services.length} artisan services for ${widget.artisanId}');
+          } else {
+            _services = [];
+            if (kDebugMode) debugPrint('MyServicePage: fetchArtisanServices not ok: ${resp.message}');
+          }
+        } catch (e) {
+          _services = [];
+          if (kDebugMode) debugPrint('MyServicePage: fetchArtisanServices exception: $e');
+        }
+      } else if (MyServiceService.endpointsEnabled) {
         // Ensure we have an auth token before calling artisan-only endpoints
         final token = await TokenStorage.getToken();
         if (token == null || token.isEmpty) {
@@ -59,132 +78,23 @@ class _MyServicePageWidgetState extends State<MyServicePageWidget> {
           return;
         }
         final resp = await _svc.fetchMyServices(context: context);
+        if (kDebugMode) debugPrint('MyServicePage: fetchMyServices ok=${resp.ok} status=${resp.statusCode} raw=${resp.raw}');
         if (resp.ok) {
-          final data = resp.data;
-          // Backend may return an array of ArtisanService documents where each has
-          // { _id, categoryId, services: [{ subCategoryId, price, currency }, ...] }
-          final List<Map<String, dynamic>> flattened = [];
-          if (data is List) {
-            final list = data.cast<dynamic>();
-            for (final e in list) {
-              if (e is Map) {
-                final doc = Map<String, dynamic>.from(e);
-                final artisanServiceId = (doc['_id'] ?? doc['id'])?.toString();
-
-                // Normalize category which may be an id or an object
-                final dynamic categoryRaw = doc['categoryId'] ?? doc['mainCategory'] ?? doc['category'];
-                String? categoryId;
-                String? categoryName = doc['categoryName'] ?? doc['name'];
-                if (categoryRaw is Map) {
-                  categoryId = (categoryRaw['_id'] ?? categoryRaw['id'])?.toString();
-                  categoryName = categoryName ?? (categoryRaw['name'] ?? categoryRaw['title'])?.toString();
-                } else {
-                  categoryId = categoryRaw?.toString();
-                }
-
-                final servicesArr = doc['services'];
-                if (servicesArr is List && servicesArr.isNotEmpty) {
-                  for (final s in servicesArr) {
-                    if (s is Map) {
-                      final sub = Map<String, dynamic>.from(s);
-
-                      // subCategory can also be an object or id
-                      final dynamic subRaw = sub['subCategoryId'] ?? sub['subCategory'] ?? sub['sub'];
-                      String? subId;
-                      String? subName = sub['name'] ?? sub['title'];
-                      if (subRaw is Map) {
-                        subId = (subRaw['_id'] ?? subRaw['id'])?.toString();
-                        subName = subName ?? (subRaw['name'] ?? subRaw['title'])?.toString();
-                      } else {
-                        subId = subRaw?.toString();
-                      }
-
-                      flattened.add({
-                        'id': '${artisanServiceId ?? ''}_${subId ?? ''}',
-                        'artisanServiceId': artisanServiceId,
-                        'categoryId': categoryId,
-                        'subCategoryId': subId,
-                        'serviceEntryId': (sub['_id'] ?? sub['id'])?.toString(),
-                        'price': sub['price'] ?? sub['amount'],
-                        'currency': sub['currency'] ?? 'NGN',
-                        'categoryName': categoryName,
-                        'subCategoryName': subName,
-                      });
-                    }
-                  }
-                } else {
-                  // No nested services — maybe already a flat list
-                  flattened.add(Map<String, dynamic>.from(doc));
-                }
-              }
-            }
-            _services = flattened;
-          } else if (data is Map && data['data'] is List) {
-            final list = List<dynamic>.from(data['data']);
-            for (final e in list) {
-              if (e is Map) {
-                final doc = Map<String, dynamic>.from(e);
-                final artisanServiceId = (doc['_id'] ?? doc['id'])?.toString();
-
-                // Normalize category which may be an id or an object
-                final dynamic categoryRaw = doc['categoryId'] ?? doc['mainCategory'] ?? doc['category'];
-                String? categoryId;
-                String? categoryName = doc['categoryName'] ?? doc['name'];
-                if (categoryRaw is Map) {
-                  categoryId = (categoryRaw['_id'] ?? categoryRaw['id'])?.toString();
-                  categoryName = categoryName ?? (categoryRaw['name'] ?? categoryRaw['title'])?.toString();
-                } else {
-                  categoryId = categoryRaw?.toString();
-                }
-
-                final servicesArr = doc['services'];
-                if (servicesArr is List && servicesArr.isNotEmpty) {
-                  for (final s in servicesArr) {
-                    if (s is Map) {
-                      final sub = Map<String, dynamic>.from(s);
-
-                      // subCategory can also be an object or id
-                      final dynamic subRaw = sub['subCategoryId'] ?? sub['subCategory'] ?? sub['sub'];
-                      String? subId;
-                      String? subName = sub['name'] ?? sub['title'];
-                      if (subRaw is Map) {
-                        subId = (subRaw['_id'] ?? subRaw['id'])?.toString();
-                        subName = subName ?? (subRaw['name'] ?? subRaw['title'])?.toString();
-                      } else {
-                        subId = subRaw?.toString();
-                      }
-
-                      flattened.add({
-                        'id': '${artisanServiceId ?? ''}_${subId ?? ''}',
-                        'artisanServiceId': artisanServiceId,
-                        'categoryId': categoryId,
-                        'subCategoryId': subId,
-                        'serviceEntryId': (sub['_id'] ?? sub['id'])?.toString(),
-                        'price': sub['price'] ?? sub['amount'],
-                        'currency': sub['currency'] ?? 'NGN',
-                        'categoryName': categoryName,
-                        'subCategoryName': subName,
-                      });
-                    }
-                  }
-                } else {
-                  flattened.add(Map<String, dynamic>.from(doc));
-                }
-              }
-            }
-            _services = flattened;
-          }
-        }
-      } else {
-        // Local-only mode: keep existing _services as-is (persisted in memory during session)
-        _services = _services; // no-op but explicit
-      }
-    } catch (e) {
-      // ignore
-    }
+          _services = MyServiceService.flattenArtisanServices(resp.data);
+          if (kDebugMode) debugPrint('MyServicePage: flattened services count=${_services.length}');
+         }
+       } else {
+         // Local-only mode: keep existing _services as-is (persisted in memory during session)
+         _services = _services; // no-op but explicit
+       }
+     } catch (e) {
+       // ignore
+       if (kDebugMode) debugPrint('MyServicePage: _loadAll exception: $e');
+     }
 
     try {
       final catResp = await _svc.fetchCategories(context: context);
+      if (kDebugMode) debugPrint('MyServicePage: fetchCategories ok=${catResp.ok} status=${catResp.statusCode} raw=${catResp.raw}');
       if (catResp.ok) {
         final cdata = catResp.data;
         if (cdata is List) {
@@ -192,8 +102,11 @@ class _MyServicePageWidgetState extends State<MyServicePageWidget> {
         } else if (cdata is Map && cdata['data'] is List) {
           _categories = List<Map<String, dynamic>>.from(cdata['data']);
         }
+        if (kDebugMode) debugPrint('MyServicePage: categories loaded count=${_categories.length}');
       }
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('MyServicePage: fetchCategories exception: $e');
+    }
 
     if (mounted) setState(() => _loading = false);
   }
@@ -797,21 +710,38 @@ class _MyServicePageWidgetState extends State<MyServicePageWidget> {
         // Use POST (create or update by category) to create/update artisan offerings per API docs.
         final res = await _svc.createService(body, context: context);
 
+        if (kDebugMode) debugPrint('MyServicePage: createService response ok=${res.ok} status=${res.statusCode} raw=${res.raw}');
+
         if (res.ok) {
-          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-            SnackBar(
-              content: Text(_editingId != null ? 'Service updated successfully' : 'Service created successfully'),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          );
-          // Reset form
-          _editingId = null;
-          _priceCtrl.clear();
-          _selectedMainId = null;
-          _selectedSubId = null;
-          await _loadAll();
-        } else {
+          // Refresh the artisan services from server to get canonical data (some APIs don't return the created entry)
+          try {
+            final refreshResp = await _svc.fetchMyServices(context: context);
+            if (kDebugMode) debugPrint('MyServicePage: fetchMyServices after create ok=${refreshResp.ok} status=${refreshResp.statusCode} raw=${refreshResp.raw}');
+            if (refreshResp.ok) {
+              _services = MyServiceService.flattenArtisanServices(refreshResp.data);
+              if (mounted) setState(() {});
+            } else {
+              // fallback to generic reload which also refreshes categories
+              await _loadAll();
+            }
+          } catch (e) {
+            if (kDebugMode) debugPrint('MyServicePage: refresh after create failed: $e');
+            await _loadAll();
+          }
+
+           ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+             SnackBar(
+               content: Text(_editingId != null ? 'Service updated successfully' : 'Service created successfully'),
+               behavior: SnackBarBehavior.floating,
+               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+             ),
+           );
+           // Reset form
+           _editingId = null;
+           _priceCtrl.clear();
+           _selectedMainId = null;
+           _selectedSubId = null;
+          } else {
           // Show server-friendly message if available to help debugging
           final msg = res.message;
           ScaffoldMessenger.maybeOf(context)?.showSnackBar(
@@ -823,15 +753,16 @@ class _MyServicePageWidgetState extends State<MyServicePageWidget> {
             ),
           );
           // Optionally log full raw body for debugging in console
-          debugPrint('MyServicePage: create/update failed: ${res.raw}');
-         }
-       }
-     } catch (e) {
-       // ignore
-     } finally {
-       if (mounted) setState(() => _submitting = false);
-     }
-   }
+          if (kDebugMode) debugPrint('MyServicePage: create/update failed raw=${res.raw}');
+        }
+      }
+    } catch (e) {
+      // ignore
+      if (kDebugMode) debugPrint('MyServicePage: _submit exception: $e');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
 
   Future<void> _startEdit(Map<String, dynamic> service) async {
     setState(() {

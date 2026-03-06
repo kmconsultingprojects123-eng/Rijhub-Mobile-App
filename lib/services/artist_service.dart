@@ -1613,4 +1613,54 @@ class ArtistService {
     }
     return null;
   }
+
+  /// Fetch artisan services for a specific artisan by userId.
+  static Future<List<Map<String, dynamic>>> fetchArtisanServices(String artisanUserId, {String? token}) async {
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+
+    // Try to fetch from a public endpoint or query param
+    final uri = Uri.parse('$API_BASE_URL/api/artisan-services').replace(queryParameters: {'artisanId': artisanUserId});
+
+    try {
+      final resp = await ApiClient.get(uri.toString(), headers: headers);
+      if (resp['status'] is int && resp['status'] >= 200 && resp['status'] < 300) {
+        dynamic body = resp['json'] ?? (resp['body'] != null ? jsonDecode(resp['body']) : null);
+        if (body is Map && body['success'] == true && body['data'] is List) {
+          return (body['data'] as List).map((e) => Map<String, dynamic>.from(e)).toList();
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to fetch artisan services: $e');
+    }
+
+    // Fallback: if no public endpoint, return empty list
+    return [];
+  }
+
+  /// Fetch the current user's artisan services (GET /api/artisan-services/me)
+  static Future<List<Map<String, dynamic>>> fetchMyArtisanServices({String? token}) async {
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+
+    final uri = Uri.parse('$API_BASE_URL/api/artisan-services/me');
+
+    try {
+      final resp = await ApiClient.get(uri.toString(), headers: headers);
+      if (resp['status'] is int && resp['status'] >= 200 && resp['status'] < 300) {
+        dynamic body = resp['json'] ?? (resp['body'] != null ? jsonDecode(resp['body']) : null);
+        if (body is Map && body['success'] == true && body['data'] is List) {
+          return (body['data'] as List).map((e) => Map<String, dynamic>.from(e)).toList();
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to fetch my artisan services: $e');
+    }
+
+    return [];
+  }
 }

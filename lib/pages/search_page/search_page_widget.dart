@@ -812,7 +812,7 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
                     ),
                   ),
 
-                  // View Button
+                  // Book Button
                   Container(
                     margin: const EdgeInsets.only(left: 8),
                     child: ElevatedButton(
@@ -842,7 +842,7 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
                           fontSize: 14,
                         ),
                       ),
-                      child: const Text('View'),
+                      child: const Text('Book'),
                     ),
                   ),
                 ],

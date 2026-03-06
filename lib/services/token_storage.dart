@@ -42,11 +42,8 @@ class TokenStorage {
   // Falls back to the legacy baseKey when no userId is available to remain
   // backwards-compatible.
   static Future<String> _dashboardKey(String baseKey, {String? userId}) async {
-    try {
-      userId ??= await TokenStorage.getUserId();
-    } catch (_) {
-      userId = null;
-    }
+    // NOTE: do NOT attempt to call getUserId() here - that may trigger
+    // getDashboardProfile(), which calls _dashboardKey -> recursion.
     if (userId != null && userId.isNotEmpty) {
       return '$_keyDashboardPrefix:$userId:$baseKey';
     }
@@ -825,6 +822,17 @@ class TokenStorage {
   /// 3. Otherwise return null.
   static Future<String?> getUserId() async {
     try {
+      // First try the cached dashboard/profile saved after login (AuthService)
+      try {
+        final dashboard = await getDashboardProfile();
+        if (dashboard != null) {
+          final candidates = ['_id', 'id', 'userId', 'user_id', 'uid'];
+          for (final k in candidates) {
+            if (dashboard[k] != null) return dashboard[k].toString();
+          }
+        }
+      } catch (_) {}
+
       final google = await getGoogleProfile();
       if (google != null) {
         final candidates = ['id', 'sub', 'userId', '_id'];

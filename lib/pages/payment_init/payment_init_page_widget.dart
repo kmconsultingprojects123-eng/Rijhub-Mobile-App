@@ -282,7 +282,15 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
   Future<void> _populateEmail() async {
     try {
       final profile = await UserService.getProfile();
-      setState(() => _email = profile?['email']?.toString() ?? '');
+      String? email = profile?['email']?.toString();
+      if (email == null || email.trim().isEmpty) {
+        final recent = await TokenStorage.getRecentRegistration();
+        email = recent?['email']?.toString();
+      }
+      if (email == null || email.trim().isEmpty) {
+        email = await TokenStorage.getRememberedEmail();
+      }
+      setState(() => _email = email ?? '');
     } catch (_) {
       setState(() => _email = '');
     }
@@ -315,6 +323,12 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
     // Ensure email present
     if ((_email == null || _email!.trim().isEmpty)) {
       await _populateEmail();
+    }
+
+    if (_email == null || _email!.trim().isEmpty) {
+      AppNotification.showError(context, 'An email address is required to make payments. Please update your profile.');
+      setState(() { _state = _PaymentState.checkout; _loading = false; _blocking = false; });
+      return;
     }
 
     // If this is a quote-based payment, try to accept the quote first so the booking is marked accepted

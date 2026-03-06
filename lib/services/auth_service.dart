@@ -151,6 +151,25 @@ class AuthService {
       } catch (_) {}
 
       if (normalizedRole != null) await TokenStorage.saveRole(normalizedRole);
+
+      // Persist user/profile payload when available so other parts of the app
+      // can read a stable user id even when the backend does not return a JWT
+      // containing the id. Common shapes: body['data'] is Map with user fields,
+      // or body['user'] is Map. Use saveDashboardProfile for a lightweight cache.
+      try {
+        Map<String, dynamic>? profileToSave;
+        if (body['data'] is Map) {
+          // Some endpoints return { success: true, data: { ...user fields... } }
+          profileToSave = Map<String, dynamic>.from(body['data']);
+        } else if (body['user'] is Map) {
+          profileToSave = Map<String, dynamic>.from(body['user']);
+        }
+        if (profileToSave != null && (profileToSave['_id'] != null || profileToSave['id'] != null)) {
+          try {
+            await TokenStorage.saveDashboardProfile(profileToSave);
+          } catch (_) {}
+        }
+      } catch (_) {}
     } catch (e) {
       // swallow errors - token persistence is best-effort
     }
