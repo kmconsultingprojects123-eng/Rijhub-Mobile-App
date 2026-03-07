@@ -99,6 +99,65 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
   // (like artisanId) later when creating the booking after payment verification.
   Map<String, dynamic>? _initRequestPayload;
 
+  String? _extractBookingIdFrom(dynamic payload) {
+    try {
+      if (payload == null) return null;
+      if (payload is Map) {
+        final m = Map<String, dynamic>.from(payload);
+        final direct = m['_id'] ?? m['id'] ?? m['bookingId'];
+        if (direct != null && direct.toString().isNotEmpty) {
+          return direct.toString();
+        }
+        final booking = m['booking'];
+        if (booking is Map) {
+          final bm = Map<String, dynamic>.from(booking);
+          final bid = bm['_id'] ?? bm['id'] ?? bm['bookingId'];
+          if (bid != null && bid.toString().isNotEmpty) {
+            return bid.toString();
+          }
+        }
+        final data = m['data'];
+        if (data is Map) {
+          final dm = Map<String, dynamic>.from(data);
+          final bid = dm['bookingId'] ??
+              (dm['booking'] is Map
+                  ? (dm['booking']['_id'] ?? dm['booking']['id'])
+                  : null);
+          if (bid != null && bid.toString().isNotEmpty) {
+            return bid.toString();
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  String? _extractThreadIdFrom(dynamic payload) {
+    try {
+      if (payload == null) return null;
+      if (payload is Map) {
+        final m = Map<String, dynamic>.from(payload);
+        final direct = m['threadId'] ??
+            (m['chat'] is Map ? (m['chat']['_id'] ?? m['chat']['id']) : null);
+        if (direct != null && direct.toString().isNotEmpty) {
+          return direct.toString();
+        }
+        final booking = m['booking'];
+        if (booking is Map) {
+          final bm = Map<String, dynamic>.from(booking);
+          final tid = bm['threadId'] ??
+              (bm['chat'] is Map
+                  ? (bm['chat']['_id'] ?? bm['chat']['id'])
+                  : null);
+          if (tid != null && tid.toString().isNotEmpty) {
+            return tid.toString();
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -227,8 +286,9 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
       }
     } catch (_) {}
     _amount = amount;
-    _bookingId =
-        widget.booking?['_id']?.toString() ?? widget.booking?['id']?.toString();
+    _bookingId = _extractBookingIdFrom(widget.booking) ??
+        widget.booking?['_id']?.toString() ??
+        widget.booking?['id']?.toString();
     // Do not disable the Pay button on initial load. The button should only be
     // disabled while verifying payment or while creating a booking. We keep
     // `_blocking` controlled where those operations occur so the user can tap
@@ -266,7 +326,13 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
         final mb = Map<String, dynamic>.from(b as Map<dynamic, dynamic>);
         final candidates = [
           mb['artisanId'],
+          (mb['booking'] is Map ? mb['booking']['artisanId'] : null),
           mb['artisan_user'] ?? mb['artisanUser'] ?? mb['artisan'],
+          (mb['booking'] is Map
+              ? (mb['booking']['artisan_user'] ??
+                  mb['booking']['artisanUser'] ??
+                  mb['booking']['artisan'])
+              : null),
           mb['userId'],
           mb['user'] is Map ? (mb['user']['_id'] ?? mb['user']['id']) : null,
         ];
@@ -726,6 +792,12 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
 
       // Before creating a booking, verify the payment so we only show the "Booking created" sheet
       // when the payment has actually been confirmed.
+      // On Android, give the platform WebView a moment to fully tear down before starting
+      // verification/network/UI work. This helps avoid native WebView/EGL crashes observed
+      // right after checkout redirect completion (especially on emulators).
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+        await Future.delayed(const Duration(milliseconds: 1200));
+      }
       bool verified = false;
       if (mounted) {
         // show a modal verifying dialog
@@ -816,9 +888,9 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
 
       // If caller provided a booking object (e.g., from earlier server create in ArtisanDetail), prefer its threadId
       try {
-        final suppliedTid = widget.booking?['threadId']?.toString() ??
-            widget.booking?['chat']?['_id']?.toString() ??
-            widget.booking?['_id']?.toString();
+        final suppliedTid = _extractThreadIdFrom(widget.booking) ??
+            widget.booking?['threadId']?.toString() ??
+            widget.booking?['chat']?['_id']?.toString();
         if (suppliedTid != null && suppliedTid.isNotEmpty) {
           threadIdFromCreation = suppliedTid;
           if (kDebugMode)
@@ -826,9 +898,11 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
                 'PaymentInit: using supplied booking.threadId=${threadIdFromCreation}');
         }
         // Also prefer supplied bookingId if present
+        final suppliedBid = _extractBookingIdFrom(widget.booking);
         if ((_bookingId == null || _bookingId!.isEmpty) &&
-            widget.booking?['_id'] != null) {
-          _bookingId = widget.booking?['_id']?.toString();
+            suppliedBid != null &&
+            suppliedBid.isNotEmpty) {
+          _bookingId = suppliedBid;
           if (kDebugMode)
             debugPrint('PaymentInit: using supplied booking._id=${_bookingId}');
         }
@@ -1397,6 +1471,21 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
               // Accept top-level success boolean
               if (decoded is Map &&
                   (decoded['success'] == true || decoded['ok'] == true)) {
+                // Paystack verify responses often include bookingId inside nested metadata.
+                // Capture it early so we don't mistakenly try to create a second booking.
+                try {
+                  final bid = _extractBookingIdFrom(decoded) ??
+                      _findKey(decoded, ['bookingId', 'booking_id'])
+                          ?.toString();
+                  if ((_bookingId == null || _bookingId!.isEmpty) &&
+                      bid != null &&
+                      bid.isNotEmpty) {
+                    _bookingId = bid;
+                    if (kDebugMode)
+                      debugPrint(
+                          'PaymentInit: bookingId from verify response -> $_bookingId');
+                  }
+                } catch (_) {}
                 return true;
               }
 
@@ -1744,29 +1833,68 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
 
   // Try to extract services list from known payload locations for booking creation
   List<dynamic>? _extractPayloadServices() {
+    List<dynamic>? raw;
     try {
       final p = widget.payment;
       if (p is Map) {
         final meta = p['metadata'];
         if (meta is Map && meta['services'] is List)
-          return meta['services'] as List<dynamic>;
-        if (p['services'] is List) return p['services'] as List<dynamic>;
+          raw = meta['services'] as List<dynamic>;
+        raw ??=
+            (p['services'] is List) ? (p['services'] as List<dynamic>) : null;
       }
     } catch (_) {}
-    try {
-      if (widget.booking != null && widget.booking!['services'] is List)
-        return widget.booking!['services'] as List<dynamic>;
-    } catch (_) {}
-    try {
-      if (_initRequestPayload != null) {
-        final meta = _initRequestPayload!['metadata'];
-        if (meta is Map && meta['services'] is List)
-          return meta['services'] as List<dynamic>;
-        if (_initRequestPayload!['services'] is List)
-          return _initRequestPayload!['services'] as List<dynamic>;
-      }
-    } catch (_) {}
-    return null;
+
+    // Booking payloads sometimes carry services under booking.services
+    if (raw == null) {
+      try {
+        if (widget.booking != null) {
+          if (widget.booking!['services'] is List) {
+            raw = widget.booking!['services'] as List<dynamic>;
+          } else if (widget.booking!['booking'] is Map &&
+              widget.booking!['booking']['services'] is List) {
+            raw = widget.booking!['booking']['services'] as List<dynamic>;
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (raw == null) {
+      try {
+        if (_initRequestPayload != null) {
+          final meta = _initRequestPayload!['metadata'];
+          if (meta is Map && meta['services'] is List)
+            raw = meta['services'] as List<dynamic>;
+          raw ??= (_initRequestPayload!['services'] is List)
+              ? (_initRequestPayload!['services'] as List<dynamic>)
+              : null;
+        }
+      } catch (_) {}
+    }
+
+    if (raw == null) return null;
+
+    // Normalize to API format expected by /api/bookings/hire:
+    // [{ subCategoryId, quantity }]
+    final out = <Map<String, dynamic>>[];
+    for (final s in raw) {
+      if (s is! Map) continue;
+      final sm = Map<String, dynamic>.from(s as Map);
+      final subId = sm['subCategoryId'] ??
+          sm['sub_category_id'] ??
+          sm['subCategory'] ??
+          sm['subcategoryId'] ??
+          sm['subCategoryID'] ??
+          sm['id'] ??
+          sm['_id'];
+      if (subId == null || subId.toString().trim().isEmpty) continue;
+      final q = sm['quantity'];
+      final qty =
+          (q is num) ? q.toInt() : (q is String ? int.tryParse(q) ?? 1 : 1);
+      out.add({'subCategoryId': subId.toString(), 'quantity': qty});
+    }
+
+    return out;
   }
 
   // Poll the quote endpoint until the server webhook creates an associated booking.
