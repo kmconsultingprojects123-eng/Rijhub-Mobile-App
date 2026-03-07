@@ -21,7 +21,21 @@ class _PaymentWebviewPageWidgetState extends State<PaymentWebviewPageWidget> {
   bool _loading = true;
   bool _blockingClose = false;
   bool _initFailed = false;
+  bool _isClosing = false; // Prevents duplicate pops; defers close to avoid WebView/EGL crash on Android
   String? _lastUrl;
+
+  /// Defer pop to next frame + delay to avoid WebView EGL/OpenGL crash during disposal
+  /// (Chrome_InProcGp crash: EGL_BAD_CONFIG on Android emulator/some devices)
+  void _deferredPop(Map<String, dynamic> result) {
+    if (_isClosing || !mounted) return;
+    _isClosing = true;
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (!mounted) return;
+      try {
+        Navigator.of(context).pop(result);
+      } catch (_) {}
+    });
+  }
 
   @override
   void initState() {
@@ -62,7 +76,7 @@ class _PaymentWebviewPageWidgetState extends State<PaymentWebviewPageWidget> {
                 // If caller provided a success marker, honor it first
                 if (widget.successUrlContains != null && s.contains(widget.successUrlContains!)) {
                   if (kDebugMode) debugPrint('PaymentWebview: detected success marker ${widget.successUrlContains} in $s');
-                  if (mounted) Navigator.of(context).pop({'success': true, 'url': s});
+                  _deferredPop({'success': true, 'url': s});
                   return;
                 }
                 // Normalize to lower-case for simple checks
@@ -74,7 +88,7 @@ class _PaymentWebviewPageWidgetState extends State<PaymentWebviewPageWidget> {
                     final qref = uri.queryParameters['reference'] ?? uri.queryParameters['ref'] ?? uri.queryParameters['tx_ref'];
                     if (qref != null && qref.isNotEmpty) {
                       if (kDebugMode) debugPrint('PaymentWebview: detected reference query param -> $qref');
-                      if (mounted) Navigator.of(context).pop({'success': true, 'url': s});
+                      _deferredPop({'success': true, 'url': s});
                       return;
                     }
                   }
@@ -82,7 +96,7 @@ class _PaymentWebviewPageWidgetState extends State<PaymentWebviewPageWidget> {
                 // Also look for common success markers in the URL or HTML finish string
                 if (lower.contains('status=success') || lower.contains('successful') || lower.contains('payment successful') || (lower.contains('gateway_response') && lower.contains('successful'))) {
                   if (kDebugMode) debugPrint('PaymentWebview: detected success markers in url/fragment');
-                  if (mounted) Navigator.of(context).pop({'success': true, 'url': s});
+                  _deferredPop({'success': true, 'url': s});
                   return;
                 }
 
@@ -91,7 +105,7 @@ class _PaymentWebviewPageWidgetState extends State<PaymentWebviewPageWidget> {
                 final isFailure = (lower.contains('status=failed') || lower.contains('status=cancel') || lower.contains('status=cancelled') || lower.contains('/cancel') || lower.contains('payment_failed') || lower.contains('transaction=failed') || (lower.contains('failed') && !lower.contains('success')));
                 if (isFailure) {
                   if (kDebugMode) debugPrint('PaymentWebview: detected failure/cancel marker in url -> $s');
-                  if (mounted) Navigator.of(context).pop({'success': false, 'url': s});
+                  _deferredPop({'success': false, 'url': s});
                   return;
                 }
               } catch (_) {}

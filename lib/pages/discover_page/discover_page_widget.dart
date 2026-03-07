@@ -231,25 +231,9 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget>
       List<Map<String, dynamic>> res = [];
       final q = _query.trim();
       if (q.isNotEmpty) {
-        final byTrade = await ArtistService.fetchArtisans(
-            page: pageToLoad, limit: 20, trade: q);
-        final byLoc = await ArtistService.fetchArtisans(
-            page: pageToLoad, limit: 20, location: q);
-        final Map<String, Map<String, dynamic>> merged = {};
-        for (final a in byTrade) {
-          final id = (a['_id'] ?? a['id'] ?? UniqueKey().toString()).toString();
-          merged[id] = a is Map<String, dynamic>
-              ? Map<String, dynamic>.from(a)
-              : <String, dynamic>{};
-        }
-        for (final a in byLoc) {
-          final id = (a['_id'] ?? a['id'] ?? UniqueKey().toString()).toString();
-          if (!merged.containsKey(id))
-            merged[id] = a is Map<String, dynamic>
-                ? Map<String, dynamic>.from(a)
-                : <String, dynamic>{};
-        }
-        res = merged.values.map((e) => Map<String, dynamic>.from(e)).toList();
+        // Use GET /api/artisans/search?q=... per search_api.md (single call for service/category search)
+        res = await ArtistService.fetchArtisans(
+            page: pageToLoad, limit: 20, q: q);
       } else {
         final loc = _userLocation;
         res = await ArtistService.fetchArtisans(

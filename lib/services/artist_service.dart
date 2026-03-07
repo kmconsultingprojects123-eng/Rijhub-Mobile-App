@@ -53,23 +53,34 @@ class ArtistService {
     final token = await TokenStorage.getToken();
     final headers = <String, String>{'Content-Type': 'application/json'};
     if (token != null) headers['Authorization'] = 'Bearer $token';
+
+    // Build params per search_api.md: GET /api/artisans/search
+    // q = free-text search (service/category terms); location = geographic; lat/lon/radiusKm = geospatial
     final qParams = <String, String>{
-      'role': 'artisan',
       'page': page.toString(),
       'limit': limit.toString()
     };
-    if (q != null && q.isNotEmpty) qParams['q'] = q;
-    if (trade != null && trade.isNotEmpty) qParams['trade'] = trade;
-    // Only use `name` as a q fallback when `q` is not provided to avoid accidentally overriding an explicit `q`.
-    if ((q == null || q.isEmpty) && name != null && name.isNotEmpty)
-      qParams['q'] = name;
-    if (location != null && location.isNotEmpty) qParams['location'] = location;
+    // Service/category search: q, trade, name all map to `q` (per search_api.md free-text mode)
+    final searchTerm = q ?? trade ?? ((q == null || q.isEmpty) && (trade == null || trade.isEmpty) ? name : null);
+    if (searchTerm != null && searchTerm.trim().isNotEmpty) {
+      qParams['q'] = searchTerm.trim();
+    }
+    // When only location is passed (e.g. discover's byLoc call with "event catering"), treat as service search
+    if ((searchTerm == null || searchTerm.isEmpty) && location != null && location.trim().isNotEmpty) {
+      qParams['q'] = location.trim();
+    }
+    // Geographic: pass location for geo when it differs from search term (e.g. "Ikeja", "Lagos")
+    if (location != null && location.trim().isNotEmpty) {
+      if (searchTerm == null || searchTerm.trim().toLowerCase() != location.trim().toLowerCase()) {
+        qParams['location'] = location.trim();
+      }
+    }
     if (lat != null) qParams['lat'] = lat.toString();
     if (lon != null) qParams['lon'] = lon.toString();
     if (radiusKm != null) qParams['radiusKm'] = radiusKm.toString();
 
-    // Prefer the dedicated artisans endpoint per API docs
-    final uri = Uri.parse('$API_BASE_URL/api/artisans')
+    // Use GET /api/artisans/search per search_api.md
+    final uri = Uri.parse('$API_BASE_URL/api/artisans/search')
         .replace(queryParameters: qParams);
 
     print('┌────────────────── DISCOVER/HOME SERVICE LOGS ──────────────────');
