@@ -2,9 +2,9 @@ import 'dart:async';
 import '/flutter_flow/nav/nav.dart';
 import '/index.dart';
 import '../../state/auth_notifier.dart';
-import '../../utils/navigation_utils.dart';
 import '../../utils/notification_permission_dialog.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 class WelcomeAfterSignupWidget extends StatefulWidget {
   const WelcomeAfterSignupWidget({super.key, this.role, this.name});
@@ -28,9 +28,11 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
 
   // State variables
   bool _navigated = false;
+  bool _isNavigating = false;
   String _role = 'customer';
   String? _name;
   double _progressValue = 0.0;
+  Timer? _autoNavigateTimer;
 
   @override
   void initState() {
@@ -62,7 +64,14 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
     // Start progress animation
     _startProgressAnimation();
 
-    // Show notification permission dialog after a brief moment so user sees welcome, then navigate when dismissed
+    // Hard fallback: always attempt to continue after 2 seconds.
+    _autoNavigateTimer = Timer(const Duration(seconds: 2), () {
+      if (!mounted || _navigated) return;
+      _navigateToDashboard();
+    });
+
+    // Show notification permission dialog after a brief moment so user sees
+    // welcome; navigation does not depend on this dialog finishing.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted || _navigated) return;
       await Future.delayed(const Duration(milliseconds: 600));
@@ -89,46 +98,54 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
 
   @override
   void dispose() {
+    _autoNavigateTimer?.cancel();
     super.dispose();
   }
 
-  void _navigateToDashboard() {
-    if (_navigated) return;
-    _navigated = true;
+  Future<void> _navigateToDashboard() async {
+    if (_navigated || _isNavigating) return;
+    _isNavigating = true;
 
     // Reset progress to full to give visual feedback that action is taken
     if (mounted) {
       setState(() => _progressValue = 1.0);
     }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-      // Wait for auth to be ready before navigating. GoRouter redirects
-      // unauthenticated users to Splash2, so tapping before the token/profile
-      // is set would send clients (and artisans) to the wrong screen.
-      await _waitForAuthReady();
+    // Wait for auth to be ready before navigating. GoRouter redirects
+    // unauthenticated users to Splash2, so tapping before the token/profile
+    // is set would send clients (and artisans) to the wrong screen.
+    await _waitForAuthReady();
+    if (!mounted) return;
 
-      if (!mounted) return;
-      try {
-        // Use replace-all so the onboarding/auth pages are removed from the
-        // stack and the app lands at the proper home/dashboard route.
-        final target = _role == 'artisan'
-            ? NavBarPage(initialPage: 'homePage', showDiscover: false)
-            : NavBarPage(initialPage: 'homePage');
+    final targetPath = _role == 'artisan'
+        ? ArtisanDashboardPageWidget.routePath
+        : HomePageWidget.routePath;
 
-        await NavigationUtils.safeReplaceAllWith(context, target);
-      } catch (e, st) {
-        // Fallback: try a simple replace so the user isn't blocked.
-        try {
-          NavigationUtils.safePushReplacement(
-            context,
-            _role == 'artisan'
-                ? ArtisanDashboardPageWidget()
-                : HomePageWidget(),
-          );
-        } catch (_) {}
+    try {
+      final router = GoRouter.maybeOf(context);
+      if (router != null) {
+        router.go(targetPath);
+        _navigated = true;
+        return;
       }
-    });
+    } catch (_) {}
+
+    // Fallback to imperative navigation if router is unavailable.
+    try {
+      final target = _role == 'artisan'
+          ? NavBarPage(initialPage: 'homePage', showDiscover: false)
+          : NavBarPage(initialPage: 'homePage');
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => target),
+        (route) => false,
+      );
+      _navigated = true;
+      return;
+    } catch (_) {}
+
+    // Allow another attempt if navigation didn't happen.
+    _isNavigating = false;
   }
 
   /// Waits for auth to be ready (token set, profile loaded) before navigating.
