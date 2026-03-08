@@ -1150,123 +1150,160 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
-        return Container(
-          decoration: BoxDecoration(
-            color: _surfaceColor(),
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(24),
-              topRight: Radius.circular(24),
-            ),
-          ),
-          child: SafeArea(
-            top: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Header
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                  child: Row(
-                    children: [
-                      Icon(Icons.business_center_outlined, color: primaryColor, size: 24),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Services Offered',
-                          style: theme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            fontSize: smallFontSize + 2,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        icon: Icon(Icons.close, color: primaryColor),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1),
-                // Services list
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _artisanServices.length,
-                    itemBuilder: (context, index) {
-                      final service = _artisanServices[index];
-                      final serviceName = service['name'] ?? 'Service';
+        // Compute responsive sizing based on device
+        final mq = MediaQuery.of(context);
+        final height = mq.size.height;
+        final width = mq.size.width;
+        final bool compact = width < 380 || height < 700;
+        final initialChild = compact ? 0.5 : 0.65;
+        final maxChild = compact ? 0.85 : 0.95;
 
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: primaryColor.withOpacity(0.08),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: primaryColor.withOpacity(0.15),
-                              width: 0.8,
+        return DraggableScrollableSheet(
+          initialChildSize: initialChild,
+          minChildSize: 0.35,
+          maxChildSize: maxChild,
+          expand: false,
+          builder: (context, scrollController) {
+            return Container(
+              decoration: BoxDecoration(
+                color: _surfaceColor(),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(24),
+                  topRight: Radius.circular(24),
+                ),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Header
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                      child: Row(
+                        children: [
+                          Icon(Icons.business_center_outlined, color: primaryColor, size: 24),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Services Offered',
+                              style: theme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                fontSize: smallFontSize + 2,
+                              ),
                             ),
                           ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 32,
-                                height: 32,
-                                decoration: BoxDecoration(
-                                  color: primaryColor.withOpacity(0.15),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  Icons.check_circle_outline,
-                                  color: primaryColor,
-                                  size: 16,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  serviceName,
-                                  style: theme.bodyMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: _textColor(0.9),
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
+                          IconButton(
+                            icon: Icon(Icons.close, color: primaryColor),
+                            onPressed: () => Navigator.pop(context),
                           ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                // Close button
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: primaryColor,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text(
-                        'Close',
-                        style: TextStyle(fontWeight: FontWeight.w600),
+                        ],
                       ),
                     ),
-                  ),
+                    const Divider(height: 1),
+
+                    // Services list - use the provided scrollController so dragging works
+                    Expanded(
+                      child: _artisanServices.isEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.info_outline, size: 48, color: Colors.grey.shade400),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      'No services available',
+                                      style: theme.bodyLarge,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          : ListView.builder(
+                              controller: scrollController,
+                              padding: const EdgeInsets.all(16),
+                              itemCount: _artisanServices.length,
+                              itemBuilder: (context, index) {
+                                final service = _artisanServices[index];
+                                final serviceName = service['name'] ?? 'Service';
+
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: primaryColor.withOpacity(0.08),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: primaryColor.withOpacity(0.15),
+                                        width: 0.8,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 32,
+                                          height: 32,
+                                          decoration: BoxDecoration(
+                                            color: primaryColor.withOpacity(0.15),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Icon(
+                                            Icons.check_circle_outline,
+                                            color: primaryColor,
+                                            size: 16,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Text(
+                                            serviceName,
+                                            style: theme.bodyMedium?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                              color: _textColor(0.9),
+                                              fontSize: smallFontSize,
+                                            ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+
+                    // Close button
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primaryColor,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text(
+                            'Close',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );
