@@ -1,7 +1,7 @@
 import 'dart:ui';
 import 'dart:async';
-import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import '/services/auth_service.dart';
 import '../forget_password/forget_password_widget.dart';
 import 'login_account_model.dart';
@@ -47,6 +47,12 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
   bool _isAppleSigningIn = false;
   // Remember-me flag (persisted)
   bool _rememberMe = false;
+
+  bool get _isAppleSignInAvailable {
+    if (kIsWeb) return false;
+    return defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS;
+  }
 
   @override
   void initState() {
@@ -493,10 +499,10 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
   }
 
   Future<void> _handleAppleSignIn() async {
-    // Only available on iOS
-    if (!Platform.isIOS) {
+    // Only available on Apple platforms
+    if (!_isAppleSignInAvailable) {
       AppNotification.showError(
-          context, 'Apple Sign-In is only available on iOS');
+          context, 'Apple Sign-In is only available on Apple devices');
       return;
     }
 
@@ -1226,8 +1232,8 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                           ),
                   ),
 
-                  // Apple Sign In Button (iOS only)
-                  if (Platform.isIOS) ...[
+                  // Apple Sign In Button (Apple platforms only)
+                  if (_isAppleSignInAvailable) ...[
                     const SizedBox(height: 12.0),
                     OutlinedButton(
                       style: OutlinedButton.styleFrom(

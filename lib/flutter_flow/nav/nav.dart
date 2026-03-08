@@ -54,6 +54,8 @@ GoRouter createRouter(AuthNotifier auth) {
               LoginAccountWidget.routePath,
               CreateAccount2Widget.routePath,
               VerifyOtpWidget.routePath,
+              // Allow post-signup welcome while auth state is still settling.
+              WelcomeAfterSignupWidget.routePath,
               // Allow the core verification page (where OTP is entered) so the
               // app won't redirect to splash2 after register -> adapter navigation.
               VerificationPageWidget.routePath,

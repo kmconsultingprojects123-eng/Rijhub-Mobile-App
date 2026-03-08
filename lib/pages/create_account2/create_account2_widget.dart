@@ -1,7 +1,6 @@
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
 import 'package:flutter/material.dart';
-import 'dart:io' show Platform;
 import 'create_account2_model.dart';
 import '/services/auth_service.dart';
 import '/services/token_storage.dart';
@@ -37,11 +36,13 @@ class RoleUtils {
   static String normalize(String? role) {
     if (role == null) return AuthConstants.defaultRole;
     final normalized = role.trim().toLowerCase();
-    if (normalized == AuthConstants.clientRole) return AuthConstants.defaultRole;
+    if (normalized == AuthConstants.clientRole)
+      return AuthConstants.defaultRole;
     return normalized;
   }
 
-  static bool isArtisan(String? role) => normalize(role) == AuthConstants.artisanRole;
+  static bool isArtisan(String? role) =>
+      normalize(role) == AuthConstants.artisanRole;
   static String getDisplayName(String? role) =>
       isArtisan(role) ? 'Artisan Account' : 'Client Account';
   static IconData getIcon(String? role) =>
@@ -52,7 +53,8 @@ class RoleUtils {
 class Validators {
   static String? validateName(String? value) {
     final trimmed = value?.trim();
-    if (trimmed == null || trimmed.isEmpty) return 'Please enter your full name';
+    if (trimmed == null || trimmed.isEmpty)
+      return 'Please enter your full name';
     if (trimmed.length < 2) return 'Name must be at least 2 characters';
     return null;
   }
@@ -68,7 +70,8 @@ class Validators {
 
   static String? validatePhone(String? value) {
     final trimmed = value?.trim();
-    if (trimmed == null || trimmed.isEmpty) return 'Please enter your phone number';
+    if (trimmed == null || trimmed.isEmpty)
+      return 'Please enter your phone number';
 
     final digitsOnly = trimmed.replaceAll(RegExp(r'\D'), '');
     if (digitsOnly.length < 10 || digitsOnly.length > 15) {
@@ -116,7 +119,8 @@ class AuthNavigationService {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Account created. Please verify your phone number.'),
+            content:
+                const Text('Account created. Please verify your phone number.'),
             duration: AuthConstants.toastDuration,
             behavior: SnackBarBehavior.floating,
           ),
@@ -203,6 +207,13 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
   bool _isCreatingAccount = false;
   bool _passwordVisible = false;
   bool _acceptedTos = false;
+
+  bool get _isAppleSignInAvailable {
+    if (kIsWeb) return false;
+    return defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS;
+  }
+
   Map<String, dynamic>? _googleProfile;
 
   @override
@@ -227,8 +238,10 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
   }
 
   void _initializeRecognizers() {
-    _tncRecognizer = TapGestureRecognizer()..onTap = () => _openUrl(AuthConstants.termsUrl);
-    _privacyRecognizer = TapGestureRecognizer()..onTap = () => _openUrl(AuthConstants.privacyUrl);
+    _tncRecognizer = TapGestureRecognizer()
+      ..onTap = () => _openUrl(AuthConstants.termsUrl);
+    _privacyRecognizer = TapGestureRecognizer()
+      ..onTap = () => _openUrl(AuthConstants.privacyUrl);
   }
 
   Future<void> _loadGoogleProfile() async {
@@ -236,8 +249,10 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
     if (profile != null && mounted) {
       setState(() {
         _googleProfile = profile;
-        _model.fullNameTextController?.text = (profile['name'] ?? '').toString();
-        _model.emailAddressTextController?.text = (profile['email'] ?? '').toString();
+        _model.fullNameTextController?.text =
+            (profile['name'] ?? '').toString();
+        _model.emailAddressTextController?.text =
+            (profile['email'] ?? '').toString();
       });
     }
   }
@@ -250,7 +265,9 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
       try {
         final args = ModalRoute.of(context)?.settings.arguments;
         if (args is Map) {
-          role = args['initialRole']?.toString() ?? args['role']?.toString() ?? role;
+          role = args['initialRole']?.toString() ??
+              args['role']?.toString() ??
+              role;
         }
       } catch (_) {}
 
@@ -286,7 +303,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
   Future<void> _openUrl(String url) async {
     try {
       final uri = Uri.parse(url);
-      if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
+          mounted) {
         await showAppErrorDialog(
           context,
           title: 'Unable to open link',
@@ -309,13 +327,15 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
     try {
       final token = await TokenStorage.getToken();
       if (token?.isNotEmpty ?? false) {
-        if (mounted) await NavigationUtils.safePushReplacement(context, HomePageWidget());
+        if (mounted)
+          await NavigationUtils.safePushReplacement(context, HomePageWidget());
         return;
       }
     } catch (_) {}
 
     showAppLoadingDialog(context);
-    final res = await AuthService.signInWithGoogle(role: _effectiveRole ?? widget.initialRole);
+    final res = await AuthService.signInWithGoogle(
+        role: _effectiveRole ?? widget.initialRole);
 
     if (!mounted) return;
     Navigator.of(context, rootNavigator: true).pop();
@@ -329,78 +349,80 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
 
   Future<void> _processGoogleSignInSuccess(Map<String, dynamic> res) async {
     final profile = res['profile'] as Map<String, dynamic>?;
-      final data = res['data'];
-      if (data != null &&
-          data is Map &&
-          (data['token'] != null || (data['user'] != null))) {
-        // Extract token if present. Navigate to welcome-after-signup before
-        // setting token so onboarding shows first.
-        String? token;
-        if (res['token'] != null) token = res['token']?.toString();
-        if (token == null)
-          token = (data['token'] ?? data['data']?['token'])?.toString();
+    final data = res['data'];
+    if (data != null &&
+        data is Map &&
+        (data['token'] != null || (data['user'] != null))) {
+      // Extract token if present. Navigate to welcome-after-signup before
+      // setting token so onboarding shows first.
+      String? token;
+      if (res['token'] != null) token = res['token']?.toString();
+      if (token == null)
+        token = (data['token'] ?? data['data']?['token'])?.toString();
 
-        final name =
-            profile != null ? (profile['name']?.toString() ?? '') : '';
+      final name = profile != null ? (profile['name']?.toString() ?? '') : '';
 
-        // Use the backend-returned role (from the user object) so that
-        // existing users see the correct welcome message. Fall back to
-        // the locally-selected role only for genuinely new accounts.
-        String role = _effectiveRole ?? widget.initialRole ?? 'customer';
+      // Use the backend-returned role (from the user object) so that
+      // existing users see the correct welcome message. Fall back to
+      // the locally-selected role only for genuinely new accounts.
+      String role = _effectiveRole ?? widget.initialRole ?? 'customer';
+      try {
+        final userData = data['user'] ?? data['data'];
+        if (userData is Map && userData['role'] != null) {
+          final backendRole = userData['role'].toString().toLowerCase();
+          if (backendRole == 'artisan' || backendRole == 'customer') {
+            role = backendRole;
+          }
+        }
+      } catch (_) {}
+
+      // Use post-frame callback so navigation runs after loading dialog is
+      // fully dismissed and the tree has settled. Future.microtask can run
+      // while the navigator is still processing the pop, or the widget can
+      // be unmounted when returning from external OAuth (e.g. Google).
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
         try {
-          final userData = data['user'] ?? data['data'];
-          if (userData is Map && userData['role'] != null) {
-            final backendRole = userData['role'].toString().toLowerCase();
-            if (backendRole == 'artisan' || backendRole == 'customer') {
-              role = backendRole;
-            }
+          if (token != null && token.isNotEmpty) {
+            await AuthNotifier.instance.setToken(token);
           }
-        } catch (_) {}
 
-        // Use post-frame callback so navigation runs after loading dialog is
-        // fully dismissed and the tree has settled. Future.microtask can run
-        // while the navigator is still processing the pop, or the widget can
-        // be unmounted when returning from external OAuth (e.g. Google).
-        WidgetsBinding.instance.addPostFrameCallback((_) async {
-          if (!mounted) return;
+          // Prefer GoRouter for navigation — more reliable when returning
+          // from background (Google OAuth) and avoids imperative navigator races.
+          final router = GoRouter.maybeOf(context);
+          if (router != null) {
+            final path = WelcomeAfterSignupWidget.routePath;
+            final q = <String, String>{
+              if (role.isNotEmpty) 'role': role,
+              if (name.isNotEmpty) 'name': name,
+            };
+            final uri = Uri(path: path, queryParameters: q);
+            router.go(uri.toString());
+          } else {
+            await NavigationUtils.safePushReplacement(
+              context,
+              WelcomeAfterSignupWidget(role: role, name: name),
+            );
+          }
+        } catch (_) {
           try {
-            // Prefer GoRouter for navigation — more reliable when returning
-            // from background (Google OAuth) and avoids imperative navigator races.
-            final router = GoRouter.maybeOf(context);
-            if (router != null) {
-              final path = WelcomeAfterSignupWidget.routePath;
-              final q = <String, String>{
-                if (role.isNotEmpty) 'role': role,
-                if (name.isNotEmpty) 'name': name,
-              };
-              final uri = Uri(path: path, queryParameters: q);
-              router.go(uri.toString());
-            } else {
+            if (mounted) {
               await NavigationUtils.safePushReplacement(
-                context,
-                WelcomeAfterSignupWidget(role: role, name: name),
-              );
+                  context, HomePageWidget());
             }
-
-            if (token != null && token.isNotEmpty) {
-              await AuthNotifier.instance.setToken(token);
-            }
-          } catch (_) {
-            try {
-              if (mounted) {
-                await NavigationUtils.safePushReplacement(context, HomePageWidget());
-              }
-            } catch (_) {}
-          }
-        });
-        return;
-      }
+          } catch (_) {}
+        }
+      });
+      return;
+    }
 
     if (profile != null) {
       setState(() {
         _googleProfile = profile;
-        _model.fullNameTextController?.text = (profile['name'] ?? '').toString();
-        _model.emailAddressTextController?.text = (profile['email'] ?? '').toString();
+        _model.fullNameTextController?.text =
+            (profile['name'] ?? '').toString();
+        _model.emailAddressTextController?.text =
+            (profile['email'] ?? '').toString();
       });
       await TokenStorage.saveGoogleProfile(profile);
     }
@@ -424,7 +446,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
     await showAppSuccessDialog(
       context,
       title: 'Google signed in',
-      desc: 'We prefilled your name and email. Complete the form to finish creating your account.',
+      desc:
+          'We prefilled your name and email. Complete the form to finish creating your account.',
       onOk: () => _handlePartialRegistrationNavigation(reference),
     );
   }
@@ -440,8 +463,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
   }
 
   Future<void> _handleAppleSignIn() async {
-    // Only available on iOS
-    if (!Platform.isIOS) return;
+    // Only available on Apple platforms
+    if (!_isAppleSignInAvailable) return;
 
     showAppLoadingDialog(context);
 
@@ -471,8 +494,7 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
         if (token == null)
           token = (data['token'] ?? data['data']?['token'])?.toString();
 
-        final name =
-            profile != null ? (profile['name']?.toString() ?? '') : '';
+        final name = profile != null ? (profile['name']?.toString() ?? '') : '';
 
         String role = _effectiveRole ?? widget.initialRole ?? 'customer';
         try {
@@ -488,6 +510,10 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
         WidgetsBinding.instance.addPostFrameCallback((_) async {
           if (!mounted) return;
           try {
+            if (token != null && token.isNotEmpty) {
+              await AuthNotifier.instance.setToken(token);
+            }
+
             final router = GoRouter.maybeOf(context);
             if (router != null) {
               final path = WelcomeAfterSignupWidget.routePath;
@@ -503,14 +529,11 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                 WelcomeAfterSignupWidget(role: role, name: name),
               );
             }
-
-            if (token != null && token.isNotEmpty) {
-              await AuthNotifier.instance.setToken(token);
-            }
           } catch (_) {
             try {
               if (mounted) {
-                await NavigationUtils.safePushReplacement(context, HomePageWidget());
+                await NavigationUtils.safePushReplacement(
+                    context, HomePageWidget());
               }
             } catch (_) {}
           }
@@ -550,7 +573,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
       await showAppErrorDialog(
         context,
         title: 'Terms required',
-        desc: 'You must accept the Terms & Conditions and Privacy Policy to create an account.',
+        desc:
+            'You must accept the Terms & Conditions and Privacy Policy to create an account.',
       );
       return;
     }
@@ -558,7 +582,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
     setState(() => _isCreatingAccount = true);
 
     try {
-      final normalizedRole = RoleUtils.normalize(_effectiveRole ?? widget.initialRole);
+      final normalizedRole =
+          RoleUtils.normalize(_effectiveRole ?? widget.initialRole);
       final res = await AuthService.register(
         name: _model.fullNameTextController?.text.trim() ?? '',
         email: _model.emailAddressTextController?.text.trim() ?? '',
@@ -593,7 +618,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
         context,
         title: 'Registration',
         desc: serverMessage,
-        onOk: () => _handleSuccessfulRegistrationNavigation(phone, reference, email),
+        onOk: () =>
+            _handleSuccessfulRegistrationNavigation(phone, reference, email),
       );
     } else {
       await _showSuccessToastAndNavigate(phone, reference, email);
@@ -606,7 +632,10 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
       if (res['reference'] != null) return res['reference'].toString();
       final data = res['data'];
       if (data is Map) {
-        return (data['reference'] ?? data['sendchamp']?['reference'] ?? data['delivered']?['reference'])?.toString();
+        return (data['reference'] ??
+                data['sendchamp']?['reference'] ??
+                data['delivered']?['reference'])
+            ?.toString();
       }
     } catch (_) {}
     return null;
@@ -647,14 +676,17 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
     });
   }
 
-  void _handleSuccessfulRegistrationNavigation(String phone, String? reference, String? email) {
+  void _handleSuccessfulRegistrationNavigation(
+      String phone, String? reference, String? email) {
     Future.microtask(() async {
       if (!mounted || _navigateScheduled) return;
-      await _navigateToVerification(phone: phone, reference: reference, email: email);
+      await _navigateToVerification(
+          phone: phone, reference: reference, email: email);
     });
   }
 
-  Future<void> _showSuccessToastAndNavigate(String phone, String? reference, String? email) async {
+  Future<void> _showSuccessToastAndNavigate(
+      String phone, String? reference, String? email) async {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -675,7 +707,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
 
     await Future.delayed(AuthConstants.dialogDelay);
     if (!mounted || _navigateScheduled) return;
-    await _navigateToVerification(phone: phone, reference: reference, email: email);
+    await _navigateToVerification(
+        phone: phone, reference: reference, email: email);
   }
 
   Future<void> _navigateToVerification({
@@ -698,7 +731,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
 
   // ========== UI Helpers ==========
   Color get _primaryColor => AuthConstants.primaryColor;
-  Color _getSurfaceAlpha(double opacity) => Theme.of(context).colorScheme.onSurface.withOpacity(opacity);
+  Color _getSurfaceAlpha(double opacity) =>
+      Theme.of(context).colorScheme.onSurface.withOpacity(opacity);
   bool get _isButtonDisabled => _isCreatingAccount;
 
   // ========== Build Methods ==========
@@ -766,9 +800,9 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
     return Text(
       'Create an account',
       style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-        fontWeight: FontWeight.w300,
-        letterSpacing: -0.5,
-      ),
+            fontWeight: FontWeight.w300,
+            letterSpacing: -0.5,
+          ),
     );
   }
 
@@ -776,15 +810,16 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
     return Text(
       'Let\'s get started by filling out the form below.',
       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-        color: _getSurfaceAlpha(0.5),
-        fontWeight: FontWeight.w300,
-      ),
+            color: _getSurfaceAlpha(0.5),
+            fontWeight: FontWeight.w300,
+          ),
     );
   }
 
   Widget _buildRoleIndicator() {
     final isArtisan = RoleUtils.isArtisan(_effectiveRole);
-    final color = isArtisan ? _primaryColor : Theme.of(context).colorScheme.secondary;
+    final color =
+        isArtisan ? _primaryColor : Theme.of(context).colorScheme.secondary;
 
     return Padding(
       padding: const EdgeInsets.only(top: 16.0),
@@ -801,7 +836,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
             const SizedBox(width: 8),
             Text(
               RoleUtils.getDisplayName(_effectiveRole),
-              style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 14),
+              style: TextStyle(
+                  color: color, fontWeight: FontWeight.w600, fontSize: 14),
             ),
           ],
         ),
@@ -829,6 +865,10 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
           _buildDivider(theme),
           const SizedBox(height: 24.0),
           _buildGoogleSignInButton(),
+          if (_isAppleSignInAvailable) ...[
+            const SizedBox(height: 12.0),
+            _buildAppleSignInButton(),
+          ],
           const SizedBox(height: 24.0),
           _buildLoginLink(),
           const SizedBox(height: 60.0),
@@ -863,7 +903,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
           style: const TextStyle(fontSize: 16),
           textInputAction: TextInputAction.next,
           validator: Validators.validateName,
-          onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_model.emailAddressFocusNode),
+          onFieldSubmitted: (_) =>
+              FocusScope.of(context).requestFocus(_model.emailAddressFocusNode),
         ),
       ],
     );
@@ -884,7 +925,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
           style: const TextStyle(fontSize: 16),
           textInputAction: TextInputAction.next,
           validator: Validators.validateEmail,
-          onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_phoneFocusNode),
+          onFieldSubmitted: (_) =>
+              FocusScope.of(context).requestFocus(_phoneFocusNode),
         ),
       ],
     );
@@ -905,7 +947,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
           style: const TextStyle(fontSize: 16),
           textInputAction: TextInputAction.next,
           validator: Validators.validatePhone,
-          onFieldSubmitted: (_) => FocusScope.of(context).requestFocus(_passwordFocusNode),
+          onFieldSubmitted: (_) =>
+              FocusScope.of(context).requestFocus(_passwordFocusNode),
         ),
       ],
     );
@@ -927,11 +970,14 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
             '••••••••',
             suffixIcon: IconButton(
               icon: Icon(
-                _passwordVisible ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                _passwordVisible
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
                 color: _getSurfaceAlpha(0.4),
                 size: 20,
               ),
-              onPressed: () => setState(() => _passwordVisible = !_passwordVisible),
+              onPressed: () =>
+                  setState(() => _passwordVisible = !_passwordVisible),
             ),
           ),
           style: const TextStyle(fontSize: 16),
@@ -944,11 +990,11 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
   }
 
   InputDecoration _buildInputDecoration(
-      ThemeData theme,
-      bool isDark,
-      String hintText, {
-        Widget? suffixIcon,
-      }) {
+    ThemeData theme,
+    bool isDark,
+    String hintText, {
+    Widget? suffixIcon,
+  }) {
     return InputDecoration(
       hintText: hintText,
       hintStyle: TextStyle(color: _getSurfaceAlpha(0.3)),
@@ -966,7 +1012,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
         borderRadius: BorderRadius.circular(12.0),
         borderSide: BorderSide(color: theme.colorScheme.error, width: 1.0),
       ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
       suffixIcon: suffixIcon,
     );
   }
@@ -992,7 +1039,10 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
             onTap: () => setState(() => _acceptedTos = !_acceptedTos),
             child: Text.rich(
               TextSpan(
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 11),
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(fontSize: 11),
                 children: [
                   const TextSpan(text: 'I accept the '),
                   TextSpan(
@@ -1019,7 +1069,6 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                   const TextSpan(text: ' of Rijhub'),
                 ],
               ),
-
             ),
           ),
         ],
@@ -1493,8 +1542,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
                         }),
                       ),
 
-                      // Apple Sign In Button (iOS only)
-                      if (Platform.isIOS) ...[
+                      // Apple Sign In Button (Apple platforms only)
+                      if (_isAppleSignInAvailable) ...[
                         const SizedBox(height: 12.0),
                         OutlinedButton(
                           style: OutlinedButton.styleFrom(
@@ -1607,20 +1656,24 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
         backgroundColor: _primaryColor,
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
         padding: const EdgeInsets.symmetric(vertical: 18.0),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
         elevation: 0,
       ),
       onPressed: _isButtonDisabled ? null : _handleCreateAccount,
       child: _isCreatingAccount
           ? const SizedBox(
-        height: 20,
-        width: 20,
-        child: CircularProgressIndicator(strokeWidth: 2),
-      )
+              height: 20,
+              width: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
           : const Text(
-        'CREATE ACCOUNT',
-        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, letterSpacing: 0.5),
-      ),
+              'CREATE ACCOUNT',
+              style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.5),
+            ),
     );
   }
 
@@ -1630,7 +1683,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
         Expanded(child: Divider(color: _getSurfaceAlpha(0.1), thickness: 1)),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: Text('OR', style: TextStyle(color: _getSurfaceAlpha(0.3), fontSize: 12)),
+          child: Text('OR',
+              style: TextStyle(color: _getSurfaceAlpha(0.3), fontSize: 12)),
         ),
         Expanded(child: Divider(color: _getSurfaceAlpha(0.1), thickness: 1)),
       ],
@@ -1642,7 +1696,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
       style: OutlinedButton.styleFrom(
         side: BorderSide(color: _primaryColor),
         padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 12.0),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
       ),
       onPressed: _handleGoogleSignIn,
       child: Row(
@@ -1656,7 +1711,43 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
           const SizedBox(width: 12),
           Text(
             'Continue with Google',
-            style: TextStyle(color: _primaryColor, fontSize: 15, fontWeight: FontWeight.w500),
+            style: TextStyle(
+                color: _primaryColor,
+                fontSize: 15,
+                fontWeight: FontWeight.w500),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAppleSignInButton() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return OutlinedButton(
+      style: OutlinedButton.styleFrom(
+        side: BorderSide(color: isDark ? Colors.white : Colors.black),
+        backgroundColor: isDark ? Colors.white : Colors.black,
+        padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 12.0),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
+      ),
+      onPressed: _handleAppleSignIn,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.apple,
+            color: isDark ? Colors.black : Colors.white,
+            size: 24,
+          ),
+          const SizedBox(width: 12),
+          Text(
+            'Continue with Apple',
+            style: TextStyle(
+              color: isDark ? Colors.black : Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ],
       ),
@@ -1668,7 +1759,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
       return Image.asset(
         'assets/images/google.webp',
         fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) => Icon(Icons.g_mobiledata, color: _primaryColor, size: 20),
+        errorBuilder: (_, __, ___) =>
+            Icon(Icons.g_mobiledata, color: _primaryColor, size: 20),
       );
     } catch (_) {
       return Icon(Icons.g_mobiledata, color: _primaryColor, size: 20);
@@ -1686,10 +1778,14 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
           ),
           TextButton(
             onPressed: () => AuthNavigationService.goToLogin(context),
-            style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 4.0)),
+            style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 4.0)),
             child: Text(
               'Log in',
-              style: TextStyle(color: _primaryColor, fontSize: 14, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                  color: _primaryColor,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600),
             ),
           ),
         ],
