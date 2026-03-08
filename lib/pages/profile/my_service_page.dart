@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import '../../services/my_service_service.dart';
 import '../../services/token_storage.dart';
+import '../../services/artist_service.dart';
+import 'package:flutter/foundation.dart';
 
 class MyServicePageWidget extends StatefulWidget {
-  const MyServicePageWidget({Key? key}) : super(key: key);
+  final String? artisanId; // added optional artisanId to allow viewing another artisan's services
+
+  const MyServicePageWidget({Key? key, this.artisanId}) : super(key: key);
 
   static String routeName = 'myServicePage';
   static String routePath = '/my-service';
@@ -31,6 +35,11 @@ class _MyServicePageWidgetState extends State<MyServicePageWidget> {
   // Cache for subcategories to avoid repeated fetches
   final Map<String, List<Map<String, dynamic>>> _subcategoriesCache = {};
 
+  // Track current authenticated user id (if any) and whether the page is showing
+  // the authenticated artisan's own services (owner) or someone else's.
+  String? _currentUserId;
+  bool _isOwner = true;
+
   @override
   void initState() {
     super.initState();
@@ -44,10 +53,81 @@ class _MyServicePageWidgetState extends State<MyServicePageWidget> {
     super.dispose();
   }
 
+  // Try to extract user id from stored JWT token (debug-only, safe decoding)
+  Future<String?> _userIdFromToken() async {
+    try {
+      final token = await TokenStorage.getToken();
+      if (token == null || token.isEmpty) return null;
+      final parts = token.split('.');
+      if (parts.length != 3) return null;
+      final payload = parts[1];
+      // base64 decode (pad if necessary)
+      String normalized = payload.replaceAll('-', '+').replaceAll('_', '/');
+      while (normalized.length % 4 != 0) normalized += '=';
+      final decoded = utf8.decode(base64.decode(normalized));
+      final Map<String, dynamic> obj = jsonDecode(decoded);
+      return (obj['id'] ?? obj['userId'] ?? obj['sub'])?.toString();
+    } catch (e) {
+      if (kDebugMode) debugPrint('MyServicePage: _userIdFromToken failed: $e');
+      return null;
+    }
+  }
+
   Future<void> _loadAll() async {
     setState(() => _loading = true);
     try {
-      if (MyServiceService.endpointsEnabled) {
+      // Determine current user id (if any) and whether the viewer is the owner
+      final tokenDerivedId = await _userIdFromToken();
+      _currentUserId = tokenDerivedId;
+      _isOwner = widget.artisanId == null || (tokenDerivedId != null && widget.artisanId == tokenDerivedId);
+
+      // If an artisanId was passed to this page, fetch that artisan's public services
+      if (widget.artisanId != null && widget.artisanId!.isNotEmpty) {
+        try {
+          // If the provided artisanId matches the logged-in user id, prefer the authenticated /me endpoint
+          final currentUserId = tokenDerivedId; // use already-resolved one
+          if (kDebugMode) debugPrint('MyServicePage: widget.artisanId=${widget.artisanId} currentUserId=$currentUserId isOwner=$_isOwner');
+          if (currentUserId != null && widget.artisanId == currentUserId) {
+            // Use authenticated endpoint which many backends support reliably
+            final myResp = await _svc.fetchMyServices(context: context);
+            if (kDebugMode) debugPrint('MyServicePage: fetchMyServices(as owner) ok=${myResp.ok} status=${myResp.statusCode} raw=${myResp.raw}');
+            if (myResp.ok) {
+              _services = MyServiceService.flattenArtisanServices(myResp.data);
+              if (kDebugMode) debugPrint('MyServicePage: fetched (owner) ${_services.length} artisan services for ${widget.artisanId}');
+              // proceed to categories fetch below
+              // skip public fetch
+              // goto categories section
+              // ...existing code will continue after this block
+            } else {
+              // if authenticated fetch failed, fall back to public fetch below
+              if (kDebugMode) debugPrint('MyServicePage: fetchMyServices(as owner) failed, will try public fetch');
+              final resp = await _svc.fetchArtisanServices(widget.artisanId!);
+              if (resp.ok) {
+                _services = MyServiceService.flattenArtisanServices(resp.data);
+                if (kDebugMode) debugPrint('MyServicePage: fetched ${_services.length} artisan services for ${widget.artisanId} (public)');
+              } else {
+                _services = [];
+                if (kDebugMode) debugPrint('MyServicePage: fetchArtisanServices not ok: ${resp.message}');
+              }
+            }
+            // done with artisanId handling
+          } else {
+            // Not owner: attempt public fetch
+            final resp = await _svc.fetchArtisanServices(widget.artisanId!);
+            if (resp.ok) {
+              // Normalize using helper
+              _services = MyServiceService.flattenArtisanServices(resp.data);
+              if (kDebugMode) debugPrint('MyServicePage: fetched ${_services.length} artisan services for ${widget.artisanId}');
+            } else {
+              _services = [];
+              if (kDebugMode) debugPrint('MyServicePage: fetchArtisanServices not ok: ${resp.message}');
+            }
+          }
+        } catch (e) {
+          _services = [];
+          if (kDebugMode) debugPrint('MyServicePage: fetchArtisanServices exception: $e');
+        }
+      } else if (MyServiceService.endpointsEnabled) {
         // Ensure we have an auth token before calling artisan-only endpoints
         final token = await TokenStorage.getToken();
         if (token == null || token.isEmpty) {
@@ -59,132 +139,38 @@ class _MyServicePageWidgetState extends State<MyServicePageWidget> {
           return;
         }
         final resp = await _svc.fetchMyServices(context: context);
+        if (kDebugMode) debugPrint('MyServicePage: fetchMyServices ok=${resp.ok} status=${resp.statusCode} raw=${resp.raw}');
         if (resp.ok) {
-          final data = resp.data;
-          // Backend may return an array of ArtisanService documents where each has
-          // { _id, categoryId, services: [{ subCategoryId, price, currency }, ...] }
-          final List<Map<String, dynamic>> flattened = [];
-          if (data is List) {
-            final list = data.cast<dynamic>();
-            for (final e in list) {
-              if (e is Map) {
-                final doc = Map<String, dynamic>.from(e);
-                final artisanServiceId = (doc['_id'] ?? doc['id'])?.toString();
+          _services = MyServiceService.flattenArtisanServices(resp.data);
+          if (kDebugMode) debugPrint('MyServicePage: flattened services count=${_services.length}');
 
-                // Normalize category which may be an id or an object
-                final dynamic categoryRaw = doc['categoryId'] ?? doc['mainCategory'] ?? doc['category'];
-                String? categoryId;
-                String? categoryName = doc['categoryName'] ?? doc['name'];
-                if (categoryRaw is Map) {
-                  categoryId = (categoryRaw['_id'] ?? categoryRaw['id'])?.toString();
-                  categoryName = categoryName ?? (categoryRaw['name'] ?? categoryRaw['title'])?.toString();
-                } else {
-                  categoryId = categoryRaw?.toString();
-                }
-
-                final servicesArr = doc['services'];
-                if (servicesArr is List && servicesArr.isNotEmpty) {
-                  for (final s in servicesArr) {
-                    if (s is Map) {
-                      final sub = Map<String, dynamic>.from(s);
-
-                      // subCategory can also be an object or id
-                      final dynamic subRaw = sub['subCategoryId'] ?? sub['subCategory'] ?? sub['sub'];
-                      String? subId;
-                      String? subName = sub['name'] ?? sub['title'];
-                      if (subRaw is Map) {
-                        subId = (subRaw['_id'] ?? subRaw['id'])?.toString();
-                        subName = subName ?? (subRaw['name'] ?? subRaw['title'])?.toString();
-                      } else {
-                        subId = subRaw?.toString();
-                      }
-
-                      flattened.add({
-                        'id': '${artisanServiceId ?? ''}_${subId ?? ''}',
-                        'artisanServiceId': artisanServiceId,
-                        'categoryId': categoryId,
-                        'subCategoryId': subId,
-                        'serviceEntryId': (sub['_id'] ?? sub['id'])?.toString(),
-                        'price': sub['price'] ?? sub['amount'],
-                        'currency': sub['currency'] ?? 'NGN',
-                        'categoryName': categoryName,
-                        'subCategoryName': subName,
-                      });
-                    }
-                  }
-                } else {
-                  // No nested services — maybe already a flat list
-                  flattened.add(Map<String, dynamic>.from(doc));
-                }
+          // Fallback: some servers expose a slightly different endpoint or shape.
+          // If the flattened result is empty, attempt to fetch via ArtistService.fetchMyArtisanServices
+          if (_services.isEmpty) {
+            try {
+              final token = await TokenStorage.getToken();
+              final alt = await ArtistService.fetchMyArtisanServices(token: token);
+              if (alt.isNotEmpty) {
+                _services = MyServiceService.flattenArtisanServices(alt);
+                if (kDebugMode) debugPrint('MyServicePage: fallback fetchMyArtisanServices count=${_services.length}');
               }
+            } catch (e) {
+              if (kDebugMode) debugPrint('MyServicePage: fallback fetchMyArtisanServices failed: $e');
             }
-            _services = flattened;
-          } else if (data is Map && data['data'] is List) {
-            final list = List<dynamic>.from(data['data']);
-            for (final e in list) {
-              if (e is Map) {
-                final doc = Map<String, dynamic>.from(e);
-                final artisanServiceId = (doc['_id'] ?? doc['id'])?.toString();
-
-                // Normalize category which may be an id or an object
-                final dynamic categoryRaw = doc['categoryId'] ?? doc['mainCategory'] ?? doc['category'];
-                String? categoryId;
-                String? categoryName = doc['categoryName'] ?? doc['name'];
-                if (categoryRaw is Map) {
-                  categoryId = (categoryRaw['_id'] ?? categoryRaw['id'])?.toString();
-                  categoryName = categoryName ?? (categoryRaw['name'] ?? categoryRaw['title'])?.toString();
-                } else {
-                  categoryId = categoryRaw?.toString();
-                }
-
-                final servicesArr = doc['services'];
-                if (servicesArr is List && servicesArr.isNotEmpty) {
-                  for (final s in servicesArr) {
-                    if (s is Map) {
-                      final sub = Map<String, dynamic>.from(s);
-
-                      // subCategory can also be an object or id
-                      final dynamic subRaw = sub['subCategoryId'] ?? sub['subCategory'] ?? sub['sub'];
-                      String? subId;
-                      String? subName = sub['name'] ?? sub['title'];
-                      if (subRaw is Map) {
-                        subId = (subRaw['_id'] ?? subRaw['id'])?.toString();
-                        subName = subName ?? (subRaw['name'] ?? subRaw['title'])?.toString();
-                      } else {
-                        subId = subRaw?.toString();
-                      }
-
-                      flattened.add({
-                        'id': '${artisanServiceId ?? ''}_${subId ?? ''}',
-                        'artisanServiceId': artisanServiceId,
-                        'categoryId': categoryId,
-                        'subCategoryId': subId,
-                        'serviceEntryId': (sub['_id'] ?? sub['id'])?.toString(),
-                        'price': sub['price'] ?? sub['amount'],
-                        'currency': sub['currency'] ?? 'NGN',
-                        'categoryName': categoryName,
-                        'subCategoryName': subName,
-                      });
-                    }
-                  }
-                } else {
-                  flattened.add(Map<String, dynamic>.from(doc));
-                }
-              }
-            }
-            _services = flattened;
           }
-        }
-      } else {
-        // Local-only mode: keep existing _services as-is (persisted in memory during session)
-        _services = _services; // no-op but explicit
-      }
-    } catch (e) {
-      // ignore
-    }
+         }
+       } else {
+         // Local-only mode: keep existing _services as-is (persisted in memory during session)
+         _services = _services; // no-op but explicit
+       }
+     } catch (e) {
+       // ignore
+       if (kDebugMode) debugPrint('MyServicePage: _loadAll exception: $e');
+     }
 
     try {
       final catResp = await _svc.fetchCategories(context: context);
+      if (kDebugMode) debugPrint('MyServicePage: fetchCategories ok=${catResp.ok} status=${catResp.statusCode} raw=${catResp.raw}');
       if (catResp.ok) {
         final cdata = catResp.data;
         if (cdata is List) {
@@ -192,8 +178,11 @@ class _MyServicePageWidgetState extends State<MyServicePageWidget> {
         } else if (cdata is Map && cdata['data'] is List) {
           _categories = List<Map<String, dynamic>>.from(cdata['data']);
         }
+        if (kDebugMode) debugPrint('MyServicePage: categories loaded count=${_categories.length}');
       }
-    } catch (_) {}
+    } catch (e) {
+      if (kDebugMode) debugPrint('MyServicePage: fetchCategories exception: $e');
+    }
 
     if (mounted) setState(() => _loading = false);
   }
@@ -221,20 +210,20 @@ class _MyServicePageWidgetState extends State<MyServicePageWidget> {
   // Choose an icon for a service name using keyword matching. Fallback to build icon.
   IconData _iconForName(String name) {
     final s = name.toLowerCase();
-    if (s.contains('plumb')) return Icons.plumbing;
-    if (s.contains('elect')) return Icons.electrical_services;
-    if (s.contains('paint') || s.contains('painter')) return Icons.brush;
-    if (s.contains('carp') || s.contains('wood') || s.contains('join')) return Icons.construction;
-    if (s.contains('clean')) return Icons.cleaning_services;
-    if (s.contains('install') || s.contains('setup')) return Icons.settings;
-    if (s.contains('move') || s.contains('mover') || s.contains('transport')) return Icons.local_shipping;
-    if (s.contains('beaut') || s.contains('spa') || s.contains('salon')) return Icons.spa;
-    if (s.contains('it') || s.contains('computer') || s.contains('tech')) return Icons.computer;
-    if (s.contains('lock') || s.contains('security')) return Icons.lock;
-    if (s.contains('tile') || s.contains('floor') || s.contains('tiled')) return Icons.grid_on;
-    if (s.contains('garden') || s.contains('lawn')) return Icons.grass;
-    if (s.contains('electronic') || s.contains('appliance')) return Icons.power;
-    return Icons.build_rounded;
+    if (s.contains('plumb')) return Icons.plumbing_outlined;
+    if (s.contains('elect')) return Icons.electrical_services_outlined;
+    if (s.contains('paint') || s.contains('painter')) return Icons.brush_outlined;
+    if (s.contains('carp') || s.contains('wood') || s.contains('join')) return Icons.construction_outlined;
+    if (s.contains('clean')) return Icons.cleaning_services_outlined;
+    if (s.contains('install') || s.contains('setup')) return Icons.settings_outlined;
+    if (s.contains('move') || s.contains('mover') || s.contains('transport')) return Icons.local_shipping_outlined;
+    if (s.contains('beaut') || s.contains('spa') || s.contains('salon')) return Icons.spa_outlined;
+    if (s.contains('it') || s.contains('computer') || s.contains('tech')) return Icons.computer_outlined;
+    if (s.contains('lock') || s.contains('security')) return Icons.lock_outline;
+    if (s.contains('tile') || s.contains('floor') || s.contains('tiled')) return Icons.grid_on_outlined;
+    if (s.contains('garden') || s.contains('lawn')) return Icons.park_outlined;
+    if (s.contains('electronic') || s.contains('appliance')) return Icons.power_outlined;
+    return Icons.build_outlined;
   }
 
   // Create a leading widget for an item (category/subcategory or service) using emoji if provided or icon mapping.
@@ -264,7 +253,7 @@ class _MyServicePageWidgetState extends State<MyServicePageWidget> {
         color: colorScheme.primary.withAlpha((0.1 * 255).toInt()),
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Icon(Icons.build_rounded, color: colorScheme.primary, size: 20),
+      child: Icon(Icons.build_outlined, color: colorScheme.primary, size: 20),
     );
   }
 
@@ -420,7 +409,7 @@ class _MyServicePageWidgetState extends State<MyServicePageWidget> {
                     padding: const EdgeInsets.all(16),
                     child: TextField(
                       decoration: InputDecoration(
-                        prefixIcon: Icon(Icons.search_rounded, color: colorScheme.onSurface.withAlpha((0.5 * 255).toInt())),
+                        prefixIcon: Icon(Icons.search_outlined, color: colorScheme.onSurface.withAlpha((0.5 * 255).toInt())),
                         hintText: 'Search main services',
                         hintStyle: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSurface.withAlpha((0.3 * 255).toInt())),
                         border: OutlineInputBorder(
@@ -447,46 +436,46 @@ class _MyServicePageWidgetState extends State<MyServicePageWidget> {
                   Expanded(
                     child: filtered.isEmpty
                         ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.search_off_rounded,
-                            size: 48,
-                            color: colorScheme.onSurface.withAlpha((0.3 * 255).toInt()),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'No services found',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: colorScheme.onSurface.withAlpha((0.6 * 255).toInt()),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.search_off_outlined,
+                                  size: 48,
+                                  color: colorScheme.onSurface.withAlpha((0.3 * 255).toInt()),
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'No services found',
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: colorScheme.onSurface.withAlpha((0.6 * 255).toInt()),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ],
-                      ),
-                    )
+                          )
                         : ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, __) => Divider(
-                        height: 1,
-                        color: colorScheme.onSurface.withAlpha((0.1 * 255).toInt()),
-                      ),
-                      itemBuilder: (context, i) {
-                        final c = filtered[i];
-                        final id = (c['id'] ?? c['_id'])?.toString();
-                        final name = (c['name'] ?? c['title'])?.toString() ?? '';
-                        return ListTile(
-                          contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                          leading: _leadingForItem(c, colorScheme),
-                          title: Text(
-                            name,
-                            style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500),
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, __) => Divider(
+                              height: 1,
+                              color: colorScheme.onSurface.withAlpha((0.1 * 255).toInt()),
+                            ),
+                            itemBuilder: (context, i) {
+                              final c = filtered[i];
+                              final id = (c['id'] ?? c['_id'])?.toString();
+                              final name = (c['name'] ?? c['title'])?.toString() ?? '';
+                              return ListTile(
+                                contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                                leading: _leadingForItem(c, colorScheme),
+                                title: Text(
+                                  name,
+                                  style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500),
+                                ),
+                                onTap: () => Navigator.of(ctx).pop({'id': id ?? '', 'name': name}),
+                              );
+                            },
                           ),
-                          onTap: () => Navigator.of(ctx).pop({'id': id ?? '', 'name': name}),
-                        );
-                      },
-                    ),
                   ),
                 ],
               ),
@@ -611,7 +600,7 @@ class _MyServicePageWidgetState extends State<MyServicePageWidget> {
                     padding: const EdgeInsets.all(16),
                     child: TextField(
                       decoration: InputDecoration(
-                        prefixIcon: Icon(Icons.search_rounded, color: colorScheme.onSurface.withAlpha((0.5 * 255).toInt())),
+                        prefixIcon: Icon(Icons.search_outlined, color: colorScheme.onSurface.withAlpha((0.5 * 255).toInt())),
                         hintText: 'Search sub services',
                         hintStyle: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSurface.withAlpha((0.3 * 255).toInt())),
                         border: OutlineInputBorder(
@@ -638,46 +627,46 @@ class _MyServicePageWidgetState extends State<MyServicePageWidget> {
                   Expanded(
                     child: filtered.isEmpty
                         ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.search_off_rounded,
-                            size: 48,
-                            color: colorScheme.onSurface.withAlpha((0.3 * 255).toInt()),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'No sub services found',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: colorScheme.onSurface.withAlpha((0.6 * 255).toInt()),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.search_off_outlined,
+                                  size: 48,
+                                  color: colorScheme.onSurface.withAlpha((0.3 * 255).toInt()),
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'No sub services found',
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: colorScheme.onSurface.withAlpha((0.6 * 255).toInt()),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ],
-                      ),
-                    )
+                          )
                         : ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, __) => Divider(
-                        height: 1,
-                        color: colorScheme.onSurface.withAlpha((0.1 * 255).toInt()),
-                      ),
-                      itemBuilder: (context, i) {
-                        final c = filtered[i];
-                        final id = (c['id'] ?? c['_id'])?.toString();
-                        final name = (c['name'] ?? c['title'])?.toString() ?? '';
-                        return ListTile(
-                          contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                          leading: _leadingForItem(c, colorScheme),
-                          title: Text(
-                            name,
-                            style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500),
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, __) => Divider(
+                              height: 1,
+                              color: colorScheme.onSurface.withAlpha((0.1 * 255).toInt()),
+                            ),
+                            itemBuilder: (context, i) {
+                              final c = filtered[i];
+                              final id = (c['id'] ?? c['_id'])?.toString();
+                              final name = (c['name'] ?? c['title'])?.toString() ?? '';
+                              return ListTile(
+                                contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                                leading: _leadingForItem(c, colorScheme),
+                                title: Text(
+                                  name,
+                                  style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500),
+                                ),
+                                onTap: () => Navigator.of(ctx).pop({'id': id ?? '', 'name': name}),
+                              );
+                            },
                           ),
-                          onTap: () => Navigator.of(ctx).pop({'id': id ?? '', 'name': name}),
-                        );
-                      },
-                    ),
                   ),
                 ],
               ),
@@ -695,6 +684,13 @@ class _MyServicePageWidgetState extends State<MyServicePageWidget> {
   }
 
   Future<void> _submit() async {
+    if (!_isOwner) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(content: const Text('You cannot create or update services for another artisan. Sign in as the artisan to manage services.'), behavior: SnackBarBehavior.floating, backgroundColor: Theme.of(context).colorScheme.error),
+      );
+      return;
+    }
+
     if (_selectedMainId == null || _selectedSubId == null) {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(
@@ -794,46 +790,211 @@ class _MyServicePageWidgetState extends State<MyServicePageWidget> {
         _selectedSubId = null;
         if (mounted) setState(() {});
       } else {
-        // Use POST (create or update by category) to create/update artisan offerings per API docs.
-        final res = await _svc.createService(body, context: context);
+        // Prefer to append a new sub-service to an existing ArtisanService document for the same category
+        bool handled = false;
+        if (_editingId == null) {
+          try {
+            final myResp = await _svc.fetchMyServices(context: context);
+            if (myResp.ok) {
+              final data = myResp.data;
+              List<dynamic> docs = [];
+              if (data is List)
+                docs = data;
+              else if (data is Map && data['data'] is List)
+                docs = List<dynamic>.from(data['data']);
 
-        if (res.ok) {
-          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-            SnackBar(
-              content: Text(_editingId != null ? 'Service updated successfully' : 'Service created successfully'),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          );
-          // Reset form
-          _editingId = null;
-          _priceCtrl.clear();
-          _selectedMainId = null;
-          _selectedSubId = null;
-          await _loadAll();
-        } else {
-          // Show server-friendly message if available to help debugging
-          final msg = res.message;
-          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-            SnackBar(
-              content: Text(msg),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-          );
-          // Optionally log full raw body for debugging in console
-          debugPrint('MyServicePage: create/update failed: ${res.raw}');
-         }
-       }
-     } catch (e) {
-       // ignore
-     } finally {
-       if (mounted) setState(() => _submitting = false);
-     }
-   }
+              String? foundDocId;
+              List<dynamic> existingServices = [];
+
+              for (final d in docs) {
+                if (d is Map) {
+                  String? catId;
+                  final categoryRaw = d['categoryId'] ?? d['mainCategory'] ??
+                      d['category'];
+                  if (categoryRaw is Map)
+                    catId =
+                        (categoryRaw['_id'] ?? categoryRaw['id'])?.toString();
+                  else
+                    catId = categoryRaw?.toString();
+
+                  if (catId != null && catId == _selectedMainId) {
+                    foundDocId = (d['_id'] ?? d['id'])?.toString();
+                    final s = d['services'];
+                    if (s is List) existingServices = List<dynamic>.from(s);
+                    break;
+                  }
+                }
+              }
+
+              if (foundDocId != null) {
+                // Build normalized existing services and append the new one
+                final List<Map<String, dynamic>> newServices = [];
+                for (final es in existingServices) {
+                  if (es is Map) {
+                    String? esSubId;
+                    try {
+                      final raw = es['subCategoryId'] ?? es['subCategory'] ??
+                          es['sub'];
+                      if (raw is Map)
+                        esSubId = (raw['_id'] ?? raw['id'])?.toString();
+                      else
+                        esSubId = raw?.toString();
+                    } catch (_) {}
+                    final priceValue = es['price'] ?? es['amount'];
+                    final currency = es['currency'] ?? 'NGN';
+                    if (esSubId != null && esSubId.isNotEmpty) {
+                      newServices.add({
+                        'subCategoryId': esSubId,
+                        'price': priceValue,
+                        'currency': currency
+                      });
+                    }
+                  }
+                }
+                // Append the new sub-service
+                newServices.add({
+                  'subCategoryId': _selectedSubId,
+                  'price': price,
+                  'currency': 'NGN',
+                });
+
+                final updBody = {
+                  'categoryId': _selectedMainId,
+                  'services': newServices
+                };
+                final updResp = await _svc.updateService(
+                    foundDocId, updBody, context: context);
+                if (kDebugMode) debugPrint(
+                    'MyServicePage: updateService (append) ok=${updResp
+                        .ok} status=${updResp.statusCode} raw=${updResp.raw}');
+                if (updResp.ok) {
+                  // Refresh services
+                  try {
+                    final refreshResp = await _svc.fetchMyServices(
+                        context: context);
+                    if (refreshResp.ok) {
+                      _services = MyServiceService.flattenArtisanServices(
+                          refreshResp.data);
+                      if (mounted) setState(() {});
+                    } else {
+                      await _loadAll();
+                    }
+                  } catch (e) {
+                    if (kDebugMode) debugPrint(
+                        'MyServicePage: refresh after update failed: $e');
+                    await _loadAll();
+                  }
+
+                  ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                    SnackBar(
+                      content: const Text('Service created successfully'),
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                  );
+
+                  // Reset form
+                  _editingId = null;
+                  _priceCtrl.clear();
+                  _selectedMainId = null;
+                  _selectedSubId = null;
+                  handled = true;
+                } else {
+                  // If append failed, fall through to try create below
+                  if (kDebugMode) debugPrint(
+                      'MyServicePage: append update failed raw=${updResp.raw}');
+                }
+              }
+            }
+          } catch (e) {
+            if (kDebugMode) debugPrint(
+                'MyServicePage: append attempt failed: $e');
+          }
+        }
+
+        if (!handled) {
+          // Use POST (create or update by category) to create/update artisan offerings per API docs.
+          final res = await _svc.createService(body, context: context);
+
+          if (kDebugMode) debugPrint(
+              'MyServicePage: createService response ok=${res.ok} status=${res
+                  .statusCode} raw=${res.raw}');
+
+          if (res.ok) {
+            // Refresh the artisan services from server to get canonical data (some APIs don't return the created entry)
+            try {
+              final refreshResp = await _svc.fetchMyServices(context: context);
+              if (kDebugMode) debugPrint(
+                  'MyServicePage: fetchMyServices after create ok=${refreshResp
+                      .ok} status=${refreshResp.statusCode} raw=${refreshResp
+                      .raw}');
+              if (refreshResp.ok) {
+                _services =
+                    MyServiceService.flattenArtisanServices(refreshResp.data);
+                if (mounted) setState(() {});
+              } else {
+                // fallback to generic reload which also refreshes categories
+                await _loadAll();
+              }
+            } catch (e) {
+              if (kDebugMode) debugPrint(
+                  'MyServicePage: refresh after create failed: $e');
+              await _loadAll();
+            }
+
+            ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+              SnackBar(
+                content: Text(_editingId != null
+                    ? 'Service updated successfully'
+                    : 'Service created successfully'),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+            );
+            // Reset form
+            _editingId = null;
+            _priceCtrl.clear();
+            _selectedMainId = null;
+            _selectedSubId = null;
+          } else {
+            // Show server-friendly message if available to help debugging
+            final msg = res.message;
+            ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+              SnackBar(
+                content: Text(msg),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                backgroundColor: Theme
+                    .of(context)
+                    .colorScheme
+                    .error,
+              ),
+            );
+            // Optionally log full raw body for debugging in console
+            if (kDebugMode) debugPrint(
+                'MyServicePage: create/update failed raw=${res.raw}');
+          }
+        }
+      }
+    } catch (e) {
+      // ignore
+      if (kDebugMode) debugPrint('MyServicePage: _submit exception: $e');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
 
   Future<void> _startEdit(Map<String, dynamic> service) async {
+    if (!_isOwner) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(content: const Text('You cannot edit services for another artisan.'), behavior: SnackBarBehavior.floating, backgroundColor: Theme.of(context).colorScheme.error),
+      );
+      return;
+    }
+
     setState(() {
       _editingId = (service['id'] ?? service['_id'] ?? service['serviceId'])?.toString();
       _selectedMainId = (service['categoryId'] ?? service['mainCategory'] ?? service['category'])?.toString();
@@ -858,6 +1019,13 @@ class _MyServicePageWidgetState extends State<MyServicePageWidget> {
   }
 
   Future<void> _confirmDelete(Map<String, dynamic> service) async {
+    if (!_isOwner) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(content: const Text('You cannot delete services for another artisan.'), behavior: SnackBarBehavior.floating, backgroundColor: Theme.of(context).colorScheme.error),
+      );
+      return;
+    }
+
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -1071,7 +1239,7 @@ class _MyServicePageWidgetState extends State<MyServicePageWidget> {
       backgroundColor: isDark ? Colors.black : Colors.white,
       appBar: AppBar(
         title: Text(
-          'My Services',
+          _isOwner ? 'My Services' : 'Services',
           style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w500, fontSize: 18),
         ),
         backgroundColor: isDark ? Colors.black : Colors.white,
@@ -1080,7 +1248,7 @@ class _MyServicePageWidgetState extends State<MyServicePageWidget> {
         scrolledUnderElevation: 0,
         centerTitle: true,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+          icon: Icon(Icons.arrow_back_outlined, size: 20),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
@@ -1089,378 +1257,444 @@ class _MyServicePageWidgetState extends State<MyServicePageWidget> {
           padding: EdgeInsets.fromLTRB(24.0, 0.0, 24.0, MediaQuery.of(context).padding.bottom + 24.0),
           child: _loading
               ? Center(
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: colorScheme.primary,
-            ),
-          )
-              : Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 16),
-
-              // Add/Edit Service Card
-              Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: onSurfaceAlpha10, width: 1),
-                  color: isDark ? Colors.grey[900] : Colors.white,
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: colorScheme.primary.withAlpha((0.1 * 255).toInt()),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Icon(
-                              _editingId != null ? Icons.edit_outlined : Icons.add_circle_outline,
-                              color: colorScheme.primary,
-                              size: 20,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            _editingId != null ? 'Edit Service' : 'Add New Service',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // Main category dropdown - Improved with tap indicator
-                      InkWell(
-                        onTap: _pickMainService,
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: onSurfaceAlpha10),
-                            color: isDark ? Colors.grey[850] : Colors.grey[50],
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Main service',
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                        color: onSurfaceAlpha60,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      _categoryName(_selectedMainId) ?? 'Select main service',
-                                      style: theme.textTheme.bodyLarge?.copyWith(
-                                        color: _selectedMainId != null ? colorScheme.onSurface : onSurfaceAlpha30,
-                                        fontWeight: _selectedMainId != null ? FontWeight.w500 : FontWeight.normal,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Icon(
-                                Icons.arrow_drop_down_rounded,
-                                color: colorScheme.primary,
-                                size: 24,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // Sub category dropdown - Improved with tap indicator
-                      InkWell(
-                        onTap: _pickSubService,
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: onSurfaceAlpha10),
-                            color: isDark ? Colors.grey[850] : Colors.grey[50],
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Sub service',
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                        color: onSurfaceAlpha60,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      _subcategoryName(_selectedMainId, _selectedSubId) ??
-                                          (_selectedMainId != null ? 'Select sub service' : 'Select main service first'),
-                                      style: theme.textTheme.bodyLarge?.copyWith(
-                                        color: _selectedSubId != null ? colorScheme.onSurface : onSurfaceAlpha30,
-                                        fontWeight: _selectedSubId != null ? FontWeight.w500 : FontWeight.normal,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Icon(
-                                Icons.arrow_drop_down_rounded,
-                                color: _selectedMainId != null ? colorScheme.primary : onSurfaceAlpha30,
-                                size: 24,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // Price field
-                      TextFormField(
-                        controller: _priceCtrl,
-                        keyboardType: TextInputType.numberWithOptions(decimal: true),
-                        style: theme.textTheme.bodyLarge,
-                        decoration: InputDecoration(
-                          labelText: 'Price',
-                          prefixText: '₦ ',
-                          prefixStyle: theme.textTheme.bodyLarge?.copyWith(color: onSurfaceAlpha60),
-                          labelStyle: theme.textTheme.bodyMedium?.copyWith(color: onSurfaceAlpha60),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: onSurfaceAlpha30),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: onSurfaceAlpha10),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: colorScheme.primary, width: 2),
-                          ),
-                          filled: true,
-                          fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
-                        ),
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // Action buttons
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: _submitting ? null : _submit,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: colorScheme.primary,
-                                foregroundColor: colorScheme.onPrimary,
-                                padding: const EdgeInsets.symmetric(vertical: 16),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                elevation: 0,
-                              ),
-                              child: _submitting
-                                  ? SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(colorScheme.onPrimary),
-                                ),
-                              )
-                                  : Text(
-                                _editingId != null ? 'Update Service' : 'Create Service',
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  color: colorScheme.onPrimary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                          if (_editingId != null) ...[
-                            const SizedBox(width: 12),
-                            OutlinedButton(
-                              onPressed: () {
-                                setState(() {
-                                  _editingId = null;
-                                  _priceCtrl.clear();
-                                  _selectedMainId = null;
-                                  _selectedSubId = null;
-                                });
-                              },
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                side: BorderSide(color: onSurfaceAlpha30),
-                              ),
-                              child: Text(
-                                'Cancel',
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  color: onSurfaceAlpha60,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Services List Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Your Services',
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: colorScheme.primary.withAlpha((0.1 * 255).toInt()),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      '${_services.length} total',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 12),
-
-              // Services List
-              Expanded(
-                child: _services.isEmpty
-                    ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.build_outlined,
-                        size: 64,
-                        color: onSurfaceAlpha30,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No services yet',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: onSurfaceAlpha60,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Add your first service above',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: onSurfaceAlpha30,
-                        ),
-                      ),
-                    ],
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: colorScheme.primary,
                   ),
                 )
-                    : RefreshIndicator(
+              : RefreshIndicator(
                   onRefresh: _loadAll,
                   color: colorScheme.primary,
-                  child: ListView.separated(
-                    itemCount: _services.length,
-                    separatorBuilder: (_, __) => Divider(
-                      height: 1,
-                      color: onSurfaceAlpha10,
-                      indent: 16,
-                      endIndent: 16,
-                    ),
-                    itemBuilder: (context, i) {
-                      final s = _services[i];
-                      // Prefer the explicit subCategory name (artisan configured), then category, then any title/name fields.
-                      String? rawTitle;
-                      if (s['subCategoryName'] != null && s['subCategoryName'].toString().trim().isNotEmpty) rawTitle = s['subCategoryName'].toString().trim();
-                      if ((rawTitle == null || rawTitle.isEmpty) && (s['categoryName'] != null && s['categoryName'].toString().trim().isNotEmpty)) rawTitle = s['categoryName'].toString().trim();
-                      if ((rawTitle == null || rawTitle.isEmpty) && (s['title'] != null && s['title'].toString().trim().isNotEmpty)) rawTitle = s['title'].toString().trim();
-                      if ((rawTitle == null || rawTitle.isEmpty) && (s['name'] != null && s['name'].toString().trim().isNotEmpty)) rawTitle = s['name'].toString().trim();
-                      final title = (rawTitle ?? '${s['categoryName'] ?? ''} ${s['subCategoryName'] ?? ''}'.trim()).toString().trim();
-                      final price = _formatPrice(s['price'] ?? s['amount'] ?? '');
+                  child: CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 16),
 
-                      return Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          leading: _leadingForItem(
-                            {
-                              'name': s['categoryName'] ?? s['name'] ?? s['title'],
-                              'icon': s['icon'] ?? s['emoji'],
-                            },
-                            colorScheme,
-                          ),
-                          title: Text(
-                            title.isNotEmpty ? title : 'Service',
-                            style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            price,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: colorScheme.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          trailing: Container(
-                            decoration: BoxDecoration(
-                              color: onSurfaceAlpha10,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  onPressed: () => _startEdit(s),
-                                  icon: Icon(Icons.edit_outlined, size: 20),
-                                  color: colorScheme.primary,
-                                  splashRadius: 20,
-                                  tooltip: 'Edit',
+                            // Add/Edit Service Card - only visible to the artisan owner
+                            if (_isOwner)
+                              Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: onSurfaceAlpha10, width: 1),
+                                  color: isDark ? Colors.grey[900] : Colors.white,
                                 ),
-                                IconButton(
-                                  onPressed: () => _confirmDelete(s),
-                                  icon: Icon(Icons.delete_outline_rounded, size: 20),
-                                  color: colorScheme.error,
-                                  splashRadius: 20,
-                                  tooltip: 'Delete',
+                                child: Padding(
+                                  padding: const EdgeInsets.all(20),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: colorScheme.primary.withAlpha((0.1 * 255).toInt()),
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                            child: Icon(
+                                              _editingId != null ? Icons.edit_outlined : Icons.add_circle_outline,
+                                              color: colorScheme.primary,
+                                              size: 20,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Text(
+                                            _editingId != null ? 'Edit Service' : 'Add New Service',
+                                            style: theme.textTheme.titleMedium?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+
+                                      const SizedBox(height: 8),
+                                      // Small helper: server is authoritative about prices
+                                      Text(
+                                        'Note: Prices displayed and used for bookings are authoritative from the server.',
+                                        style: theme.textTheme.bodySmall?.copyWith(color: onSurfaceAlpha60),
+                                      ),
+
+                                      const SizedBox(height: 20),
+
+                                      // Main category dropdown - Improved with tap indicator
+                                      InkWell(
+                                        onTap: _pickMainService,
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(color: onSurfaceAlpha10),
+                                            color: isDark ? Colors.grey[850] : Colors.grey[50],
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      'Main service',
+                                                      style: theme.textTheme.bodySmall?.copyWith(
+                                                        color: onSurfaceAlpha60,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 4),
+                                                    Text(
+                                                      _categoryName(_selectedMainId) ?? 'Select main service',
+                                                      style: theme.textTheme.bodyLarge?.copyWith(
+                                                        color: _selectedMainId != null ? colorScheme.onSurface : onSurfaceAlpha30,
+                                                        fontWeight: _selectedMainId != null ? FontWeight.w500 : FontWeight.normal,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              Icon(
+                                                Icons.arrow_drop_down_outlined,
+                                                color: colorScheme.primary,
+                                                size: 24,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+
+                                      const SizedBox(height: 16),
+
+                                      // Sub category dropdown - Improved with tap indicator
+                                      InkWell(
+                                        onTap: _pickSubService,
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(color: onSurfaceAlpha10),
+                                            color: isDark ? Colors.grey[850] : Colors.grey[50],
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      'Sub service',
+                                                      style: theme.textTheme.bodySmall?.copyWith(
+                                                        color: onSurfaceAlpha60,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 4),
+                                                    Text(
+                                                      _subcategoryName(_selectedMainId, _selectedSubId) ??
+                                                          (_selectedMainId != null ? 'Select sub service' : 'Select main service first'),
+                                                      style: theme.textTheme.bodyLarge?.copyWith(
+                                                        color: _selectedSubId != null ? colorScheme.onSurface : onSurfaceAlpha30,
+                                                        fontWeight: _selectedSubId != null ? FontWeight.w500 : FontWeight.normal,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              Icon(
+                                                Icons.arrow_drop_down_outlined,
+                                                color: _selectedMainId != null ? colorScheme.primary : onSurfaceAlpha30,
+                                                size: 24,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+
+                                      const SizedBox(height: 16),
+
+                                      // Price field
+                                      TextFormField(
+                                        controller: _priceCtrl,
+                                        keyboardType: TextInputType.numberWithOptions(decimal: true),
+                                        style: theme.textTheme.bodyLarge,
+                                        decoration: InputDecoration(
+                                          labelText: 'Price',
+                                          prefixText: '₦ ',
+                                          prefixStyle: theme.textTheme.bodyLarge?.copyWith(color: onSurfaceAlpha60),
+                                          labelStyle: theme.textTheme.bodyMedium?.copyWith(color: onSurfaceAlpha60),
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                            borderSide: BorderSide(color: onSurfaceAlpha30),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                            borderSide: BorderSide(color: onSurfaceAlpha10),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(12),
+                                            borderSide: BorderSide(color: colorScheme.primary, width: 2),
+                                          ),
+                                          filled: true,
+                                          fillColor: isDark ? Colors.grey[850] : Colors.grey[50],
+                                        ),
+                                      ),
+
+                                      const SizedBox(height: 20),
+
+                                      // Action buttons
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: ElevatedButton(
+                                              onPressed: _submitting ? null : _submit,
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: colorScheme.primary,
+                                                foregroundColor: colorScheme.onPrimary,
+                                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                                elevation: 0,
+                                              ),
+                                              child: _submitting
+                                                  ? SizedBox(
+                                                      height: 20,
+                                                      width: 20,
+                                                      child: CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                        valueColor: AlwaysStoppedAnimation<Color>(colorScheme.onPrimary),
+                                                      ),
+                                                    )
+                                                  : Text(
+                                                      _editingId != null ? 'Update Service' : 'Create Service',
+                                                      style: theme.textTheme.titleMedium?.copyWith(
+                                                        color: colorScheme.onPrimary,
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
+                                                    ),
+                                            ),
+                                          ),
+                                          if (_editingId != null) ...[
+                                            const SizedBox(width: 12),
+                                            OutlinedButton(
+                                              onPressed: () {
+                                                setState(() {
+                                                  _editingId = null;
+                                                  _priceCtrl.clear();
+                                                  _selectedMainId = null;
+                                                  _selectedSubId = null;
+                                                });
+                                              },
+                                              style: OutlinedButton.styleFrom(
+                                                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                                side: BorderSide(color: onSurfaceAlpha30),
+                                              ),
+                                              child: Text(
+                                                'Cancel',
+                                                style: theme.textTheme.titleMedium?.copyWith(
+                                                  color: onSurfaceAlpha60,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            else
+                              // When viewing someone else's services we don't allow creating/updating here.
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: onSurfaceAlpha10),
+                                  color: isDark ? Colors.grey[900] : Colors.white,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Viewing services', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                                    const SizedBox(height: 8),
+                                    Text('You are viewing another artisan\'s public services. Sign in as this artisan to add or manage services.', style: theme.textTheme.bodyMedium?.copyWith(color: onSurfaceAlpha60)),
+                                  ],
+                                ),
+                              ),
+
+                            const SizedBox(height: 24),
+
+                            // Services List Header
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  _isOwner ? 'Your Services' : 'Services',
+                                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.primary.withAlpha((0.1 * 255).toInt()),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    '${_services.length} total',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: colorScheme.primary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(height: 12),
+                          ],
+                        ),
+                      ),
+
+                      // Services list or empty state
+                      if (_services.isEmpty)
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.build_outlined,
+                                  size: 64,
+                                  color: onSurfaceAlpha30,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No services yet',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: onSurfaceAlpha60,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Add your first service above',
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: onSurfaceAlpha30,
+                                  ),
                                 ),
                               ],
                             ),
                           ),
+                        )
+                      else
+                        SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, i) {
+                              final s = _services[i];
+                              // Prefer the explicit subCategory name (artisan configured), then category, then any title/name fields.
+                              String? rawTitle;
+                              if (s['subCategoryName'] != null && s['subCategoryName'].toString().trim().isNotEmpty) rawTitle = s['subCategoryName'].toString().trim();
+                              if ((rawTitle == null || rawTitle.isEmpty) && (s['categoryName'] != null && s['categoryName'].toString().trim().isNotEmpty)) rawTitle = s['categoryName'].toString().trim();
+                              if ((rawTitle == null || rawTitle.isEmpty) && (s['title'] != null && s['title'].toString().trim().isNotEmpty)) rawTitle = s['title'].toString().trim();
+                              if ((rawTitle == null || rawTitle.isEmpty) && (s['name'] != null && s['name'].toString().trim().isNotEmpty)) rawTitle = s['name'].toString().trim();
+                              final title = (rawTitle ?? '${s['categoryName'] ?? ''} ${s['subCategoryName'] ?? ''}'.trim()).toString().trim();
+                              final price = _formatPrice(s['price'] ?? s['amount'] ?? '');
+
+                              return Column(
+                                children: [
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: ListTile(
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                      leading: _leadingForItem(
+                                        {
+                                          'name': s['categoryName'] ?? s['name'] ?? s['title'],
+                                          'icon': s['icon'] ?? s['emoji'],
+                                        },
+                                        colorScheme,
+                                      ),
+                                      title: Text(
+                                        title.isNotEmpty ? title : 'Service',
+                                        style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      subtitle: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            price,
+                                            style: theme.textTheme.bodyMedium?.copyWith(
+                                              color: colorScheme.primary,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            // show the service's main category name (use available fields or lookup)
+                                            (() {
+                                              final categoryRaw = s['categoryId'] ?? s['mainCategory'] ?? s['category'];
+                                              String? mainId;
+                                              if (categoryRaw is Map) mainId = (categoryRaw['_id'] ?? categoryRaw['id'])?.toString();
+                                              else mainId = categoryRaw?.toString();
+                                              final mainName = s['categoryName'] ?? _categoryName(mainId);
+                                              return mainName ?? '';
+                                            })(),
+                                            style: theme.textTheme.bodySmall?.copyWith(
+                                              color: colorScheme.onSurface.withAlpha((0.45 * 255).toInt()),
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w400,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      trailing: _isOwner
+                                          ? Container(
+                                              decoration: BoxDecoration(
+                                                color: onSurfaceAlpha10,
+                                                borderRadius: BorderRadius.circular(10),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  IconButton(
+                                                    onPressed: () => _startEdit(s),
+                                                    icon: Icon(Icons.edit_outlined, size: 20),
+                                                    color: colorScheme.primary,
+                                                    splashRadius: 20,
+                                                    tooltip: 'Edit',
+                                                  ),
+                                                  IconButton(
+                                                    onPressed: () => _confirmDelete(s),
+                                                    icon: Icon(Icons.delete_outline_rounded, size: 20),
+                                                    color: colorScheme.error,
+                                                    splashRadius: 20,
+                                                    tooltip: 'Delete',
+                                                  ),
+                                                ],
+                                              ),
+                                            )
+                                          : null,
+                                    ),
+                                  ),
+                                  Divider(
+                                    height: 1,
+                                    color: onSurfaceAlpha10,
+                                    indent: 16,
+                                    endIndent: 16,
+                                  ),
+                                ],
+                              );
+                            },
+                            childCount: _services.length,
+                          ),
                         ),
-                      );
-                    },
+                    ],
                   ),
                 ),
-              ),
-            ],
-          ),
         ),
       ),
     );

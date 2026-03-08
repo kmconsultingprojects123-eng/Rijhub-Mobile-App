@@ -14,8 +14,8 @@ import '../../services/artist_service.dart';
 import '/main.dart';
 import '../../state/auth_notifier.dart';
 import '../../services/navigation_service.dart';
-import './verification_page.dart';
 import 'my_service_page.dart';
+import '../../services/my_service_service.dart';
 export 'profile_model.dart';
 
 class ProfileWidget extends StatefulWidget {
@@ -50,6 +50,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
   int? artisanExperienceYears;
   bool? artisanVerified;
   List<String> artisanPortfolio = [];
+  List<Map<String, dynamic>> artisanServices = []; // Add artisan services list
 
   // Add cache for performance
   static Map<String, dynamic>? _cachedProfileData;
@@ -392,6 +393,77 @@ class _ProfileWidgetState extends State<ProfileWidget> {
             } else {
               setState(() => _artisanError = 'No artisan profile');
             }
+
+            // Fetch artisan services from MyServiceService
+            try {
+              final mySvc = MyServiceService();
+              final apiResp = await mySvc.fetchMyServices(context: context);
+              if (apiResp.ok && apiResp.data != null) {
+                List<dynamic>? docs;
+                if (apiResp.data is List)
+                  docs = apiResp.data as List<dynamic>;
+                else if (apiResp.data is Map && apiResp.data['data'] is List)
+                  docs = List<dynamic>.from(apiResp.data['data']);
+                else if (apiResp.data is Map && apiResp.data['items'] is List)
+                  docs = List<dynamic>.from(apiResp.data['items']);
+                else if (apiResp.data is Map && apiResp.data['services'] is List) docs = [apiResp.data];
+
+                if (docs != null && docs.isNotEmpty) {
+                  final List<Map<String, dynamic>> flattened = [];
+                  for (final doc in docs) {
+                    if (doc == null) continue;
+                    if (doc is! Map) continue;
+                    final d = Map<String, dynamic>.from(doc.cast<String, dynamic>());
+                    final artisanServiceId = (d['_id'] ?? d['id'])?.toString();
+                    final servicesArr = d['services'] ?? d['serviceList'] ?? d['items'];
+                    final docCategoryId = (d['categoryId'] ?? d['category']) is Map
+                        ? ((d['categoryId'] ?? d['category'])['_id'] ??
+                                (d['categoryId'] ?? d['category'])['id'])
+                            ?.toString()
+                        : (d['categoryId'] ?? d['category'])?.toString();
+                    if (servicesArr is List) {
+                      for (final s in servicesArr) {
+                        if (s == null || s is! Map) continue;
+                        final sub = Map<String, dynamic>.from(s.cast<String, dynamic>());
+                        final subRaw = sub['subCategoryId'] ??
+                            sub['sub_category_id'] ??
+                            sub['_id'] ??
+                            sub['id'];
+                        String? subId;
+                        String? subName;
+                        if (subRaw is Map) {
+                          subId = (subRaw['_id'] ?? subRaw['id'])?.toString();
+                          subName = (subRaw['name'] ?? subRaw['title'])?.toString();
+                        } else {
+                          subId = subRaw?.toString();
+                        }
+                        if (subName == null || subName.isEmpty) {
+                          subName = (sub['name'] ?? sub['title'])?.toString();
+                        }
+                        final price = sub['price'] ?? sub['amount'];
+                        if (subName != null && subName.isNotEmpty) {
+                          flattened.add({
+                            'id': '${artisanServiceId ?? ''}_${subId ?? ''}',
+                            'artisanServiceId': artisanServiceId,
+                            'categoryId': docCategoryId,
+                            'subCategoryId': subId,
+                            'serviceEntryId': (sub['_id'] ?? sub['id'])?.toString(),
+                            'price': price,
+                            'currency': sub['currency'] ?? 'NGN',
+                            'categoryName': d['categoryName'] ?? d['name'],
+                            'subCategoryName': subName,
+                          });
+                        }
+                      }
+                    }
+                  }
+                  if (mounted) setState(() => artisanServices = flattened);
+                }
+              }
+            } catch (e) {
+              // Silently fail for services - don't override artisan error
+              debugPrint('Failed to load artisan services: $e');
+            }
           }
         } catch (e) {
           setState(() => _artisanError = 'Unable to load artisan info');
@@ -431,14 +503,95 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     return null;
   }
 
+  // Helper method to show all services in a modal bottom sheet
+  void _showServicesModal() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).cardColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (BuildContext ctx) {
+        final theme = Theme.of(ctx);
+        final colorScheme = theme.colorScheme;
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 12,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: colorScheme.onSurface.withAlpha((0.12 * 255).toInt()),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                  Text('My Services', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    alignment: WrapAlignment.start,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: artisanServices.map((s) => ServicePill(service: s)).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        side: BorderSide(color: colorScheme.onSurface.withAlpha((0.08 * 255).toInt())),
+                      ),
+                      child: Text('Close', style: theme.textTheme.titleMedium?.copyWith(color: colorScheme.onSurface)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
 
-    // Determine if current user is considered an artisan for UI purposes
-    final bool _isArtisanUser = (artisanVerified == true) || (_cachedArtisanData != null && _cachedArtisanData!.isNotEmpty);
+    // Prefer an explicit role check from the cached app profile to decide if
+    // this user should see artisan-only UI. Fall back to having an artisan
+    // document cached. We intentionally do NOT treat `artisanVerified == true`
+    // alone as sufficient to show artisan-only UI because that flag can be
+    // stale or mis-set for non-artisan users.
+    bool profileRoleIsArtisan = false;
+    try {
+      final profile = AppStateNotifier.instance.profile;
+      if (profile != null) {
+        final candidates = [profile['role'], profile['type'], profile['accountType'], profile['userType'], profile['authProvider']];
+        for (final c in candidates) {
+          if (c == null) continue;
+          final s = c.toString().toLowerCase();
+          if (s.contains('artisan')) { profileRoleIsArtisan = true; break; }
+        }
+      }
+    } catch (_) {}
+
+    final bool _isArtisanUser = profileRoleIsArtisan || (_cachedArtisanData != null && _cachedArtisanData!.isNotEmpty);
 
     // Ensure this page is inside NavBarPage so the bottom navigation shows.
     // Only redirect automatically when the current router location actually
@@ -527,7 +680,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                       children: [
                         const SizedBox(height: 40.0),
 
-                        // Profile header - Extract to separate widget for better performance
+                        // Profile header - Extracted to separate widget for better performance
                         _ProfileHeader(
                           displayName: displayName,
                           profileImageUrl: profileImageUrl,
@@ -535,10 +688,12 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                           userEmail: userEmail,
                           isDark: isDark,
                           colorScheme: colorScheme,
+                          isArtisan: _isArtisanUser,
                           isValidHttpUrl: _isValidHttpUrl,
                           loadingArtisan: _loadingArtisan,
                           artisanError: _artisanError,
                           artisanTrade: artisanTrade,
+                          artisanServices: artisanServices,
                           artisanVerified: artisanVerified,
                           artisanRating: artisanRating,
                           artisanPortfolio: artisanPortfolio,
@@ -575,121 +730,149 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                               if (!ok) return;
                               try {
                                 final result = await _pushEditProfile();
-                              if (result is Map<String, dynamic>) {
-                                // Update cache with new data
-                                _cachedProfileData = Map<String, dynamic>.from(result);
-                                _isCacheStale = false;
+                                if (result is Map<String, dynamic>) {
+                                  // Update cache with new data
+                                  _cachedProfileData = Map<String, dynamic>.from(result);
+                                  _isCacheStale = false;
 
-                                setState(() {
-                                  displayName = (result['name'] ?? result['fullName'] ?? result['username'] ?? result['displayName'])?.toString();
-                                  userEmail = (result['email'] ?? result['contact'] ?? result['username'])?.toString();
-                                  userPhone = (result['phone'] ?? result['phoneNumber'] ?? result['mobile'])?.toString();
-                                  profileImageUrl = (result['profileImage'] is Map)
-                                      ? (result['profileImage']['url']?.toString() ?? '')
-                                      : (result['profileImage'] ?? result['photo'] ?? result['avatar'])?.toString();
-                                  userLocation = (result['location'] ?? result['city'] ?? result['serviceArea']?['address'])?.toString() ?? '';
-                                });
-                              } else {
+                                  setState(() {
+                                    displayName = (result['name'] ?? result['fullName'] ?? result['username'] ?? result['displayName'])?.toString();
+                                    userEmail = (result['email'] ?? result['contact'] ?? result['username'])?.toString();
+                                    userPhone = (result['phone'] ?? result['phoneNumber'] ?? result['mobile'])?.toString();
+                                    profileImageUrl = (result['profileImage'] is Map)
+                                        ? (result['profileImage']['url']?.toString() ?? '')
+                                        : (result['profileImage'] ?? result['photo'] ?? result['avatar'])?.toString();
+                                    userLocation = (result['location'] ?? result['city'] ?? result['serviceArea']?['address'])?.toString() ?? '';
+                                  });
+                                } else {
+                                  await _loadProfile();
+                                }
+                              } catch (_) {
                                 await _loadProfile();
                               }
-                            } catch (_) {
-                              await _loadProfile();
-                            }
                             });
                           },
                           onMyJobs: () {
                             ensureSignedInForAction(context).then((ok) async {
                               if (!ok) return;
                               try {
-                              // Determine role synchronously from cached profile
-                              final profile = AppStateNotifier.instance.profile;
-                              bool isArtisan = false;
-                              try {
-                                if (profile != null) {
-                                  final candidates = [profile['role'], profile['type'], profile['accountType'], profile['userType'], profile['authProvider']];
-                                  for (final c in candidates) {
-                                    if (c == null) continue;
-                                    final s = c.toString().toLowerCase();
-                                    if (s.contains('artisan')) { isArtisan = true; break; }
+                                // Determine role synchronously from cached profile
+                                final profile = AppStateNotifier.instance.profile;
+                                bool isArtisan = false;
+                                try {
+                                  if (profile != null) {
+                                    final candidates = [profile['role'], profile['type'], profile['accountType'], profile['userType'], profile['authProvider']];
+                                    for (final c in candidates) {
+                                      if (c == null) continue;
+                                      final s = c.toString().toLowerCase();
+                                      if (s.contains('artisan')) { isArtisan = true; break; }
+                                    }
+                                  }
+                                } catch (_) {}
+
+                                if (isArtisan) {
+                                  try {
+                                    GoRouter.of(context).pushNamed(ArtisanJobsHistoryWidget.routeName);
+                                    return;
+                                  } catch (_) {
+                                    try { NavigationUtils.safePush(context, const ArtisanJobsHistoryWidget()); return; } catch (_) {}
+                                  }
+                                } else {
+                                  try {
+                                    GoRouter.of(context).pushNamed(JobHistoryPageWidget.routeName);
+                                    return;
+                                  } catch (_) {
+                                    try { NavigationUtils.safePush(context, const JobHistoryPageWidget()); return; } catch (_) {}
                                   }
                                 }
                               } catch (_) {}
-
-                              if (isArtisan) {
-                                try {
-                                  GoRouter.of(context).pushNamed(ArtisanJobsHistoryWidget.routeName);
-                                  return;
-                                } catch (_) {
-                                  try { NavigationUtils.safePush(context, const ArtisanJobsHistoryWidget()); return; } catch (_) {}
-                                }
-                              } else {
-                                try {
-                                  GoRouter.of(context).pushNamed(JobHistoryPageWidget.routeName);
-                                  return;
-                                } catch (_) {
-                                  try { NavigationUtils.safePush(context, const JobHistoryPageWidget()); return; } catch (_) {}
-                                }
-                              }
-                            } catch (_) {}
                             });
                           },
                           onWallet: () {
                             ensureSignedInForAction(context).then((ok) async {
                               if (!ok) return;
-                              try {
-                              GoRouter.of(context).pushNamed(UserWalletpageWidget.routeName);
-                              return;
-                            } catch (e) {
-                              try {
-                                NavigationUtils.safePush(context, const UserWalletpageWidget());
-                                return;
-                              } catch (_) {}
-                            }
+                              try { GoRouter.of(context).pushNamed(UserWalletpageWidget.routeName); return; } catch (e) { try { NavigationUtils.safePush(context, const UserWalletpageWidget()); return; } catch (_) {} }
                             });
                           },
                           onHelpSupport: () {
-                            try {
-                              GoRouter.of(context).pushNamed(SupportPageWidget.routeName);
-                              return;
-                            } catch (e) {
-                              try {
-                                NavigationUtils.safePush(context, const SupportPageWidget());
-                                return;
-                              } catch (_) {}
-                            }
+                            try { GoRouter.of(context).pushNamed(SupportPageWidget.routeName); return; } catch (e) { try { NavigationUtils.safePush(context, const SupportPageWidget()); return; } catch (_) {} }
                           },
                           onAboutUs: () {
-                            try {
-                              GoRouter.of(context).pushNamed(InfoPageWidget.routeName);
-                              return;
-                            } catch (e) {
-                              try {
-                                NavigationUtils.safePush(context, const InfoPageWidget());
-                                return;
-                              } catch (_) {}
-                            }
+                            try { GoRouter.of(context).pushNamed(InfoPageWidget.routeName); return; } catch (e) { try { NavigationUtils.safePush(context, const InfoPageWidget()); return; } catch (_) {} }
                           },
-                          onVerification: () {
-                            try {
-                              NavigationUtils.safePush(context, const VerificationPage());
-                              return;
-                            } catch (e) {
-                              try { Navigator.of(context).push(MaterialPageRoute(builder: (_) => const VerificationPage())); return; } catch (_) {}
-                            }
-                          },
+                          // The Verification menu item was intentionally commented out per request.
+                          // onVerification: () {
+                          //   try { NavigationUtils.safePush(context, const VerificationPage()); return; } catch (e) { try { Navigator.of(context).push(MaterialPageRoute(builder: (_) => const VerificationPage())); return; } catch (_) {} }
+                          // },
+                          onVerification: () {},
                           onMyService: _isArtisanUser
-                               ? () {
-                                   try {
-                                     NavigationUtils.safePush(context, const MyServicePageWidget());
-                                     return;
-                                   } catch (e) {
-                                     try {
-                                       GoRouter.of(context).pushNamed(MyServicePageWidget.routeName);
-                                       return;
-                                     } catch (_) {}
-                                   }
-                                 }
-                               : null,
+                              ? () async {
+                                  // Resolve the artisan *user id* (not the artisan document id) so
+                                  // backend endpoints that expect ?artisanId=<userId> receive the
+                                  // correct identifier. Try cached profile -> token -> cached artisan.
+                                  String? artisanUserId;
+
+                                  try {
+                                    if (_cachedProfileData != null) {
+                                      final candidates = ['_id', 'id', 'userId', 'user_id', 'uid'];
+                                      for (final k in candidates) {
+                                        final v = _cachedProfileData![k];
+                                        if (v != null && v.toString().isNotEmpty) {
+                                          artisanUserId = v.toString();
+                                          break;
+                                        }
+                                      }
+                                      if ((artisanUserId == null || artisanUserId.isEmpty) && _cachedProfileData!['user'] is Map && _cachedProfileData!['user']['_id'] != null) {
+                                        artisanUserId = _cachedProfileData!['user']['_id'].toString();
+                                      }
+                                    }
+                                  } catch (_) {}
+
+                                  // If still missing, try TokenStorage which should contain the login's user id
+                                  if (artisanUserId == null || artisanUserId.isEmpty) {
+                                    try {
+                                      final tid = await TokenStorage.getUserId();
+                                      if (tid != null && tid.isNotEmpty) artisanUserId = tid;
+                                    } catch (_) {}
+                                  }
+
+                                  // If we now have a user id but no artisan record cached, try to fetch the artisan by user id
+                                  if ((artisanUserId != null && artisanUserId.isNotEmpty) && (_cachedArtisanData == null || _cachedArtisanData!['userId'] == null && _cachedArtisanData!['user'] == null)) {
+                                    try {
+                                      final byUser = await ArtistService.getByUserId(artisanUserId);
+                                      if (byUser != null) {
+                                        _cachedArtisanData = Map<String, dynamic>.from(byUser);
+                                      }
+                                    } catch (_) {}
+                                  }
+
+                                  // Navigate passing the user id (this is what's expected by many endpoints)
+                                  try {
+                                    if (artisanUserId != null && artisanUserId.isNotEmpty) {
+                                      try {
+                                        NavigationUtils.safePush(context, MyServicePageWidget(artisanId: artisanUserId));
+                                        return;
+                                      } catch (_) {}
+
+                                      try {
+                                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => MyServicePageWidget(artisanId: artisanUserId)));
+                                        return;
+                                      } catch (_) {}
+                                    }
+                                  } catch (_) {}
+
+                                  // Final fallback: open MyServicePage for current authenticated user
+                                  try {
+                                    NavigationUtils.safePush(context, const MyServicePageWidget());
+                                    return;
+                                  } catch (_) {
+                                    try {
+                                      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyServicePageWidget()));
+                                      return;
+                                    } catch (_) {}
+                                  }
+                                }
+                              : null,
                           theme: theme,
                           colorScheme: colorScheme,
                         ),
@@ -748,16 +931,16 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                         ),
 
                         const SizedBox(height: 40),
-                      ],
+                        ],
                     ),
                   ),
                 ),
               ),
             ),
-          ],
+        ],
         ),
       ),
-    );
+      );
   }
 }
 
@@ -773,9 +956,11 @@ class _ProfileHeader extends StatelessWidget {
   final bool loadingArtisan;
   final String? artisanError;
   final String? artisanTrade;
+  final List<Map<String, dynamic>> artisanServices;
   final bool? artisanVerified;
   final double? artisanRating;
   final List<String> artisanPortfolio;
+  final bool isArtisan;
   final VoidCallback onTap;
 
   const _ProfileHeader({
@@ -789,9 +974,11 @@ class _ProfileHeader extends StatelessWidget {
     required this.loadingArtisan,
     required this.artisanError,
     required this.artisanTrade,
+    required this.artisanServices,
     required this.artisanVerified,
     required this.artisanRating,
     required this.artisanPortfolio,
+    required this.isArtisan,
     required this.onTap,
   });
 
@@ -878,7 +1065,8 @@ class _ProfileHeader extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (artisanVerified == true) ...[
+              // Only show KYC badge for users who are actually artisans
+              if (isArtisan && artisanVerified == true) ...[
                 const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -920,7 +1108,8 @@ class _ProfileHeader extends StatelessWidget {
                 ),
               ],
             ),
-          if (loadingArtisan)
+          // Artisan-specific info should only be shown when this user is an artisan
+          if (isArtisan && loadingArtisan)
             Padding(
               padding: const EdgeInsets.only(top: 8.0),
               child: SizedBox(
@@ -929,7 +1118,7 @@ class _ProfileHeader extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.primary),
               ),
             ),
-          if (artisanError != null && !loadingArtisan)
+          if (isArtisan && artisanError != null && !loadingArtisan)
             Padding(
               padding: const EdgeInsets.only(top: 8.0),
               child: Row(
@@ -944,7 +1133,45 @@ class _ProfileHeader extends StatelessWidget {
                 ],
               ),
             ),
-          if (!loadingArtisan && artisanTrade != null)
+          if (isArtisan && !loadingArtisan && artisanServices.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8.0,
+                runSpacing: 4.0,
+                children: [
+                  // Show up to 3 compact pills inline
+                  for (int i = 0; i < artisanServices.length && i < 3; i++)
+                    ServicePill(service: artisanServices[i], compact: true),
+
+                  // If there are more services, show a 'More' pill that opens a modal
+                  if (artisanServices.length > 3)
+                    GestureDetector(
+                      onTap: () {
+                        final parentState = context.findAncestorStateOfType<_ProfileWidgetState>();
+                        if (parentState != null) return parentState._showServicesModal();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: colorScheme.onSurface.withAlpha((0.04 * 255).toInt()),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: colorScheme.onSurface.withAlpha((0.06 * 255).toInt())),
+                        ),
+                        child: Text(
+                          '+${artisanServices.length - 3} More',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: colorScheme.onSurface.withAlpha((0.8 * 255).toInt()),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            )
+          else if (isArtisan && !loadingArtisan && artisanTrade != null)
             Padding(
               padding: const EdgeInsets.only(top: 8.0),
               child: Row(
@@ -997,7 +1224,7 @@ class _ProfileHeader extends StatelessWidget {
                 ],
               ),
             ),
-          if (artisanPortfolio.isNotEmpty)
+          if (isArtisan && artisanPortfolio.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 12.0),
               child: SizedBox(
@@ -1122,11 +1349,12 @@ class _ProfileMenuSection extends StatelessWidget {
                   onTap: onWallet,
                 ),
                 const Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Divider(height: 1)),
-                _buildMenuItem(
-                  icon: Icons.verified_user_outlined,
-                  title: 'Verification',
-                  onTap: onVerification,
-                ),
+                // The Verification menu item was intentionally commented out per request.
+                // _buildMenuItem(
+                //   icon: Icons.verified_user_outlined,
+                //   title: 'Verification',
+                //   onTap: onVerification,
+                // ),
                 const SizedBox(height: 8),
               ],
             ),
@@ -1168,7 +1396,54 @@ class _ProfileMenuSection extends StatelessWidget {
   }
 }
 
+// Reusable service pill widget so header and modal render the same UI without relying on parent state callbacks
+class ServicePill extends StatelessWidget {
+  final Map<String, dynamic> service;
+  final bool compact;
+  final VoidCallback? onTap;
 
+  const ServicePill({Key? key, required this.service, this.compact = false, this.onTap}) : super(key: key);
 
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final serviceName = service['subCategoryName'] ?? service['name'] ?? 'Service';
+    final price = service['price'] ?? service['amount'];
+    final currency = service['currency'] ?? 'NGN';
 
-
+    return GestureDetector(
+      onTap: onTap,
+      child: Tooltip(
+        message: serviceName,
+        waitDuration: const Duration(milliseconds: 300),
+        showDuration: const Duration(seconds: 3),
+        child: Container(
+          padding: compact ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4) : const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: colorScheme.primary.withAlpha((0.12 * 255).toInt()),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: colorScheme.primary.withAlpha((0.08 * 255).toInt())),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  serviceName,
+                  style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600, color: colorScheme.primary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (!compact && (price != null && price.toString().isNotEmpty)) ...[
+                const SizedBox(width: 6),
+                Text('$price $currency', style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.primary)),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

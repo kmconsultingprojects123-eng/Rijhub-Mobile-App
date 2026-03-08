@@ -16,11 +16,18 @@ import '../../utils/app_notification.dart';
 import '../../utils/auth_guard.dart';
 
 class ArtisanDetailPageWidget extends StatefulWidget {
-  const ArtisanDetailPageWidget(
-      {super.key, required this.artisan, this.openHire = false});
+  const ArtisanDetailPageWidget({
+    super.key,
+    required this.artisan,
+    this.openHire = false,
+    this.userEmail,
+    this.artisanEmail,
+  });
 
   final Map<String, dynamic> artisan;
   final bool openHire;
+  final String? userEmail;
+  final String? artisanEmail;
 
   static String routeName = 'ArtisanDetailPage';
   static String routePath = '/artisanDetailPage';
@@ -51,6 +58,10 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
   double? _averageRating;
   int _reviewCount = 0;
   final Map<String, String> _userNameCache = {}; // userId -> display name
+
+  // Services state
+  List<Map<String, dynamic>> _artisanServices = [];
+  bool _loadingServices = false;
 
   String? _authToken; // cached token
 
@@ -115,8 +126,12 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
           : (_resolvedArtisanId() ?? id!);
       _unawaited(Future.delayed(
           const Duration(milliseconds: 400),
-          () =>
+              () =>
               _loadReviewsForArtisan(resolvedForReviews!, token: _authToken)));
+      _unawaited(Future.delayed(
+          const Duration(milliseconds: 200),
+              () =>
+              _loadServicesForArtisan(resolvedForReviews!, token: _authToken)));
     }
   }
 
@@ -182,7 +197,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
             if (!mounted) return;
             setState(() {
               _artisanData =
-                  Map<String, dynamic>.from(data.cast<String, dynamic>());
+              Map<String, dynamic>.from(data.cast<String, dynamic>());
             });
 
             // Ensure we pass a Map<String, dynamic> (decoded JSON may be Map<dynamic,dynamic>)
@@ -208,7 +223,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
     } on TimeoutException {
       if (_artisanData == null) {
         setState(() =>
-            _errorMessage = 'Network timeout while loading artisan details.');
+        _errorMessage = 'Network timeout while loading artisan details.');
       } else {
         debugPrint(
             'Network timeout while refreshing artisan details (kept existing data)');
@@ -217,7 +232,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
       debugPrint('Error fetching artisan: $e\n$st');
       if (_artisanData == null) {
         setState(() => _errorMessage =
-            'An unexpected error occurred while loading artisan details.');
+        'An unexpected error occurred while loading artisan details.');
       } else {
         // Keep existing UI; log the failure for diagnostics.
         debugPrint(
@@ -429,8 +444,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
         final idStr = reviewerId is String
             ? reviewerId
             : (reviewerId is Map && reviewerId['_id'] != null
-                ? reviewerId['_id'].toString()
-                : reviewerId.toString());
+            ? reviewerId['_id'].toString()
+            : reviewerId.toString());
 
         if (idStr.isNotEmpty &&
             !_userNameCache.containsKey(idStr) &&
@@ -505,9 +520,9 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
 
         if (data != null) {
           final name = (data['name'] ??
-                  data['fullName'] ??
-                  data['displayName'] ??
-                  data['username'])
+              data['fullName'] ??
+              data['displayName'] ??
+              data['username'])
               ?.toString();
           if (name?.trim().isNotEmpty ?? false) return name!.trim();
         }
@@ -729,7 +744,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
       }
 
       final possible =
-          _findKey(src, ['location', 'address', 'city', 'state', 'area']);
+      _findKey(src, ['location', 'address', 'city', 'state', 'area']);
       if (possible != null) {
         if (possible is String) {
           final s = possible.trim();
@@ -977,11 +992,11 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
               children: [
                 Text(title,
                     style:
-                        theme.bodySmall.copyWith(color: theme.secondaryText)),
+                    theme.bodySmall.copyWith(color: theme.secondaryText)),
                 const SizedBox(height: 4),
                 Text(value,
                     style:
-                        theme.bodyMedium.copyWith(fontWeight: FontWeight.w500)),
+                    theme.bodyMedium.copyWith(fontWeight: FontWeight.w500)),
               ],
             ),
           ),
@@ -990,10 +1005,315 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
     );
   }
 
-  // MARK: - Enhanced Hire Sheet with Improved Styling
+  // Build availability as pills showing date and time
+  Widget _buildAvailabilityPills(
+    Map<String, dynamic> artisan,
+    FlutterFlowTheme theme,
+    Color primaryColor,
+    double smallSpacing,
+    double mediumSpacing,
+    double smallFontSize,
+  ) {
+    try {
+      final avail = artisan['availability'];
+      if (avail is List && avail.isNotEmpty) {
+        final List<String> availabilityItems = [];
+
+        for (final item in avail) {
+          final itemStr = item.toString().trim();
+          if (itemStr.isNotEmpty) {
+            availabilityItems.add(itemStr);
+          }
+        }
+
+        if (availabilityItems.isEmpty) {
+          return _buildInfoItem(
+            Icons.calendar_today_outlined,
+            'Availability',
+            'Not specified',
+          );
+        }
+
+        return Container(
+          padding: EdgeInsets.symmetric(vertical: smallSpacing, horizontal: smallSpacing),
+          decoration: BoxDecoration(
+            color: _surfaceColor(),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _borderColor(), width: 1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: primaryColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.calendar_today_outlined,
+                      size: 16,
+                      color: primaryColor,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Availability',
+                      style: theme.bodySmall.copyWith(
+                        color: theme.secondaryText,
+                        fontSize: smallFontSize - 1,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: smallSpacing),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: availabilityItems.map((availability) {
+                  return Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          primaryColor.withOpacity(0.15),
+                          primaryColor.withOpacity(0.08),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: primaryColor.withOpacity(0.3),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.access_time,
+                          size: 12,
+                          color: primaryColor,
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          availability,
+                          style: theme.bodySmall.copyWith(
+                            color: primaryColor,
+                            fontWeight: FontWeight.w600,
+                            fontSize: smallFontSize - 2,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error building availability pills: $e');
+    }
+
+    return _buildInfoItem(
+      Icons.calendar_today_outlined,
+      'Availability',
+      'Not specified',
+    );
+  }
+
+  // Show modal with all services
+  void _showAllServicesModal(
+    BuildContext context,
+    FlutterFlowTheme theme,
+    Color primaryColor,
+    double smallFontSize,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        // Compute responsive sizing based on device
+        final mq = MediaQuery.of(context);
+        final height = mq.size.height;
+        final width = mq.size.width;
+        final bool compact = width < 380 || height < 700;
+        final initialChild = compact ? 0.5 : 0.65;
+        final maxChild = compact ? 0.85 : 0.95;
+
+        return DraggableScrollableSheet(
+          initialChildSize: initialChild,
+          minChildSize: 0.35,
+          maxChildSize: maxChild,
+          expand: false,
+          builder: (context, scrollController) {
+            return Container(
+              decoration: BoxDecoration(
+                color: _surfaceColor(),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(24),
+                  topRight: Radius.circular(24),
+                ),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Header
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                      child: Row(
+                        children: [
+                          Icon(Icons.business_center_outlined, color: primaryColor, size: 24),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Services Offered',
+                              style: theme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                fontSize: smallFontSize + 2,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.close, color: primaryColor),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+
+                    // Services list - use the provided scrollController so dragging works
+                    Expanded(
+                      child: _artisanServices.isEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.info_outline, size: 48, color: Colors.grey.shade400),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      'No services available',
+                                      style: theme.bodyLarge,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          : ListView.builder(
+                              controller: scrollController,
+                              padding: const EdgeInsets.all(16),
+                              itemCount: _artisanServices.length,
+                              itemBuilder: (context, index) {
+                                final service = _artisanServices[index];
+                                final serviceName = service['name'] ?? 'Service';
+
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: primaryColor.withOpacity(0.08),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: primaryColor.withOpacity(0.15),
+                                        width: 0.8,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 32,
+                                          height: 32,
+                                          decoration: BoxDecoration(
+                                            color: primaryColor.withOpacity(0.15),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Icon(
+                                            Icons.check_circle_outline,
+                                            color: primaryColor,
+                                            size: 16,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Text(
+                                            serviceName,
+                                            style: theme.bodyMedium?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                              color: _textColor(0.9),
+                                              fontSize: smallFontSize,
+                                            ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+
+                    // Close button
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primaryColor,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text(
+                            'Close',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // MARK: - Hire Sheet
   Future<Map<String, dynamic>?> _showHireSheet_impl(BuildContext ctx) async {
     final artisan = _artisan;
     final TextEditingController _scheduleCtrl = TextEditingController();
+    String? userEmail;
 
     try {
       // Ensure we have fresh artisan data
@@ -1001,9 +1321,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
 
       // Fetch services (job subcategories) merged with artisan-specific prices when available
       final List<Map<String, dynamic>> services =
-          await _fetchJobSubcategoriesForArtisan(artisan, ctx);
+      await _fetchJobSubcategoriesForArtisan(artisan, ctx);
 
-      // showModalBottomSheet returns dynamic; we'll return a Map with services+schedule when Pay is pressed
       final result = await showModalBottomSheet<Map<String, dynamic>>(
         context: ctx,
         isScrollControlled: true,
@@ -1035,7 +1354,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
               if (tid.isEmpty) continue;
               if (!selected.contains(tid)) continue;
               final unit =
-                  _toNum(s['price'] ?? s['unitPrice'] ?? s['amount'] ?? 0);
+              _toNum(s['price'] ?? s['unitPrice'] ?? s['amount'] ?? 0);
               sum += unit;
             }
             return sum;
@@ -1160,9 +1479,9 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
 
             final name = _resolveName(s);
             final unit =
-                _toNum(s['price'] ?? s['unitPrice'] ?? s['amount'] ?? 0);
+            _toNum(s['price'] ?? s['unitPrice'] ?? s['amount'] ?? 0);
             final priceText =
-                unit > 0 ? _formatCurrency(unit) : 'Price not set';
+            unit > 0 ? _formatCurrency(unit) : 'Price not set';
             final isSelected = selected.contains(tid);
 
             return Container(
@@ -1201,7 +1520,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color:
-                                isSelected ? primaryColor : Colors.transparent,
+                            isSelected ? primaryColor : Colors.transparent,
                             border: Border.all(
                               color: isSelected
                                   ? primaryColor
@@ -1211,7 +1530,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                           ),
                           child: isSelected
                               ? const Icon(Icons.check,
-                                  size: 16, color: Colors.white)
+                              size: 16, color: Colors.white)
                               : null,
                         ),
                         const SizedBox(width: 12),
@@ -1263,12 +1582,12 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color:
-                          stepIndex >= 0 ? primaryColor : Colors.grey.shade300,
+                      stepIndex >= 0 ? primaryColor : Colors.grey.shade300,
                     ),
                     child: Center(
                       child: Text(
                         '1',
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
                         ),
@@ -1286,12 +1605,12 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color:
-                          stepIndex >= 1 ? primaryColor : Colors.grey.shade300,
+                      stepIndex >= 1 ? primaryColor : Colors.grey.shade300,
                     ),
                     child: Center(
                       child: Text(
                         '2',
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
                         ),
@@ -1330,13 +1649,12 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                         padding: const EdgeInsets.all(24),
                         child: Column(
                           children: [
-                            // Intentionally show only text when there are no services — removed extra info icon
-                            const SizedBox(height: 4),
+                            const Icon(Icons.info_outline, size: 48, color: Colors.grey),
+                            const SizedBox(height: 12),
                             Text(
                               'No services available',
                               style: theme.bodyLarge,
                             ),
-                            const SizedBox(height: 12),
                           ],
                         ),
                       ),
@@ -1579,395 +1897,308 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                     onPressed: (stepIndex == 0 && selected.isEmpty)
                         ? null
                         : (stepIndex == 1 && _scheduleCtrl.text.isEmpty)
-                            ? null
-                            : () async {
-                                if (stepIndex == 0) {
-                                  setModalState(() => stepIndex = 1);
-                                  return;
+                        ? null
+                        : () async {
+                      if (stepIndex == 0) {
+                        setModalState(() => stepIndex = 1);
+                        return;
+                      }
+
+                      // Validate date/time is selected
+                      if (_scheduleCtrl.text.isEmpty ||
+                          chosenDateTime == null) {
+                        setModalState(
+                                () => _showDateTimeError = true);
+                        return;
+                      }
+
+                      // Build payload
+                      final payloadServices = <Map<String, dynamic>>[];
+                      final serverServices = <Map<String, dynamic>>[];
+                      String? bodyTopLevelCategoryId;
+
+                      for (final s in services) {
+                        final tid =
+                            (s['tempId'] ?? s['_id'] ?? s['id'])
+                                ?.toString() ??
+                                '';
+                        if (tid.isEmpty) continue;
+                        if (!selected.contains(tid)) continue;
+
+                        final realSubId = (s['subCategoryId'] ??
+                            s['sub_category_id'] ??
+                            s['subCategory'] ??
+                            s['sub'] ??
+                            null)
+                            ?.toString() ??
+                            tid;
+
+                        // Resolve service name
+                        String? svcName = s['name']?.toString() ??
+                            s['serviceName']?.toString() ??
+                            s['subCategoryName']?.toString() ??
+                            'Service';
+
+                        num price = _toNum(s['price'] ??
+                            s['unitPrice'] ??
+                            s['amount'] ??
+                            0);
+
+                        payloadServices.add({
+                          'subCategoryId': realSubId,
+                          'name': svcName,
+                          'price': price,
+                        });
+
+                        // Try to resolve a categoryId for this service from common fields
+                        String? resolvedCategoryId;
+                        try {
+                          final candKeys = [
+                            'categoryId',
+                            'category',
+                            'mainCategory',
+                            'category_id',
+                            'parentId',
+                            'parent',
+                          ];
+                          for (final k in candKeys) {
+                            final v = s[k];
+                            if (v != null) {
+                              final vs = v is String ? v : (v is Map ? (v['_id'] ?? v['id']) : v).toString();
+                              if (vs.trim().isNotEmpty) {
+                                resolvedCategoryId = vs.trim();
+                                break;
+                              }
+                            }
+                          }
+
+                          // Also check nested 'raw' object which often contains category refs
+                          if (resolvedCategoryId == null && s['raw'] is Map) {
+                            final raw = s['raw'] as Map;
+                            for (final k in ['categoryId', 'category', 'mainCategory', 'category_id', 'parentId', 'parent']) {
+                              final v = raw[k];
+                              if (v != null) {
+                                final vs = v is String ? v : (v is Map ? (v['_id'] ?? v['id']) : v).toString();
+                                if (vs.trim().isNotEmpty) {
+                                  resolvedCategoryId = vs.trim();
+                                  break;
                                 }
+                              }
+                            }
+                          }
+                        } catch (_) {
+                          resolvedCategoryId = null;
+                        }
 
-                                // Validate date/time is selected
-                                if (_scheduleCtrl.text.isEmpty ||
-                                    chosenDateTime == null) {
-                                  setModalState(
-                                      () => _showDateTimeError = true);
-                                  return;
+                        // Track and attach categoryId where applicable
+                        if (resolvedCategoryId != null && resolvedCategoryId.isNotEmpty) {
+                          // set top-level category id if not set yet
+                          if (bodyTopLevelCategoryId == null) bodyTopLevelCategoryId = resolvedCategoryId;
+                        }
+
+                        final srvEntry = {
+                          'subCategoryId': realSubId,
+                          'quantity': 1,
+                        };
+                        if (resolvedCategoryId != null && resolvedCategoryId.isNotEmpty) {
+                          srvEntry['categoryId'] = resolvedCategoryId;
+                        }
+
+                        serverServices.add(srvEntry);
+                      }
+
+                      // Show loading indicator
+                      setModalState(() {});
+
+                      try {
+                        String? token = _authToken;
+                        if (token == null || token.isEmpty) {
+                          token = await TokenStorage.getToken();
+                          _authToken = token;
+                        }
+
+                        // Fetch user email for booking
+                        userEmail = null;
+                        try {
+                          final profile = await UserService.getProfile();
+                          userEmail = profile?['email']?.toString();
+                          if (userEmail == null || userEmail!.trim().isEmpty) {
+                            final recent = await TokenStorage.getRecentRegistration();
+                            userEmail = recent?['email']?.toString();
+                          }
+                          if (userEmail == null || userEmail!.trim().isEmpty) {
+                            userEmail = await TokenStorage.getRememberedEmail();
+                          }
+                        } catch (_) {
+                          userEmail = null;
+                        }
+
+                        // Validate email is available
+                        if (userEmail == null || userEmail!.trim().isEmpty) {
+                          if (!mounted) return;
+                          Navigator.of(context).pop(); // Close bottom sheet
+                          AppNotification.showError(context, 'Unable to retrieve your email address. Please update your profile.');
+                          return;
+                        }
+
+                        // If we didn't find a categoryId from services, try to derive one from the artisan payload
+                        if ((bodyTopLevelCategoryId == null || bodyTopLevelCategoryId.trim().isEmpty) && artisan != null) {
+                          try {
+                            final candKeys = [
+                              'categoryId', 'category', 'mainCategory', 'primaryCategory', 'category_id', 'categoryIdRef'
+                            ];
+                            for (final k in candKeys) {
+                              final v = artisan[k];
+                              if (v != null) {
+                                final vs = v is String ? v : (v is Map ? (v['_id'] ?? v['id']) : v).toString();
+                                if (vs.trim().isNotEmpty) {
+                                  bodyTopLevelCategoryId = vs.trim();
+                                  break;
                                 }
+                              }
+                            }
 
-                                // Build payload and submit booking
-                                // We build two lists: one minimal shape the server expects (subCategoryId, quantity)
-                                // and a richer client-side metadata list (name, price) used for UI and payment metadata.
-                                final payloadServices =
-                                    <Map<String, dynamic>>[]; // client metadata
-                                final serverServices = <Map<String,
-                                    dynamic>>[]; // server-friendly shape
-                                String? categoryIdForBody;
-
-                                for (final s in services) {
-                                  final tid =
-                                      (s['tempId'] ?? s['_id'] ?? s['id'])
-                                              ?.toString() ??
-                                          '';
-                                  if (tid.isEmpty) continue;
-                                  if (!selected.contains(tid)) continue;
-
-                                  final realSubId = (s['subCategoryId'] ??
-                                              s['sub_category_id'] ??
-                                              s['subCategory'] ??
-                                              s['sub'] ??
-                                              null)
-                                          ?.toString() ??
-                                      tid;
-
-                                  // Try to capture categoryId from the service entry if available
-                                  try {
-                                    final c = s['categoryId'] ??
-                                        s['category'] ??
-                                        s['docCategoryId'] ??
-                                        s['categoryIdRaw'];
-                                    if (c != null &&
-                                        (categoryIdForBody == null ||
-                                            categoryIdForBody.isEmpty)) {
-                                      categoryIdForBody = c is Map
-                                          ? (c['_id'] ?? c['id'])?.toString()
-                                          : c.toString();
+                            // Also check nested user or nested artisanService structures
+                            if ((bodyTopLevelCategoryId == null || bodyTopLevelCategoryId.trim().isEmpty)) {
+                              if (artisan['user'] is Map) {
+                                final u = artisan['user'] as Map<String, dynamic>;
+                                for (final k in ['categoryId', 'category', 'mainCategory']) {
+                                  final v = u[k];
+                                  if (v != null) {
+                                    final vs = v is String ? v : (v is Map ? (v['_id'] ?? v['id']) : v).toString();
+                                    if (vs.trim().isNotEmpty) {
+                                      bodyTopLevelCategoryId = vs.trim();
+                                      break;
                                     }
-                                    // also inspect raw object
-                                    final raw = s['raw'];
-                                    if ((categoryIdForBody == null ||
-                                            categoryIdForBody.isEmpty) &&
-                                        raw is Map) {
-                                      final rc = raw['categoryId'] ??
-                                          raw['category'] ??
-                                          raw['mainCategory'];
-                                      if (rc != null)
-                                        categoryIdForBody = rc is Map
-                                            ? (rc['_id'] ?? rc['id'])
-                                                ?.toString()
-                                            : rc.toString();
-                                    }
-                                  } catch (_) {}
-
-                                  // Resolve a friendly service name, preferring the raw subCategoryId.name when available
-                                  String? svcName;
-                                  try {
-                                    final raw = s['raw'];
-                                    if (raw is Map) {
-                                      final sc = raw['subCategoryId'] ??
-                                          raw['sub_category_id'] ??
-                                          raw['subCategory'] ??
-                                          raw['sub'];
-                                      if (sc is Map) {
-                                        svcName = (sc['name'] ??
-                                                sc['title'] ??
-                                                sc['label'])
-                                            ?.toString();
-                                      }
-                                    }
-                                  } catch (_) {}
-                                  svcName = svcName ??
-                                      (s['name'] ??
-                                              s['serviceName'] ??
-                                              s['subCategoryName'])
-                                          ?.toString();
-
-                                  // Include price so client-side checkout can list accurate amounts
-                                  num price = 0;
-                                  try {
-                                    final p = s['price'] ??
-                                        s['unitPrice'] ??
-                                        s['amount'] ??
-                                        s['rate'] ??
-                                        0;
-                                    if (p is num)
-                                      price = p;
-                                    else
-                                      price = num.tryParse(p.toString()) ?? 0;
-                                  } catch (_) {}
-
-                                  final clientEntry = <String, dynamic>{
-                                    'subCategoryId': realSubId,
-                                    if (svcName != null) 'name': svcName,
-                                    'price': price,
-                                  };
-
-                                  final serverEntry = <String, dynamic>{
-                                    'subCategoryId': realSubId,
-                                    'quantity': 1,
-                                  };
-
-                                  payloadServices.add(clientEntry);
-                                  serverServices.add(serverEntry);
+                                  }
                                 }
+                              }
+                            }
+                          } catch (_) {}
+                        }
 
-                                // Show loading indicator
-                                setModalState(() {});
+                        final body = <String, dynamic>{
+                          'artisanId': artisan['userId'] ??
+                              (artisan['user'] is Map
+                                  ? (artisan['user'] as Map)['_id']
+                                  : null) ??
+                              artisan['_id'] ??
+                              artisan['id'] ??
+                              artisan['artisanId'],
+                          'services': serverServices,
+                          'schedule': chosenDateTime!
+                              .toUtc()
+                              .toIso8601String(),
+                          'clientTotal': _computeTotal(),
+                        };
 
-                                try {
-                                  // Ensure we have auth token
-                                  String? token = _authToken;
-                                  if (token == null || token.isEmpty) {
-                                    token = await TokenStorage.getToken();
-                                    _authToken = token;
-                                  }
+                        // attach email and categoryId (if we resolved one)
+                        body['email'] = userEmail;
+                        if (bodyTopLevelCategoryId != null && bodyTopLevelCategoryId.trim().isNotEmpty) {
+                          body['categoryId'] = bodyTopLevelCategoryId;
+                        }
 
-                                  // Build request body. Use server-friendly services shape (subCategoryId + quantity)
-                                  // Booking API expects userId (user._id), not artisan document _id
-                                  final body = <String, dynamic>{
-                                    'artisanId': artisan['userId'] ??
-                                        (artisan['user'] is Map
-                                            ? (artisan['user'] as Map)['_id']
-                                            : null) ??
-                                        artisan['_id'] ??
-                                        artisan['id'] ??
-                                        artisan['artisanId'],
-                                    'services': serverServices,
-                                    'schedule': chosenDateTime!
-                                        .toUtc()
-                                        .toIso8601String(),
-                                    'clientTotal': _computeTotal(),
-                                  };
-                                  if (categoryIdForBody != null &&
-                                      categoryIdForBody.isNotEmpty) {
-                                    body['categoryId'] = categoryIdForBody;
-                                  }
+                        // Log outgoing booking request body for debugging server validation issues
+                        try {
+                          debugPrint('Booking request body: ${jsonEncode(body)}');
+                        } catch (_) {}
 
-                                  // Add email if available
-                                  try {
-                                    final profile =
-                                        await UserService.getProfile();
-                                    final email = profile?['email']?.toString();
-                                    if (email != null && email.isNotEmpty)
-                                      body['email'] = email;
-                                  } catch (_) {}
+                        final headers = <String, String>{
+                          'Content-Type': 'application/json',
+                        };
+                        if (token != null && token.isNotEmpty) {
+                          headers['Authorization'] = 'Bearer $token';
+                        }
 
-                                  final headers = <String, String>{
-                                    'Content-Type': 'application/json',
-                                  };
-                                  if (token != null && token.isNotEmpty) {
-                                    headers['Authorization'] = 'Bearer $token';
-                                  }
+                        final normalizedBase =
+                        _normalizeBaseUrl(API_BASE_URL);
+                        final uri = Uri.parse(
+                            '$normalizedBase/api/bookings/hire');
 
-                                  final normalizedBase =
-                                      _normalizeBaseUrl(API_BASE_URL);
-                                  final uri = Uri.parse(
-                                      '$normalizedBase/api/bookings/hire');
+                        // Show loading dialog
+                        if (!mounted) return;
+                        showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (ctx) => const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        );
 
-                                  // Log request details (avoid printing Authorization token value)
-                                  try {
-                                    final headersForLog =
-                                        Map<String, String>.from(headers);
-                                    if (headersForLog
-                                        .containsKey('Authorization')) {
-                                      headersForLog['Authorization'] =
-                                          '<REDACTED>';
-                                    }
-                                    debugPrint('Booking POST -> uri: $uri');
-                                    debugPrint(
-                                        'Booking POST -> headers: ${jsonEncode(headersForLog)}');
-                                    // Also log client-side service objects (names/prices) selected in the bottom sheet
-                                    try {
-                                      debugPrint(
-                                          'Booking POST -> payloadServices: ${jsonEncode(payloadServices)}');
-                                    } catch (_) {}
-                                    debugPrint(
-                                        'Booking POST -> body: ${jsonEncode(body)}');
-                                  } catch (_) {}
+                        http.Response resp;
+                        try {
+                          resp = await http
+                              .post(
+                            uri,
+                            headers: headers,
+                            body: jsonEncode(body),
+                          )
+                              .timeout(const Duration(seconds: 12));
+                        } finally {
+                          if (mounted) {
+                            Navigator.of(context, rootNavigator: true).pop();
+                          }
+                        }
 
-                                  // Show a non-dismissible processing dialog while the request is being sent
-                                  try {
-                                    showDialog<void>(
-                                      context: context,
-                                      barrierDismissible: false,
-                                      builder: (ctx) => WillPopScope(
-                                        onWillPop: () async => false,
-                                        child: Dialog(
-                                          insetPadding:
-                                              const EdgeInsets.symmetric(
-                                                  horizontal: 40),
-                                          child: Padding(
-                                            padding: const EdgeInsets.all(20.0),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                const CircularProgressIndicator(),
-                                                const SizedBox(width: 16),
-                                                Expanded(
-                                                    child: Text(
-                                                        'Processing booking...',
-                                                        style:
-                                                            FlutterFlowTheme.of(
-                                                                    ctx)
-                                                                .bodyMedium)),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  } catch (_) {}
+                        debugPrint('Booking response: ${resp.statusCode} ${resp.body}');
 
-                                  http.Response resp;
-                                  try {
-                                    resp = await http
-                                        .post(
-                                          uri,
-                                          headers: headers,
-                                          body: jsonEncode(body),
-                                        )
-                                        .timeout(const Duration(seconds: 12));
-                                  } finally {
-                                    // Ensure we close the processing dialog even if request throws
-                                    try {
-                                      Navigator.of(context, rootNavigator: true)
-                                          .pop();
-                                    } catch (_) {}
-                                  }
+                        if (!mounted) return;
+                        Navigator.of(context).pop(); // Close bottom sheet
 
-                                  if (resp.statusCode >= 200 &&
-                                      resp.statusCode < 300) {
-                                    // Log the raw HTTP response so we can trace server behavior from the client
-                                    try {
-                                      debugPrint(
-                                          'Booking submission response -> status=${resp.statusCode} body=${resp.body}');
-                                    } catch (_) {}
-                                    final decoded = _safeParseJson(resp.body);
-                                    Map<String, dynamic>? paymentNode;
-                                    Map<String, dynamic>? bookingNode;
+                        if (resp.statusCode >= 200 &&
+                            resp.statusCode < 300) {
+                          final decoded = _safeParseJson(resp.body);
+                          Map<String, dynamic>? paymentNode;
 
-                                    if (decoded is Map) {
-                                      if (decoded['data'] is Map) {
-                                        final data = decoded['data'] as Map;
-                                        bookingNode =
-                                            Map<String, dynamic>.from(data);
-                                        if (data['payment'] is Map) {
-                                          paymentNode =
-                                              Map<String, dynamic>.from(
-                                                  data['payment']);
-                                        }
-                                      } else {
-                                        bookingNode =
-                                            Map<String, dynamic>.from(decoded);
-                                        if (decoded['payment'] is Map) {
-                                          paymentNode =
-                                              Map<String, dynamic>.from(
-                                                  decoded['payment']);
-                                        }
-                                      }
-                                    }
+                          if (decoded is Map) {
+                            if (decoded['data'] is Map) {
+                              final data = decoded['data'] as Map;
+                              if (data['payment'] is Map) {
+                                paymentNode =
+                                Map<String, dynamic>.from(data['payment']);
+                              }
+                            } else if (decoded['payment'] is Map) {
+                              paymentNode =
+                              Map<String, dynamic>.from(decoded['payment']);
+                            }
+                          }
 
-                                    // Log parsed nodes to help trace why navigation to payment may not happen
-                                    try {
-                                      debugPrint(
-                                          'Booking parsed paymentNode: ${paymentNode != null ? jsonEncode(paymentNode) : '<null>'}');
-                                    } catch (_) {
-                                      try {
-                                        debugPrint(
-                                            'Booking parsed paymentNode: <unserializable>');
-                                      } catch (_) {}
-                                    }
-                                    try {
-                                      debugPrint(
-                                          'Booking parsed bookingNode: ${bookingNode != null ? jsonEncode(bookingNode) : '<null>'}');
-                                    } catch (_) {
-                                      try {
-                                        debugPrint(
-                                            'Booking parsed bookingNode: <unserializable>');
-                                      } catch (_) {}
-                                    }
+                          if (paymentNode != null) {
+                            paymentNode['metadata'] = {
+                              'services': payloadServices,
+                              'clientTotal': body['clientTotal'],
+                            };
+                            paymentNode['email'] = userEmail;
 
-                                    // Close the modal
-                                    Navigator.of(context).pop();
-
-                                    if (paymentNode != null &&
-                                        paymentNode.isNotEmpty) {
-                                      // Attach selected services and client total to payment/booking nodes so checkout can render them
-                                      try {
-                                        paymentNode['metadata'] =
-                                            (paymentNode['metadata'] is Map)
-                                                ? Map<String, dynamic>.from(
-                                                    paymentNode['metadata'])
-                                                : <String, dynamic>{};
-                                        paymentNode['metadata']['services'] =
-                                            payloadServices;
-                                        paymentNode['metadata']['clientTotal'] =
-                                            body['clientTotal'];
-                                      } catch (_) {}
-
-                                      try {
-                                        if (bookingNode == null)
-                                          bookingNode = <String, dynamic>{};
-                                        bookingNode!['services'] =
-                                            payloadServices;
-                                        bookingNode!['clientTotal'] =
-                                            body['clientTotal'];
-                                      } catch (_) {}
-
-                                      try {
-                                        // Log the exact payload being passed to the payment page
-                                        try {
-                                          debugPrint(
-                                              'Navigating to PaymentInitPageWidget with payment metadata: ${jsonEncode(paymentNode)}');
-                                        } catch (_) {}
-                                        // Inform the user they'll be redirected to payment
-                                        try {
-                                          AppNotification.showInfo(context,
-                                              'Redirecting to payment...');
-                                        } catch (_) {}
-                                        await Navigator.of(context).push(
-                                          MaterialPageRoute(
-                                            builder: (_) =>
-                                                PaymentInitPageWidget(
-                                              payment: paymentNode!,
-                                              booking: bookingNode,
-                                            ),
-                                          ),
-                                        );
-                                        // After returning from payment page, optionally inform user
-                                        try {
-                                          AppNotification.showInfo(context,
-                                              'Returned from payment flow');
-                                        } catch (_) {}
-                                      } catch (e) {
-                                        debugPrint(
-                                            'Navigation to PaymentInitPageWidget failed: $e');
-                                        rethrow;
-                                      }
-                                    } else {
-                                      // No payment required or payment node not returned; still attach services to booking node for downstream UI
-                                      try {
-                                        if (bookingNode == null)
-                                          bookingNode = <String, dynamic>{};
-                                        bookingNode!['services'] =
-                                            payloadServices;
-                                        bookingNode!['clientTotal'] =
-                                            body['clientTotal'];
-                                      } catch (_) {}
-                                      AppNotification.showSuccess(context,
-                                          'Booking created successfully');
-                                    }
-                                  } else {
-                                    String message = 'Failed to create booking';
-                                    try {
-                                      final errorBody = jsonDecode(resp.body);
-                                      if (errorBody is Map &&
-                                          errorBody['message'] != null) {
-                                        message =
-                                            errorBody['message'].toString();
-                                      }
-                                    } catch (_) {}
-                                    AppNotification.showError(context, message);
-                                  }
-                                } on TimeoutException {
-                                  AppNotification.showError(context,
-                                      'Network timeout. Please try again.');
-                                } catch (e, st) {
-                                  debugPrint(
-                                      'Booking submission error: $e\n$st');
-                                  AppNotification.showError(context,
-                                      'An error occurred. Please try again.');
-                                }
-                              },
+                            await Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    PaymentInitPageWidget(
+                                      payment: paymentNode!,
+                                    ),
+                              ),
+                            );
+                          } else {
+                            AppNotification.showSuccess(context,
+                                'Booking created successfully');
+                          }
+                        } else {
+                          String message = 'Failed to create booking';
+                          try {
+                            final errorBody = jsonDecode(resp.body);
+                            if (errorBody is Map &&
+                                errorBody['message'] != null) {
+                              message = errorBody['message'].toString();
+                            }
+                          } catch (_) {}
+                          AppNotification.showError(context, message);
+                        }
+                      } catch (e) {
+                        debugPrint('Booking error: $e');
+                        AppNotification.showError(context,
+                            'An error occurred. Please try again.');
+                      }
+                    },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primaryColor,
                       foregroundColor: Colors.white,
@@ -1979,13 +2210,13 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                     ),
                     child: stepIndex == 0
                         ? Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text('Next (${selected.length} selected)'),
-                              const SizedBox(width: 8),
-                              const Icon(Icons.arrow_forward, size: 18),
-                            ],
-                          )
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text('Next (${selected.length} selected)'),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.arrow_forward, size: 18),
+                      ],
+                    )
                         : Text('Pay ${_formatCurrency(_computeTotal())}'),
                   ),
                 ),
@@ -2101,14 +2332,13 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
 
       return result;
     } finally {
-      try {
-        _scheduleCtrl.dispose();
-      } catch (_) {}
+      _scheduleCtrl.dispose();
     }
   }
 
   // Compatibility wrapper
   Future<void> _showHireSheet(BuildContext ctx) async {
+
     try {
       await _showHireSheet_impl(ctx);
     } catch (_) {}
@@ -2164,7 +2394,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
               for (final s in servicesArr) {
                 if (s == null || s is! Map) continue;
                 final sub =
-                    Map<String, dynamic>.from(s.cast<String, dynamic>());
+                Map<String, dynamic>.from(s.cast<String, dynamic>());
                 final subRaw = sub['subCategoryId'] ??
                     sub['sub_category_id'] ??
                     sub['subCategory'] ??
@@ -2173,7 +2403,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                     sub['id'];
                 String? subId;
                 String? subName =
-                    (sub['name'] ?? sub['title'] ?? sub['label'])?.toString();
+                (sub['name'] ?? sub['title'] ?? sub['label'])?.toString();
                 if (subRaw is Map) {
                   subId = (subRaw['_id'] ?? subRaw['id'])?.toString();
                   subName = subName ??
@@ -2213,7 +2443,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
 
           for (final e in cand) {
             if (e == null) continue;
-            if (e is! Map) continue;
+            if ( e is! Map) continue;
             final m = Map<String, dynamic>.from(e.cast<String, dynamic>());
 
             String? subId;
@@ -2223,14 +2453,14 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
             String? artisanServiceId;
 
             subId = (m['subCategoryId'] ??
-                    m['sub_category_id'] ??
-                    m['subCategory'] ??
-                    m['sub'] ??
-                    m['id'] ??
-                    m['_id'])
+                m['sub_category_id'] ??
+                m['subCategory'] ??
+                m['sub'] ??
+                m['id'] ??
+                m['_id'])
                 ?.toString();
             name =
-                (m['name'] ?? m['title'] ?? m['label'] ?? m['subCategoryName'])
+                (m['name'] ?? m['title'] ?? m['label'] ?? m['serviceName'] ?? m['subCategoryName'])
                     ?.toString();
 
             final nestedSub =
@@ -2282,289 +2512,86 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
         if (extracted.isNotEmpty) return extracted;
       }
 
-      // No per-artisan offerings present in payload — fall back to the global subcategories fetch
-      String? categoryId;
-      for (final k in [
-        'categoryId',
-        'category',
-        'jobCategory',
-        'category_id',
-        'jobCategoryId'
-      ]) {
-        final v = artisan[k];
-        if (v == null) continue;
-        if (v is String && v.isNotEmpty) {
-          categoryId = v;
-          break;
-        }
-        if (v is Map && (v['_id'] ?? v['id']) != null) {
-          categoryId = (v['_id'] ?? v['id']).toString();
-          break;
-        }
+      // If we have artisan services from _artisanServices, use those
+      if (_artisanServices.isNotEmpty) {
+        return _artisanServices.map((s) {
+          return {
+            'tempId': s['subCategoryId'] ?? s['id'],
+            'subCategoryId': s['subCategoryId'],
+            'name': s['subCategoryName'] ?? s['name'] ?? 'Service',
+            'price': s['price'] ?? 0,
+            'currency': s['currency'] ?? 'NGN',
+          };
+        }).toList();
       }
-      if (categoryId == null || categoryId.isEmpty) return [];
 
-      // Try to fetch per-artisan offerings from public ArtisanService endpoints
-      try {
-        String? artisanId = (artisan['_id'] ??
-                artisan['id'] ??
-                artisan['artisanId'] ??
-                artisan['userId'])
-            ?.toString();
-        if (artisanId == null || artisanId.isEmpty) {
-          final userObj = artisan['user'];
-          if (userObj is Map)
-            artisanId = (userObj['_id'] ?? userObj['id'])?.toString();
-        }
-
-        if (artisanId != null && artisanId.isNotEmpty) {
-          final base = _normalizeBaseUrl(API_BASE_URL);
-
-          Future<List<Map<String, dynamic>>> tryQuery({String? catId}) async {
-            try {
-              final queryParam = catId != null ? '&categoryId=$catId' : '';
-              final qUri = Uri.parse(
-                  '$base/api/artisan-services?artisanId=$artisanId$queryParam');
-              final qResp =
-                  await http.get(qUri).timeout(const Duration(seconds: 10));
-              if (qResp.statusCode >= 200 &&
-                  qResp.statusCode < 300 &&
-                  qResp.body.isNotEmpty) {
-                final body = jsonDecode(qResp.body);
-                List<dynamic>? docs;
-                if (body is List)
-                  docs = body;
-                else if (body is Map && body['data'] is List)
-                  docs = List<dynamic>.from(body['data']);
-                else if (body is Map && body['items'] is List)
-                  docs = List<dynamic>.from(body['items']);
-                else if (body is Map && body['services'] is List) docs = [body];
-
-                if (docs != null && docs.isNotEmpty) {
-                  final List<Map<String, dynamic>> flattened = [];
-                  for (final doc in docs) {
-                    if (doc == null) continue;
-                    if (doc is! Map) continue;
-                    final d =
-                        Map<String, dynamic>.from(doc.cast<String, dynamic>());
-                    final artisanServiceId = (d['_id'] ?? d['id'])?.toString();
-                    final docCategoryId = (d['categoryId'] ??
-                            d['mainCategory'] ??
-                            d['category']) is Map
-                        ? ((d['categoryId'] ??
-                                    d['mainCategory'] ??
-                                    d['category'])['_id'] ??
-                                (d['categoryId'] ??
-                                    d['mainCategory'] ??
-                                    d['category'])['id'])
-                            ?.toString()
-                        : (d['categoryId'] ??
-                                d['mainCategory'] ??
-                                d['category'])
-                            ?.toString();
-                    final servicesArr =
-                        d['services'] ?? d['serviceList'] ?? d['items'];
-                    if (servicesArr is List) {
-                      for (final s in servicesArr) {
-                        if (s == null || s is! Map) continue;
-                        final sub = Map<String, dynamic>.from(
-                            s.cast<String, dynamic>());
-                        final subRaw = sub['subCategoryId'] ??
-                            sub['sub_category_id'] ??
-                            sub['_id'] ??
-                            sub['id'];
-                        String? subId;
-                        String? subName =
-                            (sub['name'] ?? sub['title'] ?? sub['label'])
-                                ?.toString();
-                        if (subRaw is Map) {
-                          subId = (subRaw['_id'] ?? subRaw['id'])?.toString();
-                          subName = subName ??
-                              (subRaw['name'] ?? subRaw['title'])?.toString();
-                        } else {
-                          subId = subRaw?.toString();
-                        }
-                        final rawPrice = sub['price'] ??
-                            sub['amount'] ??
-                            sub['unitPrice'] ??
-                            sub['rate'] ??
-                            sub['cost'];
-                        num? price;
-                        if (rawPrice != null) {
-                          if (rawPrice is num)
-                            price = rawPrice;
-                          else
-                            price = num.tryParse(rawPrice.toString());
-                        }
-                        final tempId = (subId != null && subId.isNotEmpty)
-                            ? subId
-                            : ('artisan_${artisanId}__${(sub['_id'] ?? sub['id'])?.toString() ?? DateTime.now().microsecondsSinceEpoch.toString()}');
-                        if (catId != null &&
-                            docCategoryId != null &&
-                            docCategoryId != catId) continue;
-                        flattened.add({
-                          'tempId': tempId,
-                          if (subId != null) 'subCategoryId': subId,
-                          'name': subName ?? 'Unnamed service',
-                          if (price != null) 'price': price,
-                          'currency': sub['currency'] ?? 'NGN',
-                          'artisanServiceId': artisanServiceId,
-                          'categoryId': docCategoryId,
-                          'raw': sub,
-                        });
-                      }
-                    }
-                  }
-                  return flattened;
-                }
-              }
-            } catch (_) {}
-            return [];
-          }
-
-          if (categoryId != null && categoryId.isNotEmpty) {
-            final byCategory = await tryQuery(catId: categoryId);
-            if (byCategory.isNotEmpty) return byCategory;
-          }
-          final byArtisan = await tryQuery();
-          if (byArtisan.isNotEmpty) return byArtisan;
-
-          try {
-            final qUri = Uri.parse('$base/api/artisan-services/$artisanId');
-            final qResp =
-                await http.get(qUri).timeout(const Duration(seconds: 10));
-            if (qResp.statusCode >= 200 &&
-                qResp.statusCode < 300 &&
-                qResp.body.isNotEmpty) {
-              final body = jsonDecode(qResp.body);
-              if (body is Map && body['data'] is Map) {
-                final d = Map<String, dynamic>.from(body['data']);
-                final artisanServiceId = (d['_id'] ?? d['id'])?.toString();
-                final docCategoryId = (d['categoryId'] ??
-                        d['mainCategory'] ??
-                        d['category']) is Map
-                    ? ((d['categoryId'] ??
-                                d['mainCategory'] ??
-                                d['category'])['_id'] ??
-                            (d['categoryId'] ??
-                                d['mainCategory'] ??
-                                d['category'])['id'])
-                        ?.toString()
-                    : (d['categoryId'] ?? d['mainCategory'] ?? d['category'])
-                        ?.toString();
-                final servicesArr =
-                    d['services'] ?? d['serviceList'] ?? d['items'];
-                if (servicesArr is List) {
-                  final flattened = <Map<String, dynamic>>[];
-                  for (final s in servicesArr) {
-                    if (s == null || s is! Map) continue;
-                    final sub =
-                        Map<String, dynamic>.from(s.cast<String, dynamic>());
-                    final subRaw = sub['subCategoryId'] ??
-                        sub['sub_category_id'] ??
-                        sub['_id'] ??
-                        sub['id'];
-                    String? subId;
-                    String? subName =
-                        (sub['name'] ?? sub['title'] ?? sub['label'])
-                            ?.toString();
-                    if (subRaw is Map) {
-                      subId = (subRaw['_id'] ?? subRaw['id'])?.toString();
-                      subName = subName ??
-                          (subRaw['name'] ?? subRaw['title'])?.toString();
-                    } else {
-                      subId = subRaw?.toString();
-                    }
-                    final rawPrice =
-                        sub['price'] ?? sub['amount'] ?? sub['unitPrice'];
-                    num? price;
-                    if (rawPrice != null) {
-                      if (rawPrice is num)
-                        price = rawPrice;
-                      else
-                        price = num.tryParse(rawPrice.toString());
-                    }
-                    final tempId = (subId != null && subId.isNotEmpty)
-                        ? subId
-                        : ('artisan_${artisanId}__${(sub['_id'] ?? sub['id'])?.toString() ?? DateTime.now().microsecondsSinceEpoch.toString()}');
-                    flattened.add({
-                      'tempId': tempId,
-                      if (subId != null) 'subCategoryId': subId,
-                      'name': subName ?? 'Unnamed service',
-                      if (price != null) 'price': price,
-                      'currency': sub['currency'] ?? 'NGN',
-                      'artisanServiceId': artisanServiceId,
-                      'categoryId': docCategoryId,
-                      'raw': sub,
-                    });
-                  }
-                  return flattened;
-                }
-              }
-            }
-          } catch (_) {}
-        }
-      } catch (_) {}
-
-      // If we still have nothing, try MyServiceService.fetchMyServices() as a last-resort
-      String? resolvedAid = (artisan['_id'] ??
-              artisan['id'] ??
-              artisan['artisanId'] ??
-              artisan['userId'])
+      // Fall back to API fetch
+      String? artisanId = (artisan['_id'] ??
+          artisan['id'] ??
+          artisan['artisanId'] ??
+          artisan['userId'])
           ?.toString();
-      if (resolvedAid == null || resolvedAid.isEmpty) {
+      if (artisanId == null || artisanId.isEmpty) {
         final userObj = artisan['user'];
         if (userObj is Map)
-          resolvedAid = (userObj['_id'] ?? userObj['id'])?.toString();
+          artisanId = (userObj['_id'] ?? userObj['id'])?.toString();
       }
-      try {
-        final mySvc = MyServiceService();
-        final apiResp = await mySvc.fetchMyServices(context: context);
-        if (apiResp.ok && apiResp.data != null) {
+
+      if (artisanId != null && artisanId.isNotEmpty) {
+        final base = _normalizeBaseUrl(API_BASE_URL);
+        final qUri = Uri.parse(
+            '$base/api/artisan-services?artisanId=$artisanId&limit=100');
+        final qResp =
+        await http.get(qUri).timeout(const Duration(seconds: 10));
+
+        if (qResp.statusCode >= 200 &&
+            qResp.statusCode < 300 &&
+            qResp.body.isNotEmpty) {
+          final body = jsonDecode(qResp.body);
           List<dynamic>? docs;
-          if (apiResp.data is List)
-            docs = apiResp.data as List<dynamic>;
-          else if (apiResp.data is Map && apiResp.data['data'] is List)
-            docs = List<dynamic>.from(apiResp.data['data']);
-          else if (apiResp.data is Map && apiResp.data['items'] is List)
-            docs = List<dynamic>.from(apiResp.data['items']);
-          else if (apiResp.data is Map && apiResp.data['services'] is List)
-            docs = [apiResp.data];
+
+          if (body is List)
+            docs = body;
+          else if (body is Map && body['data'] is List)
+            docs = List<dynamic>.from(body['data']);
+          else if (body is Map && body['success'] == true && body['data'] is List) {
+            docs = List<dynamic>.from(body['data']);
+          } else if (body is Map && body['items'] is List) {
+            docs = List<dynamic>.from(body['items']);
+          }
 
           if (docs != null && docs.isNotEmpty) {
             final List<Map<String, dynamic>> flattened = [];
             for (final doc in docs) {
               if (doc == null || doc is! Map) continue;
               final d = Map<String, dynamic>.from(doc.cast<String, dynamic>());
-              final servicesArr =
-                  d['services'] ?? d['serviceList'] ?? d['items'];
               final artisanServiceId = (d['_id'] ?? d['id'])?.toString();
-              final docCategoryId = (d['categoryId'] ?? d['category']) is Map
-                  ? ((d['categoryId'] ?? d['category'])['_id'] ??
-                          (d['categoryId'] ?? d['category'])['id'])
-                      ?.toString()
-                  : (d['categoryId'] ?? d['category'])?.toString();
+              final servicesArr = d['services'] ?? d['serviceList'] ?? d['items'];
+
               if (servicesArr is List) {
                 for (final s in servicesArr) {
                   if (s == null || s is! Map) continue;
-                  final sub =
-                      Map<String, dynamic>.from(s.cast<String, dynamic>());
+                  final sub = Map<String, dynamic>.from(
+                      s.cast<String, dynamic>());
                   final subRaw = sub['subCategoryId'] ??
                       sub['sub_category_id'] ??
                       sub['_id'] ??
                       sub['id'];
                   String? subId;
                   String? subName =
-                      (sub['name'] ?? sub['title'] ?? sub['label'])?.toString();
+                  (sub['name'] ?? sub['title'] ?? sub['label'])
+                      ?.toString();
                   if (subRaw is Map) {
                     subId = (subRaw['_id'] ?? subRaw['id'])?.toString();
-                    subName = subName ??
-                        (subRaw['name'] ?? subRaw['title'])?.toString();
+                    subName = subName ?? (subRaw['name'] ?? subRaw['title'])?.toString();
                   } else {
                     subId = subRaw?.toString();
                   }
-                  final rawPrice =
-                      sub['price'] ?? sub['amount'] ?? sub['unitPrice'];
+                  final rawPrice = sub['price'] ??
+                      sub['amount'] ??
+                      sub['unitPrice'] ??
+                      sub['rate'] ??
+                      sub['cost'];
                   num? price;
                   if (rawPrice != null) {
                     if (rawPrice is num)
@@ -2574,7 +2601,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                   }
                   final tempId = (subId != null && subId.isNotEmpty)
                       ? subId
-                      : ('artisan_${resolvedAid ?? 'me'}__${(sub['_id'] ?? sub['id'])?.toString() ?? DateTime.now().microsecondsSinceEpoch.toString()}');
+                      : ('artisan_${artisanId}__${(s['serviceEntryId'] ?? s['id'] ?? s['_id'])?.toString() ?? DateTime.now().microsecondsSinceEpoch.toString()}');
+
                   flattened.add({
                     'tempId': tempId,
                     if (subId != null) 'subCategoryId': subId,
@@ -2582,16 +2610,20 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                     if (price != null) 'price': price,
                     'currency': sub['currency'] ?? 'NGN',
                     'artisanServiceId': artisanServiceId,
-                    'categoryId': docCategoryId,
                     'raw': sub,
                   });
                 }
               }
-              if (flattened.isNotEmpty) return flattened;
+            }
+            if (mounted && flattened.isNotEmpty) {
+              setState(() {
+                _artisanServices = flattened;
+              });
+              return flattened; // Success, exit early
             }
           }
         }
-      } catch (_) {}
+      }
     } catch (e) {
       debugPrint('fetchJobSubcategoriesForArtisan error: $e');
     }
@@ -2603,6 +2635,219 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
     if (id == null) return;
     if (_artisanData != null) return;
     await _fetchArtisanById(id);
+  }
+
+  Future<void> _loadServicesForArtisan(String artisanId, {String? token}) async {
+    token ??= _authToken;
+    if (artisanId.isEmpty) return;
+
+    setState(() {
+      _loadingServices = true;
+      _artisanServices = [];
+    });
+
+    try {
+      // First try to fetch from API
+      final base = _normalizeBaseUrl(API_BASE_URL);
+      final uri = Uri.parse('$base/api/artisan-services?artisanId=$artisanId&limit=100');
+      final headers = <String, String>{'Accept': 'application/json'};
+      if (token?.isNotEmpty ?? false) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+
+      final resp = await http.get(uri, headers: headers).timeout(_timeout);
+
+      if (resp.statusCode == 200) {
+        final body = jsonDecode(resp.body);
+        List<dynamic>? artisanServiceDocs;
+
+        // Parse the response - handle different response formats
+        if (body is List) {
+          artisanServiceDocs = body;
+        } else if (body is Map && body['data'] is List) {
+          artisanServiceDocs = body['data'] as List<dynamic>;
+        } else if (body is Map && body['success'] == true && body['data'] is List) {
+          artisanServiceDocs = body['data'] as List<dynamic>;
+        } else if (body is Map && body['items'] is List) {
+          artisanServiceDocs = body['items'] as List<dynamic>;
+        }
+
+        if (artisanServiceDocs != null && artisanServiceDocs.isNotEmpty) {
+          final List<Map<String, dynamic>> flattenedServices = [];
+
+          // Flatten the nested services structure
+          for (final doc in artisanServiceDocs) {
+            if (doc is! Map) continue;
+
+            final artisanServiceDoc = Map<String, dynamic>.from(doc.cast<String, dynamic>());
+
+            // Extract the nested services array from each ArtisanService document
+            final servicesArr = artisanServiceDoc['services'];
+            if (servicesArr is List && servicesArr.isNotEmpty) {
+              for (final service in servicesArr) {
+                if (service is! Map) continue;
+
+                final svc = Map<String, dynamic>.from(service.cast<String, dynamic>());
+
+                // Get the sub-category details
+                final subCategoryObj = svc['subCategoryId'];
+                String? serviceName;
+                String? subCategoryId;
+
+                if (subCategoryObj is Map) {
+                  serviceName = subCategoryObj['name'] ?? subCategoryObj['label'];
+                  subCategoryId = subCategoryObj['_id']?.toString();
+                }
+
+                // Fallback to direct service fields
+                serviceName ??= (svc['name'] ?? svc['title'] ?? svc['label'] ?? 'Unnamed Service').toString();
+                subCategoryId ??= svc['subCategoryId']?.toString();
+
+                // Only add if we have a valid service name
+                if (serviceName.isNotEmpty) {
+                  // Parse price - could be in different fields
+                  num price = 0;
+                  final priceValue = svc['price'] ?? svc['amount'] ?? svc['unitPrice'] ?? svc['rate'] ?? 0;
+                  if (priceValue is num) {
+                    price = priceValue;
+                  } else if (priceValue is String) {
+                    price = num.tryParse(priceValue) ?? 0;
+                  }
+
+                  flattenedServices.add({
+                    'id': '${artisanServiceDoc['_id']}_${svc['_id'] ?? DateTime.now().millisecondsSinceEpoch}',
+                    'name': serviceName,
+                    'price': price,
+                    'currency': svc['currency'] ?? 'NGN',
+                    'subCategoryId': subCategoryId,
+                    'artisanServiceId': artisanServiceDoc['_id']?.toString(),
+                  });
+                }
+              }
+            }
+          }
+
+          if (mounted && flattenedServices.isNotEmpty) {
+            setState(() {
+              _artisanServices = flattenedServices;
+            });
+            return; // Success, exit early
+          }
+        }
+      }
+
+      // If API fails or returns no services, try to extract from artisan object using the same logic as the bottom sheet
+      debugPrint('API returned no services, trying to extract from artisan object');
+      _extractServicesUsingBottomSheetLogic();
+
+    } catch (e) {
+      debugPrint('Failed to load services from API for artisan $artisanId: $e');
+      // Try to extract from artisan object as fallback
+      _extractServicesUsingBottomSheetLogic();
+    } finally {
+      if (mounted) setState(() => _loadingServices = false);
+    }
+  }
+
+  // Fallback method that uses the same extraction logic as the bottom sheet
+  void _extractServicesUsingBottomSheetLogic() {
+    try {
+      final artisan = _artisan;
+
+      // Use the same possibleLists as in _fetchJobSubcategoriesForArtisan
+      final possibleLists = <dynamic>[
+        artisan['services'],
+        artisan['artisanServices'],
+        artisan['artisan_service'],
+        artisan['serviceOptions'],
+        artisan['offerings'],
+        artisan['pricing'] is Map ? artisan['pricing']['services'] : null,
+        artisan['pricingDetails'],
+        artisan['service_list'],
+        artisan['serviceList'],
+        artisan['artisan_service_entries'],
+        artisan['artisan_services'],
+        artisan['service_entries'],
+        artisan['serviceItems'],
+        artisan['myServices'],
+      ];
+
+      final List<Map<String, dynamic>> extracted = [];
+
+      for (final cand in possibleLists) {
+        if (cand == null) continue;
+        if (cand is List && cand.isNotEmpty) {
+          for (final e in cand) {
+            if (e == null) continue;
+            if (e is Map && (e['services'] is List)) {
+              // This is an ArtisanService-style doc: flatten its nested services
+              final doc = Map<String, dynamic>.from(e.cast<String, dynamic>());
+              final servicesArr = doc['services'] as List<dynamic>;
+              for (final s in servicesArr) {
+                if (s == null || s is! Map) continue;
+                final sub = Map<String, dynamic>.from(s.cast<String, dynamic>());
+
+                // Get sub-category details
+                final subRaw = sub['subCategoryId'] ??
+                    sub['sub_category_id'] ??
+                    sub['_id'] ??
+                    sub['id'];
+                String? subId;
+                String? subName =
+                (sub['name'] ?? sub['title'] ?? sub['label'])
+                    ?.toString();
+                if (subRaw is Map) {
+                  subId = (subRaw['_id'] ?? subRaw['id'])?.toString();
+                  subName = subName ?? (subRaw['name'] ?? subRaw['title'])?.toString();
+                } else {
+                  subId = subRaw?.toString();
+                }
+                // Only add if we have a valid service name
+                if (subName != null && subName.isNotEmpty) {
+                  extracted.add({
+                    'id': subId ?? DateTime.now().millisecondsSinceEpoch.toString(),
+                    'name': subName,
+                    'subCategoryId': subId,
+                  });
+                }
+              }
+            } else if (e is Map) {
+              final m = Map<String, dynamic>.from(e.cast<String, dynamic>());
+
+              // Try to extract service name from various fields
+              String? name = (m['name'] ??
+                  m['title'] ??
+                  m['label'] ??
+                  m['serviceName'] ??
+                  m['subCategoryName'])?.toString();
+
+              // Check nested subCategory
+              if ((name == null || name.isEmpty) && m['subCategory'] is Map) {
+                final nested = m['subCategory'] as Map;
+                name = (nested['name'] ?? nested['title'])?.toString();
+              }
+
+              if (name != null && name.isNotEmpty) {
+                extracted.add({
+                  'id': m['_id']?.toString() ?? m['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+                  'name': name,
+                  'subCategoryId': m['subCategoryId']?.toString(),
+                });
+              }
+            }
+          }
+          if (extracted.isNotEmpty) break;
+        }
+      }
+
+      if (extracted.isNotEmpty && mounted) {
+        setState(() {
+          _artisanServices = extracted;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error extracting services using bottom sheet logic: $e');
+    }
   }
 
   // MARK: - Build
@@ -2624,9 +2869,9 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
 
     // Responsive padding
     final horizontalPadding =
-        isSmallScreen ? 16.0 : (isLargeScreen ? 24.0 : 20.0);
+    isSmallScreen ? 16.0 : (isLargeScreen ? 24.0 : 20.0);
     final verticalPadding =
-        isSmallScreen ? 16.0 : (isLargeScreen ? 24.0 : 20.0);
+    isSmallScreen ? 16.0 : (isLargeScreen ? 24.0 : 20.0);
 
     // Responsive spacing
     final smallSpacing = isSmallScreen ? 8.0 : 12.0;
@@ -2635,7 +2880,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
 
     // Responsive image size
     final profileImageSize =
-        isSmallScreen ? 70.0 : (isLargeScreen ? 90.0 : 80.0);
+    isSmallScreen ? 70.0 : (isLargeScreen ? 90.0 : 80.0);
 
     // Helper functions
     String safeToString(dynamic value) {
@@ -2684,30 +2929,30 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
             child: _loading
                 ? const CircularProgressIndicator()
                 : (_errorMessage != null
-                    ? Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(_errorMessage!,
-                                textAlign: TextAlign.center,
-                                style: theme.bodyLarge),
-                            const SizedBox(height: 12),
-                            ElevatedButton(
-                              onPressed: () async {
-                                setState(() {
-                                  _loading = true;
-                                  _errorMessage = null;
-                                });
-                                await _fetchArtisanById(providedId,
-                                    token: _authToken);
-                              },
-                              child: const Text('Retry'),
-                            ),
-                          ],
-                        ),
-                      )
-                    : const SizedBox.shrink()),
+                ? Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(_errorMessage!,
+                      textAlign: TextAlign.center,
+                      style: theme.bodyLarge),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: () async {
+                      setState(() {
+                        _loading = true;
+                        _errorMessage = null;
+                      });
+                      await _fetchArtisanById(providedId,
+                          token: _authToken);
+                    },
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            )
+                : const SizedBox.shrink()),
           ),
         ),
       );
@@ -2724,7 +2969,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                   horizontal: horizontalPadding, vertical: mediumSpacing),
               decoration: BoxDecoration(
                 border:
-                    Border(bottom: BorderSide(color: _borderColor(), width: 1)),
+                Border(bottom: BorderSide(color: _borderColor(), width: 1)),
               ),
               child: Row(
                 children: [
@@ -2793,7 +3038,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                       decoration: BoxDecoration(
                         color: _surfaceColor(),
                         borderRadius:
-                            BorderRadius.circular(isSmallScreen ? 16 : 20),
+                        BorderRadius.circular(isSmallScreen ? 16 : 20),
                       ),
                       child: Row(
                         children: [
@@ -2804,42 +3049,42 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                             child: ClipOval(
                               child: profileImage != null
                                   ? CachedNetworkImage(
-                                      imageUrl: profileImage,
-                                      fit: BoxFit.cover,
-                                      placeholder: (context, url) => Container(
-                                        color: primaryColor.withOpacity(0.1),
-                                        child: Center(
-                                          child: Icon(
-                                            Icons.person_outline,
-                                            size: isSmallScreen ? 32 : 40,
-                                            color:
-                                                primaryColor.withOpacity(0.5),
-                                          ),
-                                        ),
-                                      ),
-                                      errorWidget: (context, url, error) =>
-                                          Container(
-                                        color: primaryColor.withOpacity(0.1),
-                                        child: Center(
-                                          child: Icon(
-                                            Icons.person_outline,
-                                            size: isSmallScreen ? 32 : 40,
-                                            color:
-                                                primaryColor.withOpacity(0.5),
-                                          ),
-                                        ),
-                                      ),
-                                    )
-                                  : Container(
+                                imageUrl: profileImage,
+                                fit: BoxFit.cover,
+                                placeholder: (context, url) => Container(
+                                  color: primaryColor.withOpacity(0.1),
+                                  child: Center(
+                                    child: Icon(
+                                      Icons.person_outline,
+                                      size: isSmallScreen ? 32 : 40,
+                                      color:
+                                      primaryColor.withOpacity(0.5),
+                                    ),
+                                  ),
+                                ),
+                                errorWidget: (context, url, error) =>
+                                    Container(
                                       color: primaryColor.withOpacity(0.1),
                                       child: Center(
                                         child: Icon(
                                           Icons.person_outline,
                                           size: isSmallScreen ? 32 : 40,
-                                          color: primaryColor.withOpacity(0.5),
+                                          color:
+                                          primaryColor.withOpacity(0.5),
                                         ),
                                       ),
                                     ),
+                              )
+                                  : Container(
+                                color: primaryColor.withOpacity(0.1),
+                                child: Center(
+                                  child: Icon(
+                                    Icons.person_outline,
+                                    size: isSmallScreen ? 32 : 40,
+                                    color: primaryColor.withOpacity(0.5),
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                           SizedBox(width: mediumSpacing),
@@ -2884,35 +3129,98 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
 
                                 SizedBox(height: 6),
 
-                                // Trade pill
+                                // Services pills - compact display with modal for more
                                 Wrap(
-                                  spacing: smallSpacing,
-                                  runSpacing: isSmallScreen ? 4 : 6,
+                                  spacing: 4,
+                                  runSpacing: 4,
                                   children: [
-                                    Builder(builder: (context) {
-                                      final trade = _getTrade();
-                                      if (trade == null || trade.isEmpty) {
-                                        return const SizedBox.shrink();
-                                      }
-                                      return Container(
+                                    if (_loadingServices) ...[
+                                      Container(
                                         padding: EdgeInsets.symmetric(
-                                            horizontal: isSmallScreen ? 8 : 10,
-                                            vertical: isSmallScreen ? 4 : 6),
+                                            horizontal: 6,
+                                            vertical: 2),
                                         decoration: BoxDecoration(
                                           color: primaryColor.withOpacity(0.12),
-                                          borderRadius:
-                                              BorderRadius.circular(16),
+                                          borderRadius: BorderRadius.circular(12),
                                         ),
                                         child: Text(
-                                          trade,
+                                          'Loading...',
                                           style: theme.bodySmall.copyWith(
                                             color: primaryColor,
                                             fontWeight: FontWeight.w600,
-                                            fontSize: smallFontSize,
+                                            fontSize: smallFontSize - 2,
                                           ),
                                         ),
-                                      );
-                                    }),
+                                      ),
+                                    ] else if (_artisanServices.isNotEmpty) ...[
+                                      // Show up to 3 services as compact pills
+                                      ..._artisanServices.take(3).map((service) {
+                                        final serviceName = service['name'] ?? 'Service';
+                                        return Container(
+                                          padding: EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: primaryColor.withOpacity(0.12),
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Text(
+                                            serviceName,
+                                            style: theme.bodySmall.copyWith(
+                                              color: primaryColor,
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: smallFontSize - 2,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        );
+                                      }),
+                                      // If there are more than 3 services, show a +X more pill with modal
+                                      if (_artisanServices.length > 3)
+                                        GestureDetector(
+                                          onTap: () => _showAllServicesModal(context, theme, primaryColor, smallFontSize),
+                                          child: Container(
+                                            padding: EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color: primaryColor.withOpacity(0.2),
+                                              borderRadius: BorderRadius.circular(12),
+                                              border: Border.all(
+                                                color: primaryColor.withOpacity(0.3),
+                                                width: 0.8,
+                                              ),
+                                            ),
+                                            child: Text(
+                                              '+${_artisanServices.length - 3} more',
+                                              style: theme.bodySmall.copyWith(
+                                                color: primaryColor,
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: smallFontSize - 2,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                    ] else ...[
+                                      Container(
+                                        padding: EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: primaryColor.withOpacity(0.08),
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Text(
+                                          'No services',
+                                          style: theme.bodySmall.copyWith(
+                                            color: primaryColor,
+                                            fontWeight: FontWeight.w500,
+                                            fontSize: smallFontSize - 2,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ),
 
@@ -2923,7 +3231,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                                   children: [
                                     ...List.generate(5, (index) {
                                       final fullStars =
-                                          (_averageRating ?? 0).floor();
+                                      (_averageRating ?? 0).floor();
                                       return Icon(
                                         index < fullStars
                                             ? Icons.star_rounded
@@ -2945,8 +3253,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                                         _averageRating != null
                                             ? '${_averageRating!.toStringAsFixed(1)} (${_reviewCount} reviews)'
                                             : (_loadingReviews
-                                                ? 'Loading'
-                                                : 'No reviews yet'),
+                                            ? 'Loading'
+                                            : 'No reviews yet'),
                                         style: theme.bodyMedium.copyWith(
                                           color: _secondaryTextColor(),
                                           fontSize: smallFontSize,
@@ -2977,7 +3285,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                               vertical: isSmallScreen ? 14 : 16),
                           shape: RoundedRectangleBorder(
                             borderRadius:
-                                BorderRadius.circular(isSmallScreen ? 10 : 12),
+                            BorderRadius.circular(isSmallScreen ? 10 : 12),
                           ),
                           elevation: 0,
                           shadowColor: Colors.transparent,
@@ -3026,13 +3334,13 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                       decoration: BoxDecoration(
                         color: _surfaceColor(),
                         borderRadius:
-                            BorderRadius.circular(isSmallScreen ? 12 : 16),
+                        BorderRadius.circular(isSmallScreen ? 12 : 16),
                         border: Border.all(color: _borderColor(), width: 1.5),
                       ),
                       child: Text(
                         safeGetString('bio',
                             defaultValue:
-                                'No bio available. This artisan hasn\'t added a description yet.'),
+                            'No bio available. This artisan hasn\'t added a description yet.'),
                         style: theme.bodyLarge?.copyWith(
                           color: _textColor(0.85),
                           height: 1.6,
@@ -3072,19 +3380,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                                   defaultValue: 'Not specified')),
                         ),
                         SizedBox(height: smallSpacing),
-                        _buildInfoItem(
-                          Text(
-                            '₦',
-                            style: TextStyle(
-                              color: primaryColor,
-                              fontWeight: FontWeight.w700,
-                              fontSize: isSmallScreen ? 14 : 16,
-                            ),
-                          ),
-                          'Service Charge',
-                          safeGetNestedString(['pricing', 'perJob'],
-                              defaultValue: 'Contact for pricing'),
-                        ),
+                        _buildAvailabilityPills(artisan, theme, primaryColor, smallSpacing, mediumSpacing, smallFontSize),
                       ],
                     ),
 
@@ -3108,7 +3404,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                         if (_loadingReviews) ...[
                           Padding(
                             padding:
-                                EdgeInsets.symmetric(vertical: mediumSpacing),
+                            EdgeInsets.symmetric(vertical: mediumSpacing),
                             child: Center(
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
@@ -3119,7 +3415,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                         ] else if (_reviews.isEmpty) ...[
                           Padding(
                             padding:
-                                EdgeInsets.symmetric(vertical: mediumSpacing),
+                            EdgeInsets.symmetric(vertical: mediumSpacing),
                             child: Center(
                               child: Text(
                                 'No reviews yet',
@@ -3135,9 +3431,9 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                             final reviewerId =
                                 review['customerId'] ?? review['userId'];
                             final reviewerName = reviewerId != null &&
-                                    reviewerId.toString().isNotEmpty
+                                reviewerId.toString().isNotEmpty
                                 ? (_userNameCache[reviewerId.toString()] ??
-                                    'User')
+                                'User')
                                 : 'User';
                             String reviewDate = 'Unknown date';
                             try {
@@ -3150,11 +3446,11 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                             final reviewRating =
                                 review['rating'] ?? review['stars'] ?? 0;
                             final reviewComment = (review['comment'] ??
-                                    review['review'] ??
-                                    review['content'] ??
-                                    review['message'] ??
-                                    review['text'] ??
-                                    '')
+                                review['review'] ??
+                                review['content'] ??
+                                review['message'] ??
+                                review['text'] ??
+                                '')
                                 .toString();
 
                             return Padding(
@@ -3178,20 +3474,20 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                                           height: isSmallScreen ? 36 : 40,
                                           decoration: BoxDecoration(
                                             color:
-                                                primaryColor.withOpacity(0.1),
+                                            primaryColor.withOpacity(0.1),
                                             shape: BoxShape.circle,
                                           ),
                                           child: Center(
                                             child: Text(
                                               reviewerName.isNotEmpty
                                                   ? reviewerName[0]
-                                                      .toUpperCase()
+                                                  .toUpperCase()
                                                   : 'U',
                                               style: TextStyle(
                                                 color: primaryColor,
                                                 fontWeight: FontWeight.w600,
                                                 fontSize:
-                                                    isSmallScreen ? 14 : 16,
+                                                isSmallScreen ? 14 : 16,
                                               ),
                                             ),
                                           ),
@@ -3200,12 +3496,12 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                                         Expanded(
                                           child: Column(
                                             crossAxisAlignment:
-                                                CrossAxisAlignment.start,
+                                            CrossAxisAlignment.start,
                                             children: [
                                               Text(
                                                 reviewerName,
                                                 style:
-                                                    theme.bodyMedium.copyWith(
+                                                theme.bodyMedium.copyWith(
                                                   fontWeight: FontWeight.w600,
                                                   fontSize: bodyFontSize,
                                                 ),
@@ -3216,8 +3512,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                                                   ...List.generate(5, (index) {
                                                     return Icon(
                                                       index <
-                                                              reviewRating
-                                                                  .floor()
+                                                          reviewRating
+                                                              .floor()
                                                           ? Icons.star
                                                           : Icons.star_border,
                                                       size: isSmallScreen
@@ -3235,7 +3531,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                                                     style: theme.bodySmall
                                                         .copyWith(
                                                       color:
-                                                          _secondaryTextColor(),
+                                                      _secondaryTextColor(),
                                                       fontSize: smallFontSize,
                                                     ),
                                                   ),

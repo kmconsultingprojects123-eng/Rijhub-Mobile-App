@@ -42,11 +42,8 @@ class TokenStorage {
   // Falls back to the legacy baseKey when no userId is available to remain
   // backwards-compatible.
   static Future<String> _dashboardKey(String baseKey, {String? userId}) async {
-    try {
-      userId ??= await TokenStorage.getUserId();
-    } catch (_) {
-      userId = null;
-    }
+    // NOTE: do NOT attempt to call getUserId() here - that may trigger
+    // getDashboardProfile(), which calls _dashboardKey -> recursion.
     if (userId != null && userId.isNotEmpty) {
       return '$_keyDashboardPrefix:$userId:$baseKey';
     }
@@ -825,6 +822,17 @@ class TokenStorage {
   /// 3. Otherwise return null.
   static Future<String?> getUserId() async {
     try {
+      // First try the cached dashboard/profile saved after login (AuthService)
+      try {
+        final dashboard = await getDashboardProfile();
+        if (dashboard != null) {
+          final candidates = ['_id', 'id', 'userId', 'user_id', 'uid'];
+          for (final k in candidates) {
+            if (dashboard[k] != null) return dashboard[k].toString();
+          }
+        }
+      } catch (_) {}
+
       final google = await getGoogleProfile();
       if (google != null) {
         final candidates = ['id', 'sub', 'userId', '_id'];
@@ -910,6 +918,20 @@ class TokenStorage {
             await prefs.setString(_keyKycStatus, status);
           } catch (_) {}
         }
+      }
+
+      // Keep the simple boolean kyc_verified flag in sync with the status string.
+      // If the server reports an explicit approved/verified status we save the
+      // boolean as true; otherwise we mark it false. This prevents parts of the
+      // app that read only the boolean flag (TokenStorage.getKycVerified)
+      // from showing stale/incorrect state.
+      try {
+        final sl = status.toLowerCase();
+        final approvedKeywords = ['approved', 'verified', 'success', 'approved_by_admin', 'true', '1'];
+        final isVerified = approvedKeywords.any((kw) => sl.contains(kw));
+        await saveKycVerified(isVerified);
+      } catch (e) {
+        debugPrint('TokenStorage: saveKycStatus -> saveKycVerified sync failed: $e');
       }
     } catch (e) {
       debugPrint('TokenStorage: saveKycStatus failed: $e');

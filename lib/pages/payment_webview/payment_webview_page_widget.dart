@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/foundation.dart';
-import 'dart:async';
 import 'dart:io' show Platform;
 import '../../services/webview_monitor.dart';
 
@@ -22,40 +21,7 @@ class _PaymentWebviewPageWidgetState extends State<PaymentWebviewPageWidget> {
   bool _loading = true;
   bool _blockingClose = false;
   bool _initFailed = false;
-  bool _isClosing = false; // Prevents duplicate pops; defers close to avoid WebView/EGL crash on Android
   String? _lastUrl;
-
-  /// Best-effort graceful shutdown before closing the WebView.
-  /// Mitigates some Android WebView native crashes during dispose (EGL/GL context issues).
-  Future<void> _closeAndPop(Map<String, dynamic> result) async {
-    if (_isClosing || !mounted) return;
-    _isClosing = true;
-
-    try {
-      _blockingClose = true;
-      if (mounted) setState(() {});
-    } catch (_) {}
-
-    final c = _controller;
-    if (c != null) {
-      try {
-        await c.runJavaScript('try{window.stop && window.stop();}catch(e){}');
-      } catch (_) {}
-      try {
-        await c.loadRequest(Uri.parse('about:blank'));
-      } catch (_) {}
-      try {
-        await c.clearCache();
-      } catch (_) {}
-    }
-
-    // Let the platform view unwind before popping this route.
-    await Future.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
-    try {
-      Navigator.of(context).pop(result);
-    } catch (_) {}
-  }
 
   @override
   void initState() {
@@ -96,7 +62,7 @@ class _PaymentWebviewPageWidgetState extends State<PaymentWebviewPageWidget> {
                 // If caller provided a success marker, honor it first
                 if (widget.successUrlContains != null && s.contains(widget.successUrlContains!)) {
                   if (kDebugMode) debugPrint('PaymentWebview: detected success marker ${widget.successUrlContains} in $s');
-                  unawaited(_closeAndPop({'success': true, 'url': s}));
+                  if (mounted) Navigator.of(context).pop({'success': true, 'url': s});
                   return;
                 }
                 // Normalize to lower-case for simple checks
@@ -108,7 +74,7 @@ class _PaymentWebviewPageWidgetState extends State<PaymentWebviewPageWidget> {
                     final qref = uri.queryParameters['reference'] ?? uri.queryParameters['ref'] ?? uri.queryParameters['tx_ref'];
                     if (qref != null && qref.isNotEmpty) {
                       if (kDebugMode) debugPrint('PaymentWebview: detected reference query param -> $qref');
-                      unawaited(_closeAndPop({'success': true, 'url': s}));
+                      if (mounted) Navigator.of(context).pop({'success': true, 'url': s});
                       return;
                     }
                   }
@@ -116,7 +82,7 @@ class _PaymentWebviewPageWidgetState extends State<PaymentWebviewPageWidget> {
                 // Also look for common success markers in the URL or HTML finish string
                 if (lower.contains('status=success') || lower.contains('successful') || lower.contains('payment successful') || (lower.contains('gateway_response') && lower.contains('successful'))) {
                   if (kDebugMode) debugPrint('PaymentWebview: detected success markers in url/fragment');
-                  unawaited(_closeAndPop({'success': true, 'url': s}));
+                  if (mounted) Navigator.of(context).pop({'success': true, 'url': s});
                   return;
                 }
 
@@ -125,7 +91,7 @@ class _PaymentWebviewPageWidgetState extends State<PaymentWebviewPageWidget> {
                 final isFailure = (lower.contains('status=failed') || lower.contains('status=cancel') || lower.contains('status=cancelled') || lower.contains('/cancel') || lower.contains('payment_failed') || lower.contains('transaction=failed') || (lower.contains('failed') && !lower.contains('success')));
                 if (isFailure) {
                   if (kDebugMode) debugPrint('PaymentWebview: detected failure/cancel marker in url -> $s');
-                  unawaited(_closeAndPop({'success': false, 'url': s}));
+                  if (mounted) Navigator.of(context).pop({'success': false, 'url': s});
                   return;
                 }
               } catch (_) {}

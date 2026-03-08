@@ -1698,6 +1698,7 @@ class _ArtisanCompleteProfileWidgetState extends State<ArtisanCompleteProfileWid
                                                                 .stretch,
                                                             children: [
                                                               // Services
+                                                              /*
                                                               Text(
                                                                 'Services',
                                                                 style: theme
@@ -1769,6 +1770,7 @@ class _ArtisanCompleteProfileWidgetState extends State<ArtisanCompleteProfileWid
                                                                 ),
                                                               const SizedBox(
                                                                   height: 30),
+                                                              */
                                                               // Experience
                                                               Text(
                                                                 'Experience',
@@ -1993,6 +1995,7 @@ class _ArtisanCompleteProfileWidgetState extends State<ArtisanCompleteProfileWid
                                                               ),
                                                               const SizedBox(
                                                                   height: 20),
+                                                              /*
                                                               TextFormField(
                                                                 controller: _perHourCtrl,
                                                                 decoration: _inputDecoration(
@@ -2021,6 +2024,7 @@ class _ArtisanCompleteProfileWidgetState extends State<ArtisanCompleteProfileWid
                                                               ),
                                                               const SizedBox(
                                                                   height: 30),
+                                                              */
                                                               // Portfolio
                                                               Row(
                                                                 mainAxisAlignment: MainAxisAlignment
@@ -2704,6 +2708,5 @@ class _ArtisanCompleteProfileWidgetState extends State<ArtisanCompleteProfileWid
     );
   }
 }
-
 
 

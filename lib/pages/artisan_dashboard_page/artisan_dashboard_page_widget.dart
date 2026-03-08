@@ -44,7 +44,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
   // New local state: artisan-specific profile and kyc status and computed completion
   Map<String, dynamic>? _artisanProfile;
   bool _hasArtisanProfile =
-      false; // NEW: whether the artisan profile document exists
+  false; // NEW: whether the artisan profile document exists
   bool _kycVerifiedLocal = false;
   String? _kycStatus;
   double _profileCompletion = 0.0;
@@ -140,8 +140,8 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
       try {
         final currentUser = await UserService.getProfile();
         final currentId = (currentUser?['id'] ??
-                currentUser?['_id'] ??
-                currentUser?['userId'])
+            currentUser?['_id'] ??
+            currentUser?['userId'])
             ?.toString();
         if (cachedProfile != null &&
             currentId != null &&
@@ -150,10 +150,10 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
           String? cachedId;
           try {
             cachedId = (cachedProfile['user']?['id'] ??
-                    cachedProfile['user']?['_id'] ??
-                    cachedProfile['user']?['userId'] ??
-                    cachedProfile['_id'] ??
-                    cachedProfile['id'])
+                cachedProfile['user']?['_id'] ??
+                cachedProfile['user']?['userId'] ??
+                cachedProfile['_id'] ??
+                cachedProfile['id'])
                 ?.toString();
           } catch (_) {
             cachedId = null;
@@ -184,16 +184,16 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
           if (currentId == null || cachedId == null || cachedId == currentId) {
             setState(() {
               _model.displayName = (cachedProfile['name'] ??
-                          cachedProfile['fullName'] ??
-                          cachedProfile['username'])
-                      ?.toString() ??
+                  cachedProfile['fullName'] ??
+                  cachedProfile['username'])
+                  ?.toString() ??
                   _model.displayName;
               _model.profileImageUrl = (cachedProfile['profileImage'] is Map)
                   ? cachedProfile['profileImage']['url']
                   : (cachedProfile['profileImage'] ??
-                      cachedProfile['photo'] ??
-                      _model.profileImageUrl ??
-                      '');
+                  cachedProfile['photo'] ??
+                  _model.profileImageUrl ??
+                  '');
               _model.profileData = Map<String, dynamic>.from(cachedProfile);
             });
           } else {
@@ -225,7 +225,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
             setState(() {
               // expected payload keys: analytics, recentBookings, recentReviews, pendingJobs, averageRating
               _model.analytics =
-                  Map<String, dynamic>.from(cached['analytics'] ?? cached);
+              Map<String, dynamic>.from(cached['analytics'] ?? cached);
               _model.recentBookings = (cached['recentBookings'] is List)
                   ? List<Map<String, dynamic>>.from(cached['recentBookings'])
                   : (cached['recentBookings'] ?? _model.recentBookings ?? []);
@@ -235,12 +235,12 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
               _model.pendingJobs = (cached['pendingJobs'] is int)
                   ? cached['pendingJobs']
                   : int.tryParse((cached['pendingJobs'] ?? '').toString()) ??
-                      _model.pendingJobs;
+                  _model.pendingJobs;
               _model.averageRating = (cached['averageRating'] is num)
                   ? (cached['averageRating'] as num).toDouble()
                   : double.tryParse(
-                          (cached['averageRating'] ?? '').toString()) ??
-                      _model.averageRating;
+                  (cached['averageRating'] ?? '').toString()) ??
+                  _model.averageRating;
             });
           }
         } catch (e) {
@@ -319,7 +319,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
           (role != null && role.toLowerCase() == 'artisan') ||
               (_model.profileData != null &&
                   (_model.profileData!['role']?.toString().toLowerCase() ==
-                          'artisan' ||
+                      'artisan' ||
                       (_model.profileData!['roles'] is List &&
                           (_model.profileData!['roles'] as List)
                               .contains('artisan'))));
@@ -358,7 +358,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
           return Dialog(
             backgroundColor: theme.cardColor,
             shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -468,36 +468,36 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                         onPressed: (_kycStatus == 'pending')
                             ? null
                             : () async {
-                                Navigator.of(ctx).pop();
-                                try {
-                                  final status =
-                                      await TokenStorage.getKycStatus();
-                                  if (status == 'pending') {
-                                    await showDialog<void>(
-                                      context: context,
-                                      builder: (ctx) => AlertDialog(
-                                        title:
-                                            const Text('Awaiting KYC approval'),
-                                        content: const Text(
-                                            'Your KYC request is pending admin review. We will notify you when it is approved.'),
-                                        actions: [
-                                          TextButton(
-                                              onPressed: () =>
-                                                  Navigator.of(ctx).pop(),
-                                              child: const Text('OK'))
-                                        ],
-                                      ),
-                                    );
-                                  } else {
-                                    await Navigator.of(context).push(
-                                        MaterialPageRoute(
-                                            builder: (_) =>
-                                                ArtisanKycWidget()));
-                                    await TokenStorage.saveOnboardReminderShown(
-                                        true);
-                                  }
-                                } catch (_) {}
-                              },
+                          Navigator.of(ctx).pop();
+                          try {
+                            final status =
+                            await TokenStorage.getKycStatus();
+                            if (status == 'pending') {
+                              await showDialog<void>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title:
+                                  const Text('Awaiting KYC approval'),
+                                  content: const Text(
+                                      'Your KYC request is pending admin review. We will notify you when it is approved.'),
+                                  actions: [
+                                    TextButton(
+                                        onPressed: () =>
+                                            Navigator.of(ctx).pop(),
+                                        child: const Text('OK'))
+                                  ],
+                                ),
+                              );
+                            } else {
+                              await Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                      builder: (_) =>
+                                          ArtisanKycWidget()));
+                              await TokenStorage.saveOnboardReminderShown(
+                                  true);
+                            }
+                          } catch (_) {}
+                        },
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -557,7 +557,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
         setState(() {
           _model.displayName =
               (profile['name'] ?? profile['fullName'] ?? profile['username'])
-                      ?.toString() ??
+                  ?.toString() ??
                   'Artisan';
           _model.profileImageUrl = (profile['profileImage'] is Map)
               ? profile['profileImage']['url']
@@ -571,7 +571,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
         final loc = await UserService.getCanonicalLocation();
         if (loc != null && mounted) {
           final addr =
-              (loc['address'] ?? loc['name'] ?? loc['label'])?.toString();
+          (loc['address'] ?? loc['name'] ?? loc['label'])?.toString();
           if (addr != null && addr.isNotEmpty) {
             setState(() => _model.userLocation = addr);
           }
@@ -579,12 +579,12 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
           // fallback to profile fields
           if (profile['location'] != null && mounted)
             setState(
-                () => _model.userLocation = profile['location'].toString());
+                    () => _model.userLocation = profile['location'].toString());
           else if (profile['address'] is Map &&
               profile['address']['city'] != null &&
               mounted)
             setState(() =>
-                _model.userLocation = profile['address']['city'].toString());
+            _model.userLocation = profile['address']['city'].toString());
           else if (profile['city'] != null && mounted)
             setState(() => _model.userLocation = profile['city'].toString());
         }
@@ -595,7 +595,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
             profile['address']['city'] != null &&
             mounted)
           setState(() =>
-              _model.userLocation = profile['address']['city'].toString());
+          _model.userLocation = profile['address']['city'].toString());
         else if (profile['city'] != null && mounted)
           setState(() => _model.userLocation = profile['city'].toString());
       }
@@ -643,7 +643,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
             if (doc['user'] is Map) {
               final u = Map<String, dynamic>.from(doc['user']);
               final role =
-                  (u['role'] ?? u['type'] ?? '').toString().toLowerCase();
+              (u['role'] ?? u['type'] ?? '').toString().toLowerCase();
               if (role.contains('artisan')) return true;
             }
             final r = (doc['role'] ?? doc['type'] ?? doc['accountType'] ?? '')
@@ -706,12 +706,48 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
         if (kDebugMode) debugPrint('Failed to fetch artisan profile: $e');
       }
 
-      // Fetch authoritative KYC status (do not block profile load)
-      Future.microtask(() async {
-        try {
-          await _fetchAuthoritativeKycStatus();
-        } catch (_) {}
-      });
+      // If the artisan profile contains an admin-verified flag, prefer that as
+      // authoritative proof of KYC verification. Some server flows set
+      // verification on the artisan document before the user object is
+      // updated, so check the artisan document for 'isVerified'/'verified' or
+      // 'kycVerified' and update local state accordingly.
+      try {
+        final ap = _artisanProfile;
+        if (ap != null) {
+          bool artisanVerified = false;
+          try {
+            final cand = ap['isVerified'] ?? ap['verified'] ?? ap['kycVerified'];
+            if (cand is bool) artisanVerified = cand;
+            else if (cand != null) {
+              final sl = cand.toString().toLowerCase();
+              artisanVerified = (sl == 'true' || sl == '1' || sl == 'approved' || sl == 'verified');
+            }
+            // also check nested user object inside artisan document
+            if (!artisanVerified && ap['user'] is Map) {
+              final u = Map<String, dynamic>.from(ap['user']);
+              final ucand = u['isVerified'] ?? u['verified'] ?? u['kycVerified'];
+              if (ucand is bool) artisanVerified = ucand;
+              else if (ucand != null) {
+                final sl = ucand.toString().toLowerCase();
+                artisanVerified = (sl == 'true' || sl == '1' || sl == 'approved' || sl == 'verified');
+              }
+            }
+          } catch (_) {}
+
+          if (artisanVerified && mounted) {
+            setState(() {
+              _kycVerifiedLocal = true;
+              _model.isVerified = true;
+              _kycStatus = 'approved';
+            });
+            try {
+              await TokenStorage.saveKycStatus('approved');
+            } catch (_) {}
+          }
+        }
+      } catch (e) {
+        if (kDebugMode) debugPrint('artisan verification detection failed: $e');
+      }
 
       // Compute completion percentage using both user profile and artisan-specific profile
       _computeProfileCompletion();
@@ -744,28 +780,75 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
         try {
           final decoded = jsonDecode(body);
           bool verified = false;
+          String? parsedStatus;
+
           if (decoded is Map) {
             final data = decoded['data'] ?? decoded;
-            if (data is Map && data['verified'] != null) {
-              final v = data['verified'];
-              if (v is bool)
-                verified = v;
-              else
-                verified =
-                    v.toString().toLowerCase() == 'true' || v.toString() == '1';
-            } else if (decoded['verified'] != null) {
-              final v = decoded['verified'];
-              if (v is bool)
-                verified = v;
-              else
-                verified =
-                    v.toString().toLowerCase() == 'true' || v.toString() == '1';
+
+            // 1) If server returns a data.status string (e.g. 'pending'|'approved'), prefer that
+            try {
+              final s = (data is Map) ? data['status'] : null;
+              if (s != null) parsedStatus = s.toString();
+            } catch (_) {}
+
+            // 2) If a boolean 'verified' is present, use it
+            try {
+              final v = (data is Map) ? data['verified'] : null;
+              if (v != null) {
+                if (v is bool)
+                  verified = v;
+                else {
+                  final sl = v.toString().toLowerCase();
+                  verified = (sl == 'true' || sl == '1' || sl == 'verified' || sl == 'approved');
+                }
+              }
+            } catch (_) {}
+
+            // 3) Fallback: top-level decoded['verified'] or decoded['status']
+            if (!verified) {
+              try {
+                if (decoded['verified'] != null) {
+                  final v = decoded['verified'];
+                  if (v is bool)
+                    verified = v;
+                  else {
+                    final sl = v.toString().toLowerCase();
+                    verified = (sl == 'true' || sl == '1' || sl == 'verified' || sl == 'approved');
+                  }
+                }
+              } catch (_) {}
+            }
+            if (parsedStatus == null) {
+              try {
+                final top = decoded['status'];
+                if (top != null) parsedStatus = top.toString();
+              } catch (_) {}
+            }
+
+            // If we only have a status string (e.g. 'approved'|'pending'), map that to verified boolean
+            if (!verified && parsedStatus != null) {
+              final sl = parsedStatus.toLowerCase();
+              if (sl == 'approved' || sl == 'verified' || sl == 'success' || sl == 'approved_by_admin') {
+                verified = true;
+              } else {
+                verified = false;
+              }
             }
           }
+
+          // Persist the resolved status string for other parts of the app that read TokenStorage.getKycStatus()
+          try {
+            if (mounted && parsedStatus != null && parsedStatus!.isNotEmpty) {
+              TokenStorage.saveKycStatus(parsedStatus!.toString());
+            }
+          } catch (_) {}
+
           if (mounted) {
-            setState(() => _kycVerifiedLocal = verified);
-            if (verified && !_model.isVerified)
-              setState(() => _model.isVerified = true);
+            setState(() {
+              _kycVerifiedLocal = verified;
+              if (parsedStatus != null) _kycStatus = parsedStatus;
+            });
+            if (verified && !_model.isVerified) setState(() => _model.isVerified = true);
             // Recompute profile completion so UI updates immediately when KYC status changes
             try {
               _computeProfileCompletion();
@@ -815,8 +898,8 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
               try {
                 final bk = b is Map
                     ? (b['booking'] is Map
-                        ? Map<String, dynamic>.from(b['booking'])
-                        : Map<String, dynamic>.from(b))
+                    ? Map<String, dynamic>.from(b['booking'])
+                    : Map<String, dynamic>.from(b))
                     : <String, dynamic>{};
                 final status = (bk['status'] ?? '').toString().toLowerCase();
                 final priceVal =
@@ -895,7 +978,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
         final profile = await UserService.getProfile();
         if (profile != null && mounted) {
           setState(
-              () => _model.profileData = Map<String, dynamic>.from(profile));
+                  () => _model.profileData = Map<String, dynamic>.from(profile));
         }
       }
 
@@ -1082,7 +1165,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color:
-            isDark ? theme.colorScheme.surface : theme.colorScheme.background,
+        isDark ? theme.colorScheme.surface : theme.colorScheme.background,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: theme.colorScheme.onSurface.withOpacity(0.1),
@@ -1111,7 +1194,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
               if (change.isNotEmpty)
                 Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: isPositive
                         ? const Color(0xFFE8F5E8)
@@ -1177,7 +1260,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
     // If not enabled, do not call onTap and dim visuals
     final effectiveOnTap = enabled ? onTap : null;
     final titleColor =
-        enabled ? null : theme.colorScheme.onSurface.withOpacity(0.4);
+    enabled ? null : theme.colorScheme.onSurface.withOpacity(0.4);
     final subtitleColor = enabled
         ? theme.colorScheme.onSurface.withOpacity(0.6)
         : theme.colorScheme.onSurface.withOpacity(0.35);
@@ -1213,10 +1296,10 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
       ),
       trailing: enabled
           ? Icon(
-              Icons.chevron_right_rounded,
-              color: theme.colorScheme.onSurface.withOpacity(0.3),
-              size: 20,
-            )
+        Icons.chevron_right_rounded,
+        color: theme.colorScheme.onSurface.withOpacity(0.3),
+        size: 20,
+      )
           : const SizedBox.shrink(),
       contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
     );
@@ -1231,16 +1314,16 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
       if (cachedProfile != null && mounted) {
         setState(() {
           _model.displayName = (cachedProfile['name'] ??
-                      cachedProfile['fullName'] ??
-                      cachedProfile['username'])
-                  ?.toString() ??
+              cachedProfile['fullName'] ??
+              cachedProfile['username'])
+              ?.toString() ??
               _model.displayName;
           _model.profileImageUrl = (cachedProfile['profileImage'] is Map)
               ? cachedProfile['profileImage']['url']
               : (cachedProfile['profileImage'] ??
-                  cachedProfile['photo'] ??
-                  _model.profileImageUrl ??
-                  '');
+              cachedProfile['photo'] ??
+              _model.profileImageUrl ??
+              '');
           _model.profileData = Map<String, dynamic>.from(cachedProfile);
           _loadingProfile = false; // we have something to display
         });
@@ -1250,7 +1333,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
       if (cached != null && mounted) {
         setState(() {
           _model.analytics =
-              Map<String, dynamic>.from(cached['analytics'] ?? cached);
+          Map<String, dynamic>.from(cached['analytics'] ?? cached);
           _model.recentBookings = (cached['recentBookings'] is List)
               ? List<Map<String, dynamic>>.from(cached['recentBookings'])
               : (cached['recentBookings'] ?? _model.recentBookings ?? []);
@@ -1260,11 +1343,11 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
           _model.pendingJobs = (cached['pendingJobs'] is int)
               ? cached['pendingJobs']
               : int.tryParse((cached['pendingJobs'] ?? '').toString()) ??
-                  _model.pendingJobs;
+              _model.pendingJobs;
           _model.averageRating = (cached['averageRating'] is num)
               ? (cached['averageRating'] as num).toDouble()
               : double.tryParse((cached['averageRating'] ?? '').toString()) ??
-                  _model.averageRating;
+              _model.averageRating;
         });
         // Start the reviews carousel if we have cached reviews
         try {
@@ -1304,7 +1387,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
         } catch (_) {
           try {
             final next = (_reviewsPageController!.page?.toInt() ??
-                    (_reviewsPageController!.initialPage)) +
+                (_reviewsPageController!.initialPage)) +
                 1;
             _reviewsPageController!.jumpToPage(next);
           } catch (_) {}
@@ -1357,10 +1440,10 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
         if (data != null) {
           final user = <String, dynamic>{};
           user['name'] = (data['name'] ??
-                      data['fullName'] ??
-                      data['displayName'] ??
-                      data['username'])
-                  ?.toString() ??
+              data['fullName'] ??
+              data['displayName'] ??
+              data['username'])
+              ?.toString() ??
               '';
           var img = data['profileImage'] ??
               data['avatar'] ??
@@ -1434,7 +1517,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
     })();
 
     final int avgPerJob =
-        (jobsCompleted > 0) ? (earnings / jobsCompleted).round() : 0;
+    (jobsCompleted > 0) ? (earnings / jobsCompleted).round() : 0;
 
     return Scaffold(
       key: scaffoldKey,
@@ -1477,7 +1560,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                               height: 40,
                               clipBehavior: Clip.antiAlias,
                               decoration:
-                                  const BoxDecoration(shape: BoxShape.circle),
+                              const BoxDecoration(shape: BoxShape.circle),
                               child: Builder(builder: (ctx) {
                                 final url = _model.profileImageUrl;
                                 if (url != null &&
@@ -1535,7 +1618,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                       'Hello ${_model.displayName ?? "Artisan"}',
                                       style: theme.textTheme.bodyLarge
                                           ?.copyWith(
-                                              fontWeight: FontWeight.w600),
+                                          fontWeight: FontWeight.w600),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -1548,7 +1631,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                       decoration: BoxDecoration(
                                           color: Colors.green.withAlpha(30),
                                           borderRadius:
-                                              BorderRadius.circular(12)),
+                                          BorderRadius.circular(12)),
                                       child: Row(
                                         children: [
                                           const Icon(Icons.verified,
@@ -1557,9 +1640,9 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                           Text('KYC verified',
                                               style: theme.textTheme.labelSmall
                                                   ?.copyWith(
-                                                      color: Colors.green,
-                                                      fontWeight:
-                                                          FontWeight.w600)),
+                                                  color: Colors.green,
+                                                  fontWeight:
+                                                  FontWeight.w600)),
                                         ],
                                       ),
                                     ),
@@ -1589,8 +1672,8 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                             'Location not set',
                                         style: theme.textTheme.bodySmall
                                             ?.copyWith(
-                                                color: colorScheme.onSurface
-                                                    .withOpacity(0.6)),
+                                            color: colorScheme.onSurface
+                                                .withOpacity(0.6)),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
@@ -1610,7 +1693,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                     showBadge: _unreadNotifications > 0,
                     badgeContent: AnimatedBuilder(
                       animation:
-                          _notifAnimController ?? AlwaysStoppedAnimation(1.0),
+                      _notifAnimController ?? AlwaysStoppedAnimation(1.0),
                       builder: (context, child) {
                         return Transform.scale(
                           scale: _notifPulse?.value ?? 1.0,
@@ -1687,11 +1770,11 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                               children: [
                                 Row(
                                   mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
+                                  MainAxisAlignment.spaceBetween,
                                   children: [
                                     Column(
                                       crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                      CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           'Performance Overview',
@@ -1759,17 +1842,17 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                                   width: 80,
                                                   height: 80,
                                                   child:
-                                                      CircularProgressIndicator(
+                                                  CircularProgressIndicator(
                                                     value:
-                                                        (_model.averageRating /
-                                                                5)
-                                                            .clamp(0.0, 1.0),
+                                                    (_model.averageRating /
+                                                        5)
+                                                        .clamp(0.0, 1.0),
                                                     strokeWidth: 5,
                                                     valueColor:
-                                                        AlwaysStoppedAnimation<
-                                                                Color>(
-                                                            colorScheme
-                                                                .primary),
+                                                    AlwaysStoppedAnimation<
+                                                        Color>(
+                                                        colorScheme
+                                                            .primary),
                                                     backgroundColor: colorScheme
                                                         .primary
                                                         .withOpacity(0.12),
@@ -1777,7 +1860,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                                 ),
                                                 Column(
                                                   mainAxisSize:
-                                                      MainAxisSize.min,
+                                                  MainAxisSize.min,
                                                   children: [
                                                     Text(
                                                       _model.averageRating
@@ -1786,7 +1869,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                                           .headlineSmall
                                                           ?.copyWith(
                                                         fontWeight:
-                                                            FontWeight.w700,
+                                                        FontWeight.w700,
                                                       ),
                                                     ),
                                                     Text(
@@ -1821,14 +1904,14 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                        CrossAxisAlignment.start,
                                         children: [
                                           _buildStatRow(
                                             context: context,
                                             icon: Icons.work_outline,
                                             label: 'Jobs Completed',
                                             value:
-                                                '${analytics['jobsCompleted'] ?? 0}',
+                                            '${analytics['jobsCompleted'] ?? 0}',
                                             color: colorScheme.primary,
                                           ),
                                           const SizedBox(height: 12),
@@ -1837,7 +1920,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                             icon: Icons.rate_review_outlined,
                                             label: 'Total Reviews',
                                             value:
-                                                '${analytics['reviews'] ?? 0}',
+                                            '${analytics['reviews'] ?? 0}',
                                             color: colorScheme.primary,
                                           ),
                                           const SizedBox(height: 12),
@@ -1877,11 +1960,11 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                               children: [
                                 Row(
                                   mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
+                                  MainAxisAlignment.spaceBetween,
                                   children: [
                                     Column(
                                       crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                      CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           'Earnings Summary',
@@ -1930,7 +2013,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                        CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             'Total Earnings',
@@ -1955,7 +2038,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                        CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             'Avg. per Job',
@@ -2000,7 +2083,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                     child: Text(
                                       'View Wallet',
                                       style:
-                                          theme.textTheme.titleMedium?.copyWith(
+                                      theme.textTheme.titleMedium?.copyWith(
                                         color: colorScheme.onPrimary,
                                         fontWeight: FontWeight.w600,
                                       ),
@@ -2043,19 +2126,19 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                               children: [
                                 Row(
                                   mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
+                                  MainAxisAlignment.spaceBetween,
                                   children: [
                                     Text(
                                       'Profile Completion',
                                       style:
-                                          theme.textTheme.titleMedium?.copyWith(
+                                      theme.textTheme.titleMedium?.copyWith(
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
                                     Text(
                                       '${(_profileCompletion * 100).toInt()}%',
                                       style:
-                                          theme.textTheme.titleMedium?.copyWith(
+                                      theme.textTheme.titleMedium?.copyWith(
                                         fontWeight: FontWeight.w700,
                                         color: colorScheme.primary,
                                       ),
@@ -2067,7 +2150,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                   value: _profileCompletion,
                                   minHeight: 6,
                                   backgroundColor:
-                                      colorScheme.onSurface.withOpacity(0.1),
+                                  colorScheme.onSurface.withOpacity(0.1),
                                   valueColor: AlwaysStoppedAnimation<Color>(
                                       colorScheme.primary),
                                   borderRadius: BorderRadius.circular(3),
@@ -2101,8 +2184,8 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                           if (cached != null && mounted) {
                                             setState(() {
                                               _artisanProfile =
-                                                  Map<String, dynamic>.from(
-                                                      cached);
+                                              Map<String, dynamic>.from(
+                                                  cached);
                                               _hasArtisanProfile = true;
                                             });
                                             try {
@@ -2126,7 +2209,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                   child: Divider(
                                     height: 1,
                                     color:
-                                        colorScheme.onSurface.withOpacity(0.1),
+                                    colorScheme.onSurface.withOpacity(0.1),
                                   ),
                                 ),
                                 _buildMenuItem(
@@ -2138,8 +2221,8 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                   subtitle: _model.isVerified == true
                                       ? 'Verified'
                                       : (_kycStatus == 'pending'
-                                          ? 'Request pending — awaiting admin approval'
-                                          : 'Get verified to attract more clients'),
+                                      ? 'Request pending — awaiting admin approval'
+                                      : 'Get verified to attract more clients'),
                                   onTap: () async {
                                     try {
                                       final status = _kycStatus ??
@@ -2171,7 +2254,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                                     ArtisanKycWidget()));
                                         await _refreshData();
                                         final s =
-                                            await TokenStorage.getKycStatus();
+                                        await TokenStorage.getKycStatus();
                                         if (s != _kycStatus && mounted)
                                           setState(() => _kycStatus = s);
                                       }
@@ -2211,7 +2294,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                           const SizedBox(height: 24),
                           Padding(
                             padding:
-                                const EdgeInsets.only(left: 4.0, bottom: 12),
+                            const EdgeInsets.only(left: 4.0, bottom: 12),
                             child: Text(
                               'RECENT BOOKINGS',
                               style: TextStyle(
@@ -2235,10 +2318,10 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                               children: [
                                 Padding(
                                   padding:
-                                      const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                                  const EdgeInsets.fromLTRB(20, 20, 20, 16),
                                   child: Row(
                                     mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
+                                    MainAxisAlignment.spaceBetween,
                                     children: [
                                       Text(
                                         'Recent Bookings',
@@ -2268,13 +2351,13 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                 ),
                                 ..._model.recentBookings!.take(3).map((item) {
                                   final service = (item['booking']
-                                              ?['service'] ??
-                                          item['service'] ??
-                                          'Job')
+                                  ?['service'] ??
+                                      item['service'] ??
+                                      'Job')
                                       .toString();
                                   final status = (item['booking']?['status'] ??
-                                          item['status'] ??
-                                          '')
+                                      item['status'] ??
+                                      '')
                                       .toString();
 
                                   Color statusColor;
@@ -2307,7 +2390,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                               color: colorScheme.primary
                                                   .withOpacity(0.1),
                                               borderRadius:
-                                                  BorderRadius.circular(10),
+                                              BorderRadius.circular(10),
                                             ),
                                             child: Icon(
                                               Icons.work_outline,
@@ -2336,9 +2419,9 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                             ),
                                             decoration: BoxDecoration(
                                               color:
-                                                  statusColor.withOpacity(0.1),
+                                              statusColor.withOpacity(0.1),
                                               borderRadius:
-                                                  BorderRadius.circular(20),
+                                              BorderRadius.circular(20),
                                             ),
                                             child: Text(
                                               status,
@@ -2351,10 +2434,10 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                           ),
                                         ),
                                         if (_model.recentBookings!
-                                                .indexOf(item) <
+                                            .indexOf(item) <
                                             _model.recentBookings!
-                                                    .take(3)
-                                                    .length -
+                                                .take(3)
+                                                .length -
                                                 1)
                                           Padding(
                                             padding: const EdgeInsets.symmetric(
@@ -2381,7 +2464,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                           const SizedBox(height: 24),
                           Padding(
                             padding:
-                                const EdgeInsets.only(left: 4.0, bottom: 12),
+                            const EdgeInsets.only(left: 4.0, bottom: 12),
                             child: Text(
                               'RECENT REVIEWS',
                               style: TextStyle(
@@ -2403,7 +2486,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                     _pauseReviewsAutoScroll();
                                   } catch (_) {}
                                 } else if (notification
-                                    is ScrollEndNotification) {
+                                is ScrollEndNotification) {
                                   // user stopped scrolling -> resume autoplay
                                   try {
                                     _startReviewsAutoScroll();
@@ -2419,13 +2502,13 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                   final reviews = _model.recentReviews!;
                                   final r = reviews[index % reviews.length];
                                   final comment = (r['comment'] ??
-                                          r['text'] ??
-                                          r['message'] ??
-                                          '')
+                                      r['text'] ??
+                                      r['message'] ??
+                                      '')
                                       .toString();
                                   final rating = double.tryParse(
-                                          (r['rating'] ?? r['stars'] ?? '0')
-                                              .toString()) ??
+                                      (r['rating'] ?? r['stars'] ?? '0')
+                                          .toString()) ??
                                       0.0;
 
                                   // Derive a reviewer id if available (many API shapes)
@@ -2451,7 +2534,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                       }
                                     }
                                     if ((reviewerId == null ||
-                                            reviewerId.isEmpty) &&
+                                        reviewerId.isEmpty) &&
                                         r['customer'] is Map) {
                                       final cc = Map<String, dynamic>.from(
                                           r['customer']);
@@ -2459,10 +2542,10 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                         reviewerId = cc['_id'].toString();
                                     }
                                     if ((reviewerId == null ||
-                                            reviewerId.isEmpty) &&
+                                        reviewerId.isEmpty) &&
                                         r['user'] is Map) {
                                       final uu =
-                                          Map<String, dynamic>.from(r['user']);
+                                      Map<String, dynamic>.from(r['user']);
                                       if (uu['_id'] != null)
                                         reviewerId = uu['_id'].toString();
                                     }
@@ -2473,11 +2556,11 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                   // Try inline image/name first (existing fallbacks)
                                   String? inlineImageUrl;
                                   String inlineName = (r['customerName'] ??
-                                          r['customer']?['name'] ??
-                                          r['customerUser']?['name'] ??
-                                          r['user']?['name'] ??
-                                          r['reviewer']?['name'] ??
-                                          'Customer')
+                                      r['customer']?['name'] ??
+                                      r['customerUser']?['name'] ??
+                                      r['user']?['name'] ??
+                                      r['reviewer']?['name'] ??
+                                      'Customer')
                                       .toString();
 
                                   try {
@@ -2517,16 +2600,16 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                   }
 
                                   final displayName = (fetchedUser != null &&
-                                          (fetchedUser['name'] as String)
-                                              .trim()
-                                              .isNotEmpty)
+                                      (fetchedUser['name'] as String)
+                                          .trim()
+                                          .isNotEmpty)
                                       ? fetchedUser['name'] as String
                                       : inlineName;
                                   final reviewerImageUrl = (fetchedUser !=
-                                              null &&
-                                          (fetchedUser['profileImage']
-                                                  as String)
-                                              .isNotEmpty)
+                                      null &&
+                                      (fetchedUser['profileImage']
+                                      as String)
+                                          .isNotEmpty)
                                       ? fetchedUser['profileImage'] as String
                                       : inlineImageUrl;
 
@@ -2545,7 +2628,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                       elevation: 0,
                                       shape: RoundedRectangleBorder(
                                           borderRadius:
-                                              BorderRadius.circular(12)),
+                                          BorderRadius.circular(12)),
                                       child: Padding(
                                         padding: const EdgeInsets.all(12.0),
                                         child: Row(
@@ -2559,8 +2642,8 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                                 clipBehavior: Clip.antiAlias,
                                                 decoration: BoxDecoration(
                                                     borderRadius:
-                                                        BorderRadius.circular(
-                                                            10)),
+                                                    BorderRadius.circular(
+                                                        10)),
                                                 child: CachedNetworkImage(
                                                   imageUrl: reviewerImageUrl,
                                                   fit: BoxFit.cover,
@@ -2568,21 +2651,21 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                                       Container(
                                                           color: ff.warning
                                                               .withOpacity(
-                                                                  0.08)),
+                                                              0.08)),
                                                   errorWidget: (c, u, e) =>
                                                       Container(
-                                                    color: ff.warning
-                                                        .withOpacity(0.08),
-                                                    child: Center(
-                                                        child: Text(initials,
-                                                            style: theme
-                                                                .textTheme
-                                                                .bodyMedium
-                                                                ?.copyWith(
+                                                        color: ff.warning
+                                                            .withOpacity(0.08),
+                                                        child: Center(
+                                                            child: Text(initials,
+                                                                style: theme
+                                                                    .textTheme
+                                                                    .bodyMedium
+                                                                    ?.copyWith(
                                                                     fontWeight:
-                                                                        FontWeight
-                                                                            .w700))),
-                                                  ),
+                                                                    FontWeight
+                                                                        .w700))),
+                                                      ),
                                                 ),
                                               )
                                             else
@@ -2593,7 +2676,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                                   color: ff.warning
                                                       .withOpacity(0.12),
                                                   borderRadius:
-                                                      BorderRadius.circular(10),
+                                                  BorderRadius.circular(10),
                                                 ),
                                                 child: Center(
                                                   child: Text(
@@ -2603,9 +2686,9 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                                     style: theme
                                                         .textTheme.bodyMedium
                                                         ?.copyWith(
-                                                            fontWeight:
-                                                                FontWeight
-                                                                    .w700),
+                                                        fontWeight:
+                                                        FontWeight
+                                                            .w700),
                                                   ),
                                                 ),
                                               ),
@@ -2613,9 +2696,9 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                             Expanded(
                                               child: Column(
                                                 crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
+                                                CrossAxisAlignment.start,
                                                 mainAxisAlignment:
-                                                    MainAxisAlignment.center,
+                                                MainAxisAlignment.center,
                                                 children: [
                                                   Row(
                                                     children: [
@@ -2625,9 +2708,9 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                                           style: theme.textTheme
                                                               .bodyMedium
                                                               ?.copyWith(
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w600),
+                                                              fontWeight:
+                                                              FontWeight
+                                                                  .w600),
                                                           maxLines: 1,
                                                           overflow: TextOverflow
                                                               .ellipsis,
@@ -2641,20 +2724,20 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                                                   .star_rate_rounded,
                                                               size: 14,
                                                               color:
-                                                                  ff.warning),
+                                                              ff.warning),
                                                           const SizedBox(
                                                               width: 4),
                                                           Text(
                                                               rating
                                                                   .toStringAsFixed(
-                                                                      1),
+                                                                  1),
                                                               style: theme
                                                                   .textTheme
                                                                   .bodySmall
                                                                   ?.copyWith(
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .w600)),
+                                                                  fontWeight:
+                                                                  FontWeight
+                                                                      .w600)),
                                                         ],
                                                       ),
                                                     ],
@@ -2665,13 +2748,13 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                                     style: theme
                                                         .textTheme.bodySmall
                                                         ?.copyWith(
-                                                            color: colorScheme
-                                                                .onSurface
-                                                                .withOpacity(
-                                                                    0.7)),
+                                                        color: colorScheme
+                                                            .onSurface
+                                                            .withOpacity(
+                                                            0.7)),
                                                     maxLines: 2,
                                                     overflow:
-                                                        TextOverflow.ellipsis,
+                                                    TextOverflow.ellipsis,
                                                   ),
                                                 ],
                                               ),
@@ -2766,7 +2849,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
           final colorScheme = theme.colorScheme;
           return Padding(
             padding:
-                EdgeInsets.only(bottom: MediaQuery.of(ctx2).viewInsets.bottom),
+            EdgeInsets.only(bottom: MediaQuery.of(ctx2).viewInsets.bottom),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -2802,11 +2885,11 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                         ),
                         icon: loading
                             ? SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                    color: colorScheme.onPrimary,
-                                    strokeWidth: 2))
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                color: colorScheme.onPrimary,
+                                strokeWidth: 2))
                             : Icon(Icons.my_location_rounded),
                         label: Text(
                             loading
@@ -2817,90 +2900,90 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                         onPressed: loading
                             ? null
                             : () async {
-                                setModalState(() {
-                                  loading = true;
-                                  statusText = '';
-                                });
-                                final ok = await LocationPermissionService
-                                    .ensureLocationPermissions(context);
-                                if (!ok) {
-                                  setModalState(() => loading = false);
-                                  if (mounted)
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                            content: Text(
-                                                'Location permission denied')));
-                                  return;
-                                }
+                          setModalState(() {
+                            loading = true;
+                            statusText = '';
+                          });
+                          final ok = await LocationPermissionService
+                              .ensureLocationPermissions(context);
+                          if (!ok) {
+                            setModalState(() => loading = false);
+                            if (mounted)
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text(
+                                          'Location permission denied')));
+                            return;
+                          }
 
-                                try {
-                                  final pos =
-                                      await Geolocator.getCurrentPosition(
-                                          locationSettings:
-                                              const LocationSettings(
-                                                  accuracy:
-                                                      LocationAccuracy.best));
-                                  // Reverse geocode using Google Maps Geocoding API to get human-readable address
-                                  String? address;
-                                  try {
-                                    final key = GOOGLE_MAPS_API_KEY;
-                                    if (key.isNotEmpty) {
-                                      final url = Uri.parse(
-                                          'https://maps.googleapis.com/maps/api/geocode/json?latlng=${pos.latitude},${pos.longitude}&key=$key');
-                                      final resp = await http
-                                          .get(url)
-                                          .timeout(const Duration(seconds: 10));
-                                      if (resp.statusCode == 200 &&
-                                          resp.body.isNotEmpty) {
-                                        final body = jsonDecode(resp.body);
-                                        if (body is Map &&
-                                            body['results'] is List &&
-                                            (body['results'] as List)
-                                                .isNotEmpty) {
-                                          final feat =
-                                              (body['results'] as List).first;
-                                          if (feat is Map &&
-                                              feat['formatted_address'] !=
-                                                  null) {
-                                            address = feat['formatted_address']
-                                                .toString();
-                                          }
-                                        }
-                                      }
+                          try {
+                            final pos =
+                            await Geolocator.getCurrentPosition(
+                                locationSettings:
+                                const LocationSettings(
+                                    accuracy:
+                                    LocationAccuracy.best));
+                            // Reverse geocode using Google Maps Geocoding API to get human-readable address
+                            String? address;
+                            try {
+                              final key = GOOGLE_MAPS_API_KEY;
+                              if (key.isNotEmpty) {
+                                final url = Uri.parse(
+                                    'https://maps.googleapis.com/maps/api/geocode/json?latlng=${pos.latitude},${pos.longitude}&key=$key');
+                                final resp = await http
+                                    .get(url)
+                                    .timeout(const Duration(seconds: 10));
+                                if (resp.statusCode == 200 &&
+                                    resp.body.isNotEmpty) {
+                                  final body = jsonDecode(resp.body);
+                                  if (body is Map &&
+                                      body['results'] is List &&
+                                      (body['results'] as List)
+                                          .isNotEmpty) {
+                                    final feat =
+                                        (body['results'] as List).first;
+                                    if (feat is Map &&
+                                        feat['formatted_address'] !=
+                                            null) {
+                                      address = feat['formatted_address']
+                                          .toString();
                                     }
-                                  } catch (e) {
-                                    // ignore reverse-geocode failure; we'll still save coords
                                   }
-
-                                  await TokenStorage.saveLocation(
-                                      address: address,
-                                      latitude: pos.latitude,
-                                      longitude: pos.longitude);
-                                  if (!mounted) return;
-                                  setState(() {
-                                    // Update displayed location on the dashboard header
-                                    _model.userLocation = address ??
-                                        '${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)}';
-                                  });
-                                  Navigator.of(ctx2).pop();
-                                  if (mounted)
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                            content: Text(address != null
-                                                ? 'Location set: $address'
-                                                : 'Location coordinates saved')));
-                                } catch (e) {
-                                  if (mounted)
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                            content: Text(
-                                                'Failed to obtain device location')));
-                                } finally {
-                                  setModalState(() {
-                                    loading = false;
-                                  });
                                 }
-                              },
+                              }
+                            } catch (e) {
+                              // ignore reverse-geocode failure; we'll still save coords
+                            }
+
+                            await TokenStorage.saveLocation(
+                                address: address,
+                                latitude: pos.latitude,
+                                longitude: pos.longitude);
+                            if (!mounted) return;
+                            setState(() {
+                              // Update displayed location on the dashboard header
+                              _model.userLocation = address ??
+                                  '${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)}';
+                            });
+                            Navigator.of(ctx2).pop();
+                            if (mounted)
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                      content: Text(address != null
+                                          ? 'Location set: $address'
+                                          : 'Location coordinates saved')));
+                          } catch (e) {
+                            if (mounted)
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text(
+                                          'Failed to obtain device location')));
+                          } finally {
+                            setModalState(() {
+                              loading = false;
+                            });
+                          }
+                        },
                       ),
                       const SizedBox(height: 12),
                       OutlinedButton.icon(
@@ -2980,23 +3063,23 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
 
         // name
         final namePresent = ((pd['name'] ?? pd['fullName'] ?? pd['username'])
-                ?.toString()
-                .trim()
-                .isNotEmpty) ==
+            ?.toString()
+            .trim()
+            .isNotEmpty) ==
             true;
         if (namePresent) present++;
 
         // phone
         final phonePresent = ((pd['phone'] ?? pd['telephone'] ?? pd['contact'])
-                ?.toString()
-                .trim()
-                .isNotEmpty) ==
+            ?.toString()
+            .trim()
+            .isNotEmpty) ==
             true;
         if (phonePresent) present++;
 
         // avatar
         final avatarPresent = ((_model.profileImageUrl != null &&
-                _model.profileImageUrl.toString().trim().isNotEmpty) ||
+            _model.profileImageUrl.toString().trim().isNotEmpty) ||
             (pd['profileImage'] != null &&
                 pd['profileImage']?.toString().isNotEmpty == true));
         if (avatarPresent) present++;
@@ -3028,3 +3111,4 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
     }
   }
 }
+

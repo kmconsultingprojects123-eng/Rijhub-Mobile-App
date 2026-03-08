@@ -4,8 +4,11 @@ export 'search_page_model.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../artisan_detail_page/artisan_detail_page_widget.dart';
 import '../../services/artist_service.dart';
+import '../../api_config.dart';
 
 class SearchPageWidget extends StatefulWidget {
   const SearchPageWidget({super.key, this.initialQuery});
@@ -31,6 +34,7 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
   final int _limit = 12;
   bool _hasSearched = false;
   String? _selectedTrade;
+  String? _errorMessage;
 
   // Minimalist color scheme
   final Color _primaryColor = const Color(0xFFA20025);
@@ -39,8 +43,16 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
   final Color _textSecondary = const Color(0xFF6B7280);
   final Color _borderColor = const Color(0xFFE5E7EB);
 
-  // Popular items
-  final List<String> _popularTrades = ['All', 'Electrician', 'Plumber', 'Carpenter', 'Painter', 'Cleaner'];
+  // Job subcategories and search tracking
+  List<Map<String, dynamic>> _allServices = [];
+  List<Map<String, dynamic>> _topServices = [];
+  final Map<String, int> _serviceSearchCount = {};
+
+  // Cache for artisan services to avoid redundant API calls
+  final Map<String, List<String>> _serviceCache = {};
+
+  // Debounce timers map
+  final Map<String, Timer?> _debounceTimers = {};
 
   @override
   void initState() {
@@ -76,14 +88,16 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
       if (!mounted) return;
       setState(() {});
     });
+
+    // Load job subcategories to populate top services on init
+    _loadJobSubcategories();
   }
 
   @override
   void dispose() {
-    for (final t in _debounceTimers.values) {
-      try {
-        t?.cancel();
-      } catch (_) {}
+    // Cancel all debounce timers
+    for (final timer in _debounceTimers.values) {
+      timer?.cancel();
     }
     _debounceTimers.clear();
     _scrollController.dispose();
@@ -98,6 +112,7 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
       _page = 1;
       _hasMore = true;
       _artisans.clear();
+      _errorMessage = null;
     });
 
     await _fetchArtisans(reset: true);
@@ -130,9 +145,7 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
       final q = _model.textController!.text.trim();
       final tradeParam = (_selectedTrade != null && _selectedTrade!.isNotEmpty && _selectedTrade != 'All') ? _selectedTrade : null;
       if (kDebugMode) {
-        try {
-          debugPrint('SearchPage._fetchArtisans -> q="$q" tradeParam=$tradeParam page=$_page limit=$_limit');
-        } catch (_) {}
+        debugPrint('SearchPage._fetchArtisans -> q="$q" tradeParam=$tradeParam page=$_page limit=$_limit');
       }
 
       final results = await ArtistService.fetchArtisans(
@@ -140,6 +153,7 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
         limit: _limit,
         q: q.isNotEmpty ? q : null,
         trade: tradeParam,
+        // No categoryId parameter: searches are not filtered by a UI category selector
       );
 
       if (!mounted) return;
@@ -150,12 +164,20 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
           _hasMore = results.length == _limit;
           if (_hasMore) _page++;
         });
+
+        // Batch load services for all artisans
+        _batchLoadServices();
       } else {
         setState(() => _hasMore = false);
       }
     } catch (e) {
       if (kDebugMode) debugPrint('Error fetching artisans: $e');
-      if (mounted) setState(() => _hasMore = false);
+      if (mounted) {
+        setState(() {
+          _hasMore = false;
+          _errorMessage = 'Failed to load artisans. Please check your connection.';
+        });
+      }
       return;
     } finally {
       if (mounted) {
@@ -167,16 +189,268 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
     }
   }
 
+  Future<void> _batchLoadServices() async {
+    // Get all artisan IDs that aren't in cache
+    final artisanIds = _artisans
+        .map((a) => a['_id']?.toString() ?? a['id']?.toString())
+        .where((id) => id != null && id.isNotEmpty && !_serviceCache.containsKey(id))
+        .cast<String>()
+        .toList();
+
+    if (artisanIds.isEmpty) return;
+
+    // Process in batches to avoid overwhelming the server
+    const batchSize = 5;
+    for (var i = 0; i < artisanIds.length; i += batchSize) {
+      final batch = artisanIds.skip(i).take(batchSize).toList();
+      await Future.wait(batch.map((id) => _fetchArtisanServicesForCard(id)));
+    }
+  }
+
   Future<void> _fetchMore() async {
     if (_isLoadingMore || !_hasMore) return;
     await _fetchArtisans(reset: false);
   }
 
-  final Map<String, Timer?> _debounceTimers = {};
-
   void _debounce(String key, Duration duration, VoidCallback action) {
     _debounceTimers[key]?.cancel();
     _debounceTimers[key] = Timer(duration, action);
+  }
+
+  /// Fetch job subcategories from API and build top 5 list
+    Future<void> _loadJobSubcategories({String? categoryId}) async {
+    try {
+      var uriStr = '$API_BASE_URL/api/job-subcategories?limit=100';
+      if (categoryId != null && categoryId.isNotEmpty) {
+        uriStr = '$API_BASE_URL/api/job-subcategories?categoryId=$categoryId&limit=100';
+      }
+      final uri = Uri.parse(uriStr);
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        List<dynamic>? items;
+
+        if (body is Map && body['data'] is List) {
+          items = body['data'] as List<dynamic>;
+        } else if (body is List) {
+          items = body;
+        }
+
+        if (items != null && items.isNotEmpty) {
+          final services = items
+              .map((e) {
+            if (e is! Map) return null;
+            final m = Map<String, dynamic>.from(e.cast<String, dynamic>());
+            // Preserve category linkage when available
+            String? catId;
+            if (m['categoryId'] != null) catId = (m['categoryId'] is Map) ? (m['categoryId']['_id'] ?? m['categoryId']['id'])?.toString() : m['categoryId']?.toString();
+            if (m['category'] != null && catId == null) catId = (m['category'] is Map) ? (m['category']['_id'] ?? m['category']['id'])?.toString() : m['category']?.toString();
+            return {
+              'id': m['_id'] ?? m['id'],
+              'name': m['name'] ?? 'Service',
+              'slug': m['slug'] ?? '',
+              'categoryId': catId,
+            };
+          })
+              .whereType<Map<String, dynamic>>()
+              .toList();
+
+          if (mounted) {
+            setState(() {
+              // Populate the master services list which is used to build top services
+              _allServices = services;
+              _updateTopServices();
+            });
+          }
+        } else {
+          // No services returned for this category — clear top services
+          if (mounted) {
+            setState(() {
+              _allServices = [];
+              _updateTopServices();
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading job subcategories: $e');
+    }
+    }
+
+
+  /// Track service selection and update top services
+  void _trackServiceSearch(String serviceId, String serviceName) {
+    _serviceSearchCount[serviceId] = (_serviceSearchCount[serviceId] ?? 0) + 1;
+    _updateTopServices();
+  }
+
+  /// Update top 5 services based on search frequency and shuffle
+  void _updateTopServices() {
+    if (_allServices.isEmpty) return;
+
+    // Sort by search count (descending)
+    final sorted = List<Map<String, dynamic>>.from(_allServices);
+    sorted.sort((a, b) {
+      final countA = _serviceSearchCount[a['id']] ?? 0;
+      final countB = _serviceSearchCount[b['id']] ?? 0;
+      return countB.compareTo(countA);
+    });
+
+    // Take top 5 and shuffle for variety
+    final top = sorted.take(5).toList();
+    top.shuffle();
+
+    if (mounted) {
+      setState(() {
+        _topServices = top;
+      });
+    }
+  }
+
+  /// Check if URL is valid
+  bool _isValidImageUrl(String url) {
+    if (url.isEmpty) return false;
+
+    // Fix protocol-relative URLs
+    if (url.startsWith('//')) {
+      url = 'https:$url';
+    }
+
+    try {
+      final uri = Uri.parse(url);
+      return uri.hasScheme &&
+          (uri.scheme == 'http' || uri.scheme == 'https') &&
+          uri.host.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Fetch artisan's configured services from API - FIXED VERSION
+  Future<List<String>> _fetchArtisanServicesForCard(String? artisanId) async {
+    if (artisanId == null || artisanId.isEmpty) return <String>[];
+
+    // Check cache first
+    if (_serviceCache.containsKey(artisanId)) {
+      if (kDebugMode) debugPrint('SearchPage: Returning cached services for artisanId=$artisanId');
+      return _serviceCache[artisanId] ?? <String>[];
+    }
+
+    try {
+      final uri = Uri.parse('$API_BASE_URL/api/artisan-services?artisanId=$artisanId&limit=100');
+      if (kDebugMode) debugPrint('SearchPage: Fetching services from: $uri');
+
+      final response = await http.get(uri).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        if (kDebugMode) debugPrint('SearchPage: Services API response for $artisanId: ${body.toString().substring(0, min(500, body.toString().length))}');
+
+        final List<String> services = [];
+
+        // Handle different response structures
+        if (body is Map<String, dynamic>) {
+          // Case 1: Response has a 'data' field that's an array
+          if (body['data'] is List) {
+            final items = body['data'] as List;
+            for (var item in items) {
+              if (item is Map<String, dynamic>) {
+                _extractServiceNames(item, services);
+              }
+            }
+          }
+          // Case 2: Response has a 'services' field that's an array
+          else if (body['services'] is List) {
+            final items = body['services'] as List;
+            for (var item in items) {
+              if (item is Map<String, dynamic>) {
+                _extractServiceNames(item, services);
+              }
+            }
+          }
+          // Case 3: Response is a single service object
+          else {
+            _extractServiceNames(body, services);
+          }
+        }
+        // Case 4: Response is directly an array
+        else if (body is List) {
+          for (var item in body) {
+            if (item is Map<String, dynamic>) {
+              _extractServiceNames(item, services);
+            }
+          }
+        }
+
+        // Remove duplicates
+        final uniqueServices = services.toSet().toList();
+
+        // Cache the result
+        _serviceCache[artisanId] = uniqueServices;
+        if (kDebugMode) debugPrint('SearchPage: Found ${uniqueServices.length} services for artisanId=$artisanId: $uniqueServices');
+
+        return uniqueServices;
+      } else {
+        if (kDebugMode) debugPrint('SearchPage: API returned status ${response.statusCode} for artisanId=$artisanId');
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('Error fetching artisan services: $e');
+    }
+
+    // Cache empty result to avoid repeated failed requests
+    _serviceCache[artisanId] = <String>[];
+    return <String>[];
+  }
+
+  /// Helper method to extract service names from various possible structures
+  void _extractServiceNames(Map<String, dynamic> item, List<String> services) {
+    // Try direct name fields
+    final directName = item['name'] ??
+        item['serviceName'] ??
+        item['title'] ??
+        item['service'] ??
+        item['service_type'] ??
+        item['category'];
+
+    if (directName != null && directName.toString().isNotEmpty) {
+      services.add(directName.toString());
+      return;
+    }
+
+    // Try nested objects
+    final nestedFields = ['subCategoryId', 'subCategory', 'subcategory', 'categoryId', 'category'];
+    for (final field in nestedFields) {
+      if (item[field] is Map) {
+        final nested = item[field] as Map<String, dynamic>;
+        final nestedName = nested['name'] ??
+            nested['title'] ??
+            nested['label'] ??
+            nested['service'];
+        if (nestedName != null && nestedName.toString().isNotEmpty) {
+          services.add(nestedName.toString());
+          return;
+        }
+      }
+    }
+
+    // Try array fields
+    final arrayFields = ['services', 'items', 'list'];
+    for (final field in arrayFields) {
+      if (item[field] is List) {
+        final array = item[field] as List;
+        for (var element in array) {
+          if (element is Map<String, dynamic>) {
+            final elementName = element['name'] ??
+                element['title'] ??
+                element['service'];
+            if (elementName != null && elementName.toString().isNotEmpty) {
+              services.add(elementName.toString());
+            }
+          }
+        }
+      }
+    }
   }
 
   // ENHANCED Filter Chip Widget
@@ -192,7 +466,6 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
     // Responsive calculations
     final bool isSmallScreen = screenWidth < 360;
     final bool isMediumScreen = screenWidth < 420;
-    // final bool isLargeScreen = screenWidth >= 420; // isLargeScreen not needed
 
     // Adaptive padding based on screen size
     final horizontalPadding = isSmallScreen ? 14.0 : (isMediumScreen ? 16.0 : 20.0);
@@ -226,7 +499,7 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
       child: Container(
         margin: EdgeInsets.only(
           right: isSmallScreen ? 8.0 : (isMediumScreen ? 10.0 : 12.0),
-          bottom: screenHeight < 700 ? 4.0 : 0, // Extra bottom margin on very short screens
+          bottom: screenHeight < 700 ? 4.0 : 0,
         ),
         padding: EdgeInsets.symmetric(
           horizontal: horizontalPadding,
@@ -252,7 +525,7 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
           duration: const Duration(milliseconds: 200),
           child: Text(
             label,
-            key: ValueKey('$label-$selected'), // Force animation on selection change
+            key: ValueKey('$label-$selected'),
             style: TextStyle(
               fontSize: fontSize,
               fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
@@ -289,7 +562,8 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
         final top = src['name'];
         if (top != null && top.toString().trim().isNotEmpty) return top.toString().trim();
 
-        final authKeys = ['artisanAuthDetails', 'artisanAuthdDetails', 'artisanAuthdDetails', 'artisanAuthdetails'];
+        // Fixed: Removed duplicate entry
+        final authKeys = {'artisanAuthDetails', 'artisanAuthdDetails', 'artisanAuthdetails'}.toList();
         for (final k in authKeys) {
           final a = src[k];
           if (a is Map && a['name'] != null && a['name'].toString().trim().isNotEmpty) return a['name'].toString().trim();
@@ -303,8 +577,6 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
       } catch (_) {}
       return 'Artisan';
     }
-
-    final name = _extractName(artisan);
 
     String _extractImageUrl(Map<String, dynamic> src) {
       try {
@@ -342,14 +614,13 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
       return '';
     }
 
+    final name = _extractName(artisan);
+
     var imageUrl = _extractImageUrl(artisan);
     if (imageUrl.startsWith('//')) imageUrl = 'https:$imageUrl';
     imageUrl = imageUrl.trim();
 
-    final trades = (artisan['trade'] is List)
-        ? List<String>.from(artisan['trade'])
-        : (artisan['trades'] is List ? List<String>.from(artisan['trades']) : <String>[]);
-
+    // Extract location
     String location = '';
     try {
       if (artisan['serviceArea'] is Map) {
@@ -358,250 +629,307 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
     } catch (_) {}
     if (location.isEmpty) location = artisan['location'] ?? artisan['city'] ?? '';
 
+    // Extract rating and review count
     final rating = (artisan['rating'] is num) ? (artisan['rating'] as num).toDouble() :
     (artisan['averageRating'] ?? artisan['average_rating'] ?? 0).toDouble();
     final reviewCount = artisan['reviewsCount'] ?? artisan['reviewCount'] ?? artisan['review_count'] ?? 0;
 
-    String _initials(String s) {
-      final parts = s.trim().split(RegExp(r'\s+'));
+    // Extract artisan ID to fetch their services
+    String? artisanId;
+    try {
+      artisanId = (artisan['_id'] ?? artisan['id'] ?? artisan['artisanId'])?.toString();
+    } catch (_) {}
+
+    return _buildArtisanCardWithServices(
+      context: context,
+      artisan: artisan,
+      imageUrl: imageUrl,
+      artisanId: artisanId,
+      isDark: isDark,
+      surfaceColor: surfaceColor,
+      cardBorderColor: cardBorderColor,
+      textPrimaryColor: textPrimaryColor,
+      textSecondaryColor: textSecondaryColor,
+      tradeBadgeColor: tradeBadgeColor,
+      tradeTextColor: tradeTextColor,
+      name: name,
+      location: location,
+      rating: rating,
+      reviewCount: reviewCount,
+    );
+  }
+
+  /// Helper method to build artisan card with fetched services
+  Widget _buildArtisanCardWithServices({
+    required BuildContext context,
+    required Map<String, dynamic> artisan,
+    required String imageUrl,
+    required String? artisanId,
+    required bool isDark,
+    required Color surfaceColor,
+    required Color cardBorderColor,
+    required Color textPrimaryColor,
+    required Color textSecondaryColor,
+    required Color tradeBadgeColor,
+    required Color tradeTextColor,
+    required String name,
+    required String location,
+    required double rating,
+    required int reviewCount,
+  }) {
+    String _getInitials(String s) {
+      final parts = s.trim().split(' ');
       if (parts.isEmpty) return 'A';
       if (parts.length == 1) return parts[0].substring(0, 1).toUpperCase();
       return (parts[0].substring(0, 1) + parts[1].substring(0, 1)).toUpperCase();
     }
 
-    return Container(
-      margin: EdgeInsets.only(
-        bottom: 16,
-        left: 4,
-        right: 4,
-      ),
-      padding: EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: surfaceColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cardBorderColor, width: 1),
-        // boxShadow removed per request — UI card should be flat
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return FutureBuilder<List<String>>(
+      future: _fetchArtisanServicesForCard(artisanId),
+      builder: (context, snapshot) {
+        if (kDebugMode) {
+          debugPrint('FutureBuilder for artisan $artisanId - state: ${snapshot.connectionState}, hasData: ${snapshot.hasData}, data: ${snapshot.data}');
+        }
+
+        List<String> services = <String>[];
+        if (snapshot.hasData) {
+          services = snapshot.data ?? <String>[];
+        }
+
+        return Container(
+          margin: const EdgeInsets.only(
+            bottom: 16,
+            left: 4,
+            right: 4,
+          ),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: surfaceColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: cardBorderColor, width: 1),
+          ),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Avatar
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: _primaryColor.withAlpha((0.1 * 255).round()),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: _primaryColor.withAlpha((0.2 * 255).round()),
-                    width: 1,
-                  ),
-                ),
-                child: Builder(builder: (context) {
-                  final hasValidUrl = imageUrl.isNotEmpty && (Uri.tryParse(imageUrl)?.hasScheme ?? false);
-                  if (hasValidUrl) {
-                    return ClipOval(
-                      child: CachedNetworkImage(
-                        imageUrl: imageUrl,
-                        width: 56,
-                        height: 56,
-                        fit: BoxFit.cover,
-                        imageBuilder: (context, imageProvider) => Container(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            image: DecorationImage(
-                              image: imageProvider,
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                        ),
-                        placeholder: (context, url) => Center(
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation(_primaryColor),
-                            ),
-                          ),
-                        ),
-                        errorWidget: (context, url, error) => Center(
-                          child: Text(
-                            _initials(name),
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: _primaryColor,
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  }
-
-                  return Center(
-                    child: Text(
-                      _initials(name),
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: _primaryColor,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Avatar
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: _primaryColor.withAlpha((0.1 * 255).round()),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: _primaryColor.withAlpha((0.2 * 255).round()),
+                        width: 1,
                       ),
                     ),
-                  );
-                }),
-              ),
-              const SizedBox(width: 16),
+                    child: Builder(builder: (context) {
+                      final hasValidUrl = _isValidImageUrl(imageUrl);
+                      if (hasValidUrl) {
+                        return ClipOval(
+                          child: CachedNetworkImage(
+                            imageUrl: imageUrl,
+                            width: 56,
+                            height: 56,
+                            fit: BoxFit.cover,
+                            imageBuilder: (context, imageProvider) => Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                image: DecorationImage(
+                                  image: imageProvider,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                            placeholder: (context, url) => Center(
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation(_primaryColor),
+                                ),
+                              ),
+                            ),
+                            errorWidget: (context, url, error) => Center(
+                              child: Text(
+                                _getInitials(name),
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  color: _primaryColor,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }
 
-              // Name and rating
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: textPrimaryColor,
-                        letterSpacing: -0.3,
-                        height: 1.3,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.star_rounded,
-                          size: 16,
-                          color: const Color(0xFFF59E0B),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          rating.toStringAsFixed(1),
+                      return Center(
+                        child: Text(
+                          _getInitials(name),
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: _primaryColor,
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(width: 16),
+
+                  // Name and rating
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          style: TextStyle(
+                            fontSize: 16,
                             fontWeight: FontWeight.w600,
                             color: textPrimaryColor,
+                            letterSpacing: -0.3,
+                            height: 1.3,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '($reviewCount reviews)',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: textSecondaryColor,
-                          ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.star_rounded,
+                              size: 16,
+                              color: const Color(0xFFF59E0B),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              rating.toStringAsFixed(1),
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: textPrimaryColor,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '($reviewCount reviews)',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: textSecondaryColor,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
+                  ),
+
+                  // Book Button
+                  Container(
+                    margin: const EdgeInsets.only(left: 8),
+                    child: ElevatedButton(
+                      onPressed: () {
+                        try {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => ArtisanDetailPageWidget(artisan: artisan),
+                            ),
+                          );
+                        } catch (_) {}
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _primaryColor,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: MediaQuery.of(context).size.width < 360 ? 16 : 20,
+                          vertical: 10,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                        shadowColor: Colors.transparent,
+                        textStyle: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      child: const Text('Book'),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 20),
+
+              // Location
+              if (location.isNotEmpty)
+                Row(
+                  children: [
+                    Icon(
+                      Icons.location_on_outlined,
+                      size: 16,
+                      color: textSecondaryColor,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        location,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: textSecondaryColor,
+                          height: 1.4,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ],
                 ),
-              ),
 
-              // View Button - ENHANCED with primary color
-              Container(
-                margin: const EdgeInsets.only(left: 8),
-                child: ElevatedButton(
-                  onPressed: () {
-                    try {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => ArtisanDetailPageWidget(artisan: artisan),
+              // Services - FIXED: Now showing from API
+              if (services.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: services.take(3).map((service) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: tradeBadgeColor,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _primaryColor.withAlpha((0.2 * 255).round()),
+                          width: 1,
                         ),
-                      );
-                    } catch (_) {}
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _primaryColor,
-                    foregroundColor: Colors.white,
-                    padding: EdgeInsets.symmetric(
-                      horizontal: MediaQuery.of(context).size.width < 360 ? 16 : 20,
-                      vertical: 10,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 0,
-                    shadowColor: Colors.transparent,
-                    textStyle: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                  child: const Text('View'),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 20),
-
-          // Location
-          if (location.isNotEmpty)
-            Row(
-              children: [
-                Icon(
-                  Icons.location_on_outlined,
-                  size: 16,
-                  color: textSecondaryColor,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    location,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: textSecondaryColor,
-                      height: 1.4,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                      ),
+                      child: Text(
+                        service,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: tradeTextColor,
+                          letterSpacing: -0.1,
+                        ),
+                      ),
+                    );
+                  }).toList(),
                 ),
               ],
-            ),
-
-          // Trades - ENHANCED with primary color badges
-          if (trades.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: trades.take(3).map((trade) {
-                return Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: tradeBadgeColor,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: _primaryColor.withAlpha((0.2 * 255).round()),
-                      width: 1,
-                    ),
-                  ),
-                  child: Text(
-                    trade,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: tradeTextColor,
-                      letterSpacing: -0.1,
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ],
-        ],
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -682,6 +1010,18 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
               borderRadius: BorderRadius.circular(4),
             ),
           ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            children: List.generate(3, (_) => Container(
+              width: 60,
+              height: 24,
+              decoration: BoxDecoration(
+                color: placeholder,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            )),
+          ),
         ],
       ),
     );
@@ -697,7 +1037,6 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
     // Responsive calculations
     final bool isSmallScreen = screenWidth < 360;
     final bool isMediumScreen = screenWidth < 420;
-    // final bool isLargeScreen = screenWidth >= 420; // isLargeScreen not needed
 
     // Responsive padding
     final horizontalPadding = isSmallScreen
@@ -756,97 +1095,121 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
                   horizontal: horizontalPadding,
                   vertical: isSmallScreen ? 12 : 16,
                 ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1F2937) : _surfaceColor,
-                    borderRadius: BorderRadius.circular(isSmallScreen ? 10 : 12),
-                    boxShadow: isDark ? null : [
-                      BoxShadow(
-                        color: Colors.black.withAlpha((0.02 * 255).round()),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
+                child: Column(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1F2937) : _surfaceColor,
+                        borderRadius: BorderRadius.circular(isSmallScreen ? 10 : 12),
+                        boxShadow: isDark ? null : [
+                          BoxShadow(
+                            color: Colors.black.withAlpha((0.02 * 255).round()),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  child: TextFormField(
-                    controller: _model.textController,
-                    focusNode: _model.textFieldFocusNode,
-                    onTap: () {
-                      if (!mounted) return;
-                      setState(() {
-                        _selectedTrade = null;
-                      });
-                    },
-                    onChanged: (_) => _debounce(
-                      '_searchDebounce',
-                      const Duration(milliseconds: 600),
-                      _startSearch,
-                    ),
-                    textInputAction: TextInputAction.search,
-                    onFieldSubmitted: (_) => _startSearch(),
-                    style: TextStyle(
-                      fontSize: isSmallScreen ? 14 : 15,
-                      color: isDark ? Colors.white : _textPrimary,
-                      height: 1.4,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Search artisans...',
-                      hintStyle: TextStyle(
-                        color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
-                        fontSize: isSmallScreen ? 14 : 15,
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: isSmallScreen ? 16 : 20,
-                        vertical: isSmallScreen ? 16 : 18,
-                      ),
-                      prefixIcon: Icon(
-                        Icons.search_rounded,
-                        color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
-                        size: isSmallScreen ? 18 : 20,
-                      ),
-                      suffixIcon: _model.textController!.text.isNotEmpty
-                          ? IconButton(
-                        icon: Icon(
-                          Icons.clear_rounded,
-                          size: isSmallScreen ? 16 : 18,
-                          color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
-                        ),
-                        onPressed: () {
-                          _model.textController?.clear();
-                          setState(() {});
-                          _startSearch();
+                      child: TextFormField(
+                        controller: _model.textController,
+                        focusNode: _model.textFieldFocusNode,
+                        onTap: () {
+                          if (!mounted) return;
+                          setState(() {
+                            _selectedTrade = null;
+                          });
                         },
-                      )
-                          : null,
+                        onChanged: (_) => _debounce(
+                          '_searchDebounce',
+                          const Duration(milliseconds: 600),
+                          _startSearch,
+                        ),
+                        textInputAction: TextInputAction.search,
+                        onFieldSubmitted: (_) => _startSearch(),
+                        style: TextStyle(
+                          fontSize: isSmallScreen ? 14 : 15,
+                          color: isDark ? Colors.white : _textPrimary,
+                          height: 1.4,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Search artisans...',
+                          hintStyle: TextStyle(
+                            color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
+                            fontSize: isSmallScreen ? 14 : 15,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: isSmallScreen ? 16 : 20,
+                            vertical: isSmallScreen ? 16 : 18,
+                          ),
+                          prefixIcon: Icon(
+                            Icons.search_rounded,
+                            color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
+                            size: isSmallScreen ? 18 : 20,
+                          ),
+                          suffixIcon: _model.textController!.text.isNotEmpty
+                              ? IconButton(
+                            icon: Icon(
+                              Icons.clear_rounded,
+                              size: isSmallScreen ? 16 : 18,
+                              color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
+                            ),
+                            onPressed: () {
+                              _model.textController?.clear();
+                              setState(() {});
+                              _startSearch();
+                            },
+                          )
+                              : null,
+                        ),
+                      ),
                     ),
-                  ),
+
+                    // Category selector removed — keeping a small spacer for layout
+                    const SizedBox(height: 8),
+
+                  ],
                 ),
               ),
 
-              // Trade Filters - ENHANCED container
+              // Trade Filters - ENHANCED container with dynamic services
               Container(
                 height: filterChipHeight,
                 margin: EdgeInsets.only(
                   bottom: screenHeight < 700 ? 12 : 16,
                 ),
-                child: ListView.builder(
+                child: _topServices.isEmpty
+                    ? Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation(_primaryColor),
+                    ),
+                  ),
+                )
+                    : ListView.builder(
                   padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
                   scrollDirection: Axis.horizontal,
-                  itemCount: _popularTrades.length,
+                  itemCount: _topServices.length,
                   itemBuilder: (context, index) {
-                    final trade = _popularTrades[index];
-                    final selected = _selectedTrade == trade ||
-                        (trade == 'All' && _selectedTrade == null);
+                    final service = _topServices[index];
+                    final serviceName = service['name'] ?? 'Service';
+                    final serviceId = service['id'] ?? '';
+                    final selected = _selectedTrade == serviceName;
                     return _buildEnhancedFilterChip(
-                      label: trade,
+                      label: serviceName,
                       selected: selected,
                       onTap: () {
                         if (!mounted) return;
                         setState(() {
-                          _selectedTrade = trade == 'All' ? null : trade;
-                          _model.textController?.text = trade == 'All' ? '' : trade;
+                          _selectedTrade = selected ? null : serviceName;
+                          _model.textController?.text = selected ? '' : serviceName;
                         });
+                        // Track the service search
+                        if (!selected && serviceId.isNotEmpty) {
+                          _trackServiceSearch(serviceId, serviceName);
+                        }
                         _startSearch();
                       },
                       isDark: isDark,
@@ -872,11 +1235,52 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
               // Results Section
               Expanded(
                 child: _hasSearched
-                    ? (_isLoading && _artisans.isEmpty)
+                    ? _isLoading
                     ? ListView.builder(
                   padding: EdgeInsets.all(horizontalPadding),
                   itemCount: 3,
                   itemBuilder: (context, index) => _buildSkeletonCard(),
+                )
+                    : _errorMessage != null
+                    ? Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(horizontalPadding),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.error_outline_rounded,
+                          size: emptyIconSize,
+                          color: isDark ? const Color(0xFF6B7280) : _textSecondary,
+                        ),
+                        SizedBox(height: emptyTitleSpacing),
+                        Text(
+                          _errorMessage!,
+                          style: TextStyle(
+                            fontSize: isSmallScreen ? 14 : 16,
+                            color: isDark ? Colors.white : _textPrimary,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        SizedBox(height: emptySubSpacing * 2),
+                        ElevatedButton(
+                          onPressed: _startSearch,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _primaryColor,
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 12,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
                 )
                     : _artisans.isEmpty
                     ? Center(
@@ -912,29 +1316,35 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
                     ),
                   ),
                 )
-                    : ListView.builder(
-                  controller: _scrollController,
-                  padding: EdgeInsets.all(horizontalPadding),
-                  itemCount: _artisans.length + (_isLoadingMore ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (index < _artisans.length) {
-                      return _buildArtisanCard(context, _artisans[index]);
-                    } else {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 24),
-                        child: Center(
-                          child: SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation(_primaryColor),
+                    : RefreshIndicator(
+                  onRefresh: () async {
+                    await _startSearch();
+                  },
+                  color: _primaryColor,
+                  child: ListView.builder(
+                    controller: _scrollController,
+                    padding: EdgeInsets.all(horizontalPadding),
+                    itemCount: _artisans.length + (_isLoadingMore ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      if (index < _artisans.length) {
+                        return _buildArtisanCard(context, _artisans[index]);
+                      } else {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: Center(
+                            child: SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation(_primaryColor),
+                              ),
                             ),
                           ),
-                        ),
-                      );
-                    }
-                  },
+                        );
+                      }
+                    },
+                  ),
                 )
                     : Center(
                   child: Padding(

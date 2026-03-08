@@ -17,12 +17,14 @@ import '../../utils/navigation_utils.dart';
 import '../../utils/auth_guard.dart';
 import '../../widgets/network_error_widget.dart';
 import '../../services/token_storage.dart';
-import 'package:flutter/services.dart'; // <-- added
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../utils/location_permission.dart';
 import 'package:http/http.dart' as http;
 import '../../google_maps_config.dart';
 import '../../services/artist_service.dart';
+import '../../services/my_service_service.dart'; // Added import for artisan services
+import '../../services/job_service.dart';
 import '../artisan_detail_page/artisan_detail_page_widget.dart';
 import '/main.dart';
 export 'home_page_model.dart';
@@ -52,30 +54,36 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
   bool _notificationsFailed = false;
   bool _profileFailed = false;
 
-    // Carousel
-    late PageController _adPageController;
-    int _adPageIndex = 0;
-    // Absolute page index for infinite scrolling
-    int _adPageAbsoluteIndex = 0;
-    Timer? _adTimer;
-    bool _isUserScrolling = false;
+  // Carousel
+  late PageController _adPageController;
+  int _adPageIndex = 0;
+  // Absolute page index for infinite scrolling
+  int _adPageAbsoluteIndex = 0;
+  Timer? _adTimer;
+  bool _isUserScrolling = false;
 
-    // Artisans carousel state
-    List<Map<String, dynamic>> _artisans = [];
-    bool _loadingArtisans = false;
-    String? _artisanError;
-    // Auto-scroll/page state for artisans carousel
-    late PageController _artisanPageController;
-    int _artisanPageIndex = 0;
-    Timer? _artisanTimer;
-    bool _artisanUserScrolling = false;
-    // Absolute page index for infinite scrolling (same approach as ads)
-    int _artisanPageAbsoluteIndex = 0;
+  // Artisans carousel state
+  List<Map<String, dynamic>> _artisans = [];
+  bool _loadingArtisans = false;
+  String? _artisanError;
+  // Auto-scroll/page state for artisans carousel
+  late PageController _artisanPageController;
+  int _artisanPageIndex = 0;
+  Timer? _artisanTimer;
+  bool _artisanUserScrolling = false;
+  // Absolute page index for infinite scrolling (same approach as ads)
+  int _artisanPageAbsoluteIndex = 0;
 
-    List<String> _adImages = [];
-    final List<String> _defaultAds = [
-    // Prefer the requested carl_1.webp (bundled asset). If it isn't available,
-    // the carousel will fall back to app_logo_RH.jpg at render-time.
+  // Cache for artisan services
+  final Map<String, List<Map<String, dynamic>>> _artisanServicesCache = {}; // artisanId -> services list
+  bool _loadingArtisanServices = false;
+
+  // Dynamic home services (fetched from JobService). Each entry is a map with keys: icon, label, color, iconColor
+  List<Map<String, dynamic>> _homeServices = [];
+  bool _loadingHomeServices = false;
+
+  List<String> _adImages = [];
+  final List<String> _defaultAds = [
     'assets/images/carl_1.webp',
     'assets/images/carl_1.webp',
     'assets/images/carl_1.webp',
@@ -103,8 +111,8 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
   String? _profileImageUrlCached;
   Map<String, dynamic>? _cachedLocation;
 
-    @override
-    void initState() {
+  @override
+  void initState() {
     super.initState();
     _model = createModel(context, () => HomePageModel());
     // Initialize artisans page controller early to avoid races when data loads quickly
@@ -121,6 +129,8 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
 
     _loadAds();
     _loadMarquee();
+    // Fetch home services (up to 8) to replace the static list
+    _fetchHomeServices();
     _fetchUnreadNotifications();
     _notifTimer = Timer.periodic(const Duration(seconds: 30), (_) { if (mounted) _fetchUnreadNotifications(); });
 
@@ -146,7 +156,7 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
     });
     // initial probe
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkConnectivity());
-    }
+  }
 
   Future<void> _setLastSuccess() async {
     if (!mounted) return;
@@ -286,7 +296,7 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
     } catch (_) {}
   }
 
-    String? _extractProfileImageUrl(Map<String, dynamic>? p) {
+  String? _extractProfileImageUrl(Map<String, dynamic>? p) {
     if (p == null) return null;
     try {
       final keys = ['profileImageUrl', 'profileImage', 'avatar', 'image', 'photo', 'picture', 'pictureUrl', 'imageUrl', 'avatarUrl'];
@@ -330,9 +340,9 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
       }
     } catch (_) {}
     return null;
-    }
+  }
 
-    Future<void> _openLocationBottomSheet() async {
+  Future<void> _openLocationBottomSheet() async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -453,7 +463,7 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
         });
       },
     );
-    }
+  }
 
   // Normalize image URLs: if a relative/path-only URL is provided by the backend,
   // prefix it with API_BASE_URL so CachedNetworkImage can fetch it. Also handle
@@ -481,8 +491,8 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
     }
   }
 
-    @override
-    void dispose() {
+  @override
+  void dispose() {
     // Remove global app state listener to avoid leaks
     try { AppStateNotifier.instance.removeListener(_onAppStateChanged); } catch (_) {}
     _adTimer?.cancel();
@@ -495,7 +505,7 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
     _networkCheckTimer?.cancel();
     _model.dispose();
     super.dispose();
-    }
+  }
 
   Future<void> _loadAds() async {
     setState(() { _loadingAds = true; _adsFailed = false; });
@@ -631,8 +641,6 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
       if (_cachedLocation != null) {
         try {
           final addr = _cachedLocation!['address'] as String?;
-          // final lat = _cachedLocation!['latitude'] as double?;
-          // final lon = _cachedLocation!['longitude'] as double?;
           if (addr != null && addr.isNotEmpty) return addr;
           // If no address is available, don't show raw coordinates; prompt user to set a location
           return 'Tap to set location';
@@ -658,6 +666,261 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
       return data.buffer.asUint8List();
     } catch (_) {
       return null;
+    }
+  }
+
+  // Helper to extract artisan ID from various possible locations
+  String? _extractArtisanId(Map<String, dynamic> artisan) {
+    try {
+      // Check direct ID fields
+      final directId = artisan['_id'] ?? artisan['id'] ?? artisan['artisanId'] ?? artisan['userId'];
+      if (directId != null) return directId.toString();
+
+      // Check nested user object
+      if (artisan['user'] is Map) {
+        final user = artisan['user'] as Map;
+        final userId = user['_id'] ?? user['id'];
+        if (userId != null) return userId.toString();
+      }
+
+      // Check for stringified JSON
+      if (artisan['user'] is String) {
+        try {
+          final parsed = jsonDecode(artisan['user'] as String);
+          if (parsed is Map) {
+            final userId = parsed['_id'] ?? parsed['id'];
+            if (userId != null) return userId.toString();
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Fetch services for a specific artisan
+  Future<void> _fetchArtisanServices(String artisanId, String artisanKey) async {
+    if (artisanId.isEmpty || _artisanServicesCache.containsKey(artisanKey)) return;
+
+    try {
+      final response = await MyServiceService().fetchArtisanServices(artisanId);
+      if (response.ok && response.data != null) {
+        final services = MyServiceService.flattenArtisanServices(response.data);
+        if (mounted) {
+          setState(() {
+            _artisanServicesCache[artisanKey] = services;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching services for artisan $artisanId: $e');
+    }
+  }
+
+  Future<void> _loadHomeArtisans() async {
+    if (_loadingArtisans) return;
+    setState(() { _loadingArtisans = true; _artisanError = null; });
+    try {
+      print('┌────────────────── HOME PAGE ARTISAN LOADING ──────────────────');
+      print('│ [HOME PAGE] Calling ArtistService.fetchArtisans');
+      final list = await ArtistService.fetchArtisans(page: 1, limit: 10);
+      print('│ [HOME PAGE] Found ${list.length} artisans');
+      print('└────────────────────────────────────────────────────────────────');
+
+      if (!mounted) return;
+
+      // Store artisans
+      setState(() {
+        _artisans = List<Map<String, dynamic>>.from(list);
+        _loadingArtisans = false;
+        _artisanError = null;
+      });
+
+      // Fetch services for each artisan
+      for (final artisan in _artisans) {
+        final artisanId = _extractArtisanId(artisan);
+        if (artisanId != null) {
+          final artisanKey = '${artisanId}_${artisan.hashCode}';
+          _fetchArtisanServices(artisanId, artisanKey);
+        }
+      }
+
+      // Jump to a high start index to allow infinite swiping both directions.
+      final int count = _artisans.length;
+      if (count > 0) {
+        final start = count * 1000; // arbitrary large offset
+        _artisanPageAbsoluteIndex = start;
+        if (_artisanPageController.hasClients) {
+          _artisanPageController.jumpToPage(start);
+        } else {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            try { _artisanPageController.jumpToPage(start); } catch (_) {}
+          });
+        }
+      }
+      // Start auto-scroll for artisans carousel once we have data
+      _startArtisanTimer();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _loadingArtisans = false; _artisanError = 'Failed to load artisans'; });
+    }
+  }
+
+  void _startArtisanTimer() {
+    _artisanTimer?.cancel();
+    // don't start if not enough items
+    if (!mounted || _artisans.length < 2) return;
+    _artisanTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted || _artisans.isEmpty || _artisanUserScrolling) return;
+      final count = _artisans.length;
+      final nextAbs = _artisanPageAbsoluteIndex + 1;
+      try {
+        _artisanPageController.animateToPage(nextAbs, duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
+        setState(() {
+          _artisanPageAbsoluteIndex = nextAbs;
+          if (count > 0) _artisanPageIndex = _artisanPageAbsoluteIndex % count;
+        });
+      } catch (_) {}
+    });
+  }
+
+  // Robust helper to extract a human display name from various artisan/user shapes
+  String _artisanDisplayName(Map<String, dynamic>? a) {
+    if (a == null) return 'Unknown';
+    try {
+      // candidate keys in order of preference
+      final nameKeys = ['name', 'fullName', 'displayName', 'username', 'firstName', 'firstname', 'lastName'];
+
+      // try top-level simple keys
+      for (final k in nameKeys) {
+        if (a.containsKey(k) && a[k] != null) {
+          final v = a[k];
+          if (v is String && v.trim().isNotEmpty) return v.trim();
+        }
+      }
+
+      // try composing firstName + lastName
+      final first = (a['firstName'] ?? a['firstname'])?.toString() ?? '';
+      final last = (a['lastName'] ?? a['lastname'])?.toString() ?? '';
+      if (first.trim().isNotEmpty || last.trim().isNotEmpty) return ('${first.trim()} ${last.trim()}').trim();
+
+      // check common nested roots
+      final nestedRoots = ['user', 'owner', 'data', 'profile', 'person', 'artisan'];
+      for (final root in nestedRoots) {
+        if (a[root] is Map) {
+          final m = Map<String, dynamic>.from(a[root]);
+          for (final k in nameKeys) {
+            if (m.containsKey(k) && m[k] != null) {
+              final v = m[k];
+              if (v is String && v.trim().isNotEmpty) return v.trim();
+            }
+          }
+          final f = (m['firstName'] ?? m['firstname'])?.toString() ?? '';
+          final l = (m['lastName'] ?? m['lastname'])?.toString() ?? '';
+          if (f.trim().isNotEmpty || l.trim().isNotEmpty) return ('${f.trim()} ${l.trim()}').trim();
+        }
+      }
+
+      // Sometimes API returns an embedded user object as a JSON-string
+      for (final root in nestedRoots) {
+        if (a[root] is String) {
+          try {
+            final parsed = jsonDecode(a[root] as String);
+            if (parsed is Map) {
+              final out = _artisanDisplayName(Map<String, dynamic>.from(parsed));
+              if (out != 'Unknown') return out;
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+    return 'Unknown';
+  }
+
+  // Robust helper to extract an image URL/path for an artisan from various shapes
+  String? _artisanProfileImage(Map<String, dynamic>? a) {
+    if (a == null) return null;
+    try {
+      // candidate top-level keys
+      final imgKeys = ['profileImage', 'profileImageUrl', 'avatar', 'image', 'photo', 'picture', 'pictureUrl', 'imageUrl', 'avatarUrl', 'thumbnail'];
+      for (final k in imgKeys) {
+        if (a.containsKey(k) && a[k] != null) {
+          final v = a[k];
+          if (v is String && v.trim().isNotEmpty) return v.trim();
+          if (v is Map) {
+            for (final ck in ['url', 'path', 'imageUrl', 'src']) {
+              if (v.containsKey(ck) && v[ck] != null) {
+                final cs = v[ck];
+                if (cs is String && cs.trim().isNotEmpty) return cs.trim();
+              }
+            }
+          }
+        }
+      }
+
+      // nested roots
+      final nestedRoots = ['user', 'owner', 'data', 'profile', 'person', 'artisan'];
+      for (final root in nestedRoots) {
+        if (a[root] is Map) {
+          final m = Map<String, dynamic>.from(a[root]);
+          final got = _artisanProfileImage(m);
+          if (got != null && got.isNotEmpty) return got;
+        }
+      }
+
+      // sometimes nested as json string
+      for (final root in nestedRoots) {
+        if (a[root] is String) {
+          try {
+            final parsed = jsonDecode(a[root] as String);
+            if (parsed is Map) {
+              final out = _artisanProfileImage(Map<String, dynamic>.from(parsed));
+              if (out != null && out.isNotEmpty) return out;
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  String _normalizeBaseUrl(String raw) {
+    var base = (raw ?? '').toString().trim();
+    if (base.isEmpty) return '';
+    if (base.startsWith('http:') && !base.startsWith('http://')) base = base.replaceFirst('http:', 'http://');
+    if (base.startsWith('https:') && !base.startsWith('https://')) base = base.replaceFirst('https:', 'https://');
+    if (!base.startsWith(RegExp(r'https?://'))) base = 'https://$base';
+    return base.replaceAll(RegExp(r'/+\$'), '').replaceAll(RegExp(r'/+'), '');
+  }
+
+  Map<String, dynamic> _resolveAdSource(String? raw) {
+    // returns {'src': String?, 'isAsset': bool}
+    try {
+      if (raw == null) return {'src': null, 'isAsset': false};
+      var s = raw.trim();
+      if (s.isEmpty) return {'src': null, 'isAsset': false};
+      // Asset reference (bundled)
+      if (s.startsWith('assets/')) return {'src': s, 'isAsset': true};
+      // Full network URL
+      if (s.startsWith('http://') || s.startsWith('https://'))
+        return {'src': s, 'isAsset': false};
+      // Leading slash path => treat as network path on API_BASE_URL
+      final base = _normalizeBaseUrl(API_BASE_URL);
+      if (s.startsWith('/')) return {'src': '$base$s', 'isAsset': false};
+      // If looks like a filename with extension, assume uploads
+      if (s.contains('.') && !s.contains(' '))
+        return {'src': '$base/uploads/$s', 'isAsset': false};
+      // Fallback: treat as network uploads path
+      return {'src': '$base/uploads/$s', 'isAsset': false};
+    } catch (_) {
+      try {
+        final s = raw?.toString() ?? '';
+        return {
+          'src': s.isNotEmpty ? s : null,
+          'isAsset': s.startsWith('assets/')
+        };
+      } catch (_) {
+        return {'src': null, 'isAsset': false};
+      }
     }
   }
 
@@ -869,7 +1132,6 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
                       0.0,
                       20.0,
                       // include device bottom inset + extra spacing (nav bar height + margin)
-
                       MediaQuery.of(context).padding.bottom + kBottomNavigationBarHeight + 64.0,
                     ),
                     child: Column(
@@ -1198,6 +1460,20 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
                                   aspect = 1.05;
                                 }
 
+                                // Determine how many cards to show: up to 8 from dynamic services,
+                                // otherwise use the fallback palette length.
+                                final displayCount = _homeServices.isNotEmpty ? (_homeServices.length < 8 ? _homeServices.length : 8) : 0;
+                                if (displayCount == 0) {
+                                  // While loading, show a small spinner; otherwise render nothing.
+                                  if (_loadingHomeServices) {
+                                    return SizedBox(
+                                      height: 120,
+                                      child: Center(child: CircularProgressIndicator(color: colorScheme.primary)),
+                                    );
+                                  }
+                                  return const SizedBox.shrink();
+                                }
+
                                 return GridView.builder(
                                   physics: const NeverScrollableScrollPhysics(),
                                   shrinkWrap: true,
@@ -1207,7 +1483,7 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
                                     mainAxisSpacing: 20,
                                     childAspectRatio: aspect,
                                   ),
-                                  itemCount: 8,
+                                  itemCount: displayCount,
                                   itemBuilder: (context, index) => _buildServiceCard(context, index),
                                 );
                               }),
@@ -1434,64 +1710,100 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
     );
   }
 
-    Widget _buildServiceCard(BuildContext context, int index) {
+  /// Fetch up to 8 public job categories and map them to the existing icon palette.
+  Future<void> _fetchHomeServices({bool forceRefresh = false}) async {
+    if (_loadingHomeServices && !forceRefresh) return;
+    _loadingHomeServices = true;
+    try {
+      final cats = await JobService.getJobCategories(page: 1, limit: 8);
+      final mapped = <Map<String, dynamic>>[];
+      for (final c in cats) {
+        try {
+          final name = (c['name'] ?? c['title'] ?? c['label'] ?? c['slug'] ?? '').toString();
+          if (name.trim().isEmpty) continue;
+          final entry = _mapCategoryToServiceEntry(name);
+          mapped.add(entry);
+          if (mapped.length >= 8) break;
+        } catch (_) {}
+      }
+      if (mounted) setState(() { if (mapped.isNotEmpty) _homeServices = mapped; _loadingHomeServices = false; });
+    } catch (e) {
+      if (mounted) setState(() => _loadingHomeServices = false);
+    }
+  }
+
+  /// Map a category name to a service entry that contains the existing icon and colors.
+  /// This tries to match common keywords to the existing set of icons. If no match,
+  /// fallback to the generic first icon (Carpentry) but keep the category name.
+  Map<String, dynamic> _mapCategoryToServiceEntry(String name) {
+    final lower = name.toLowerCase();
+    // Base palette (must match the original static order/icons/colors)
+    final base = [
+      {'icon': FFIcons.kcapentry, 'color': const Color(0xFFFF6B35)},
+      {'icon': FFIcons.kcatering, 'color': const Color(0xFF00C9A7)},
+      {'icon': FFIcons.kcleaning, 'color': const Color(0xFF4CD964)},
+      {'icon': FFIcons.kelectrictian, 'color': const Color(0xFF5E5CE6)},
+      {'icon': FFIcons.kgardener, 'color': const Color(0xFF32D74B)},
+      {'icon': FFIcons.kmechanic, 'color': const Color(0xFFFF375F)},
+      {'icon': FFIcons.kmaintainace, 'color': const Color(0xFF64D2FF)},
+      {'icon': FFIcons.ktailor, 'color': const Color(0xFFBF5AF2)},
+    ];
+
+    // Keyword -> index mapping heuristics
+    final Map<int, List<String>> keywords = {
+      0: ['carpentry', 'carpenter', 'wood', 'furniture'],
+      1: ['cater', 'food', 'chef', 'catering'],
+      2: ['clean', 'maid', 'housekeeping', 'janitor'],
+      3: ['electric', 'electrician', 'electrical', 'wiring'],
+      4: ['garden', 'gardener', 'landscap'],
+      5: ['mechanic', 'auto', 'car', 'vehicle'],
+      6: ['maintenance', 'handyman', 'repair', 'fix'],
+      7: ['tailor', 'sew', 'tailoring', 'dressmaking'],
+    };
+
+    for (final kv in keywords.entries) {
+      for (final k in kv.value) {
+        if (lower.contains(k)) {
+          final pick = base[kv.key];
+          return {
+            'icon': pick['icon'],
+            'label': name,
+            'color': pick['color'],
+            'iconColor': pick['color'],
+          };
+        }
+      }
+    }
+
+    // Fallback: pick index based on hash to provide some variety
+    final idx = name.hashCode.abs() % base.length;
+    final pick = base[idx];
+    return {
+      'icon': pick['icon'],
+      'label': name,
+      'color': pick['color'],
+      'iconColor': pick['color'],
+    };
+  }
+
+  Widget _buildServiceCard(BuildContext context, int index) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
 
-    // Define service data with consistent colors
-    final List<Map<String, dynamic>> services = [
-      {
-        'icon': FFIcons.kcapentry,
-        'label': 'Carpentry',
-        'color': Color(0xFFFF6B35), // Orange
-        'iconColor': Color(0xFFFF6B35),
-      },
-      {
-        'icon': FFIcons.kcatering,
-        'label': 'Catering',
-        'color': Color(0xFF00C9A7), // Teal
-        'iconColor': Color(0xFF00C9A7),
-      },
-      {
-        'icon': FFIcons.kcleaning,
-        'label': 'Cleaning',
-        'color': Color(0xFF4CD964), // Green
-        'iconColor': Color(0xFF4CD964),
-      },
-      {
-        'icon': FFIcons.kelectrictian,
-        'label': 'Electrician',
-        'color': Color(0xFF5E5CE6), // Purple
-        'iconColor': Color(0xFF5E5CE6),
-      },
-      {
-        'icon': FFIcons.kgardener,
-        'label': 'Gardener',
-        'color': Color(0xFF32D74B), // Lime Green
-        'iconColor': Color(0xFF32D74B),
-      },
-      {
-        'icon': FFIcons.kmechanic,
-        'label': 'Mechanic',
-        'color': Color(0xFFFF375F), // Pink
-        'iconColor': Color(0xFFFF375F),
-      },
-      {
-        'icon': FFIcons.kmaintainace,
-        'label': 'Maintenance',
-        'color': Color(0xFF64D2FF), // Light Blue
-        'iconColor': Color(0xFF64D2FF),
-      },
-      {
-        'icon': FFIcons.ktailor,
-        'label': 'Tailor',
-        'color': Color(0xFFBF5AF2), // Purple Pink
-        'iconColor': Color(0xFFBF5AF2),
-      },
-    ];
+    // Use only services fetched from the service endpoint. Don't fall back to
+    // a static palette. The caller should ensure we only build cards for
+    // available services (itemCount will be 0 when none are present).
+    final services = _homeServices;
+    // Defensive clamp; itemBuilder shouldn't be called when services is empty because
+    // itemCount will be 0, but keep safety here.
+    final safeIndex = services.isNotEmpty ? index.clamp(0, services.length - 1) : 0;
+    final service = services.isNotEmpty ? services[safeIndex] : null;
 
-    final service = services[index];
+    if (service == null) {
+      // No data to render. Return an invisible placeholder to keep the builder safe.
+      return const SizedBox.shrink();
+    }
 
     return Material(
         color: Colors.transparent,
@@ -1499,7 +1811,7 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: () => NavigationUtils.safePush(context, SearchPageWidget(initialQuery: service['label'] as String)),
-          splashColor: service['color'].withOpacity(0.1) as Color,
+          splashColor: (service['color'] as Color).withOpacity(0.1),
           highlightColor: Colors.transparent,
           child: Container(
             decoration: BoxDecoration(
@@ -1622,63 +1934,9 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
           ),
         )
     );
-    }
+  }
 
-        Future<void> _loadHomeArtisans() async {
-        if (_loadingArtisans) return;
-        setState(() { _loadingArtisans = true; _artisanError = null; });
-        try {
-          print('┌────────────────── HOME PAGE ARTISAN LOADING ──────────────────');
-          print('│ [HOME PAGE] Calling ArtistService.fetchArtisans');
-          final list = await ArtistService.fetchArtisans(page: 1, limit: 10);
-          print('│ [HOME PAGE] Found ${list.length} artisans');
-          print('└────────────────────────────────────────────────────────────────');
-          if (!mounted) return;
-          setState(() {
-            _artisans = List<Map<String, dynamic>>.from(list);
-            _loadingArtisans = false;
-            _artisanError = null;
-          });
-      // Jump to a high start index to allow infinite swiping both directions.
-      final int count = _artisans.length;
-      if (count > 0) {
-        final start = count * 1000; // arbitrary large offset
-        _artisanPageAbsoluteIndex = start;
-        if (_artisanPageController.hasClients) {
-          _artisanPageController.jumpToPage(start);
-        } else {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            try { _artisanPageController.jumpToPage(start); } catch (_) {}
-          });
-        }
-      }
-      // Start auto-scroll for artisans carousel once we have data
-       _startArtisanTimer();
-        } catch (e) {
-          if (!mounted) return;
-          setState(() { _loadingArtisans = false; _artisanError = 'Failed to load artisans'; });
-        }
-        }
-
-      void _startArtisanTimer() {
-        _artisanTimer?.cancel();
-        // don't start if not enough items
-        if (!mounted || _artisans.length < 2) return;
-        _artisanTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (!mounted || _artisans.isEmpty || _artisanUserScrolling) return;
-      final count = _artisans.length;
-      final nextAbs = _artisanPageAbsoluteIndex + 1;
-      try {
-        _artisanPageController.animateToPage(nextAbs, duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
-        setState(() {
-          _artisanPageAbsoluteIndex = nextAbs;
-          if (count > 0) _artisanPageIndex = _artisanPageAbsoluteIndex % count;
-        });
-      } catch (_) {}
-     });
-   }
-
-    Widget _buildArtisanCard(BuildContext context, Map<String, dynamic> artisan) {
+  Widget _buildArtisanCard(BuildContext context, Map<String, dynamic> artisan) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final name = _artisanDisplayName(artisan);
@@ -1686,26 +1944,12 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
     final profileRaw = _artisanProfileImage(artisan);
     final profileUrl = _normalizeImageUrl(profileRaw?.toString());
 
-    // Robustly extract trade/service label and avoid printing list `[]` when backend returns an array
-    final dynamic tradeRaw = artisan['trade'] ?? artisan['service'] ?? artisan['profession'] ?? artisan['occupation'];
-    String trade = 'Service';
-    try {
-      if (tradeRaw is String && tradeRaw.trim().isNotEmpty) {
-        trade = tradeRaw.trim();
-      } else if (tradeRaw is List && tradeRaw.isNotEmpty) {
-        trade = tradeRaw.map((e) {
-          if (e == null) return '';
-          if (e is String) return e.trim();
-          if (e is Map) return (e['name'] ?? e['label'] ?? e['title'] ?? '').toString().trim();
-          return e.toString().trim();
-        }).where((s) => s.isNotEmpty).join(', ');
-        if (trade.isEmpty) trade = 'Service';
-      } else if (tradeRaw is Map) {
-        trade = (tradeRaw['name'] ?? tradeRaw['label'] ?? tradeRaw['title'] ?? tradeRaw['service'] ?? tradeRaw['trade'])?.toString() ?? 'Service';
-      } else if (tradeRaw != null) {
-        trade = tradeRaw.toString();
-      }
-    } catch (_) { trade = 'Service'; }
+    // Get artisan ID for service cache lookup
+    final artisanId = _extractArtisanId(artisan);
+    final artisanKey = artisanId != null ? '${artisanId}_${artisan.hashCode}' : null;
+
+    // Get services from cache
+    final cachedServices = artisanKey != null ? _artisanServicesCache[artisanKey] : null;
 
     return LayoutBuilder(builder: (ctx, constraints) {
       final cardWidth = (MediaQuery.of(ctx).size.width - 40).clamp(280.0, 820.0);
@@ -1723,13 +1967,19 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Avatar
-                  ClipOval(
-                    child: SizedBox(
-                      width: 64,
-                      height: 64,
-                      child: profileUrl != null
-                          ? CachedNetworkImage(
+                  // Avatar with verified badge overlay (bottom-right) similar to discover page
+                  Container(
+                    width: 64,
+                    height: 64,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        ClipOval(
+                          child: SizedBox(
+                            width: 64,
+                            height: 64,
+                            child: profileUrl != null
+                                ? CachedNetworkImage(
                               imageUrl: profileUrl,
                               fit: BoxFit.cover,
                               placeholder: (c, u) => Container(color: colorScheme.surface),
@@ -1741,10 +1991,33 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
                                 );
                               },
                             )
-                          : Container(
+                                : Container(
                               color: colorScheme.surface,
                               child: Center(child: Text(name.split(' ').where((s) => s.isNotEmpty).map((s) => s[0]).take(2).join().toUpperCase(), style: TextStyle(color: colorScheme.primary, fontWeight: FontWeight.w600))),
                             ),
+                          ),
+                        ),
+                        // Verified badge bottom-right (same style as discovery page)
+                        if (artisan['verified'] == true || artisan['isVerified'] == true || artisan['is_verified'] == true)
+                          Positioned(
+                            right: -2,
+                            bottom: -2,
+                            child: Container(
+                              width: 18,
+                              height: 18,
+                              decoration: BoxDecoration(
+                                color: Colors.green,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Theme.of(context).cardColor, width: 1.5),
+                              ),
+                              child: const Icon(
+                                Icons.verified_rounded,
+                                size: 12,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -1757,18 +2030,13 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
                       children: [
                         Row(
                           children: [
-                            // Name + verified badge close to the name
+                            // Name (left). Removed the inline rating that was previously shown on the right.
                             Expanded(
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(name, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis),
-                                  ),
-                                  if (artisan['verified'] == true || artisan['isVerified'] == true || artisan['is_verified'] == true) ...[
-                                    const SizedBox(width: 4),
-                                    Icon(Icons.verified, color: Colors.green, size: 16),
-                                  ],
-                                ],
+                              child: Text(
+                                name,
+                                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ],
@@ -1794,24 +2062,14 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
                         ] else ...[
                           Text('No ratings', style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurface.withOpacity(0.6))),
                         ],
-                        const SizedBox(height: 8),
-                        // Trade pill (single-line, no brackets). Trade string is already normalized above.
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: colorScheme.primary.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(trade, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.primary, fontWeight: FontWeight.w600)),
-                        ),
-                       ],
-                     ),
-                   ),
+                      ],
+                    ),
+                  ),
 
                   // Book Now button
-                   Column(
-                     mainAxisAlignment: MainAxisAlignment.center,
-                     children: [
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: colorScheme.primary,
@@ -1821,10 +2079,10 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
                           shadowColor: Colors.transparent,
                         ),
                         onPressed: () => NavigationUtils.safePush(context, ArtisanDetailPageWidget(artisan: artisan, openHire: true)),
-                        child: const Text('Book Now'),
+                        child: const Text('Book'),
                       ),
-                     ],
-                   ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -1832,147 +2090,5 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
         ),
       );
     });
-    }
-
-  // Robust helper to extract a human display name from various artisan/user shapes
-  String _artisanDisplayName(Map<String, dynamic>? a) {
-    if (a == null) return 'Unknown';
-    try {
-      // candidate keys in order of preference
-      final nameKeys = ['name', 'fullName', 'displayName', 'username', 'firstName', 'firstname', 'lastName'];
-
-      // try top-level simple keys
-      for (final k in nameKeys) {
-        if (a.containsKey(k) && a[k] != null) {
-          final v = a[k];
-          if (v is String && v.trim().isNotEmpty) return v.trim();
-        }
-      }
-
-      // try composing firstName + lastName
-      final first = (a['firstName'] ?? a['firstname'])?.toString() ?? '';
-      final last = (a['lastName'] ?? a['lastname'])?.toString() ?? '';
-      if (first.trim().isNotEmpty || last.trim().isNotEmpty) return ('${first.trim()} ${last.trim()}').trim();
-
-      // check common nested roots
-      final nestedRoots = ['user', 'owner', 'data', 'profile', 'person', 'artisan'];
-      for (final root in nestedRoots) {
-        if (a[root] is Map) {
-          final m = Map<String, dynamic>.from(a[root]);
-          for (final k in nameKeys) {
-            if (m.containsKey(k) && m[k] != null) {
-              final v = m[k];
-              if (v is String && v.trim().isNotEmpty) return v.trim();
-            }
-          }
-          final f = (m['firstName'] ?? m['firstname'])?.toString() ?? '';
-          final l = (m['lastName'] ?? m['lastname'])?.toString() ?? '';
-          if (f.trim().isNotEmpty || l.trim().isNotEmpty) return ('${f.trim()} ${l.trim()}').trim();
-        }
-      }
-
-      // Sometimes API returns an embedded user object as a JSON-string
-      for (final root in nestedRoots) {
-        if (a[root] is String) {
-          try {
-            final parsed = jsonDecode(a[root] as String);
-            if (parsed is Map) {
-              final out = _artisanDisplayName(Map<String, dynamic>.from(parsed));
-              if (out != 'Unknown') return out;
-            }
-          } catch (_) {}
-        }
-      }
-    } catch (_) {}
-    return 'Unknown';
-  }
-
-  // Robust helper to extract an image URL/path for an artisan from various shapes
-  String? _artisanProfileImage(Map<String, dynamic>? a) {
-    if (a == null) return null;
-    try {
-      // candidate top-level keys
-      final imgKeys = ['profileImage', 'profileImageUrl', 'avatar', 'image', 'photo', 'picture', 'pictureUrl', 'imageUrl', 'avatarUrl', 'thumbnail'];
-      for (final k in imgKeys) {
-        if (a.containsKey(k) && a[k] != null) {
-          final v = a[k];
-          if (v is String && v.trim().isNotEmpty) return v.trim();
-          if (v is Map) {
-            for (final ck in ['url', 'path', 'imageUrl', 'src']) {
-              if (v.containsKey(ck) && v[ck] != null) {
-                final cs = v[ck];
-                if (cs is String && cs.trim().isNotEmpty) return cs.trim();
-              }
-            }
-          }
-        }
-      }
-
-      // nested roots
-      final nestedRoots = ['user', 'owner', 'data', 'profile', 'person', 'artisan'];
-      for (final root in nestedRoots) {
-        if (a[root] is Map) {
-          final m = Map<String, dynamic>.from(a[root]);
-          final got = _artisanProfileImage(m);
-          if (got != null && got.isNotEmpty) return got;
-        }
-      }
-
-      // sometimes nested as json string
-      for (final root in nestedRoots) {
-        if (a[root] is String) {
-          try {
-            final parsed = jsonDecode(a[root] as String);
-            if (parsed is Map) {
-              final out = _artisanProfileImage(Map<String, dynamic>.from(parsed));
-              if (out != null && out.isNotEmpty) return out;
-            }
-          } catch (_) {}
-        }
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  String _normalizeBaseUrl(String raw) {
-    var base = (raw ?? '').toString().trim();
-    if (base.isEmpty) return '';
-    if (base.startsWith('http:') && !base.startsWith('http://')) base = base.replaceFirst('http:', 'http://');
-    if (base.startsWith('https:') && !base.startsWith('https://')) base = base.replaceFirst('https:', 'https://');
-    if (!base.startsWith(RegExp(r'https?://'))) base = 'https://$base';
-    return base.replaceAll(RegExp(r'/+\$'), '').replaceAll(RegExp(r'/+ '), '');
-  }
-
-  Map<String, dynamic> _resolveAdSource(String? raw) {
-    // returns {'src': String?, 'isAsset': bool}
-    try {
-      if (raw == null) return {'src': null, 'isAsset': false};
-      var s = raw.trim();
-      if (s.isEmpty) return {'src': null, 'isAsset': false};
-      // Asset reference (bundled)
-      if (s.startsWith('assets/')) return {'src': s, 'isAsset': true};
-      // Full network URL
-      if (s.startsWith('http://') || s.startsWith('https://'))
-        return {'src': s, 'isAsset': false};
-      // Leading slash path => treat as network path on API_BASE_URL
-      final base = _normalizeBaseUrl(API_BASE_URL);
-      if (s.startsWith('/')) return {'src': '$base$s', 'isAsset': false};
-      // If looks like a filename with extension, assume uploads
-      if (s.contains('.') && !s.contains(' '))
-        return {'src': '$base/uploads/$s', 'isAsset': false};
-      // Fallback: treat as network uploads path
-      return {'src': '$base/uploads/$s', 'isAsset': false};
-    } catch (_) {
-      try {
-        final s = raw?.toString() ?? '';
-        return {
-          'src': s.isNotEmpty ? s : null,
-          'isAsset': s.startsWith('assets/')
-        };
-      } catch (_) {
-        return {'src': null, 'isAsset': false};
-      }
-    }
   }
 }
-

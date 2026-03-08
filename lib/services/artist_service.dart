@@ -49,38 +49,31 @@ class ArtistService {
       String? location,
       double? lat,
       double? lon,
-      int? radiusKm}) async {
+      int? radiusKm,
+      String? categoryId,
+      String? subCategoryId}) async {
     final token = await TokenStorage.getToken();
     final headers = <String, String>{'Content-Type': 'application/json'};
     if (token != null) headers['Authorization'] = 'Bearer $token';
-
-    // Build params per search_api.md: GET /api/artisans/search
-    // q = free-text search (service/category terms); location = geographic; lat/lon/radiusKm = geospatial
     final qParams = <String, String>{
+      'role': 'artisan',
       'page': page.toString(),
       'limit': limit.toString()
     };
-    // Service/category search: q, trade, name all map to `q` (per search_api.md free-text mode)
-    final searchTerm = q ?? trade ?? ((q == null || q.isEmpty) && (trade == null || trade.isEmpty) ? name : null);
-    if (searchTerm != null && searchTerm.trim().isNotEmpty) {
-      qParams['q'] = searchTerm.trim();
-    }
-    // When only location is passed (e.g. discover's byLoc call with "event catering"), treat as service search
-    if ((searchTerm == null || searchTerm.isEmpty) && location != null && location.trim().isNotEmpty) {
-      qParams['q'] = location.trim();
-    }
-    // Geographic: pass location for geo when it differs from search term (e.g. "Ikeja", "Lagos")
-    if (location != null && location.trim().isNotEmpty) {
-      if (searchTerm == null || searchTerm.trim().toLowerCase() != location.trim().toLowerCase()) {
-        qParams['location'] = location.trim();
-      }
-    }
+    if (q != null && q.isNotEmpty) qParams['q'] = q;
+    if (trade != null && trade.isNotEmpty) qParams['trade'] = trade;
+    if (categoryId != null && categoryId.isNotEmpty) qParams['categoryId'] = categoryId;
+    if (subCategoryId != null && subCategoryId.isNotEmpty) qParams['subCategoryId'] = subCategoryId;
+    // Only use `name` as a q fallback when `q` is not provided to avoid accidentally overriding an explicit `q`.
+    if ((q == null || q.isEmpty) && name != null && name.isNotEmpty)
+      qParams['q'] = name;
+    if (location != null && location.isNotEmpty) qParams['location'] = location;
     if (lat != null) qParams['lat'] = lat.toString();
     if (lon != null) qParams['lon'] = lon.toString();
     if (radiusKm != null) qParams['radiusKm'] = radiusKm.toString();
 
-    // Use GET /api/artisans/search per search_api.md
-    final uri = Uri.parse('$API_BASE_URL/api/artisans/search')
+    // Prefer the dedicated artisans endpoint per API docs
+    final uri = Uri.parse('$API_BASE_URL/api/artisans')
         .replace(queryParameters: qParams);
 
     print('┌────────────────── DISCOVER/HOME SERVICE LOGS ──────────────────');
@@ -1623,5 +1616,80 @@ class ArtistService {
         debugPrint('ArtistService.getByUserId -> $url failed: $e');
     }
     return null;
+  }
+
+  /// Fetch artisan services for a specific artisan by userId.
+  static Future<List<Map<String, dynamic>>> fetchArtisanServices(String artisanUserId, {String? token}) async {
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+
+    // Preferred public endpoint per API docs: GET /api/artisan-services/:id
+    final pathUri = Uri.parse('$API_BASE_URL/api/artisan-services/$artisanUserId');
+    final queryUri = Uri.parse('$API_BASE_URL/api/artisan-services').replace(queryParameters: {'artisanId': artisanUserId});
+
+    try {
+      // Try path-based endpoint first
+      final resp = await ApiClient.get(pathUri.toString(), headers: headers);
+      if (resp['status'] is int && resp['status'] >= 200 && resp['status'] < 300) {
+        dynamic body = resp['json'] ?? (resp['body'] != null ? jsonDecode(resp['body']) : null);
+        if (body == null) return [];
+
+        // If the endpoint returns a single artisan service object, wrap it in a list
+        if (body is Map && body['success'] == true && body['data'] is Map) {
+          return [(Map<String, dynamic>.from(body['data'] as Map))];
+        }
+
+        // If body is a Map with data list
+        if (body is Map && body['success'] == true && body['data'] is List) {
+          return (body['data'] as List).map((e) => Map<String, dynamic>.from(e)).toList();
+        }
+
+        // If the body itself is a Map that looks like a service doc, return it
+        if (body is Map) return [Map<String, dynamic>.from(body)];
+        if (body is List) return List<Map<String, dynamic>>.from(body.map((e) => Map<String, dynamic>.from(e)));
+      }
+
+      // If path endpoint failed (404 or other), try legacy query-param endpoint as a fallback
+      final respQuery = await ApiClient.get(queryUri.toString(), headers: headers);
+      if (respQuery['status'] is int && respQuery['status'] >= 200 && respQuery['status'] < 300) {
+        dynamic body = respQuery['json'] ?? (respQuery['body'] != null ? jsonDecode(respQuery['body']) : null);
+        if (body == null) return [];
+        if (body is Map && body['success'] == true && body['data'] is List) {
+          return (body['data'] as List).map((e) => Map<String, dynamic>.from(e)).toList();
+        }
+        if (body is List) return List<Map<String, dynamic>>.from(body.map((e) => Map<String, dynamic>.from(e)));
+      }
+    } catch (e) {
+      debugPrint('Failed to fetch artisan services: $e');
+    }
+
+    // Fallback: if no public endpoint, return empty list
+    return [];
+  }
+
+  /// Fetch the current user's artisan services (GET /api/artisan-services/me)
+  static Future<List<Map<String, dynamic>>> fetchMyArtisanServices({String? token}) async {
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+
+    final uri = Uri.parse('$API_BASE_URL/api/artisan-services/me');
+
+    try {
+      final resp = await ApiClient.get(uri.toString(), headers: headers);
+      if (resp['status'] is int && resp['status'] >= 200 && resp['status'] < 300) {
+        dynamic body = resp['json'] ?? (resp['body'] != null ? jsonDecode(resp['body']) : null);
+        if (body is Map && body['success'] == true && body['data'] is List) {
+          return (body['data'] as List).map((e) => Map<String, dynamic>.from(e)).toList();
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to fetch my artisan services: $e');
+    }
+
+    return [];
   }
 }

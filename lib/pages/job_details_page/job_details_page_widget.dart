@@ -667,8 +667,8 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
 
                   const SizedBox(height: 16),
 
-                  // Quick Info (reflowed): two-column header row, full-width LOCATION,
-                  // then Posted By & Schedule side-by-side under the location. Payment shown below.
+                  // Quick Info (reflowed): two-column header row and full-width LOCATION.
+                  // Application deadline and Posted By will be shown below the boxed quick info as stacked rows.
                   Builder(builder: (_) {
                     Widget? catCard = (categoryName != null && categoryName.isNotEmpty)
                         ? _buildInfoCard('CATEGORY', categoryName, Icons.category_outlined)
@@ -676,19 +676,7 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
                     Widget? expCard = (experienceLevel != null && experienceLevel.isNotEmpty)
                         ? _buildInfoCard('EXPERIENCE', experienceLevel, Icons.timeline_outlined)
                         : null;
-                    final clientId = _extractClientId(widget.job);
-                    Widget? postedCard;
-                    if (clientId != null || clientName != null) {
-                      final display = _loadingPostedBy
-                          ? 'Loading...'
-                          : (_postedByName ?? (clientName != null ? clientName.toString() : clientId.toString()));
-                      postedCard = _buildInfoCard('POSTED BY', display, Icons.person_outline);
-                    } else {
-                      postedCard = null;
-                    }
-                    Widget? scheduleCard = (scheduleStr.isNotEmpty)
-                        ? _buildInfoCard('Application deadline', scheduleStr, Icons.schedule_outlined)
-                        : null;
+
                     Widget? paymentCard = (paymentStatus != null)
                         ? _buildInfoCard('PAYMENT', paymentStatus.toString(), Icons.payment_outlined)
                         : null;
@@ -715,21 +703,16 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
 
                     final List<Widget> children = [];
 
-                    // Top two-column row (category, experience)
-                    final topRow = twoColRow(catCard, expCard);
-                    if (topRow is! SizedBox) children.add(topRow);
+                    // Top two-column row (category, experience) — add when either exists
+                    if (catCard != null || expCard != null) {
+                      children.add(twoColRow(catCard, expCard));
+                    }
 
                     // Spacing
                     if (children.isNotEmpty) children.add(const SizedBox(height: 12));
 
                     // Full-width location
                     children.add(locationCard);
-                    children.add(const SizedBox(height: 12));
-
-                    // Posted By & Schedule under the location
-                    final bottomRow = twoColRow(postedCard, scheduleCard);
-                    if (bottomRow is! SizedBox) children.add(bottomRow);
-
                     // Payment card below (full width) if present
                     if (paymentCard != null) {
                       children.add(const SizedBox(height: 12));
@@ -738,6 +721,78 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
 
                     return Column(children: children);
                   }),
+
+                  // Application deadline and Posted By stacked vertically (application deadline first)
+                  const SizedBox(height: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (scheduleStr.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 140,
+                                child: Text(
+                                  'Application deadline:',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: _getTextSecondary(context),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  scheduleStr,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  softWrap: false,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: _getTextPrimary(context),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      // Posted by underneath
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              width: 140,
+                              child: Text(
+                                'Posted by:',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: _getTextSecondary(context),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                _loadingPostedBy ? 'Loading...' : (_postedByName ?? (clientName != null ? clientName.toString() : ( _extractClientId(widget.job) ?? 'Unknown'))),
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: _getTextPrimary(context),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
 
                   const SizedBox(height: 24),
 
@@ -870,6 +925,7 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
                                 ),
                               ),
 
+                            /* Job ID display commented out per request
                             // Job ID
                             if (_extractJobId() != null)
                               Padding(
@@ -901,6 +957,8 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
                                   ],
                                 ),
                               ),
+                            */
+
                           ].whereType<Widget>().toList(),
                         ),
                       ),

@@ -1,7 +1,7 @@
 import '/flutter_flow/flutter_flow_util.dart';
 import 'package:flutter/material.dart';
 import 'dart:convert';
-import 'package:flutter/services.dart' show rootBundle, MissingPluginException;
+import 'package:flutter/services.dart' show MissingPluginException;
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'dart:io';
@@ -120,10 +120,12 @@ class _ArtisanProfileupdateWidgetState
     _model.serviceAreaRadiusFocusNode ??= FocusNode();
 
     // Attempt to prefill from backend profile after build
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadProfileData();
-      _loadStatesLgas();
-      _fetchJobCategories();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _loadProfileData();
+      await _loadStatesLgas();
+      await _fetchJobCategories();
+      // Ensure UI-level prefills for step 2 are applied after all data is available
+      _applyPrefillsToUI();
     });
   }
 
@@ -188,6 +190,102 @@ class _ArtisanProfileupdateWidgetState
         _statesLgas = map;
         _statesList = map.keys.toList()..sort();
       });
+
+      // If we already have an address prefilling the service area, try to infer state/LGA selections
+      final addr = (_model.serviceAreaAddressController?.text ?? '').trim();
+      if (addr.isNotEmpty) {
+        // Only support the single allowed state for now (Abuja FCT)
+        final state = _statesList.isNotEmpty ? _statesList.first : null;
+        if (state != null) {
+          final lgas = _statesLgas[state] ?? [];
+          final matched = lgas.firstWhere((l) => addr.toLowerCase().contains(l.toLowerCase()), orElse: () => '');
+          if (matched.isNotEmpty) {
+            setState(() {
+              _selectedState = state;
+              _lgasForSelectedState = List<String>.from(lgas);
+              _selectedLga = matched;
+            });
+
+            // If radius is not already set, attempt to estimate it from Nominatim boundingbox
+            if ((_model.serviceAreaRadiusController?.text ?? '').trim().isEmpty) {
+              final tryAddr = '$matched, $state, Nigeria';
+              try {
+                final geo = await LocationService.geocodePlace(tryAddr, limit: 1);
+                if (geo != null && geo['boundingbox'] is List) {
+                  final bbox = geo['boundingbox'] as List;
+                  if (bbox.length == 4) {
+                    final south = (bbox[0] as num).toDouble();
+                    final north = (bbox[1] as num).toDouble();
+                    final west = (bbox[2] as num).toDouble();
+                    final east = (bbox[3] as num).toDouble();
+                    final diagKm = _haversineDistance(south, west, north, east);
+                    final approxRadiusKm = (diagKm / 2).ceil();
+                    setState(() {
+                      _model.serviceAreaRadiusController?.text = approxRadiusKm.toString();
+                      if (geo['lat'] != null && geo['lon'] != null) {
+                        _serviceLat = (geo['lat'] as num).toDouble();
+                        _serviceLon = (geo['lon'] as num).toDouble();
+                      }
+                    });
+                  }
+                }
+              } catch (_) {}
+            }
+          }
+        }
+      }
+
+      // If we have coordinates but no selected LGA, attempt a reverse geocode via LocationService to get a bbox and infer LGA
+      if ((_serviceLat != null && _serviceLon != null) && (_selectedLga == null || _selectedLga!.isEmpty)) {
+        try {
+          final q = '${_serviceLat},${_serviceLon}';
+          final res = await LocationService.geocodePlace(q, limit: 1);
+          final addrFromGeo = (res?['displayName']?.toString() ?? '').trim();
+          if (addrFromGeo.isNotEmpty) {
+            final state = _statesList.isNotEmpty ? _statesList.first : null;
+            if (state != null) {
+              final lgas = _statesLgas[state] ?? [];
+              final matched = lgas.firstWhere((l) => addrFromGeo.toLowerCase().contains(l.toLowerCase()), orElse: () => '');
+              if (matched.isNotEmpty) {
+                setState(() {
+                  _selectedState = state;
+                  _lgasForSelectedState = List<String>.from(lgas);
+                  _selectedLga = matched;
+                });
+
+                // If radius is not already set, try to estimate using bounding box returned by reverse geocode
+                if ((_model.serviceAreaRadiusController?.text ?? '').trim().isEmpty) {
+                  try {
+                    final tryAddr = '$matched, $state, Nigeria';
+                    final geo2 = await LocationService.geocodePlace(tryAddr, limit: 1);
+                    if (geo2 != null && geo2['boundingbox'] is List) {
+                      final bb = geo2['boundingbox'] as List;
+                      if (bb.length == 4) {
+                        final south = (bb[0] as num).toDouble();
+                        final north = (bb[1] as num).toDouble();
+                        final west = (bb[2] as num).toDouble();
+                        final east = (bb[3] as num).toDouble();
+                        final diagKm = _haversineDistance(south, west, north, east);
+                        final approxRadiusKm = (diagKm / 2).ceil();
+                        setState(() {
+                          _model.serviceAreaRadiusController?.text = approxRadiusKm.toString();
+                          if (geo2['lat'] != null && geo2['lon'] != null) {
+                            _serviceLat = (geo2['lat'] as num).toDouble();
+                            _serviceLon = (geo2['lon'] as num).toDouble();
+                          }
+                        });
+                      }
+                    }
+                  } catch (_) {}
+                }
+              }
+            }
+          }
+        } catch (e) {
+          if (kDebugMode) debugPrint('Failed to load states/lgas json via LocationService: $e');
+        }
+      }
+
     } catch (e) {
       if (kDebugMode) debugPrint('Failed to load states/lgas json via LocationService: $e');
     }
@@ -227,6 +325,65 @@ class _ArtisanProfileupdateWidgetState
       if (mounted) setState(() => _isGeocoding = false);
     }
     }
+
+  // Apply structured prefills to visible UI controls (use after initial loads)
+  void _applyPrefillsToUI() {
+    try {
+      final sa = _formData['serviceArea'];
+      if (sa is Map) {
+        final addr = (sa['address'] ?? sa['addr'] ?? '').toString();
+        final radius = sa['radius']?.toString() ?? '';
+        final coords = sa['coordinates'];
+        if (addr.isNotEmpty) {
+          _model.serviceAreaAddressController?.text = addr;
+        }
+        if (radius.isNotEmpty) {
+          _model.serviceAreaRadiusController?.text = radius;
+        }
+        if (coords is List && coords.length >= 2) {
+          final lon = coords[0];
+          final lat = coords[1];
+          _serviceLon = (lon is num) ? lon.toDouble() : double.tryParse(lon.toString());
+          _serviceLat = (lat is num) ? lat.toDouble() : double.tryParse(lat.toString());
+        }
+
+        // If we have an address, attempt to match it to a known state/LGA list
+        final addrText = (_model.serviceAreaAddressController?.text ?? '').trim();
+        if (addrText.isNotEmpty && _statesList.isNotEmpty) {
+          final state = _statesList.first;
+          final lgas = _statesLgas[state] ?? [];
+          final matched = lgas.firstWhere((l) => addrText.toLowerCase().contains(l.toLowerCase()), orElse: () => '');
+          if (matched.isNotEmpty) {
+            if (mounted) setState(() {
+              _selectedState = state;
+              _lgasForSelectedState = List<String>.from(lgas);
+              _selectedLga = matched;
+            });
+            return;
+          }
+        }
+
+        // If we had coords but haven't set LGA, try reverse geocode to infer
+        if ((_serviceLat != null && _serviceLon != null) && (_selectedLga == null || _selectedLga!.isEmpty)) {
+          LocationService.geocodePlace('${_serviceLat},${_serviceLon}', limit: 1).then((res) {
+            final display = (res?['displayName']?.toString() ?? '').trim();
+            if (display.isNotEmpty && _statesList.isNotEmpty) {
+              final state = _statesList.first;
+              final lgas = _statesLgas[state] ?? [];
+              final matched = lgas.firstWhere((l) => display.toLowerCase().contains(l.toLowerCase()), orElse: () => '');
+              if (matched.isNotEmpty) {
+                if (mounted) setState(() {
+                  _selectedState = state;
+                  _lgasForSelectedState = List<String>.from(lgas);
+                  _selectedLga = matched;
+                });
+              }
+            }
+          }).catchError((_) {});
+        }
+      }
+    } catch (_) {}
+  }
 
   // Load profile data from backend and prefill fields
   Future<void> _loadProfileData() async {
@@ -288,8 +445,83 @@ class _ArtisanProfileupdateWidgetState
           if ((_model.pricingPerHourController?.text ?? '').isEmpty) _model.pricingPerHourController?.text = (p['pricing']?['perHour'] ?? '').toString();
           if ((_model.pricingPerJobController?.text ?? '').isEmpty) _model.pricingPerJobController?.text = (p['pricing']?['perJob'] ?? '').toString();
           if ((_model.availabilityController?.text ?? '').isEmpty && p['availability'] is List) _model.availabilityController?.text = (p['availability'] as List).map((e)=>e.toString()).join(',');
-          if ((_model.serviceAreaAddressController?.text ?? '').isEmpty) _model.serviceAreaAddressController?.text = (p['serviceArea']?['address'] ?? '').toString();
-          if ((_model.serviceAreaRadiusController?.text ?? '').isEmpty) _model.serviceAreaRadiusController?.text = (p['serviceArea']?['radius'] ?? '').toString();
+          // Parse availability into structured list so UI chips are visible when editing
+          final availText = (_model.availabilityController?.text ?? '').trim();
+          if (availText.isNotEmpty) {
+            final parts = availText.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+            _availabilityList = List<String>.from(parts);
+            // try to parse first entry into selected day & time pickers: format 'Day HH:mm-HH:mm'
+            try {
+              final first = parts.first;
+              final segs = first.split(' ');
+              if (segs.length >= 2) {
+                final day = segs.first;
+                final times = segs.sublist(1).join(' ');
+                final timesParts = times.split('-').map((s) => s.trim()).toList();
+                if (timesParts.length == 2) {
+                  final parseTime = (String t) {
+                    final tt = t.split(':');
+                    if (tt.length >= 2) return TimeOfDay(hour: int.tryParse(tt[0]) ?? 0, minute: int.tryParse(tt[1]) ?? 0);
+                    return null;
+                  };
+                  final sT = parseTime(timesParts[0]);
+                  final eT = parseTime(timesParts[1]);
+                  if (sT != null && eT != null) {
+                    _selectedDay = day;
+                    _startTime = sT;
+                    _endTime = eT;
+                  }
+                }
+              }
+            } catch (_) {}
+          }
+
+          // Also preserve structured values in _formData so step transitions restore them
+          try {
+            // pricing
+            if (p['pricing'] is Map) {
+              _formData['pricing'] = {
+                'perHour': p['pricing']?['perHour'],
+                'perJob': p['pricing']?['perJob'],
+              };
+            } else if ((_model.pricingPerHourController?.text ?? '').isNotEmpty || (_model.pricingPerJobController?.text ?? '').isNotEmpty) {
+              _formData['pricing'] = {
+                'perHour': (_model.pricingPerHourController?.text ?? '').trim(),
+                'perJob': (_model.pricingPerJobController?.text ?? '').trim(),
+              };
+            }
+
+            // availability
+            if (p['availability'] is List) {
+              _formData['availability'] = (p['availability'] as List).map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
+            } else if (_availabilityList.isNotEmpty) {
+              _formData['availability'] = List<String>.from(_availabilityList);
+            }
+
+            // serviceArea
+            final sa = p['serviceArea'];
+            if (sa is Map) {
+              final addrVal = (sa['address'] ?? sa['addr'] ?? sa['display'] ?? '').toString();
+              final radiusVal = sa['radius'] ?? sa['r'] ?? sa['distance'] ?? sa['km'];
+              final coordLat = sa['lat'] ?? sa['latitude'] ?? sa['center']?['lat'];
+              final coordLon = sa['lon'] ?? sa['longitude'] ?? sa['center']?['lon'];
+              final saMap = <String,dynamic>{};
+              if (addrVal.isNotEmpty) saMap['address'] = addrVal;
+              if (radiusVal != null && radiusVal.toString().isNotEmpty) saMap['radius'] = radiusVal;
+              if (coordLat != null && coordLon != null) saMap['coordinates'] = [(coordLon is num) ? coordLon : double.tryParse(coordLon.toString()), (coordLat is num) ? coordLat : double.tryParse(coordLat.toString())];
+              if (saMap.isNotEmpty) _formData['serviceArea'] = saMap;
+            } else {
+              // fallback to controllers if they were filled earlier
+              if ((_model.serviceAreaAddressController?.text ?? '').isNotEmpty || (_model.serviceAreaRadiusController?.text ?? '').isNotEmpty) {
+                final saMap = <String,dynamic>{};
+                if ((_model.serviceAreaAddressController?.text ?? '').isNotEmpty) saMap['address'] = _model.serviceAreaAddressController?.text.trim();
+                if ((_model.serviceAreaRadiusController?.text ?? '').isNotEmpty) saMap['radius'] = _model.serviceAreaRadiusController?.text.trim();
+                if (_serviceLat != null && _serviceLon != null) saMap['coordinates'] = [_serviceLon, _serviceLat];
+                if (saMap.isNotEmpty) _formData['serviceArea'] = saMap;
+              }
+            }
+          } catch (_) {}
+
         } catch (e) {
           if (mounted && kDebugMode) debugPrint('artisan prefill error: $e');
         }
@@ -739,6 +971,7 @@ class _ArtisanProfileupdateWidgetState
           const SizedBox(height: 24),
 
           // Service (select from known job categories when available; fallback to free-text)
+          /*
           Text('SERVICE', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: theme.colorScheme.onSurface.withOpacity(0.6))),
           const SizedBox(height: 8),
           if (_jobCategories.isNotEmpty) ...[
@@ -797,7 +1030,8 @@ class _ArtisanProfileupdateWidgetState
               validator: (v) => (v == null || v.trim().isEmpty) ? 'At least one service is required' : null,
             ),
           ],
-
+          */
+          // Service input removed per request - keeping spacing
           const SizedBox(height: 16),
 
           // Experience
@@ -867,6 +1101,7 @@ class _ArtisanProfileupdateWidgetState
           const SizedBox(height: 24),
 
           // Pricing per hour
+          /*
           Text('PRICING - PER HOUR', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: theme.colorScheme.onSurface.withOpacity(0.6))),
           const SizedBox(height: 8),
           TextFormField(
@@ -888,6 +1123,9 @@ class _ArtisanProfileupdateWidgetState
             keyboardType: TextInputType.numberWithOptions(decimal: true),
             cursorColor: primaryColor,
           ),
+          const SizedBox(height: 16),
+          */
+          // Pricing fields removed per request - preserve spacing
           const SizedBox(height: 16),
 
           // Availability
@@ -991,7 +1229,38 @@ class _ArtisanProfileupdateWidgetState
                     if (v != null && _selectedState != null) {
                       final addr = '$v, ${_selectedState!}, Nigeria';
                       _model.serviceAreaAddressController?.text = addr;
-                      await _geocodeAddress(addr);
+
+                      // Attempt to geocode using LocationService (Nominatim) to obtain bounding box
+                      try {
+                        final geo = await LocationService.geocodePlace(addr, limit: 1);
+                        if (geo != null) {
+                          // if boundingbox available: [south, north, west, east]
+                          final bbox = geo['boundingbox'];
+                          if (bbox is List && bbox.length == 4) {
+                            final south = (bbox[0] as num).toDouble();
+                            final north = (bbox[1] as num).toDouble();
+                            final west = (bbox[2] as num).toDouble();
+                            final east = (bbox[3] as num).toDouble();
+                            // diagonal distance in km between (south, west) and (north, east)
+                            final diagKm = _haversineDistance(south, west, north, east);
+                            final approxRadiusKm = (diagKm / 2).ceil();
+                            // set the radius controller text
+                            _model.serviceAreaRadiusController?.text = approxRadiusKm.toString();
+                            // set lat/lon from geocode result if present
+                            if (geo['lat'] != null && geo['lon'] != null) {
+                              setState(() { _serviceLat = (geo['lat'] as num).toDouble(); _serviceLon = (geo['lon'] as num).toDouble(); });
+                            }
+                          } else {
+                            // Fallback: call existing Google geocode to fill coords
+                            await _geocodeAddress(addr);
+                          }
+                        } else {
+                          await _geocodeAddress(addr);
+                        }
+                      } catch (e) {
+                        if (kDebugMode) debugPrint('LGA geocode/estimate failed: $e');
+                        await _geocodeAddress(addr);
+                      }
                     }
                   },
                   disabledHint: const Text('Choose state first'),
@@ -1205,6 +1474,10 @@ class _ArtisanProfileupdateWidgetState
           }
         }
       });
+      // After state change, ensure UI-level prefills (dropdowns/LGAs) reflect the serviceArea data
+      if (_currentStep == 1) {
+        _applyPrefillsToUI();
+      }
     } else {
       // Final step: merge formData with any remaining controllers (name/email/phone) and submit
       // Save top-level identity fields
@@ -1495,49 +1768,19 @@ class _ArtisanProfileupdateWidgetState
       ),
     );
   }
+
+  // Haversine formula to compute distance in kilometers between two lat/lon points
+  double _haversineDistance(double lat1, double lon1, double lat2, double lon2) {
+    const R = 6371.0; // Earth radius in km
+    double toRad(double deg) => deg * (math.pi / 180.0);
+    final dLat = toRad(lat2 - lat1);
+    final dLon = toRad(lon2 - lon1);
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(toRad(lat1)) * math.cos(toRad(lat2)) *
+        math.sin(dLon / 2) * math.sin(dLon / 2);
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    return R * c;
+  }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
