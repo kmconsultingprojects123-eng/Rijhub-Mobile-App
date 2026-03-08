@@ -24,6 +24,7 @@ import 'package:http/http.dart' as http;
 import '../../google_maps_config.dart';
 import '../../services/artist_service.dart';
 import '../../services/my_service_service.dart'; // Added import for artisan services
+import '../../services/job_service.dart';
 import '../artisan_detail_page/artisan_detail_page_widget.dart';
 import '/main.dart';
 export 'home_page_model.dart';
@@ -77,6 +78,10 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
   final Map<String, List<Map<String, dynamic>>> _artisanServicesCache = {}; // artisanId -> services list
   bool _loadingArtisanServices = false;
 
+  // Dynamic home services (fetched from JobService). Each entry is a map with keys: icon, label, color, iconColor
+  List<Map<String, dynamic>> _homeServices = [];
+  bool _loadingHomeServices = false;
+
   List<String> _adImages = [];
   final List<String> _defaultAds = [
     'assets/images/carl_1.webp',
@@ -124,6 +129,8 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
 
     _loadAds();
     _loadMarquee();
+    // Fetch home services (up to 8) to replace the static list
+    _fetchHomeServices();
     _fetchUnreadNotifications();
     _notifTimer = Timer.periodic(const Duration(seconds: 30), (_) { if (mounted) _fetchUnreadNotifications(); });
 
@@ -1453,6 +1460,20 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
                                   aspect = 1.05;
                                 }
 
+                                // Determine how many cards to show: up to 8 from dynamic services,
+                                // otherwise use the fallback palette length.
+                                final displayCount = _homeServices.isNotEmpty ? (_homeServices.length < 8 ? _homeServices.length : 8) : 0;
+                                if (displayCount == 0) {
+                                  // While loading, show a small spinner; otherwise render nothing.
+                                  if (_loadingHomeServices) {
+                                    return SizedBox(
+                                      height: 120,
+                                      child: Center(child: CircularProgressIndicator(color: colorScheme.primary)),
+                                    );
+                                  }
+                                  return const SizedBox.shrink();
+                                }
+
                                 return GridView.builder(
                                   physics: const NeverScrollableScrollPhysics(),
                                   shrinkWrap: true,
@@ -1462,7 +1483,7 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
                                     mainAxisSpacing: 20,
                                     childAspectRatio: aspect,
                                   ),
-                                  itemCount: 8,
+                                  itemCount: displayCount,
                                   itemBuilder: (context, index) => _buildServiceCard(context, index),
                                 );
                               }),
@@ -1689,64 +1710,100 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
     );
   }
 
+  /// Fetch up to 8 public job categories and map them to the existing icon palette.
+  Future<void> _fetchHomeServices({bool forceRefresh = false}) async {
+    if (_loadingHomeServices && !forceRefresh) return;
+    _loadingHomeServices = true;
+    try {
+      final cats = await JobService.getJobCategories(page: 1, limit: 8);
+      final mapped = <Map<String, dynamic>>[];
+      for (final c in cats) {
+        try {
+          final name = (c['name'] ?? c['title'] ?? c['label'] ?? c['slug'] ?? '').toString();
+          if (name.trim().isEmpty) continue;
+          final entry = _mapCategoryToServiceEntry(name);
+          mapped.add(entry);
+          if (mapped.length >= 8) break;
+        } catch (_) {}
+      }
+      if (mounted) setState(() { if (mapped.isNotEmpty) _homeServices = mapped; _loadingHomeServices = false; });
+    } catch (e) {
+      if (mounted) setState(() => _loadingHomeServices = false);
+    }
+  }
+
+  /// Map a category name to a service entry that contains the existing icon and colors.
+  /// This tries to match common keywords to the existing set of icons. If no match,
+  /// fallback to the generic first icon (Carpentry) but keep the category name.
+  Map<String, dynamic> _mapCategoryToServiceEntry(String name) {
+    final lower = name.toLowerCase();
+    // Base palette (must match the original static order/icons/colors)
+    final base = [
+      {'icon': FFIcons.kcapentry, 'color': const Color(0xFFFF6B35)},
+      {'icon': FFIcons.kcatering, 'color': const Color(0xFF00C9A7)},
+      {'icon': FFIcons.kcleaning, 'color': const Color(0xFF4CD964)},
+      {'icon': FFIcons.kelectrictian, 'color': const Color(0xFF5E5CE6)},
+      {'icon': FFIcons.kgardener, 'color': const Color(0xFF32D74B)},
+      {'icon': FFIcons.kmechanic, 'color': const Color(0xFFFF375F)},
+      {'icon': FFIcons.kmaintainace, 'color': const Color(0xFF64D2FF)},
+      {'icon': FFIcons.ktailor, 'color': const Color(0xFFBF5AF2)},
+    ];
+
+    // Keyword -> index mapping heuristics
+    final Map<int, List<String>> keywords = {
+      0: ['carpentry', 'carpenter', 'wood', 'furniture'],
+      1: ['cater', 'food', 'chef', 'catering'],
+      2: ['clean', 'maid', 'housekeeping', 'janitor'],
+      3: ['electric', 'electrician', 'electrical', 'wiring'],
+      4: ['garden', 'gardener', 'landscap'],
+      5: ['mechanic', 'auto', 'car', 'vehicle'],
+      6: ['maintenance', 'handyman', 'repair', 'fix'],
+      7: ['tailor', 'sew', 'tailoring', 'dressmaking'],
+    };
+
+    for (final kv in keywords.entries) {
+      for (final k in kv.value) {
+        if (lower.contains(k)) {
+          final pick = base[kv.key];
+          return {
+            'icon': pick['icon'],
+            'label': name,
+            'color': pick['color'],
+            'iconColor': pick['color'],
+          };
+        }
+      }
+    }
+
+    // Fallback: pick index based on hash to provide some variety
+    final idx = name.hashCode.abs() % base.length;
+    final pick = base[idx];
+    return {
+      'icon': pick['icon'],
+      'label': name,
+      'color': pick['color'],
+      'iconColor': pick['color'],
+    };
+  }
+
   Widget _buildServiceCard(BuildContext context, int index) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
 
-    // Define service data with consistent colors
-    final List<Map<String, dynamic>> services = [
-      {
-        'icon': FFIcons.kcapentry,
-        'label': 'Carpentry',
-        'color': Color(0xFFFF6B35), // Orange
-        'iconColor': Color(0xFFFF6B35),
-      },
-      {
-        'icon': FFIcons.kcatering,
-        'label': 'Catering',
-        'color': Color(0xFF00C9A7), // Teal
-        'iconColor': Color(0xFF00C9A7),
-      },
-      {
-        'icon': FFIcons.kcleaning,
-        'label': 'Cleaning',
-        'color': Color(0xFF4CD964), // Green
-        'iconColor': Color(0xFF4CD964),
-      },
-      {
-        'icon': FFIcons.kelectrictian,
-        'label': 'Electrician',
-        'color': Color(0xFF5E5CE6), // Purple
-        'iconColor': Color(0xFF5E5CE6),
-      },
-      {
-        'icon': FFIcons.kgardener,
-        'label': 'Gardener',
-        'color': Color(0xFF32D74B), // Lime Green
-        'iconColor': Color(0xFF32D74B),
-      },
-      {
-        'icon': FFIcons.kmechanic,
-        'label': 'Mechanic',
-        'color': Color(0xFFFF375F), // Pink
-        'iconColor': Color(0xFFFF375F),
-      },
-      {
-        'icon': FFIcons.kmaintainace,
-        'label': 'Maintenance',
-        'color': Color(0xFF64D2FF), // Light Blue
-        'iconColor': Color(0xFF64D2FF),
-      },
-      {
-        'icon': FFIcons.ktailor,
-        'label': 'Tailor',
-        'color': Color(0xFFBF5AF2), // Purple Pink
-        'iconColor': Color(0xFFBF5AF2),
-      },
-    ];
+    // Use only services fetched from the service endpoint. Don't fall back to
+    // a static palette. The caller should ensure we only build cards for
+    // available services (itemCount will be 0 when none are present).
+    final services = _homeServices;
+    // Defensive clamp; itemBuilder shouldn't be called when services is empty because
+    // itemCount will be 0, but keep safety here.
+    final safeIndex = services.isNotEmpty ? index.clamp(0, services.length - 1) : 0;
+    final service = services.isNotEmpty ? services[safeIndex] : null;
 
-    final service = services[index];
+    if (service == null) {
+      // No data to render. Return an invisible placeholder to keep the builder safe.
+      return const SizedBox.shrink();
+    }
 
     return Material(
         color: Colors.transparent,
@@ -1754,7 +1811,7 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: () => NavigationUtils.safePush(context, SearchPageWidget(initialQuery: service['label'] as String)),
-          splashColor: service['color'].withOpacity(0.1) as Color,
+          splashColor: (service['color'] as Color).withOpacity(0.1),
           highlightColor: Colors.transparent,
           child: Container(
             decoration: BoxDecoration(
@@ -1894,44 +1951,6 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
     // Get services from cache
     final cachedServices = artisanKey != null ? _artisanServicesCache[artisanKey] : null;
 
-    // Determine what to display in the service pill
-    String serviceDisplay = 'Loading...';
-    bool hasMultipleServices = false;
-
-    if (cachedServices != null) {
-      if (cachedServices.isNotEmpty) {
-        // Show first service name
-        serviceDisplay = cachedServices.first['name'] ?? 'Service';
-        hasMultipleServices = cachedServices.length > 1;
-      } else {
-        serviceDisplay = 'No services';
-      }
-    } else {
-      // If no services in cache yet, try to extract from artisan object as fallback
-      try {
-        final tradeRaw = artisan['trade'] ?? artisan['service'] ?? artisan['profession'] ?? artisan['occupation'];
-        if (tradeRaw is String && tradeRaw.trim().isNotEmpty) {
-          serviceDisplay = tradeRaw.trim();
-        } else if (tradeRaw is List && tradeRaw.isNotEmpty) {
-          serviceDisplay = tradeRaw.map((e) {
-            if (e == null) return '';
-            if (e is String) return e.trim();
-            if (e is Map) return (e['name'] ?? e['label'] ?? e['title'] ?? '').toString().trim();
-            return e.toString().trim();
-          }).where((s) => s.isNotEmpty).join(', ');
-          if (serviceDisplay.isEmpty) serviceDisplay = 'Service';
-        } else if (tradeRaw is Map) {
-          serviceDisplay = (tradeRaw['name'] ?? tradeRaw['label'] ?? tradeRaw['title'] ?? tradeRaw['service'] ?? tradeRaw['trade'])?.toString() ?? 'Service';
-        } else if (tradeRaw != null) {
-          serviceDisplay = tradeRaw.toString();
-        } else {
-          serviceDisplay = 'Service';
-        }
-      } catch (_) {
-        serviceDisplay = 'Service';
-      }
-    }
-
     return LayoutBuilder(builder: (ctx, constraints) {
       final cardWidth = (MediaQuery.of(ctx).size.width - 40).clamp(280.0, 820.0);
       return SizedBox(
@@ -1948,33 +1967,62 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Avatar
-                  ClipOval(
-                    child: SizedBox(
-                      width: 64,
-                      height: 64,
-                      child: profileUrl != null
-                          ? CachedNetworkImage(
-                        imageUrl: profileUrl,
-                        fit: BoxFit.cover,
-                        placeholder: (c, u) => Container(color: colorScheme.surface),
-                        errorWidget: (c, u, e) {
-                          final initials = name.split(' ').where((s) => s.isNotEmpty).map((s) => s[0]).take(2).join().toUpperCase();
-                          return Container(
-                            color: colorScheme.surface,
-                            child: Center(child: Text(initials, style: TextStyle(color: colorScheme.primary, fontWeight: FontWeight.w600))),
-                          );
-                        },
-                      )
-                          : Container(
-                        color: colorScheme.surface,
-                        child: Center(child: Text(name.split(' ').where((s) => s.isNotEmpty).map((s) => s[0]).take(2).join().toUpperCase(), style: TextStyle(color: colorScheme.primary, fontWeight: FontWeight.w600))),
-                      ),
+                  // Avatar with verified badge overlay (bottom-right) similar to discover page
+                  Container(
+                    width: 64,
+                    height: 64,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        ClipOval(
+                          child: SizedBox(
+                            width: 64,
+                            height: 64,
+                            child: profileUrl != null
+                                ? CachedNetworkImage(
+                              imageUrl: profileUrl,
+                              fit: BoxFit.cover,
+                              placeholder: (c, u) => Container(color: colorScheme.surface),
+                              errorWidget: (c, u, e) {
+                                final initials = name.split(' ').where((s) => s.isNotEmpty).map((s) => s[0]).take(2).join().toUpperCase();
+                                return Container(
+                                  color: colorScheme.surface,
+                                  child: Center(child: Text(initials, style: TextStyle(color: colorScheme.primary, fontWeight: FontWeight.w600))),
+                                );
+                              },
+                            )
+                                : Container(
+                              color: colorScheme.surface,
+                              child: Center(child: Text(name.split(' ').where((s) => s.isNotEmpty).map((s) => s[0]).take(2).join().toUpperCase(), style: TextStyle(color: colorScheme.primary, fontWeight: FontWeight.w600))),
+                            ),
+                          ),
+                        ),
+                        // Verified badge bottom-right (same style as discovery page)
+                        if (artisan['verified'] == true || artisan['isVerified'] == true || artisan['is_verified'] == true)
+                          Positioned(
+                            right: -2,
+                            bottom: -2,
+                            child: Container(
+                              width: 18,
+                              height: 18,
+                              decoration: BoxDecoration(
+                                color: Colors.green,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Theme.of(context).cardColor, width: 1.5),
+                              ),
+                              child: const Icon(
+                                Icons.verified_rounded,
+                                size: 12,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 12),
 
-                  // Name + rating + services
+                  // Name + rating
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1982,18 +2030,13 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
                       children: [
                         Row(
                           children: [
-                            // Name + verified badge close to the name
+                            // Name (left). Removed the inline rating that was previously shown on the right.
                             Expanded(
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(name, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis),
-                                  ),
-                                  if (artisan['verified'] == true || artisan['isVerified'] == true || artisan['is_verified'] == true) ...[
-                                    const SizedBox(width: 4),
-                                    Icon(Icons.verified, color: Colors.green, size: 16),
-                                  ],
-                                ],
+                              child: Text(
+                                name,
+                                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ],
@@ -2019,55 +2062,6 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
                         ] else ...[
                           Text('No ratings', style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurface.withOpacity(0.6))),
                         ],
-                        const SizedBox(height: 8),
-                        // Service pill (showing actual artisan services)
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: colorScheme.primary.withOpacity(0.12),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Flexible(
-                                      child: Text(
-                                        serviceDisplay,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: theme.textTheme.bodySmall?.copyWith(
-                                          color: colorScheme.primary,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                    if (hasMultipleServices) ...[
-                                      const SizedBox(width: 4),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: colorScheme.primary,
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        child: Text(
-                                          '+${cachedServices!.length - 1}',
-                                          style: theme.textTheme.bodySmall?.copyWith(
-                                            color: colorScheme.onPrimary,
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
                       ],
                     ),
                   ),

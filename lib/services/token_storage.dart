@@ -919,6 +919,20 @@ class TokenStorage {
           } catch (_) {}
         }
       }
+
+      // Keep the simple boolean kyc_verified flag in sync with the status string.
+      // If the server reports an explicit approved/verified status we save the
+      // boolean as true; otherwise we mark it false. This prevents parts of the
+      // app that read only the boolean flag (TokenStorage.getKycVerified)
+      // from showing stale/incorrect state.
+      try {
+        final sl = status.toLowerCase();
+        final approvedKeywords = ['approved', 'verified', 'success', 'approved_by_admin', 'true', '1'];
+        final isVerified = approvedKeywords.any((kw) => sl.contains(kw));
+        await saveKycVerified(isVerified);
+      } catch (e) {
+        debugPrint('TokenStorage: saveKycStatus -> saveKycVerified sync failed: $e');
+      }
     } catch (e) {
       debugPrint('TokenStorage: saveKycStatus failed: $e');
     }

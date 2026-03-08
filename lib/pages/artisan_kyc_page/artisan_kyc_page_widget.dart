@@ -343,7 +343,7 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
 
             // Business Name Field
             Text(
-              'BUSINESS NAME',
+              'BUSINESS NAME / FULL NAME',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
@@ -656,6 +656,7 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
               ),
             const SizedBox(height: 20),
 
+            /* Service Category and Years of Experience fields hidden per request
             // Service Category Field
             Text(
               'SERVICE CATEGORY',
@@ -680,7 +681,6 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
                    decoration: InputDecoration(
                      contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0), borderSide: BorderSide.none),
-                     focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0), borderSide: BorderSide(color: primaryColor, width: 1.5)),
                    ),
                   isExpanded: true,
                   items: _categories.map((c) {
@@ -773,6 +773,7 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
               ),
             ),
             const SizedBox(height: 8),
+
             TextFormField(
               controller: _yearsExperienceCtrl,
               keyboardType: TextInputType.number,
@@ -833,6 +834,7 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
                 ),
               ),
             const SizedBox(height: 40),
+            */
           ],
         ),
       ),
@@ -1185,12 +1187,10 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
                   title: 'Business Details',
                   items: [
                     _buildReviewItem('Business Name', _businessNameCtrl.text),
-                    _buildReviewItem('Service Category', _serviceCategoryCtrl.text.isNotEmpty
-                        ? _serviceCategoryCtrl.text
-                        : (_selectedCategoryId != null && _selectedCategoryId!.isNotEmpty
-                            ? (_categories.firstWhere((c) => (c['_id'] ?? c['id'])?.toString() == _selectedCategoryId, orElse: () => {})['name']?.toString() ?? '')
-                            : '')),
-                    _buildReviewItem('Years of Experience', '${_yearsExperienceCtrl.text} years'),
+                    _buildReviewItem('ID Type', _idType.replaceAll('_', ' ').toUpperCase()),
+                    _buildReviewItem('Profile Photo', _profileImage != null ? '✓ Uploaded' : '✗ Not uploaded'),
+                    _buildReviewItem('ID Front', _idFront != null ? '✓ Uploaded' : '✗ Not uploaded'),
+                    _buildReviewItem('ID Back', _idBack != null ? '✓ Uploaded' : '✗ Not uploaded'),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -1397,8 +1397,9 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
       if (fields['state'] == null || fields['state']!.isEmpty) clientErrors['state'] = 'State is required';
       if (fields['lga'] == null || fields['lga']!.isEmpty) clientErrors['lga'] = 'LGA is required';
       if (fields['IdType'] == null || fields['IdType']!.isEmpty) clientErrors['IdType'] = 'ID type is required';
-      if (fields['serviceCategory'] == null || fields['serviceCategory']!.isEmpty) clientErrors['serviceCategory'] = 'Service category is required';
-      if (fields['yearsExperience'] == null || fields['yearsExperience']!.isEmpty) clientErrors['yearsExperience'] = 'Years of experience is required';
+      // serviceCategory and yearsExperience are optional/hidden in UI per request
+      // if (fields['serviceCategory'] == null || fields['serviceCategory']!.isEmpty) clientErrors['serviceCategory'] = 'Service category is required';
+      // if (fields['yearsExperience'] == null || fields['yearsExperience']!.isEmpty) clientErrors['yearsExperience'] = 'Years of experience is required';
 
       if (!files.containsKey('profileImage') || files['profileImage']!.isEmpty) clientErrors['profileImage'] = 'Profile image is required';
       if (!files.containsKey('IdUploadFront') || files['IdUploadFront']!.isEmpty) clientErrors['IdUploadFront'] = 'ID front image is required';
@@ -1421,16 +1422,16 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
         });
         return;
       }
-      // Validate yearsExperience is numeric and non-negative
-      final y = int.tryParse(fields['yearsExperience'] ?? '');
-      if (y == null || y < 0) {
-        setState(() {
-          _isSubmitting = false;
-          _fieldErrors = {'yearsExperience': 'Enter a valid non-negative number'};
-          _error = 'Please correct the highlighted fields.';
-        });
-        return;
-      }
+      // yearsExperience validation skipped because the field is hidden/commented per request
+      // final y = int.tryParse(fields['yearsExperience'] ?? '');
+      // if (y == null || y < 0) {
+      //   setState(() {
+      //     _isSubmitting = false;
+      //     _fieldErrors = {'yearsExperience': 'Enter a valid non-negative number'};
+      //     _error = 'Please correct the highlighted fields.';
+      //   });
+      //   return;
+      // }
       // Use the enhanced submit which will try direct signed uploads and
       // sensible JSON fallbacks when the server rejects multipart.
       final resp = await KycService.submitKycEnhanced(fields, files, token: token);

@@ -14,7 +14,6 @@ import '../../services/artist_service.dart';
 import '/main.dart';
 import '../../state/auth_notifier.dart';
 import '../../services/navigation_service.dart';
-import './verification_page.dart';
 import 'my_service_page.dart';
 import '../../services/my_service_service.dart';
 export 'profile_model.dart';
@@ -504,14 +503,95 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     return null;
   }
 
+  // Helper method to show all services in a modal bottom sheet
+  void _showServicesModal() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).cardColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (BuildContext ctx) {
+        final theme = Theme.of(ctx);
+        final colorScheme = theme.colorScheme;
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 12,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: colorScheme.onSurface.withAlpha((0.12 * 255).toInt()),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                  Text('My Services', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    alignment: WrapAlignment.start,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: artisanServices.map((s) => ServicePill(service: s)).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        side: BorderSide(color: colorScheme.onSurface.withAlpha((0.08 * 255).toInt())),
+                      ),
+                      child: Text('Close', style: theme.textTheme.titleMedium?.copyWith(color: colorScheme.onSurface)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
 
-    // Determine if current user is considered an artisan for UI purposes
-    final bool _isArtisanUser = (artisanVerified == true) || (_cachedArtisanData != null && _cachedArtisanData!.isNotEmpty);
+    // Prefer an explicit role check from the cached app profile to decide if
+    // this user should see artisan-only UI. Fall back to having an artisan
+    // document cached. We intentionally do NOT treat `artisanVerified == true`
+    // alone as sufficient to show artisan-only UI because that flag can be
+    // stale or mis-set for non-artisan users.
+    bool profileRoleIsArtisan = false;
+    try {
+      final profile = AppStateNotifier.instance.profile;
+      if (profile != null) {
+        final candidates = [profile['role'], profile['type'], profile['accountType'], profile['userType'], profile['authProvider']];
+        for (final c in candidates) {
+          if (c == null) continue;
+          final s = c.toString().toLowerCase();
+          if (s.contains('artisan')) { profileRoleIsArtisan = true; break; }
+        }
+      }
+    } catch (_) {}
+
+    final bool _isArtisanUser = profileRoleIsArtisan || (_cachedArtisanData != null && _cachedArtisanData!.isNotEmpty);
 
     // Ensure this page is inside NavBarPage so the bottom navigation shows.
     // Only redirect automatically when the current router location actually
@@ -600,7 +680,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                       children: [
                         const SizedBox(height: 40.0),
 
-                        // Profile header - Extract to separate widget for better performance
+                        // Profile header - Extracted to separate widget for better performance
                         _ProfileHeader(
                           displayName: displayName,
                           profileImageUrl: profileImageUrl,
@@ -608,6 +688,7 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                           userEmail: userEmail,
                           isDark: isDark,
                           colorScheme: colorScheme,
+                          isArtisan: _isArtisanUser,
                           isValidHttpUrl: _isValidHttpUrl,
                           loadingArtisan: _loadingArtisan,
                           artisanError: _artisanError,
@@ -719,9 +800,11 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                           onAboutUs: () {
                             try { GoRouter.of(context).pushNamed(InfoPageWidget.routeName); return; } catch (e) { try { NavigationUtils.safePush(context, const InfoPageWidget()); return; } catch (_) {} }
                           },
-                          onVerification: () {
-                            try { NavigationUtils.safePush(context, const VerificationPage()); return; } catch (e) { try { Navigator.of(context).push(MaterialPageRoute(builder: (_) => const VerificationPage())); return; } catch (_) {} }
-                          },
+                          // The Verification menu item was intentionally commented out per request.
+                          // onVerification: () {
+                          //   try { NavigationUtils.safePush(context, const VerificationPage()); return; } catch (e) { try { Navigator.of(context).push(MaterialPageRoute(builder: (_) => const VerificationPage())); return; } catch (_) {} }
+                          // },
+                          onVerification: () {},
                           onMyService: _isArtisanUser
                               ? () async {
                                   // Resolve the artisan *user id* (not the artisan document id) so
@@ -877,6 +960,7 @@ class _ProfileHeader extends StatelessWidget {
   final bool? artisanVerified;
   final double? artisanRating;
   final List<String> artisanPortfolio;
+  final bool isArtisan;
   final VoidCallback onTap;
 
   const _ProfileHeader({
@@ -894,6 +978,7 @@ class _ProfileHeader extends StatelessWidget {
     required this.artisanVerified,
     required this.artisanRating,
     required this.artisanPortfolio,
+    required this.isArtisan,
     required this.onTap,
   });
 
@@ -980,7 +1065,8 @@ class _ProfileHeader extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (artisanVerified == true) ...[
+              // Only show KYC badge for users who are actually artisans
+              if (isArtisan && artisanVerified == true) ...[
                 const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1022,7 +1108,8 @@ class _ProfileHeader extends StatelessWidget {
                 ),
               ],
             ),
-          if (loadingArtisan)
+          // Artisan-specific info should only be shown when this user is an artisan
+          if (isArtisan && loadingArtisan)
             Padding(
               padding: const EdgeInsets.only(top: 8.0),
               child: SizedBox(
@@ -1031,7 +1118,7 @@ class _ProfileHeader extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.primary),
               ),
             ),
-          if (artisanError != null && !loadingArtisan)
+          if (isArtisan && artisanError != null && !loadingArtisan)
             Padding(
               padding: const EdgeInsets.only(top: 8.0),
               child: Row(
@@ -1046,37 +1133,45 @@ class _ProfileHeader extends StatelessWidget {
                 ],
               ),
             ),
-          if (!loadingArtisan && artisanServices.isNotEmpty)
+          if (isArtisan && !loadingArtisan && artisanServices.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 8.0),
               child: Wrap(
                 alignment: WrapAlignment.center,
                 spacing: 8.0,
                 runSpacing: 4.0,
-                children: artisanServices.map((service) {
-                  final serviceName = service['subCategoryName'] ?? service['name'] ?? 'Service';
-                  return Tooltip(
-                    message: serviceName,
-                    waitDuration: const Duration(milliseconds: 300),
-                    showDuration: const Duration(seconds: 3),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: colorScheme.primary.withAlpha((0.12 * 255).toInt()),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        serviceName,
-                        style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600, color: colorScheme.primary),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                children: [
+                  // Show up to 3 compact pills inline
+                  for (int i = 0; i < artisanServices.length && i < 3; i++)
+                    ServicePill(service: artisanServices[i], compact: true),
+
+                  // If there are more services, show a 'More' pill that opens a modal
+                  if (artisanServices.length > 3)
+                    GestureDetector(
+                      onTap: () {
+                        final parentState = context.findAncestorStateOfType<_ProfileWidgetState>();
+                        if (parentState != null) return parentState._showServicesModal();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: colorScheme.onSurface.withAlpha((0.04 * 255).toInt()),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: colorScheme.onSurface.withAlpha((0.06 * 255).toInt())),
+                        ),
+                        child: Text(
+                          '+${artisanServices.length - 3} More',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: colorScheme.onSurface.withAlpha((0.8 * 255).toInt()),
+                          ),
+                        ),
                       ),
                     ),
-                  );
-                }).toList(),
+                ],
               ),
             )
-          else if (!loadingArtisan && artisanTrade != null)
+          else if (isArtisan && !loadingArtisan && artisanTrade != null)
             Padding(
               padding: const EdgeInsets.only(top: 8.0),
               child: Row(
@@ -1129,7 +1224,7 @@ class _ProfileHeader extends StatelessWidget {
                 ],
               ),
             ),
-          if (artisanPortfolio.isNotEmpty)
+          if (isArtisan && artisanPortfolio.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 12.0),
               child: SizedBox(
@@ -1254,11 +1349,12 @@ class _ProfileMenuSection extends StatelessWidget {
                   onTap: onWallet,
                 ),
                 const Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Divider(height: 1)),
-                _buildMenuItem(
-                  icon: Icons.verified_user_outlined,
-                  title: 'Verification',
-                  onTap: onVerification,
-                ),
+                // The Verification menu item was intentionally commented out per request.
+                // _buildMenuItem(
+                //   icon: Icons.verified_user_outlined,
+                //   title: 'Verification',
+                //   onTap: onVerification,
+                // ),
                 const SizedBox(height: 8),
               ],
             ),
@@ -1300,4 +1396,54 @@ class _ProfileMenuSection extends StatelessWidget {
   }
 }
 
+// Reusable service pill widget so header and modal render the same UI without relying on parent state callbacks
+class ServicePill extends StatelessWidget {
+  final Map<String, dynamic> service;
+  final bool compact;
+  final VoidCallback? onTap;
 
+  const ServicePill({Key? key, required this.service, this.compact = false, this.onTap}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final serviceName = service['subCategoryName'] ?? service['name'] ?? 'Service';
+    final price = service['price'] ?? service['amount'];
+    final currency = service['currency'] ?? 'NGN';
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Tooltip(
+        message: serviceName,
+        waitDuration: const Duration(milliseconds: 300),
+        showDuration: const Duration(seconds: 3),
+        child: Container(
+          padding: compact ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4) : const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: colorScheme.primary.withAlpha((0.12 * 255).toInt()),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: colorScheme.primary.withAlpha((0.08 * 255).toInt())),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  serviceName,
+                  style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600, color: colorScheme.primary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (!compact && (price != null && price.toString().isNotEmpty)) ...[
+                const SizedBox(width: 6),
+                Text('$price $currency', style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.primary)),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

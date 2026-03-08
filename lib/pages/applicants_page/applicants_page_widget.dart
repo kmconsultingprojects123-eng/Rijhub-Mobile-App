@@ -18,6 +18,14 @@ class ApplicantsPage extends StatefulWidget {
 }
 
 class _ApplicantsPageState extends State<ApplicantsPage> {
+  // Future that holds fetched quotes so we can refresh it from the UI
+  late Future<List<Map<String, dynamic>>> _quotesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _quotesFuture = _fetchJobQuotes();
+  }
    Future<List<Map<String, dynamic>>> _fetchJobQuotes() async {
     final token = await TokenStorage.getToken();
     if (token == null) throw Exception('Not authenticated');
@@ -193,7 +201,7 @@ class _ApplicantsPageState extends State<ApplicantsPage> {
         title: const Text('Applicants'),
       ),
       body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: _fetchJobQuotes(),
+        future: _quotesFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             // Show a handful of skeleton cards instead of a spinner for a
@@ -210,7 +218,51 @@ class _ApplicantsPageState extends State<ApplicantsPage> {
           }
           final quotes = snapshot.data ?? [];
           if (quotes.isEmpty) {
-            return const Center(child: Text('No applicants yet'));
+            // Friendly empty state with an explicit refresh action
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.person_search_rounded, size: 72, color: Theme.of(context).disabledColor),
+                    const SizedBox(height: 16),
+                    Text('No applicants yet', style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: 8),
+                    Text(
+                      'It looks like nobody has applied for this job yet. You can refresh to check again, or try promoting the job to get more applicants.',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).textTheme.bodySmall?.color),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _quotesFuture = _fetchJobQuotes();
+                            });
+                          },
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Refresh'),
+                        ),
+                        const SizedBox(width: 12),
+                        TextButton(
+                          onPressed: () {
+                            // Simple fallback action - navigate back so the user can edit/publish the job
+                            try {
+                              Navigator.of(context).maybePop();
+                            } catch (_) {}
+                          },
+                          child: const Text('Edit job'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
           }
 
           return ListView.separated(

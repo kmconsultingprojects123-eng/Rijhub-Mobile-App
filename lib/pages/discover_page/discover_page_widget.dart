@@ -1248,44 +1248,38 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget>
                     ),
                   const SizedBox(height: 8),
                   // Trades/chips
-                  if (trades.isNotEmpty)
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      children: trades.take(3).map((t) {
-                        final label = _formatTradeLabel(t);
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            label,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              fontWeight: FontWeight.w500,
-                              color: theme.colorScheme.primary,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      }).toList(),
+                  // Always show a pill for the artisan's primary service. If the artisan
+                  // has no services/trades, show a disabled pill that reads "No service".
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: trades.isNotEmpty
+                          ? theme.colorScheme.primary.withOpacity(0.1)
+                          : theme.colorScheme.surfaceVariant.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(12),
                     ),
+                    child: Text(
+                      trades.isNotEmpty
+                          ? _formatTradeLabel(trades.first)
+                          : 'No service',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: trades.isNotEmpty
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               ),
             ),
             const SizedBox(width: 12),
             // View button (no box shadow)
             ElevatedButton(
-              onPressed: () async => await NavigationUtils.safePush(
-                context,
-                ArtisanDetailPageWidget(
-                  artisan: _artisanWithUserId(artisan),
-                  openHire: true,
-                ),
-              ),
+              onPressed: () async => await _showArtisanProfile(artisan),
               style: ElevatedButton.styleFrom(
                 elevation: 0,
                 shadowColor: Colors.transparent,
@@ -1725,13 +1719,22 @@ class _DiscoverPageWidgetState extends State<DiscoverPageWidget>
 
   Future<void> _showArtisanProfile(Map<String, dynamic> artisan) async {
     try {
-      await NavigationUtils.safePush(
+      // Await the navigation; when the user returns, refresh the artisans list
+      // so any newly added services are reflected in the pill.
+      final res = await NavigationUtils.safePush(
         context,
         ArtisanDetailPageWidget(
           artisan: _artisanWithUserId(artisan),
           openHire: true,
         ),
       );
+
+      // If the detail page made a change (or regardless), refresh the list in
+      // the background to pick up updated services. Use showLoading=false to
+      // avoid disrupting the user's flow with a loading indicator.
+      if (mounted) {
+        unawaited(_loadArtisans(next: false, showLoading: false));
+      }
     } catch (_) {}
   }
 

@@ -89,7 +89,7 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
       setState(() {});
     });
 
-    // Load job subcategories on init
+    // Load job subcategories to populate top services on init
     _loadJobSubcategories();
   }
 
@@ -153,6 +153,7 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
         limit: _limit,
         q: q.isNotEmpty ? q : null,
         trade: tradeParam,
+        // No categoryId parameter: searches are not filtered by a UI category selector
       );
 
       if (!mounted) return;
@@ -217,9 +218,13 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
   }
 
   /// Fetch job subcategories from API and build top 5 list
-  Future<void> _loadJobSubcategories() async {
+    Future<void> _loadJobSubcategories({String? categoryId}) async {
     try {
-      final uri = Uri.parse('$API_BASE_URL/api/job-subcategories?limit=100');
+      var uriStr = '$API_BASE_URL/api/job-subcategories?limit=100';
+      if (categoryId != null && categoryId.isNotEmpty) {
+        uriStr = '$API_BASE_URL/api/job-subcategories?categoryId=$categoryId&limit=100';
+      }
+      final uri = Uri.parse(uriStr);
       final response = await http.get(uri).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
@@ -237,10 +242,15 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
               .map((e) {
             if (e is! Map) return null;
             final m = Map<String, dynamic>.from(e.cast<String, dynamic>());
+            // Preserve category linkage when available
+            String? catId;
+            if (m['categoryId'] != null) catId = (m['categoryId'] is Map) ? (m['categoryId']['_id'] ?? m['categoryId']['id'])?.toString() : m['categoryId']?.toString();
+            if (m['category'] != null && catId == null) catId = (m['category'] is Map) ? (m['category']['_id'] ?? m['category']['id'])?.toString() : m['category']?.toString();
             return {
               'id': m['_id'] ?? m['id'],
               'name': m['name'] ?? 'Service',
               'slug': m['slug'] ?? '',
+              'categoryId': catId,
             };
           })
               .whereType<Map<String, dynamic>>()
@@ -248,7 +258,16 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
 
           if (mounted) {
             setState(() {
+              // Populate the master services list which is used to build top services
               _allServices = services;
+              _updateTopServices();
+            });
+          }
+        } else {
+          // No services returned for this category — clear top services
+          if (mounted) {
+            setState(() {
+              _allServices = [];
               _updateTopServices();
             });
           }
@@ -257,6 +276,13 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
     } catch (e) {
       debugPrint('Error loading job subcategories: $e');
     }
+    }
+
+
+  /// Track service selection and update top services
+  void _trackServiceSearch(String serviceId, String serviceName) {
+    _serviceSearchCount[serviceId] = (_serviceSearchCount[serviceId] ?? 0) + 1;
+    _updateTopServices();
   }
 
   /// Update top 5 services based on search frequency and shuffle
@@ -271,10 +297,8 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
       return countB.compareTo(countA);
     });
 
-    // Take top 5
+    // Take top 5 and shuffle for variety
     final top = sorted.take(5).toList();
-
-    // Shuffle for variety
     top.shuffle();
 
     if (mounted) {
@@ -282,12 +306,6 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
         _topServices = top;
       });
     }
-  }
-
-  /// Track service selection and update top services
-  void _trackServiceSearch(String serviceId, String serviceName) {
-    _serviceSearchCount[serviceId] = (_serviceSearchCount[serviceId] ?? 0) + 1;
-    _updateTopServices();
   }
 
   /// Check if URL is valid
@@ -1077,71 +1095,79 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
                   horizontal: horizontalPadding,
                   vertical: isSmallScreen ? 12 : 16,
                 ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1F2937) : _surfaceColor,
-                    borderRadius: BorderRadius.circular(isSmallScreen ? 10 : 12),
-                    boxShadow: isDark ? null : [
-                      BoxShadow(
-                        color: Colors.black.withAlpha((0.02 * 255).round()),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
+                child: Column(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1F2937) : _surfaceColor,
+                        borderRadius: BorderRadius.circular(isSmallScreen ? 10 : 12),
+                        boxShadow: isDark ? null : [
+                          BoxShadow(
+                            color: Colors.black.withAlpha((0.02 * 255).round()),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  child: TextFormField(
-                    controller: _model.textController,
-                    focusNode: _model.textFieldFocusNode,
-                    onTap: () {
-                      if (!mounted) return;
-                      setState(() {
-                        _selectedTrade = null;
-                      });
-                    },
-                    onChanged: (_) => _debounce(
-                      '_searchDebounce',
-                      const Duration(milliseconds: 600),
-                      _startSearch,
-                    ),
-                    textInputAction: TextInputAction.search,
-                    onFieldSubmitted: (_) => _startSearch(),
-                    style: TextStyle(
-                      fontSize: isSmallScreen ? 14 : 15,
-                      color: isDark ? Colors.white : _textPrimary,
-                      height: 1.4,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Search artisans...',
-                      hintStyle: TextStyle(
-                        color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
-                        fontSize: isSmallScreen ? 14 : 15,
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: isSmallScreen ? 16 : 20,
-                        vertical: isSmallScreen ? 16 : 18,
-                      ),
-                      prefixIcon: Icon(
-                        Icons.search_rounded,
-                        color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
-                        size: isSmallScreen ? 18 : 20,
-                      ),
-                      suffixIcon: _model.textController!.text.isNotEmpty
-                          ? IconButton(
-                        icon: Icon(
-                          Icons.clear_rounded,
-                          size: isSmallScreen ? 16 : 18,
-                          color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
-                        ),
-                        onPressed: () {
-                          _model.textController?.clear();
-                          setState(() {});
-                          _startSearch();
+                      child: TextFormField(
+                        controller: _model.textController,
+                        focusNode: _model.textFieldFocusNode,
+                        onTap: () {
+                          if (!mounted) return;
+                          setState(() {
+                            _selectedTrade = null;
+                          });
                         },
-                      )
-                          : null,
+                        onChanged: (_) => _debounce(
+                          '_searchDebounce',
+                          const Duration(milliseconds: 600),
+                          _startSearch,
+                        ),
+                        textInputAction: TextInputAction.search,
+                        onFieldSubmitted: (_) => _startSearch(),
+                        style: TextStyle(
+                          fontSize: isSmallScreen ? 14 : 15,
+                          color: isDark ? Colors.white : _textPrimary,
+                          height: 1.4,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Search artisans...',
+                          hintStyle: TextStyle(
+                            color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
+                            fontSize: isSmallScreen ? 14 : 15,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: isSmallScreen ? 16 : 20,
+                            vertical: isSmallScreen ? 16 : 18,
+                          ),
+                          prefixIcon: Icon(
+                            Icons.search_rounded,
+                            color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
+                            size: isSmallScreen ? 18 : 20,
+                          ),
+                          suffixIcon: _model.textController!.text.isNotEmpty
+                              ? IconButton(
+                            icon: Icon(
+                              Icons.clear_rounded,
+                              size: isSmallScreen ? 16 : 18,
+                              color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
+                            ),
+                            onPressed: () {
+                              _model.textController?.clear();
+                              setState(() {});
+                              _startSearch();
+                            },
+                          )
+                              : null,
+                        ),
+                      ),
                     ),
-                  ),
+
+                    // Category selector removed — keeping a small spacer for layout
+                    const SizedBox(height: 8),
+
+                  ],
                 ),
               ),
 

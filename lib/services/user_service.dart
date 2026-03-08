@@ -105,7 +105,20 @@ class UserService {
             } catch (_) {}
             try {
               final kyc = _extractKyc(candidate);
-              if (kyc != null) await TokenStorage.saveKycVerified(kyc);
+              if (kyc != null) {
+                try {
+                  final current = await TokenStorage.getKycVerified();
+                  // If the server reports verified=true we always save it.
+                  // If the server reports false, avoid overwriting a previously cached true
+                  // to prevent transient/stale server responses from downgrading the UI.
+                  if (kyc == true || current != true) {
+                    await TokenStorage.saveKycVerified(kyc);
+                  }
+                } catch (_) {
+                  // fallback: save whatever we have
+                  try { await TokenStorage.saveKycVerified(kyc); } catch (_) {}
+                }
+              }
             } catch (_) {}
             // Persist location info (address + coords) into TokenStorage for global use
             try {
@@ -423,6 +436,23 @@ class UserService {
   static bool? _extractKyc(Map<String, dynamic>? profile) {
     if (profile == null) return null;
     try {
+      bool foundFalse = false;
+      bool foundTrue = false;
+
+      // 1) check nested kyc.status early (some APIs use kyc: { status: 'approved' })
+      try {
+        final kycObj = profile['kyc'];
+        if (kycObj is Map) {
+          final status = kycObj['status'] ?? kycObj['state'];
+          if (status is String) {
+            final ss = status.toLowerCase().trim();
+            if (ss == 'approved' || ss == 'verified' || ss == 'success' || ss == 'approved_by_admin') return true;
+            if (ss == 'pending' || ss == 'submitted' || ss == 'rejected') foundFalse = true;
+          }
+        }
+      } catch (_) {}
+
+      // 2) Check common direct indicators
       final candidates = [
         profile['kycVerified'],
         profile['kyc']?['verified'],
@@ -431,11 +461,43 @@ class UserService {
       ];
       for (final c in candidates) {
         if (c == null) continue;
-        if (c is bool) return c;
-        final s = c.toString().toLowerCase();
-        if (s == 'true' || s == '1') return true;
-        if (s == 'false' || s == '0') return false;
+        if (c is bool) {
+          if (c) return true;
+          foundFalse = true;
+          continue;
+        }
+        if (c is num) {
+          if (c > 0) {
+            // treat numeric >0 as potentially verified
+            foundTrue = true;
+            break;
+          }
+          foundFalse = true;
+          continue;
+        }
+        final s = c.toString().toLowerCase().trim();
+        if (s == 'true' || s == '1' || s == 'approved' || s == 'verified' || s == 'success' || s == 'approved_by_admin') {
+          return true;
+        }
+        if (s == 'false' || s == '0' || s == 'pending' || s == 'rejected' || s == 'submitted') {
+          foundFalse = true;
+        }
       }
+
+      if (foundTrue) return true;
+
+      // 3) kycLevel interpretation: accept >=2 as verified; 1 commonly means submitted
+      final lvl = profile['kycLevel'] ?? profile['kyc']?['level'];
+      if (lvl != null) {
+        if (lvl is num) return lvl >= 2;
+        final sl = lvl.toString().toLowerCase().trim();
+        final maybe = int.tryParse(sl);
+        if (maybe != null) return maybe >= 2;
+      }
+
+      // 4) If explicit negatives were observed and no positives, return false
+      if (foundFalse) return false;
+
     } catch (_) {}
     return null;
   }

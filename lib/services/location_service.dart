@@ -26,7 +26,19 @@ class LocationService {
           final lat = double.tryParse(item['lat']?.toString() ?? '');
           final lon = double.tryParse(item['lon']?.toString() ?? '');
           final display = item['display_name']?.toString() ?? place;
-          if (lat != null && lon != null) return {'lat': lat, 'lon': lon, 'displayName': display};
+          // boundingbox comes as [south, north, west, east]
+          List<double>? bbox;
+          try {
+            if (item['boundingbox'] is List) {
+              final bb = (item['boundingbox'] as List).map((e) => double.tryParse(e?.toString() ?? '')).where((e) => e != null).map((e) => e!).toList();
+              if (bb.length == 4) bbox = bb;
+            }
+          } catch (_) {}
+          if (lat != null && lon != null) {
+            final res = {'lat': lat, 'lon': lon, 'displayName': display};
+            if (bbox != null) res['boundingbox'] = bbox;
+            return res;
+          }
         }
       }
     } catch (_) {}

@@ -6,6 +6,8 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../search_page/search_page_widget.dart' as sp;
+import '../../services/my_service_service.dart';
+import '../../services/api_error_handler.dart';
 export 'all_servicepage_model.dart';
 
 class AllServicepageWidget extends StatefulWidget {
@@ -215,6 +217,7 @@ class _AllServicepageWidgetState extends State<AllServicepageWidget> with RouteA
     final name = (c['name'] ?? c['title'] ?? '').toString();
     final slug = (c['slug'] ?? '').toString().toLowerCase();
     final desc = (c['description'] ?? '').toString();
+    final id = (c['_id'] ?? c['id'])?.toString();
 
     Color color = const Color(0xFFA20025); // fallback
     for (final key in _categoryColorMap.keys) {
@@ -229,11 +232,112 @@ class _AllServicepageWidgetState extends State<AllServicepageWidget> with RouteA
     IconData icon = _pickIconForName(name, slug) ?? Icons.work_outline;
 
     return ServiceItem(
+      id: id,
       title: name.isNotEmpty ? name : (slug.isNotEmpty ? slug : 'Service'),
       icon: icon,
       color: color,
       searchQuery: name.isNotEmpty ? name : slug,
       description: desc.isNotEmpty ? desc : 'Professional service',
+    );
+  }
+
+  // Show sub-services (subcategories) for a category service in a bottom sheet.
+  Future<void> _showSubservicesForCategory(ServiceItem service) async {
+    if (!mounted) return;
+    final ctx = context;
+    await showModalBottomSheet<void>(
+      context: ctx,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext sheetCtx) {
+        // Use DraggableScrollableSheet to make the bottom sheet responsive and draggable.
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.5,
+          minChildSize: 0.25,
+          maxChildSize: 0.95,
+          builder: (context, scrollController) {
+            final theme = Theme.of(context);
+            return Container(
+              decoration: BoxDecoration(
+                color: theme.cardColor,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              padding: EdgeInsets.only(left: 16, right: 16, top: 12, bottom: MediaQuery.of(context).viewInsets.bottom + 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 12), decoration: BoxDecoration(color: theme.colorScheme.onSurface.withAlpha((0.12 * 255).toInt()), borderRadius: BorderRadius.circular(4))),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: Text(service.title, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+                  ),
+
+                  // FutureBuilder drives the list; we attach the DraggableScrollableSheet's
+                  // scrollController to the ListView so the sheet expands/contracts smoothly.
+                  Expanded(
+                    child: FutureBuilder<ApiResponse>(
+                      future: MyServiceService().fetchSubcategories(context: sheetCtx, categoryId: service.id),
+                      builder: (context, snap) {
+                        if (snap.connectionState == ConnectionState.waiting) {
+                          return Center(child: CircularProgressIndicator(color: theme.colorScheme.primary));
+                        }
+                        if (snap.hasError) {
+                          return Center(child: Text('Unable to load sub-services', style: theme.textTheme.bodyMedium));
+                        }
+                        final resp = snap.data;
+                        if (resp == null || !resp.ok || resp.data == null) {
+                          return Center(child: Text('No sub-services available', style: theme.textTheme.bodyMedium));
+                        }
+
+                        List<Map<String, dynamic>> list = [];
+                        try {
+                          final data = resp.data;
+                          if (data is List) list = data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+                          else if (data is Map && data['data'] is List) list = List<Map<String, dynamic>>.from(data['data'].map((e) => Map<String, dynamic>.from(e)));
+                        } catch (_) {}
+
+                        if (list.isEmpty) return Center(child: Text('No sub-services available', style: theme.textTheme.bodyMedium));
+
+                        return ListView.separated(
+                          controller: scrollController,
+                          itemCount: list.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (c, i) {
+                            final item = list[i];
+                            final name = (item['name'] ?? item['title'] ?? '').toString();
+                            final display = name.isNotEmpty ? name : (item['slug'] ?? '').toString();
+                            return ListTile(
+                              title: Text(display),
+                              onTap: () {
+                                Navigator.of(sheetCtx).pop();
+                                Navigator.of(ctx).push(MaterialPageRoute(builder: (_) => sp.SearchPageWidget(initialQuery: display)));
+                              },
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(sheetCtx).pop(),
+                      child: Text('Close', style: theme.textTheme.titleMedium),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -306,7 +410,7 @@ class _AllServicepageWidgetState extends State<AllServicepageWidget> with RouteA
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () => _handleServiceTap(service.searchQuery),
+        onTap: () => _showSubservicesForCategory(service),
         splashColor: service.color.withOpacity(0.08),
         highlightColor: Colors.transparent,
         child: Container(
@@ -839,6 +943,7 @@ class _AllServicepageWidgetState extends State<AllServicepageWidget> with RouteA
 
 // Helper class for service data
 class ServiceItem {
+  final String? id;
   final String title;
   final IconData icon;
   final Color color;
@@ -846,6 +951,7 @@ class ServiceItem {
   final String description;
 
   ServiceItem({
+    this.id,
     required this.title,
     required this.icon,
     required this.color,

@@ -7,11 +7,10 @@ import 'package:go_router/go_router.dart';
 import '../../services/user_service.dart';
 import '../../services/job_service.dart';
 import '../../services/location_service.dart';
-import '../job_history_page/job_history_page_widget.dart';
 import '../../utils/app_notification.dart';
 import '../../utils/error_messages.dart';
-import '../../utils/navigation_utils.dart';
 import '../../services/navigation_service.dart';
+import '../../services/my_service_service.dart';
 // ...existing code... (removed rootBundle/json import)
 export 'create_job_page1_model.dart';
 
@@ -57,6 +56,15 @@ class _CreateJobPage1WidgetState extends State<CreateJobPage1Widget> {
     ];
     String? _selectedExperienceLevel;
 
+    // Sub-services (job subcategories) and search
+    List<Map<String, dynamic>> _subservices = [];
+    List<Map<String, dynamic>> _filteredSubservices = [];
+    // Support multiple selected sub-services
+    List<String> _selectedSubserviceIds = [];
+    List<String> _selectedSubserviceNames = [];
+    final TextEditingController _serviceSearchController = TextEditingController();
+    bool _loadingSubservices = false;
+
     // (location uses free-text input; lat/lon auto-filled on blur)
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
@@ -80,7 +88,7 @@ class _CreateJobPage1WidgetState extends State<CreateJobPage1Widget> {
   final FocusNode _locationFocusNode = FocusNode();
   final FocusNode _budgetFocusNode = FocusNode();
   final FocusNode _descriptionFocusNode = FocusNode();
-  final FocusNode _skillsFocusNode = FocusNode();
+  // _skillsFocusNode was removed after converting skills to sub-service selector
 
   @override
   void initState() {
@@ -99,6 +107,9 @@ class _CreateJobPage1WidgetState extends State<CreateJobPage1Widget> {
 
     // Prefill location from user's profile
     _prefillLocation();
+
+    // Fetch all sub-services (will optionally be filtered by category later)
+    _fetchSubservices();
 
     // Setup geocoding on location blur
     _locationFocusNode.addListener(() {
@@ -165,6 +176,46 @@ class _CreateJobPage1WidgetState extends State<CreateJobPage1Widget> {
         });
       }
     } catch (_) {}
+  }
+
+  Future<void> _fetchSubservices({String? categoryId}) async {
+    if (!mounted) return;
+    setState(() { _loadingSubservices = true; });
+    try {
+      final svc = MyServiceService();
+      final resp = await svc.fetchSubcategories(context: context, categoryId: categoryId);
+      List<Map<String, dynamic>> list = [];
+      if (resp.ok && resp.data != null) {
+        final data = resp.data;
+        if (data is List) {
+          list = data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        } else if (data is Map && data['data'] is List) {
+          list = List<Map<String, dynamic>>.from(data['data'].map((e) => Map<String, dynamic>.from(e)));
+        } else if (data is Map && data['items'] is List) {
+          list = List<Map<String, dynamic>>.from(data['items'].map((e) => Map<String, dynamic>.from(e)));
+        } else if (data is Map) {
+          list = [Map<String, dynamic>.from(data)];
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _subservices = list;
+          _filteredSubservices = List<Map<String, dynamic>>.from(list);
+        });
+        try {
+          debugPrint('Fetched ${list.length} subservices for selector');
+          if (list.isNotEmpty) {
+            final sample = list.take(3).map((e) => ((e['_id'] ?? e['id'])?.toString() ?? 'no-id') + ':' + ((e['name'] ?? e['title'] ?? e['label'])?.toString() ?? 'no-name')).join(', ');
+            debugPrint('Sample subservices: $sample');
+          }
+        } catch (_) {}
+      }
+    } catch (e) {
+      // ignore errors but keep UI responsive
+    } finally {
+      if (mounted) setState(() { _loadingSubservices = false; });
+    }
   }
 
   Future<void> _prefillLocation() async {
@@ -261,49 +312,68 @@ class _CreateJobPage1WidgetState extends State<CreateJobPage1Widget> {
         coordinates.add(_jobLat!);
       }
 
-      // Parse skills
-      final skills = _skillsController.text
-          .split(',')
-          .map((s) => s.trim())
-          .where((s) => s.isNotEmpty)
-          .toList();
-
-      // Parse budget
-      final budgetString = _budgetController.text.replaceAll(RegExp(r'[^0-9.]'), '');
-      final budget = double.tryParse(budgetString);
-
-      // Map the UI labels to the backend tokens. Backend supports only
-      // 'entry', 'mid', and 'senior'. Ensure we only send one of these.
-      final Map<String, String> _experienceMap = {
-        'Entry': 'entry',
-        'Mid': 'mid',
-        'Senior': 'senior',
-      };
-
-      final experienceToken = _selectedExperienceLevel != null ? _experienceMap[_selectedExperienceLevel!] : null;
-      if (_selectedExperienceLevel != null && experienceToken == null) {
-        // Give a clear user-facing error listing allowed choices and stop submission
-        final allowed = _experienceMap.keys.join(', ');
-        final friendly = 'Please select a valid experience level. Allowed: $allowed';
-        if (mounted) {
-          setState(() => _formErrorMessage = friendly);
-          AppNotification.showError(context, friendly);
-        }
-        return;
+      // Parse skills - prefer the selected sub-services (multiple) if present, otherwise fall back to legacy text input
+      List<String> skills = [];
+      if (_selectedSubserviceIds.isNotEmpty) {
+        skills = List<String>.from(_selectedSubserviceNames);
+      } else {
+        skills = _skillsController.text
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
       }
 
-      final payload = {
-        'title': _titleController.text.trim(),
-        'company': _companyController.text.trim(),
-        'description': _descriptionController.text.trim(),
-        'trade': skills.isNotEmpty ? skills : null,
-        'location': _locationController.text.trim(),
-        'coordinates': coordinates.isNotEmpty ? coordinates : null,
-        'budget': budget,
-        'schedule': _selectedDeadline?.toIso8601String(),
-        'categoryId': _selectedCategoryId,
-        'experienceLevel': experienceToken,
-      };
+       // Require at least one skill/sub-service selection
+       if (skills.isEmpty) {
+         final msg = 'Please select a required service or enter required skills.';
+         if (mounted) {
+           setState(() => _formErrorMessage = msg);
+           AppNotification.showError(context, msg);
+         }
+         setState(() => _submitting = false);
+         return;
+       }
+
+       // Parse budget
+       final budgetString = _budgetController.text.replaceAll(RegExp(r'[^0-9.]'), '');
+       final budget = double.tryParse(budgetString);
+
+       // Map the UI labels to the backend tokens. Backend supports only
+       // 'entry', 'mid', and 'senior'. Ensure we only send one of these.
+       final Map<String, String> _experienceMap = {
+         'Entry': 'entry',
+         'Mid': 'mid',
+         'Senior': 'senior',
+       };
+
+       final experienceToken = _selectedExperienceLevel != null ? _experienceMap[_selectedExperienceLevel!] : null;
+       if (_selectedExperienceLevel != null && experienceToken == null) {
+         // Give a clear user-facing error listing allowed choices and stop submission
+         final allowed = _experienceMap.keys.join(', ');
+         final friendly = 'Please select a valid experience level. Allowed: $allowed';
+         if (mounted) {
+           setState(() => _formErrorMessage = friendly);
+           AppNotification.showError(context, friendly);
+         }
+         return;
+       }
+
+       final payload = {
+         'title': _titleController.text.trim(),
+         'company': _companyController.text.trim(),
+         'description': _descriptionController.text.trim(),
+         'trade': skills.isNotEmpty ? skills : null,
+         'location': _locationController.text.trim(),
+         'coordinates': coordinates.isNotEmpty ? coordinates : null,
+         'budget': budget,
+         'schedule': _selectedDeadline?.toIso8601String(),
+         'categoryId': _selectedCategoryId,
+        // Include first selected id for backward compatibility and a list of ids
+         'subCategoryId': _selectedSubserviceIds.isNotEmpty ? _selectedSubserviceIds.first : null,
+         'subCategoryIds': _selectedSubserviceIds.isNotEmpty ? _selectedSubserviceIds : null,
+         'experienceLevel': experienceToken,
+       };
 
       // Remove null or empty values
       payload.removeWhere((key, value) =>
@@ -457,6 +527,228 @@ class _CreateJobPage1WidgetState extends State<CreateJobPage1Widget> {
       );
     });
   }
+
+  Widget _buildServiceSelector() {
+    return Builder(builder: (context) {
+      final textPrimary = _getTextPrimary(context);
+      final textSecondary = _getTextSecondary(context);
+      final borderColor = _getBorderColor(context);
+      final surface = _getSurfaceColor(context);
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Required Service',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: textPrimary,
+              letterSpacing: -0.2,
+            ),
+          ),
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: () => _openServiceSelector(),
+            child: Container(
+              decoration: BoxDecoration(
+                color: surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: borderColor, width: 1),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: (_selectedSubserviceNames.isEmpty)
+                        ? Text(
+                            'Select services',
+                            style: TextStyle(fontSize: 15, color: textSecondary),
+                          )
+                        : SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: _selectedSubserviceNames.map((name) {
+                                return Padding(
+                                   padding: const EdgeInsets.only(right: 8.0),
+                                   child: Chip(
+                                     label: Text(name, style: TextStyle(color: textPrimary)),
+                                     backgroundColor: Theme.of(context).brightness == Brightness.dark ? Colors.white12 : Colors.grey[200],
+                                     onDeleted: () {
+                                       setState(() {
+                                         final removeIndex = _selectedSubserviceNames.indexOf(name);
+                                         if (removeIndex >= 0) {
+                                           _selectedSubserviceNames.removeAt(removeIndex);
+                                           if (_selectedSubserviceIds.length > removeIndex) _selectedSubserviceIds.removeAt(removeIndex);
+                                         }
+                                       });
+                                     },
+                                   ),
+                                 );
+                              }).toList(),
+                            ),
+                          ),
+                  ),
+                  Icon(Icons.keyboard_arrow_down_rounded, color: textSecondary),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+      );
+    });
+  }
+
+  void _onServiceSearchChanged(String value) {
+    final q = value.trim().toLowerCase();
+    if (q.isEmpty) {
+      setState(() { _filteredSubservices = List<Map<String, dynamic>>.from(_subservices); });
+      return;
+    }
+    setState(() {
+      _filteredSubservices = _subservices.where((s) {
+        final n = (s['name'] ?? s['title'] ?? s['label'] ?? '').toString().toLowerCase();
+        return n.contains(q);
+      }).toList();
+    });
+  }
+
+      Future<void> _openServiceSelector() async {
+     // If there is a selected category, try to fetch subservices for it to narrow the list
+     if (_selectedCategoryId != null) {
+       await _fetchSubservices(categoryId: _selectedCategoryId);
+     } else if (_subservices.isEmpty) {
+       await _fetchSubservices();
+     }
+
+     _serviceSearchController.text = '';
+     _onServiceSearchChanged('');
+
+     // Local copies for multi-select that persist across bottom-sheet rebuilds
+     final List<String> localSelectedIds = List<String>.from(_selectedSubserviceIds);
+     final List<String> localSelectedNames = List<String>.from(_selectedSubserviceNames);
+    // Local filtered list used by the bottom-sheet so search updates are responsive
+    List<Map<String, dynamic>> localFiltered = List<Map<String, dynamic>>.from(_subservices);
+
+    // Debug: log how many subservices are available when opening selector
+    try {
+      debugPrint('Opening service selector: ${_subservices.length} total subservices, ${localSelectedIds.length} preselected');
+    } catch (_) {}
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
+      builder: (ctx) {
+        return StatefulBuilder(builder: (context, setBottomState) {
+
+          // Local search helper for the bottom-sheet
+          void _localSearch(String v) {
+            final q = v.trim().toLowerCase();
+            if (q.isEmpty) {
+              localFiltered = List<Map<String, dynamic>>.from(_subservices);
+            } else {
+              localFiltered = _subservices.where((s) {
+                final n = (s['name'] ?? s['title'] ?? s['label'] ?? '').toString().toLowerCase();
+                return n.contains(q);
+              }).toList();
+            }
+            setBottomState(() {});
+          }
+
+          void _toggleItem(Map<String, dynamic> s) {
+             final id = (s['_id'] ?? s['id'])?.toString();
+             final name = (s['name'] ?? s['title'] ?? s['label'])?.toString() ?? '';
+             if (id == null) return;
+             final idx = localSelectedIds.indexOf(id);
+             if (idx >= 0) {
+               localSelectedIds.removeAt(idx);
+               if (localSelectedNames.length > idx) localSelectedNames.removeAt(idx);
+               try { debugPrint('Deselected subservice: $id'); } catch (_) {}
+              } else {
+                localSelectedIds.add(id);
+                localSelectedNames.add(name);
+                try { debugPrint('Selected subservice: $id ($name)'); } catch (_) {}
+              }
+              setBottomState(() {});
+           }
+
+          return Padding(
+            padding: MediaQuery.of(ctx).viewInsets,
+            child: Container(
+              height: MediaQuery.of(ctx).size.height * 0.7,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Select services', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                      TextButton(
+                        onPressed: () {
+                          // Commit selection to parent state
+                          setState(() {
+                            _selectedSubserviceIds = List<String>.from(localSelectedIds);
+                            _selectedSubserviceNames = List<String>.from(localSelectedNames);
+                          });
+                          try { debugPrint('Committed ${_selectedSubserviceIds.length} selected subservices'); } catch (_) {}
+                           Navigator.of(ctx).pop();
+                         },
+                         child: Text('Done'),
+                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: TextField(
+                      controller: _serviceSearchController,
+                      decoration: InputDecoration(
+                        hintText: 'Search services',
+                        prefixIcon: Icon(Icons.search, color: _getTextSecondary(context)),
+                        filled: true,
+                        fillColor: _getSurfaceColor(context),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: _getBorderColor(context))),
+                      ),
+                      onChanged: (v) {
+                        _localSearch(v);
+                      },
+                    ),
+                  ),
+                  Expanded(
+                    child: _loadingSubservices
+                        ? Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(_getPrimaryColor(context))))
+                        : localFiltered.isEmpty
+                            ? Center(child: Text('No services found', style: TextStyle(color: _getTextSecondary(context))))
+                            : ListView.separated(
+                                itemCount: localFiltered.length,
+                                separatorBuilder: (_, __) => Divider(height: 1),
+                                itemBuilder: (context, i) {
+                                  final s = localFiltered[i];
+                                   final id = (s['_id'] ?? s['id'])?.toString();
+                                   final name = (s['name'] ?? s['title'] ?? s['label'])?.toString() ?? '';
+                                   final checked = id != null && localSelectedIds.contains(id);
+                                   return CheckboxListTile(
+                                     key: id != null ? ValueKey('subsvc_$id') : null,
+                                     value: checked,
+                                     onChanged: (_) { _toggleItem(s); },
+                                     title: Text(name),
+                                     subtitle: s['description'] != null ? Text(s['description'].toString(), maxLines: 1, overflow: TextOverflow.ellipsis) : null,
+                                     controlAffinity: ListTileControlAffinity.trailing,
+                                   );
+                                },
+                               ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        });
+      },
+    );
+   }
 
   Widget _buildDropdown({
     required String label,
@@ -645,7 +937,7 @@ class _CreateJobPage1WidgetState extends State<CreateJobPage1Widget> {
               hintText: 'e.g. Senior Software Engineer',
             ),
             _buildFormField(
-              label: 'Company Name',
+              label: 'Company Name / Owners Name',
               controller: _companyController,
               focusNode: _companyFocusNode,
               validator: (value) => _validateRequired(value, 'company name'),
@@ -703,26 +995,20 @@ class _CreateJobPage1WidgetState extends State<CreateJobPage1Widget> {
       case 3:
         return Column(
           children: [
-            _buildFormField(
-              label: 'Required Skills',
-              controller: _skillsController,
-              focusNode: _skillsFocusNode,
-              validator: (value) => _validateRequired(value, 'required skills'),
-              maxLines: 2,
-              hintText: 'e.g. plumbing, tiling, electrical work',
-            ),
-            _buildDropdown(
-              label: 'Experience Level',
-              options: _experienceLevels,
-              value: _selectedExperienceLevel,
-              onChanged: (value) {
-                setState(() => _selectedExperienceLevel = value);
-              },
-              hintText: 'Select experience level',
-            ),
-            _buildDatePicker(),
-          ],
-        );
+            // Replace free-text skills with a searchable sub-service selector
+            _buildServiceSelector(),
+             _buildDropdown(
+               label: 'Experience Level',
+               options: _experienceLevels,
+               value: _selectedExperienceLevel,
+               onChanged: (value) {
+                 setState(() => _selectedExperienceLevel = value);
+               },
+               hintText: 'Select experience level',
+             ),
+             _buildDatePicker(),
+           ],
+         );
 
       default:
         return Container();
@@ -733,6 +1019,7 @@ class _CreateJobPage1WidgetState extends State<CreateJobPage1Widget> {
   void dispose() {
     _scrollController.dispose();
     _model.dispose();
+    _serviceSearchController.dispose();
     super.dispose();
   }
 
@@ -884,5 +1171,4 @@ class _CreateJobPage1WidgetState extends State<CreateJobPage1Widget> {
     );
   }
 
-    // ...existing code... (restored free-text location input; removed location selector)
 }

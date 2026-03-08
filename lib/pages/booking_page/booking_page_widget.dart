@@ -548,6 +548,38 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
     return null;
   }
 
+  // New helper: fetch a fresh booking payload from the API by booking id.
+  // Used after performing state-changing actions so the UI immediately reflects
+  // any nested user/artisan data the server returns.
+  Future<Map<String,dynamic>?> _fetchBookingById(String bookingId) async {
+    try {
+      final token = await TokenStorage.getToken();
+      final headers = <String,String>{'Content-Type':'application/json'};
+      if (token != null && token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
+      final url = '$API_BASE_URL/api/bookings/$bookingId';
+      final res = await http.get(Uri.parse(url), headers: headers).timeout(const Duration(seconds:8));
+      if (kDebugMode) {
+        debugPrint('--- Booking Details API Request ---');
+        debugPrint('URL: $url');
+        // Avoid printing full Authorization token in logs
+        final maskedHeaders = Map<String, String>.from(headers);
+        if (maskedHeaders['Authorization'] != null && maskedHeaders['Authorization']!.length > 10) maskedHeaders['Authorization'] = maskedHeaders['Authorization']!.substring(0,10) + '...';
+        debugPrint('Headers: $maskedHeaders');
+        debugPrint('Status Code: ${res.statusCode}');
+        debugPrint('Response Body: ${res.body}');
+        debugPrint('-----------------------------------');
+      }
+      if (res.statusCode >=200 && res.statusCode <300 && res.body.isNotEmpty) {
+        final d = jsonDecode(res.body);
+        dynamic data = d is Map ? (d['data'] ?? d) : d;
+        if (data is Map) return Map<String,dynamic>.from(data);
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('fetchBookingById error: $e');
+    }
+    return null;
+  }
+
   void _onProfileTap(BuildContext context, Map<String,dynamic> booking) async {
     // Determine counterpart (customer when current user is artisan, else artisan)
     final bool isArtisan = _isArtisan;
@@ -654,16 +686,28 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
       final url = '$API_BASE_URL/api/bookings/$id/accept';
       final res = await http.post(Uri.parse(url), headers: headers, body: jsonEncode({})).timeout(const Duration(seconds:8));
       if (res.statusCode >=200 && res.statusCode <300) {
+        // Try to fetch a fresh booking payload from server to ensure nested user/artisan data is available
+        Map<String,dynamic>? fresh;
+        try {
+          fresh = await _fetchBookingById(id);
+        } catch (_) { fresh = null; }
+
         dynamic d;
         if (res.body.isNotEmpty) d = jsonDecode(res.body);
         Map<String,dynamic>? updated;
         if (d is Map) {
           updated = (d['data'] is Map) ? Map<String,dynamic>.from(d['data']) : (d['booking'] is Map ? Map<String,dynamic>.from(d['booking']) : Map<String,dynamic>.from(d));
         }
+
         setState(() {
           if (index != -1) {
-            if (updated != null) _bookings[index] = updated;
-            else _bookings[index]['booking'] = {...?_bookings[index]['booking'], 'status': 'accepted'};
+            if (fresh != null) {
+              _bookings[index] = fresh;
+            } else if (updated != null) {
+              _bookings[index] = updated;
+            } else {
+              _bookings[index]['booking'] = {...?_bookings[index]['booking'], 'status': 'accepted'};
+            }
           }
         });
         if (!mounted) return;
@@ -723,6 +767,10 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
       final bodyMap = {'reason': 'Rejected by artisan'};
       final res = await http.post(Uri.parse(url), headers: headers, body: jsonEncode(bodyMap)).timeout(const Duration(seconds:8));
       if (res.statusCode >=200 && res.statusCode <300) {
+        // Try to fetch fresh booking payload
+        Map<String,dynamic>? fresh;
+        try { fresh = await _fetchBookingById(id); } catch (_) { fresh = null; }
+
         dynamic d;
         if (res.body.isNotEmpty) d = jsonDecode(res.body);
         Map<String,dynamic>? updated;
@@ -731,8 +779,11 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
         }
         setState(() {
           if (index != -1) {
-            if (updated != null) _bookings[index] = updated;
-            else {
+            if (fresh != null) {
+              _bookings[index] = fresh;
+            } else if (updated != null) {
+              _bookings[index] = updated;
+            } else {
               _bookings[index]['booking'] = {...?_bookings[index]['booking'], 'status': 'cancelled', 'refundStatus': 'refunded'};
             }
           }
@@ -839,6 +890,10 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
         res = await http.delete(Uri.parse(url), headers: headers, body: jsonEncode({})).timeout(const Duration(seconds:8));
       }
       if (res.statusCode >=200 && res.statusCode <300) {
+        // Attempt to fetch a fresh booking payload so UI shows nested user fields
+        Map<String,dynamic>? fresh;
+        try { fresh = await _fetchBookingById(id); } catch (_) { fresh = null; }
+
         dynamic d;
         if (res.body.isNotEmpty) d = jsonDecode(res.body);
         Map<String,dynamic>? updated;
@@ -847,8 +902,13 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
         }
         setState(() {
           if (index != -1) {
-            if (updated != null) _bookings[index] = updated;
-            else _bookings[index]['booking'] = {...?_bookings[index]['booking'], 'status': 'cancelled', 'refundStatus': 'refunded'};
+            if (fresh != null) {
+              _bookings[index] = fresh;
+            } else if (updated != null) {
+              _bookings[index] = updated;
+            } else {
+              _bookings[index]['booking'] = {...?_bookings[index]['booking'], 'status': 'cancelled', 'refundStatus': 'refunded'};
+            }
           }
         });
         if (!mounted) return;
@@ -954,6 +1014,10 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
       final resp = await http.post(uri, headers: headers, body: jsonEncode(payload)).timeout(const Duration(seconds: 12));
 
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        // Try to fetch a fresh booking payload from server to include nested user/artisan fields
+        Map<String,dynamic>? fresh;
+        try { fresh = await _fetchBookingById(id); } catch (_) { fresh = null; }
+
         dynamic decoded;
         if (resp.body.isNotEmpty) decoded = jsonDecode(resp.body);
         Map<String,dynamic>? updated;
@@ -962,8 +1026,13 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
         }
         setState(() {
           if (index != -1) {
-            if (updated != null) _bookings[index] = updated;
-            else _bookings[index]['booking'] = {...?_bookings[index]['booking'], 'status': 'completed'};
+            if (fresh != null) {
+              _bookings[index] = fresh;
+            } else if (updated != null) {
+              _bookings[index] = updated;
+            } else {
+              _bookings[index]['booking'] = {...?_bookings[index]['booking'], 'status': 'completed'};
+            }
           }
         });
 
