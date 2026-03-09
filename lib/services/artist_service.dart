@@ -38,8 +38,9 @@ class ArtistService {
   // some servers do not support for GET and may return validation errors.
   static bool _lastGetByUserIdHad200 = false;
 
-  /// Fetch artisans from backend with optional pagination and query.
+  /// Fetch artisans from the new search endpoint GET /api/artisans/search.
   /// Accepts multiple server response shapes and returns a list of artisan maps.
+  /// See search_api.md for full parameter documentation.
   static Future<List<Map<String, dynamic>>> fetchArtisans(
       {int page = 1,
       int limit = 20,
@@ -55,25 +56,34 @@ class ArtistService {
     final token = await TokenStorage.getToken();
     final headers = <String, String>{'Content-Type': 'application/json'};
     if (token != null) headers['Authorization'] = 'Bearer $token';
+
+    // Build query params for /api/artisans/search (no `role` param — not used by this endpoint)
     final qParams = <String, String>{
-      'role': 'artisan',
       'page': page.toString(),
-      'limit': limit.toString()
+      'limit': limit.toString(),
     };
-    if (q != null && q.isNotEmpty) qParams['q'] = q;
-    if (trade != null && trade.isNotEmpty) qParams['trade'] = trade;
-    if (categoryId != null && categoryId.isNotEmpty) qParams['categoryId'] = categoryId;
-    if (subCategoryId != null && subCategoryId.isNotEmpty) qParams['subCategoryId'] = subCategoryId;
-    // Only use `name` as a q fallback when `q` is not provided to avoid accidentally overriding an explicit `q`.
-    if ((q == null || q.isEmpty) && name != null && name.isNotEmpty)
-      qParams['q'] = name;
+
+    // Free-text search: `q` takes precedence; fall back to `trade` or `name` for backward compat
+    final effectiveQ = (q != null && q.isNotEmpty)
+        ? q
+        : (trade != null && trade.isNotEmpty)
+            ? trade
+            : (name != null && name.isNotEmpty)
+                ? name
+                : null;
+    if (effectiveQ != null) qParams['q'] = effectiveQ;
+
+    if (categoryId != null && categoryId.isNotEmpty)
+      qParams['categoryId'] = categoryId;
+    if (subCategoryId != null && subCategoryId.isNotEmpty)
+      qParams['subCategoryId'] = subCategoryId;
     if (location != null && location.isNotEmpty) qParams['location'] = location;
     if (lat != null) qParams['lat'] = lat.toString();
     if (lon != null) qParams['lon'] = lon.toString();
     if (radiusKm != null) qParams['radiusKm'] = radiusKm.toString();
 
-    // Prefer the dedicated artisans endpoint per API docs
-    final uri = Uri.parse('$API_BASE_URL/api/artisans')
+    // Primary: new search endpoint per search_api.md
+    final uri = Uri.parse('$API_BASE_URL/api/artisans/search')
         .replace(queryParameters: qParams);
 
     print('┌────────────────── DISCOVER/HOME SERVICE LOGS ──────────────────');
@@ -178,28 +188,36 @@ class ArtistService {
         }
       }
 
-      // If we couldn't find a list in the primary response, try alternative endpoints before giving up.
+      // If we couldn't parse the primary response, try the legacy endpoint as fallback.
       try {
-        // 1) Try search endpoint
-        final searchUri = Uri.parse('$API_BASE_URL/api/artisans/search')
-            .replace(queryParameters: qParams);
+        // Legacy /api/artisans fallback
+        final legacyParams = Map<String, String>.from(qParams);
+        legacyParams['role'] = 'artisan';
+        // restore `trade` param for legacy endpoint compatibility
+        if (trade != null &&
+            trade.isNotEmpty &&
+            !legacyParams.containsKey('trade')) {
+          legacyParams['trade'] = trade;
+        }
+        final legacyUri = Uri.parse('$API_BASE_URL/api/artisans')
+            .replace(queryParameters: legacyParams);
         print(
-            '┌────────────────── DISCOVER/HOME FALLBACK 1 (SEARCH) ──────────────────');
-        print('│ URL: ${searchUri.toString()}');
+            '┌────────────────── DISCOVER/HOME FALLBACK 1 (LEGACY) ──────────────────');
+        print('│ URL: ${legacyUri.toString()}');
 
-        final searchResp = await http
-            .get(searchUri, headers: headers)
+        final legacyResp = await http
+            .get(legacyUri, headers: headers)
             .timeout(const Duration(seconds: 15));
 
-        print('│ STATUS: ${searchResp.statusCode}');
+        print('│ STATUS: ${legacyResp.statusCode}');
         print(
             '└───────────────────────────────────────────────────────────────────────');
 
-        if (searchResp.statusCode >= 200 &&
-            searchResp.statusCode < 300 &&
-            searchResp.body.isNotEmpty) {
+        if (legacyResp.statusCode >= 200 &&
+            legacyResp.statusCode < 300 &&
+            legacyResp.body.isNotEmpty) {
           try {
-            final sb = jsonDecode(searchResp.body);
+            final sb = jsonDecode(legacyResp.body);
             if (sb is List)
               return List<Map<String, dynamic>>.from(
                   sb.map((e) => Map<String, dynamic>.from(e)));
@@ -208,7 +226,6 @@ class ArtistService {
                   .map((e) => Map<String, dynamic>.from(e)));
           } catch (e) {
             print('│ ERROR PARSING FALLBACK 1: $e');
-            // search decode failed
           }
         }
 
@@ -243,26 +260,25 @@ class ArtistService {
                   .map((e) => Map<String, dynamic>.from(e)));
           } catch (e) {
             print('│ ERROR PARSING FALLBACK 2: $e');
-            // users decode failed
           }
         }
       } catch (e) {
         print('│ ERROR IN FALLBACK ATTEMPTS: $e');
-        // fallback attempts failed
       }
 
       return [];
     }
-    // Non-2xx responses: log and try alternative endpoints before giving up
-    // non-ok response
+    // Non-2xx from primary search endpoint: try legacy /api/artisans as fallback
     try {
-      final altSearchUri = Uri.parse('$API_BASE_URL/api/artisans/search')
-          .replace(queryParameters: qParams);
-      print('┌────────────────── NON-2XX SEARCH FALLBACK ──────────────────');
-      print('│ URL: ${altSearchUri.toString()}');
+      final legacyParams = Map<String, String>.from(qParams);
+      legacyParams['role'] = 'artisan';
+      final altLegacyUri = Uri.parse('$API_BASE_URL/api/artisans')
+          .replace(queryParameters: legacyParams);
+      print('┌────────────────── NON-2XX LEGACY FALLBACK ──────────────────');
+      print('│ URL: ${altLegacyUri.toString()}');
 
       final altResp = await http
-          .get(altSearchUri, headers: headers)
+          .get(altLegacyUri, headers: headers)
           .timeout(const Duration(seconds: 10));
 
       print('│ STATUS: ${altResp.statusCode}');
@@ -280,11 +296,11 @@ class ArtistService {
             return List<Map<String, dynamic>>.from((body['data'] as List)
                 .map((e) => Map<String, dynamic>.from(e)));
         } catch (e) {
-          print('│ ERROR PARSING ALT SEARCH: $e');
+          print('│ ERROR PARSING ALT LEGACY: $e');
         }
       }
     } catch (e) {
-      print('│ ERROR IN ALT SEARCH FALLBACK: $e');
+      print('│ ERROR IN LEGACY FALLBACK: $e');
     }
     return [];
   }
@@ -1619,21 +1635,28 @@ class ArtistService {
   }
 
   /// Fetch artisan services for a specific artisan by userId.
-  static Future<List<Map<String, dynamic>>> fetchArtisanServices(String artisanUserId, {String? token}) async {
+  static Future<List<Map<String, dynamic>>> fetchArtisanServices(
+      String artisanUserId,
+      {String? token}) async {
     final headers = <String, String>{'Content-Type': 'application/json'};
     if (token != null && token.isNotEmpty) {
       headers['Authorization'] = 'Bearer $token';
     }
 
     // Preferred public endpoint per API docs: GET /api/artisan-services/:id
-    final pathUri = Uri.parse('$API_BASE_URL/api/artisan-services/$artisanUserId');
-    final queryUri = Uri.parse('$API_BASE_URL/api/artisan-services').replace(queryParameters: {'artisanId': artisanUserId});
+    final pathUri =
+        Uri.parse('$API_BASE_URL/api/artisan-services/$artisanUserId');
+    final queryUri = Uri.parse('$API_BASE_URL/api/artisan-services')
+        .replace(queryParameters: {'artisanId': artisanUserId});
 
     try {
       // Try path-based endpoint first
       final resp = await ApiClient.get(pathUri.toString(), headers: headers);
-      if (resp['status'] is int && resp['status'] >= 200 && resp['status'] < 300) {
-        dynamic body = resp['json'] ?? (resp['body'] != null ? jsonDecode(resp['body']) : null);
+      if (resp['status'] is int &&
+          resp['status'] >= 200 &&
+          resp['status'] < 300) {
+        dynamic body = resp['json'] ??
+            (resp['body'] != null ? jsonDecode(resp['body']) : null);
         if (body == null) return [];
 
         // If the endpoint returns a single artisan service object, wrap it in a list
@@ -1643,23 +1666,35 @@ class ArtistService {
 
         // If body is a Map with data list
         if (body is Map && body['success'] == true && body['data'] is List) {
-          return (body['data'] as List).map((e) => Map<String, dynamic>.from(e)).toList();
+          return (body['data'] as List)
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
         }
 
         // If the body itself is a Map that looks like a service doc, return it
         if (body is Map) return [Map<String, dynamic>.from(body)];
-        if (body is List) return List<Map<String, dynamic>>.from(body.map((e) => Map<String, dynamic>.from(e)));
+        if (body is List)
+          return List<Map<String, dynamic>>.from(
+              body.map((e) => Map<String, dynamic>.from(e)));
       }
 
       // If path endpoint failed (404 or other), try legacy query-param endpoint as a fallback
-      final respQuery = await ApiClient.get(queryUri.toString(), headers: headers);
-      if (respQuery['status'] is int && respQuery['status'] >= 200 && respQuery['status'] < 300) {
-        dynamic body = respQuery['json'] ?? (respQuery['body'] != null ? jsonDecode(respQuery['body']) : null);
+      final respQuery =
+          await ApiClient.get(queryUri.toString(), headers: headers);
+      if (respQuery['status'] is int &&
+          respQuery['status'] >= 200 &&
+          respQuery['status'] < 300) {
+        dynamic body = respQuery['json'] ??
+            (respQuery['body'] != null ? jsonDecode(respQuery['body']) : null);
         if (body == null) return [];
         if (body is Map && body['success'] == true && body['data'] is List) {
-          return (body['data'] as List).map((e) => Map<String, dynamic>.from(e)).toList();
+          return (body['data'] as List)
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
         }
-        if (body is List) return List<Map<String, dynamic>>.from(body.map((e) => Map<String, dynamic>.from(e)));
+        if (body is List)
+          return List<Map<String, dynamic>>.from(
+              body.map((e) => Map<String, dynamic>.from(e)));
       }
     } catch (e) {
       debugPrint('Failed to fetch artisan services: $e');
@@ -1670,7 +1705,8 @@ class ArtistService {
   }
 
   /// Fetch the current user's artisan services (GET /api/artisan-services/me)
-  static Future<List<Map<String, dynamic>>> fetchMyArtisanServices({String? token}) async {
+  static Future<List<Map<String, dynamic>>> fetchMyArtisanServices(
+      {String? token}) async {
     final headers = <String, String>{'Content-Type': 'application/json'};
     if (token != null && token.isNotEmpty) {
       headers['Authorization'] = 'Bearer $token';
@@ -1680,10 +1716,15 @@ class ArtistService {
 
     try {
       final resp = await ApiClient.get(uri.toString(), headers: headers);
-      if (resp['status'] is int && resp['status'] >= 200 && resp['status'] < 300) {
-        dynamic body = resp['json'] ?? (resp['body'] != null ? jsonDecode(resp['body']) : null);
+      if (resp['status'] is int &&
+          resp['status'] >= 200 &&
+          resp['status'] < 300) {
+        dynamic body = resp['json'] ??
+            (resp['body'] != null ? jsonDecode(resp['body']) : null);
         if (body is Map && body['success'] == true && body['data'] is List) {
-          return (body['data'] as List).map((e) => Map<String, dynamic>.from(e)).toList();
+          return (body['data'] as List)
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
         }
       }
     } catch (e) {
