@@ -688,11 +688,8 @@ class _ArtisanProfileupdateWidgetState
       // (name/email/phone) are managed by the auth/user profile and are optional
       // here. Do not enforce them for create/update so partial updates are allowed.
 
-      // Stricter validation for create flow: ensure trade and experience present and numeric
+      // Stricter validation for create flow: ensure experience present and numeric
       if (!_hasArtisanProfile) {
-        if (payload['trade'] == null || (payload['trade'] is List && (payload['trade'] as List).isEmpty)) {
-          throw Exception('Please provide at least one trade (e.g., Plumber)');
-        }
         final expText = (_model.experienceController?.text ?? '').trim();
         if (expText.isEmpty) throw Exception('Experience (years) is required');
         final expNum = num.tryParse(expText);
@@ -1401,10 +1398,9 @@ class _ArtisanProfileupdateWidgetState
 
     switch (_currentStep) {
       case 0:
-        // Require trade & numeric experience (these fields live on step 0 in this form)
-        final hasTrade = (_model.tradeController?.text.trim().isNotEmpty == true);
+        // Require numeric experience (trade field was removed from UI)
         final hasExperience = (_model.experienceController?.text.trim().isNotEmpty == true) && (num.tryParse(_model.experienceController!.text.trim()) != null);
-        return hasTrade && hasExperience;
+        return hasExperience;
       case 1:
         // Intermediate step: pricing & availability — allow to proceed if fields validated by form
         return true;

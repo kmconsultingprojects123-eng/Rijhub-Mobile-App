@@ -544,6 +544,31 @@ class TokenStorage {
     return raw.toLowerCase() == 'true';
   }
 
+  static Future<void> deleteOnboardReminderShown() async {
+    try {
+      if (kIsWeb) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_keyOnboardReminderShown);
+      } else {
+        final s = await _getSecureStorage();
+        if (s != null) {
+          try {
+            await s.delete(key: _keyOnboardReminderShown);
+          } catch (e) {
+            debugPrint('TokenStorage: secure delete onboard_reminder_shown failed: $e');
+            _secureAvailable = false;
+          }
+        }
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove(_keyOnboardReminderShown);
+        } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('TokenStorage: deleteOnboardReminderShown failed: $e');
+    }
+  }
+
   // Persist a small Google profile object (as JSON) so UI can restore an
   // in-progress Google sign-in between app restarts.
   static Future<void> saveGoogleProfile(Map<String, dynamic> profile) async {

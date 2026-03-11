@@ -976,6 +976,10 @@ class AuthService {
     try {
       await TokenStorage.deleteToken();
       await TokenStorage.deleteRole();
+      await TokenStorage.deleteKycStatus();
+      await TokenStorage.deleteKycVerified();
+      await TokenStorage.deleteDashboardCache();
+      await TokenStorage.deleteOnboardReminderShown();
       // Also remove any cached Google profile when logging out
       try {
         await TokenStorage.deleteGoogleProfile();
