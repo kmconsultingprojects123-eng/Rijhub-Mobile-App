@@ -9,6 +9,13 @@ import 'package:path/path.dart' as p;
 import 'upload_service.dart';
 import 'user_service.dart';
 
+void _printLog(String message) {
+  final pattern = RegExp('.{1,800}');
+  for (var match in pattern.allMatches(message)) {
+    debugPrint(match.group(0));
+  }
+}
+
 /// Safely parse a JSON string and convert any Map results into Map<String,dynamic>.
 /// Returns List or Map<String,dynamic> or primitive as appropriate, or null on parse error.
 dynamic _safeJsonParse(String? raw) {
@@ -814,6 +821,13 @@ class ArtistService {
           });
 
           final uri = '$API_BASE_URL/api/artisans';
+
+          _printLog('┌────────────────── CREATE ARTISAN PROFILE (MULTIPART) ──────────────────');
+          _printLog('│ URL: $uri');
+          _printLog('│ FIELDS: $fields');
+          _printLog('│ FILE MAP KEYS: ${fileMap.keys.toList()}');
+          _printLog('└────────────────────────────────────────────────────────────────────────');
+
           if (kDebugMode)
             debugPrint(
                 'createMyProfile -> sending multipart to $uri fields=${fields.keys.toList()} fileMapKeys=${fileMap.keys.toList()}');
@@ -824,6 +838,12 @@ class ArtistService {
               method: 'POST');
           final int? status =
               (resp['status'] is int) ? resp['status'] as int : null;
+
+          _printLog('┌────────────────── CREATE ARTISAN PROFILE (MULTIPART) RESPONSE ──────────────────');
+          _printLog('│ STATUS: $status');
+          _printLog('│ BODY: ${resp['body']}');
+          _printLog('└───────────────────────────────────────────────────────────────────────────────');
+
           if (kDebugMode)
             debugPrint(
                 'ArtistService.createMyProfile (multipart) -> $uri status=$status body=${resp['body']}');
@@ -892,11 +912,27 @@ class ArtistService {
         debugPrint(
             'createMyProfile: payload after sanitization -> ${payload['portfolio']}');
       final uri = '$API_BASE_URL/api/artisans';
+
+      _printLog('┌────────────────── CREATE ARTISAN PROFILE (JSON) ──────────────────');
+      _printLog('│ URL: $uri');
+      try {
+        _printLog('│ PAYLOAD: ${jsonEncode(payload)}');
+      } catch (_) {
+        _printLog('│ PAYLOAD: $payload');
+      }
+      _printLog('└───────────────────────────────────────────────────────────────────');
+
       final resp = await ApiClient.post(uri,
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(payload));
       final int? status =
           (resp['status'] is int) ? resp['status'] as int : null;
+
+      _printLog('┌────────────────── CREATE ARTISAN PROFILE RESPONSE ──────────────────');
+      _printLog('│ STATUS: $status');
+      _printLog('│ BODY: ${resp['body']}');
+      _printLog('└─────────────────────────────────────────────────────────────────────');
+
       if (kDebugMode)
         debugPrint(
             'ArtistService.createMyProfile -> $uri status=$status body=${resp['body']}');
