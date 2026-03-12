@@ -381,9 +381,6 @@ class JobService {
   static Future<Map<String, dynamic>> updateJob(
       String id, Map<String, dynamic> payload) async {
     if (id.isEmpty) throw Exception('Job id required');
-    final token = await TokenStorage.getToken();
-    final headers = <String, String>{'Content-Type': 'application/json'};
-    if (token != null) headers['Authorization'] = 'Bearer $token';
     final uri = Uri.parse('$API_BASE_URL/api/jobs/$id');
 
     // ┌──────────────────────────────────────────────────────────────────────────────
@@ -394,42 +391,99 @@ class JobService {
         '┌──────────────────────────────────────────────────────────────────────────────');
     // ignore: avoid_print
     print('│ [API Request] PATCH $uri');
-    if (headers.isNotEmpty) {
-      // ignore: avoid_print
-      print('│ Headers:');
-      // ignore: avoid_print
-      headers.forEach((k, v) => print('│   $k: $v'));
-    }
+    // Body printed below when using ApiClient or raw HTTP
     // ignore: avoid_print
     print('│ Body: ${jsonEncode(payload)}');
     // ignore: avoid_print
     print(
         '└──────────────────────────────────────────────────────────────────────────────');
 
-    final resp = await http
-        .patch(uri, headers: headers, body: jsonEncode(payload))
-        .timeout(Duration(seconds: 15));
+    // Prefer ApiClient.put so token handling, retries and nicer error messages are used.
+    try {
+      final resp = await ApiClient.put(uri.toString(), headers: {'Content-Type': 'application/json'}, body: jsonEncode(payload));
+      final status = resp['status'] as int? ?? 0;
+      if (status >= 200 && status < 300) {
+        // ignore: avoid_print
+        print('│ ApiClient.put succeeded with status=$status body=${resp['body']}');
+        final jsonBody = resp['json'];
+        if (jsonBody is Map && jsonBody['data'] is Map) return Map<String, dynamic>.from(jsonBody['data']);
+        if (jsonBody is Map) return Map<String, dynamic>.from(jsonBody);
+        return {};
+      }
+      // ApiClient returned an error-like response; fall through to try raw HTTP as a last resort
+      final userMessage = resp['userMessage'] ?? 'Failed to update job';
+      // ignore: avoid_print
+      print('│ ApiClient.put failed with status=$status userMessage=$userMessage body=${resp['body']}');
+    } catch (e) {
+      // ignore and fallback to low-level HTTP attempt below
+      // ignore: avoid_print
+      print('│ ApiClient.put threw an exception: $e');
+    }
 
-    // ┌──────────────────────────────────────────────────────────────────────────────
-    // │ API Logger - Response (JobService)
-    // └──────────────────────────────────────────────────────────────────────────────
+    // Fallback: try PATCH then PUT using http directly (preserve prior behavior)
+    final token = await TokenStorage.getToken();
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    if (token != null) headers['Authorization'] = 'Bearer $token';
+
+    http.Response resp;
+    try {
+      resp = await http
+          .patch(uri, headers: headers, body: jsonEncode(payload))
+          .timeout(Duration(seconds: 15));
+    } catch (e) {
+      try {
+        // ignore: avoid_print
+        print('│ PATCH failed, retrying with PUT due to exception: $e');
+        resp = await http
+            .put(uri, headers: headers, body: jsonEncode(payload))
+            .timeout(Duration(seconds: 15));
+      } catch (e2) {
+        throw Exception('Failed to update job (network error): $e2');
+      }
+    }
+
+    if (!(resp.statusCode >= 200 && resp.statusCode < 300) && (resp.statusCode == 405 || resp.statusCode == 404 || resp.statusCode >= 400)) {
+      try {
+        // ignore: avoid_print
+        print('│ PATCH returned ${resp.statusCode}, retrying with PUT');
+        resp = await http
+            .put(uri, headers: headers, body: jsonEncode(payload))
+            .timeout(Duration(seconds: 15));
+      } catch (e) {
+        throw Exception('Failed to update job using PUT: $e');
+      }
+    }
+
+    // Log final response
     // ignore: avoid_print
-    print(
-        '┌──────────────────────────────────────────────────────────────────────────────');
-    // ignore: avoid_print
-    print('│ [API Response] ${resp.statusCode} $uri');
-    // ignore: avoid_print
-    print('│ Body: ${resp.body}');
-    // ignore: avoid_print
-    print(
-        '└──────────────────────────────────────────────────────────────────────────────');
+    print('│ Final HTTP response: ${resp.statusCode} ${resp.body}');
     if (resp.statusCode >= 200 && resp.statusCode < 300) {
       final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : {};
-      if (body is Map && body['data'] is Map)
-        return Map<String, dynamic>.from(body['data']);
+      if (body is Map && body['data'] is Map) return Map<String, dynamic>.from(body['data']);
       if (body is Map) return Map<String, dynamic>.from(body);
       return {};
     }
     throw Exception('Failed to update job: ${resp.statusCode} ${resp.body}');
+  }
+
+  /// Fetch a single job by id. Returns a Map with job fields or throws on error.
+  static Future<Map<String, dynamic>> getJob(String id) async {
+    if (id.isEmpty) throw Exception('Job id required');
+    final url = '$API_BASE_URL/api/jobs/$id';
+    try {
+      final res = await ApiClient.get(url, headers: {'Content-Type': 'application/json'});
+      final status = res['status'] as int? ?? 0;
+      if (status >= 200 && status < 300) {
+        final jsonBody = res['json'];
+        if (jsonBody is Map && jsonBody['data'] is Map) return Map<String, dynamic>.from(jsonBody['data']);
+        if (jsonBody is Map) return Map<String, dynamic>.from(jsonBody);
+        return {};
+      }
+      final msg = res['userMessage'] ?? 'Failed to fetch job';
+      throw Exception(msg);
+    } catch (e) {
+      // Re-throw with a clear message
+      throw Exception('Failed to fetch job: $e');
+    }
   }
 }

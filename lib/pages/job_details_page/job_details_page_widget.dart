@@ -673,13 +673,6 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
                     Widget? catCard = (categoryName != null && categoryName.isNotEmpty)
                         ? _buildInfoCard('CATEGORY', categoryName, Icons.category_outlined)
                         : null;
-                    Widget? expCard = (experienceLevel != null && experienceLevel.isNotEmpty)
-                        ? _buildInfoCard('EXPERIENCE', experienceLevel, Icons.timeline_outlined)
-                        : null;
-
-                    Widget? paymentCard = (paymentStatus != null)
-                        ? _buildInfoCard('PAYMENT', paymentStatus.toString(), Icons.payment_outlined)
-                        : null;
 
                     Widget locationCard;
                     if (_loadingHumanLocation && (locationLabel.isEmpty)) {
@@ -703,9 +696,10 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
 
                     final List<Widget> children = [];
 
-                    // Top two-column row (category, experience) — add when either exists
-                    if (catCard != null || expCard != null) {
-                      children.add(twoColRow(catCard, expCard));
+                    // Top two-column row (category only) — experience will be shown
+                    // below in the labelled rows to match the deadline style.
+                    if (catCard != null) {
+                      children.add(twoColRow(catCard, null));
                     }
 
                     // Spacing
@@ -713,11 +707,6 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
 
                     // Full-width location
                     children.add(locationCard);
-                    // Payment card below (full width) if present
-                    if (paymentCard != null) {
-                      children.add(const SizedBox(height: 12));
-                      children.add(paymentCard);
-                    }
 
                     return Column(children: children);
                   }),
@@ -791,6 +780,41 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
                           ],
                         ),
                       ),
+
+                      // Show experience as a labeled row (like application deadline)
+                      if (experienceLevel != null && experienceLevel.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 140,
+                                child: Text(
+                                  'Experience:',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: _getTextSecondary(context),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  experienceLevel.toString(),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  softWrap: false,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: _getTextPrimary(context),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
 

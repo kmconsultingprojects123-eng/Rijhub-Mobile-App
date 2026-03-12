@@ -13,6 +13,7 @@ import '../artisan_jobs_history/artisan_jobs_history_widget.dart';
 import 'dart:async';
 import '../../utils/navigation_utils.dart';
 import '../../utils/auth_guard.dart';
+import '../../utils/job_events.dart';
 import '/main.dart';
 import '../../services/navigation_service.dart';
 export 'job_post_page_model.dart';
@@ -51,6 +52,8 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
   String _currentQuery = '';
   final Set<String> _seenJobIds = {};
   bool _lastFetchFailed = false;
+  // Listen for global job events (created/updated) to reflect changes in realtime
+  StreamSubscription<Map<String, dynamic>>? _jobEventsSub;
 
   @override
   void initState() {
@@ -149,6 +152,27 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
         _fetchMore();
       }
     });
+
+    // Subscribe to global job update events so edits show up immediately
+    try {
+      _jobEventsSub = JobEvents.jobUpdatedStream.listen((updated) {
+        if (!mounted) return;
+        try {
+          final updatedId = (updated['id'] ?? updated['_id'] ?? updated['jobId'])?.toString() ?? '';
+          if (updatedId.isEmpty) return;
+          final idx = _jobs.indexWhere((j) => ((j['_id'] ?? j['id'] ?? j['jobId'])?.toString() ?? '') == updatedId);
+          setState(() {
+            if (idx >= 0) {
+              _jobs[idx] = Map<String, dynamic>.from(updated);
+            } else {
+              // Insert at top unless current filter would exclude it
+              _jobs.insert(0, Map<String, dynamic>.from(updated));
+              _seenJobIds.add(updatedId);
+            }
+          });
+        } catch (_) {}
+      });
+    } catch (_) {}
   }
 
   @override
@@ -158,6 +182,7 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
     try { if (_textListener != null) _model.textController?.removeListener(_textListener!); } catch (_) {}
     _model.dispose();
     try { _scrollController.dispose(); } catch (_) {}
+    try { _jobEventsSub?.cancel(); } catch (_) {}
 
     super.dispose();
   }
@@ -556,10 +581,53 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                                   ElevatedButton(
                                     onPressed: () async {
                                       if (!await ensureSignedInForAction(context)) return;
-                                      try { await NavigationUtils.safePush(context, CreateJobPage1Widget()); } catch (_) {}
+                                      try {
+                                        // Open the Create Job page and wait for its result. The page pops(true) on successful job creation.
+                                        final res = await NavigationUtils.safePush(context, CreateJobPage1Widget());
+                                        // Some navigation fallbacks (GoRouter/page-based) return null even when
+                                        // the pushed page performed a pop(true). The Create page now
+                                        // returns the created job object (Map) on success — if we
+                                        // receive that Map, insert it locally so the UI updates
+                                        // immediately. Otherwise refresh the list.
+                                        if (res != false) {
+                                          if (mounted) {
+                                            try {
+                                              if (res is Map<String, dynamic>) {
+                                                // Insert new job at top if not already present
+                                                final createdJob = Map<String, dynamic>.from(res);
+                                                final id = (createdJob['id'] ?? createdJob['_id'] ?? '').toString();
+                                                if (id.isNotEmpty && !_seenJobIds.contains(id)) {
+                                                  setState(() {
+                                                    _jobs.insert(0, createdJob);
+                                                    _seenJobIds.add(id);
+                                                  });
+                                                } else {
+                                                  // If no id or already present, do a full refresh
+                                                  await _fetchJobs();
+                                                }
+                                              } else {
+                                                // Unknown truthy result or null from GoRouter fallback — refresh
+                                                await _fetchJobs();
+                                              }
+                                            } catch (_) {}
+                                          }
+                                        }
+                                      } catch (_) {}
                                     },
-                                    style: ElevatedButton.styleFrom(backgroundColor: colorScheme.primary, foregroundColor: colorScheme.onPrimary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10), elevation: 0),
-                                    child: Row(children: const [Icon(Icons.add, size: 18), SizedBox(width: 6), Text('Create', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600))]),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: colorScheme.primary,
+                                      foregroundColor: colorScheme.onPrimary,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                      elevation: 0,
+                                    ),
+                                    child: Row(
+                                      children: const [
+                                        Icon(Icons.add, size: 18),
+                                        SizedBox(width: 6),
+                                        Text('Create', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                                      ],
+                                    ),
                                   ),
                               ])
                             ],
@@ -691,64 +759,41 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                             child: Padding(
                               padding: const EdgeInsets.all(20),
                               child: Column(
-                                crossAxisAlignment:
-                                CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   // Top row with title and status
                                   Row(
-                                    mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                          crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              title.isNotEmpty
-                                                  ? title
-                                                  : 'Untitled Job',
-                                              style: theme.textTheme
-                                                  .titleMedium
-                                                  ?.copyWith(
-                                                fontWeight: FontWeight.w600,
-                                              ),
+                                              title.isNotEmpty ? title : 'Untitled Job',
+                                              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
                                               maxLines: 1,
-                                              overflow:
-                                              TextOverflow.ellipsis,
+                                              overflow: TextOverflow.ellipsis,
                                             ),
                                             const SizedBox(height: 4),
                                             Text(
                                               postedText,
-                                              style: theme.textTheme
-                                                  .bodySmall
-                                                  ?.copyWith(
-                                                color: colorScheme
-                                                    .onSurface
-                                                    .withAlpha((0.6 * 255).toInt()),
-                                              ),
+                                              style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurface.withAlpha((0.6 * 255).toInt())),
                                             ),
                                           ],
                                         ),
                                       ),
                                       const SizedBox(width: 12),
                                       Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 12, vertical: 6),
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                         decoration: BoxDecoration(
-                                          color: isOpen
-                                              ? colorScheme.primary.withAlpha((0.1 * 255).toInt())
-                                              : colorScheme.error.withAlpha((0.1 * 255).toInt()),
-                                          borderRadius:
-                                          BorderRadius.circular(20),
+                                          color: isOpen ? colorScheme.primary.withAlpha((0.1 * 255).toInt()) : colorScheme.error.withAlpha((0.1 * 255).toInt()),
+                                          borderRadius: BorderRadius.circular(20),
                                         ),
                                         child: Text(
                                           statusLabel,
-                                          style: theme.textTheme.bodySmall
-                                              ?.copyWith(
-                                            color: isOpen
-                                                ? colorScheme.primary
-                                                : colorScheme.error,
+                                          style: theme.textTheme.bodySmall?.copyWith(
+                                            color: isOpen ? colorScheme.primary : colorScheme.error,
                                             fontWeight: FontWeight.w600,
                                           ),
                                         ),
@@ -763,69 +808,46 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                                     desc,
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.bodyMedium
-                                        ?.copyWith(
-                                      color: colorScheme.onSurface.withAlpha((0.8 * 255).toInt()),
-                                    ),
+                                    style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSurface.withAlpha((0.8 * 255).toInt())),
                                   ),
 
                                   const SizedBox(height: 20),
 
                                   // Bottom row: budget, location, and action
                                   Row(
-                                    mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Column(
-                                        crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            _displayBudget(budget),
-                                            style: theme.textTheme
-                                                .titleMedium
-                                                ?.copyWith(
-                                              fontWeight: FontWeight.w700,
-                                              color: colorScheme.primary,
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              _displayBudget(budget),
+                                              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700, color: colorScheme.primary),
                                             ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            'Location: ${location.toString()}',
-                                            style: theme.textTheme.bodySmall
-                                                ?.copyWith(
-                                              color: colorScheme.onSurface
-                                                  .withAlpha((0.6 * 255).toInt()),
+                                            const SizedBox(height: 4),
+                                            // Constrain location text to at most 2 lines and ellipsize to avoid pushing the action button
+                                            Text(
+                                              'Location: ${location.toString()}',
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurface.withAlpha((0.6 * 255).toInt())),
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
                                       ElevatedButton(
                                         onPressed: () async {
                                           await NavigationUtils.safePush(context, JobDetailsPageWidget(job: job));
                                         },
                                         style: ElevatedButton.styleFrom(
-                                          backgroundColor:
-                                          colorScheme.primary,
-                                          foregroundColor:
-                                          colorScheme.onPrimary,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                            BorderRadius.circular(8),
-                                          ),
-                                          padding:
-                                          const EdgeInsets.symmetric(
-                                              horizontal: 20,
-                                              vertical: 10),
+                                          backgroundColor: colorScheme.primary,
+                                          foregroundColor: colorScheme.onPrimary,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                                           elevation: 0,
                                         ),
-                                        child: Text(
-                                          'View Job',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
+                                        child: Text('View Job', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                                       ),
                                     ],
                                   ),
