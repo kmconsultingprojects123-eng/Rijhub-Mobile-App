@@ -122,4 +122,18 @@ class NavigationUtils {
   static void safePop(BuildContext context, [Object? result]) {
     NavigationService.instance.pop(context, result as dynamic);
   }
+
+  /// New: safe push using a route path (GoRouter-first).
+  static Future<void> safePushRoute(BuildContext context, String path, {Map<String, String>? queryParams, Object? extra}) async {
+    try {
+      final guest = await isGuestSession();
+      if (guest) {
+        final ok = await ensureAuthenticatedOrPrompt(context);
+        if (!ok) return;
+      }
+    } catch (_) {}
+
+    if (!context.mounted) return;
+    await NavigationService.instance.pushRoute(context, path, queryParams: queryParams, extra: extra);
+  }
 }
