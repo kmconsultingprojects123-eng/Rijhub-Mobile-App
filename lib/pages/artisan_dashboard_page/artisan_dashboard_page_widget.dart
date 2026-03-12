@@ -298,7 +298,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
 
     // Schedule a gentle reminder a short while after the page has initialised
     // so new artisans who've not completed key setup steps get prompted.
-    Future.delayed(const Duration(seconds: 5), () {
+    Future.delayed(const Duration(seconds: 3), () {
       try {
         _maybeShowOnboardReminder();
       } catch (_) {}

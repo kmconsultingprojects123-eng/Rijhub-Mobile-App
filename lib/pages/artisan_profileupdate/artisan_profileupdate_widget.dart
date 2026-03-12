@@ -14,6 +14,7 @@ import '../../services/token_storage.dart';
 import '../../services/artist_service.dart';
 import '../../services/job_service.dart';
 import '../../services/location_service.dart';
+import 'package:geolocator/geolocator.dart';
 import 'artisan_profileupdate_model.dart';
 export 'artisan_profileupdate_model.dart';
 
@@ -34,12 +35,12 @@ class _ArtisanProfileupdateWidgetState
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final _formKey = GlobalKey<FormState>();
-    bool _isSaving = false;
-    bool _hasArtisanProfile = false;
-    // Accumulate step values here so data travels from step to step until final submit
-    final Map<String, dynamic> _formData = {};
-    // Keep only remote portfolio metadata (no local file uploads handled here)
-    List<Map<String, dynamic>> _remotePortfolioItems = [];
+  bool _isSaving = false;
+  bool _hasArtisanProfile = false;
+  // Accumulate step values here so data travels from step to step until final submit
+  final Map<String, dynamic> _formData = {};
+  // Keep only remote portfolio metadata (no local file uploads handled here)
+  List<Map<String, dynamic>> _remotePortfolioItems = [];
   // Local state for LGA/state lists and geocoding
   Map<String, List<String>> _statesLgas = {};
   List<String> _statesList = [];
@@ -51,7 +52,11 @@ class _ArtisanProfileupdateWidgetState
   bool _isGeocoding = false;
   // Multi-step state (now 3 steps: professional, pricing, portfolio)
   int _currentStep = 0;
-  List<String> _stepTitles = const ['Professional Details', 'Pricing & Availability', 'Portfolio'];
+  List<String> _stepTitles = const [
+    'Professional Details',
+    'Pricing & Availability',
+    'Portfolio'
+  ];
   String? _error;
 
   // Convenience getter for last step index
@@ -64,14 +69,15 @@ class _ArtisanProfileupdateWidgetState
   TimeOfDay? _startTime;
   TimeOfDay? _endTime;
 
-    // Local picked images for portfolio (simple file picker)
-    List<String> _localPortfolioImagePaths = [];
-    // Job categories for service dropdown
-    List<Map<String, dynamic>> _jobCategories = [];
-    String? _selectedCategoryId;
-    String? _selectedCategoryName; // cached name for saving when categories not present
-    // Track whether file picker is available on this platform
-    bool _filePickerAvailable = true;
+  // Local picked images for portfolio (simple file picker)
+  List<String> _localPortfolioImagePaths = [];
+  // Job categories for service dropdown
+  List<Map<String, dynamic>> _jobCategories = [];
+  String? _selectedCategoryId;
+  String?
+      _selectedCategoryName; // cached name for saving when categories not present
+  // Track whether file picker is available on this platform
+  bool _filePickerAvailable = true;
 
   @override
   void initState() {
@@ -131,11 +137,13 @@ class _ArtisanProfileupdateWidgetState
 
   // Helper to display a friendly error to the user and set the _error state
   void _showUserError(dynamic error, {String? fallback}) {
-    final msg = ErrorMessages.humanize(error ?? fallback ?? 'Something went wrong. Please try again.');
+    final msg = ErrorMessages.humanize(
+        error ?? fallback ?? 'Something went wrong. Please try again.');
     if (mounted) {
       setState(() => _error = msg);
       try {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(msg)));
       } catch (_) {
         // ignore any scaffold messenger errors during build
       }
@@ -144,24 +152,37 @@ class _ArtisanProfileupdateWidgetState
 
   // Availability helpers (moved here so analyzer finds them before use)
   String _formatAvailabilityEntry(String day, TimeOfDay start, TimeOfDay end) {
-    String fmt(TimeOfDay t) => t.hour.toString().padLeft(2,'0') + ':' + t.minute.toString().padLeft(2,'0');
+    String fmt(TimeOfDay t) =>
+        t.hour.toString().padLeft(2, '0') +
+        ':' +
+        t.minute.toString().padLeft(2, '0');
     return '$day ${fmt(start)}-${fmt(end)}';
   }
 
   Future<void> _pickTimeRange() async {
-    final s = await showTimePicker(context: context, initialTime: _startTime ?? const TimeOfDay(hour:9,minute:0));
+    final s = await showTimePicker(
+        context: context,
+        initialTime: _startTime ?? const TimeOfDay(hour: 9, minute: 0));
     if (s == null) return;
-    final e = await showTimePicker(context: context, initialTime: _endTime ?? const TimeOfDay(hour:17,minute:0));
+    final e = await showTimePicker(
+        context: context,
+        initialTime: _endTime ?? const TimeOfDay(hour: 17, minute: 0));
     if (e == null) return;
-    setState(() { _startTime = s; _endTime = e; });
+    setState(() {
+      _startTime = s;
+      _endTime = e;
+    });
   }
 
   void _addAvailability() {
     if (_startTime == null || _endTime == null) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please pick a start and end time')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please pick a start and end time')));
       return;
     }
-    final entry = _formatAvailabilityEntry(_selectedDay, _startTime!, _endTime!);
+    final entry =
+        _formatAvailabilityEntry(_selectedDay, _startTime!, _endTime!);
     if (!_availabilityList.contains(entry)) {
       setState(() {
         _availabilityList.add(entry);
@@ -198,7 +219,9 @@ class _ArtisanProfileupdateWidgetState
         final state = _statesList.isNotEmpty ? _statesList.first : null;
         if (state != null) {
           final lgas = _statesLgas[state] ?? [];
-          final matched = lgas.firstWhere((l) => addr.toLowerCase().contains(l.toLowerCase()), orElse: () => '');
+          final matched = lgas.firstWhere(
+              (l) => addr.toLowerCase().contains(l.toLowerCase()),
+              orElse: () => '');
           if (matched.isNotEmpty) {
             setState(() {
               _selectedState = state;
@@ -206,37 +229,19 @@ class _ArtisanProfileupdateWidgetState
               _selectedLga = matched;
             });
 
-            // If radius is not already set, attempt to estimate it from Nominatim boundingbox
-            if ((_model.serviceAreaRadiusController?.text ?? '').trim().isEmpty) {
-              final tryAddr = '$matched, $state, Nigeria';
-              try {
-                final geo = await LocationService.geocodePlace(tryAddr, limit: 1);
-                if (geo != null && geo['boundingbox'] is List) {
-                  final bbox = geo['boundingbox'] as List;
-                  if (bbox.length == 4) {
-                    final south = (bbox[0] as num).toDouble();
-                    final north = (bbox[1] as num).toDouble();
-                    final west = (bbox[2] as num).toDouble();
-                    final east = (bbox[3] as num).toDouble();
-                    final diagKm = _haversineDistance(south, west, north, east);
-                    final approxRadiusKm = (diagKm / 2).ceil();
-                    setState(() {
-                      _model.serviceAreaRadiusController?.text = approxRadiusKm.toString();
-                      if (geo['lat'] != null && geo['lon'] != null) {
-                        _serviceLat = (geo['lat'] as num).toDouble();
-                        _serviceLon = (geo['lon'] as num).toDouble();
-                      }
-                    });
-                  }
-                }
-              } catch (_) {}
+            // If radius is not already set, attempt to estimate it
+            if ((_model.serviceAreaRadiusController?.text ?? '')
+                .trim()
+                .isEmpty) {
+              await _updateApproximateRadius(matched, state);
             }
           }
         }
       }
 
       // If we have coordinates but no selected LGA, attempt a reverse geocode via LocationService to get a bbox and infer LGA
-      if ((_serviceLat != null && _serviceLon != null) && (_selectedLga == null || _selectedLga!.isEmpty)) {
+      if ((_serviceLat != null && _serviceLon != null) &&
+          (_selectedLga == null || _selectedLga!.isEmpty)) {
         try {
           final q = '${_serviceLat},${_serviceLon}';
           final res = await LocationService.geocodePlace(q, limit: 1);
@@ -245,7 +250,9 @@ class _ArtisanProfileupdateWidgetState
             final state = _statesList.isNotEmpty ? _statesList.first : null;
             if (state != null) {
               final lgas = _statesLgas[state] ?? [];
-              final matched = lgas.firstWhere((l) => addrFromGeo.toLowerCase().contains(l.toLowerCase()), orElse: () => '');
+              final matched = lgas.firstWhere(
+                  (l) => addrFromGeo.toLowerCase().contains(l.toLowerCase()),
+                  orElse: () => '');
               if (matched.isNotEmpty) {
                 setState(() {
                   _selectedState = state;
@@ -253,78 +260,76 @@ class _ArtisanProfileupdateWidgetState
                   _selectedLga = matched;
                 });
 
-                // If radius is not already set, try to estimate using bounding box returned by reverse geocode
-                if ((_model.serviceAreaRadiusController?.text ?? '').trim().isEmpty) {
-                  try {
-                    final tryAddr = '$matched, $state, Nigeria';
-                    final geo2 = await LocationService.geocodePlace(tryAddr, limit: 1);
-                    if (geo2 != null && geo2['boundingbox'] is List) {
-                      final bb = geo2['boundingbox'] as List;
-                      if (bb.length == 4) {
-                        final south = (bb[0] as num).toDouble();
-                        final north = (bb[1] as num).toDouble();
-                        final west = (bb[2] as num).toDouble();
-                        final east = (bb[3] as num).toDouble();
-                        final diagKm = _haversineDistance(south, west, north, east);
-                        final approxRadiusKm = (diagKm / 2).ceil();
-                        setState(() {
-                          _model.serviceAreaRadiusController?.text = approxRadiusKm.toString();
-                          if (geo2['lat'] != null && geo2['lon'] != null) {
-                            _serviceLat = (geo2['lat'] as num).toDouble();
-                            _serviceLon = (geo2['lon'] as num).toDouble();
-                          }
-                        });
-                      }
-                    }
-                  } catch (_) {}
+                // If radius is not already set, try to estimate
+                if ((_model.serviceAreaRadiusController?.text ?? '')
+                    .trim()
+                    .isEmpty) {
+                  await _updateApproximateRadius(matched, state);
                 }
               }
             }
           }
         } catch (e) {
-          if (kDebugMode) debugPrint('Failed to load states/lgas json via LocationService: $e');
+          if (kDebugMode)
+            debugPrint(
+                'Failed to load states/lgas json via LocationService: $e');
         }
       }
-
     } catch (e) {
-      if (kDebugMode) debugPrint('Failed to load states/lgas json via LocationService: $e');
+      if (kDebugMode)
+        debugPrint('Failed to load states/lgas json via LocationService: $e');
     }
   }
 
-    Future<void> _geocodeAddress(String address) async {
+  Future<void> _geocodeAddress(String address) async {
     if (address.trim().isEmpty) return;
-    setState(() { _isGeocoding = true; _serviceLat = null; _serviceLon = null; });
+    setState(() {
+      _isGeocoding = true;
+      _serviceLat = null;
+      _serviceLon = null;
+    });
     try {
       final key = GOOGLE_MAPS_API_KEY;
       if (key.isEmpty) return;
       final q = Uri.encodeComponent(address);
-      final url = Uri.parse('https://maps.googleapis.com/maps/api/geocode/json?address=$q&key=$key');
+      final url = Uri.parse(
+          'https://maps.googleapis.com/maps/api/geocode/json?address=$q&key=$key');
       final resp = await http.get(url).timeout(const Duration(seconds: 12));
       if (resp.statusCode == 200 && resp.body.isNotEmpty) {
         final body = jsonDecode(resp.body);
-        if (body is Map && body['results'] is List && (body['results'] as List).isNotEmpty) {
+        if (body is Map &&
+            body['results'] is List &&
+            (body['results'] as List).isNotEmpty) {
           final res = (body['results'] as List).first;
-          if (res is Map && res['geometry'] is Map && res['geometry']['location'] is Map) {
+          if (res is Map &&
+              res['geometry'] is Map &&
+              res['geometry']['location'] is Map) {
             final loc = res['geometry']['location'];
             final lat = loc['lat'];
             final lon = loc['lng'];
             if (lat is num && lon is num) {
-              setState(() { _serviceLat = lat.toDouble(); _serviceLon = lon.toDouble(); });
+              setState(() {
+                _serviceLat = lat.toDouble();
+                _serviceLon = lon.toDouble();
+              });
             }
           }
         }
       } else {
-        if (mounted && kDebugMode) debugPrint('Geocode failed (${resp.statusCode}): ${resp.body}');
+        if (mounted && kDebugMode)
+          debugPrint('Geocode failed (${resp.statusCode}): ${resp.body}');
         // Present a short, friendly message to the user
-        _showUserError('Could not look up the address. Please check it and try again.');
+        _showUserError(
+            'Could not look up the address. Please check it and try again.');
       }
     } catch (e) {
       if (mounted && kDebugMode) debugPrint('Geocode error: $e');
-      _showUserError('Location lookup failed. Please check your connection and try again.');
+      _showUserError(
+          'Location lookup failed. Please check your connection and try again.');
     } finally {
       if (mounted) setState(() => _isGeocoding = false);
     }
-    }
+  }
 
   // Apply structured prefills to visible UI controls (use after initial loads)
   void _applyPrefillsToUI() {
@@ -343,40 +348,52 @@ class _ArtisanProfileupdateWidgetState
         if (coords is List && coords.length >= 2) {
           final lon = coords[0];
           final lat = coords[1];
-          _serviceLon = (lon is num) ? lon.toDouble() : double.tryParse(lon.toString());
-          _serviceLat = (lat is num) ? lat.toDouble() : double.tryParse(lat.toString());
+          _serviceLon =
+              (lon is num) ? lon.toDouble() : double.tryParse(lon.toString());
+          _serviceLat =
+              (lat is num) ? lat.toDouble() : double.tryParse(lat.toString());
         }
 
         // If we have an address, attempt to match it to a known state/LGA list
-        final addrText = (_model.serviceAreaAddressController?.text ?? '').trim();
+        final addrText =
+            (_model.serviceAreaAddressController?.text ?? '').trim();
         if (addrText.isNotEmpty && _statesList.isNotEmpty) {
           final state = _statesList.first;
           final lgas = _statesLgas[state] ?? [];
-          final matched = lgas.firstWhere((l) => addrText.toLowerCase().contains(l.toLowerCase()), orElse: () => '');
+          final matched = lgas.firstWhere(
+              (l) => addrText.toLowerCase().contains(l.toLowerCase()),
+              orElse: () => '');
           if (matched.isNotEmpty) {
-            if (mounted) setState(() {
-              _selectedState = state;
-              _lgasForSelectedState = List<String>.from(lgas);
-              _selectedLga = matched;
-            });
+            if (mounted)
+              setState(() {
+                _selectedState = state;
+                _lgasForSelectedState = List<String>.from(lgas);
+                _selectedLga = matched;
+              });
             return;
           }
         }
 
         // If we had coords but haven't set LGA, try reverse geocode to infer
-        if ((_serviceLat != null && _serviceLon != null) && (_selectedLga == null || _selectedLga!.isEmpty)) {
-          LocationService.geocodePlace('${_serviceLat},${_serviceLon}', limit: 1).then((res) {
+        if ((_serviceLat != null && _serviceLon != null) &&
+            (_selectedLga == null || _selectedLga!.isEmpty)) {
+          LocationService.geocodePlace('${_serviceLat},${_serviceLon}',
+                  limit: 1)
+              .then((res) {
             final display = (res?['displayName']?.toString() ?? '').trim();
             if (display.isNotEmpty && _statesList.isNotEmpty) {
               final state = _statesList.first;
               final lgas = _statesLgas[state] ?? [];
-              final matched = lgas.firstWhere((l) => display.toLowerCase().contains(l.toLowerCase()), orElse: () => '');
+              final matched = lgas.firstWhere(
+                  (l) => display.toLowerCase().contains(l.toLowerCase()),
+                  orElse: () => '');
               if (matched.isNotEmpty) {
-                if (mounted) setState(() {
-                  _selectedState = state;
-                  _lgasForSelectedState = List<String>.from(lgas);
-                  _selectedLga = matched;
-                });
+                if (mounted)
+                  setState(() {
+                    _selectedState = state;
+                    _lgasForSelectedState = List<String>.from(lgas);
+                    _selectedLga = matched;
+                  });
               }
             }
           }).catchError((_) {});
@@ -401,34 +418,49 @@ class _ArtisanProfileupdateWidgetState
           final img = p['profileImage'];
           if (img is Map && img['url'] != null) {
             _formData['profileImage'] = img['url'].toString();
-          } else if (p['profileImage'] is String && p['profileImage'].toString().startsWith('http')) {
+          } else if (p['profileImage'] is String &&
+              p['profileImage'].toString().startsWith('http')) {
             _formData['profileImage'] = p['profileImage'] as String;
           }
         } catch (_) {}
 
         // identity fields
-        if ((_model.fullNameController?.text ?? '').isEmpty) _model.fullNameController?.text = (p['name'] ?? p['fullName'] ?? p['username'] ?? '').toString();
-        if ((_model.emailController?.text ?? '').isEmpty) _model.emailController?.text = (p['email'] ?? '').toString();
-        if ((_model.phoneController?.text ?? '').isEmpty) _model.phoneController?.text = (p['phone'] ?? p['telephone'] ?? '').toString();
+        if ((_model.fullNameController?.text ?? '').isEmpty)
+          _model.fullNameController?.text =
+              (p['name'] ?? p['fullName'] ?? p['username'] ?? '').toString();
+        if ((_model.emailController?.text ?? '').isEmpty)
+          _model.emailController?.text = (p['email'] ?? '').toString();
+        if ((_model.phoneController?.text ?? '').isEmpty)
+          _model.phoneController?.text =
+              (p['phone'] ?? p['telephone'] ?? '').toString();
 
         // trades/service prefill and category matching
         try {
           if ((_model.tradeController?.text ?? '').isEmpty) {
-            if (p['trade'] is List) _model.tradeController?.text = (p['trade'] as List).map((e) => e.toString()).join(',');
-            else if (p['trade'] is String) _model.tradeController?.text = p['trade'];
+            if (p['trade'] is List)
+              _model.tradeController?.text =
+                  (p['trade'] as List).map((e) => e.toString()).join(',');
+            else if (p['trade'] is String)
+              _model.tradeController?.text = p['trade'];
           }
 
           final preText = (_model.tradeController?.text ?? '').trim();
           if (preText.isNotEmpty && _jobCategories.isNotEmpty) {
-            final first = preText.split(',').map((s) => s.trim()).firstWhere((s) => s.isNotEmpty, orElse: () => '');
+            final first = preText
+                .split(',')
+                .map((s) => s.trim())
+                .firstWhere((s) => s.isNotEmpty, orElse: () => '');
             if (first.isNotEmpty) {
               final match = _jobCategories.firstWhere((c) {
-                final name = (c['name'] ?? c['title'] ?? '').toString().toLowerCase();
+                final name =
+                    (c['name'] ?? c['title'] ?? '').toString().toLowerCase();
                 return name == first.toLowerCase();
               }, orElse: () => {});
-              if (match is Map && ((match['_id'] ?? match['id'] ?? '')?.toString() ?? '').isNotEmpty) {
-                _selectedCategoryId = (match['_id'] ?? match['id']).toString();
-                _selectedCategoryName = (match['name'] ?? match['title']).toString();
+              final matchId = (match['_id'] ?? match['id'] ?? '').toString();
+              if (matchId.isNotEmpty) {
+                _selectedCategoryId = matchId;
+                _selectedCategoryName =
+                    (match['name'] ?? match['title']).toString();
                 _model.tradeController?.text = _selectedCategoryName ?? '';
               }
             }
@@ -439,16 +471,35 @@ class _ArtisanProfileupdateWidgetState
 
         // other simple prefills
         try {
-          if ((_model.experienceController?.text ?? '').isEmpty) _model.experienceController?.text = (p['experience'] ?? '').toString();
-          if ((_model.certificationsController?.text ?? '').isEmpty) _model.certificationsController?.text = (p['certifications'] is List ? (p['certifications'] as List).map((e)=>e.toString()).join(',') : (p['certifications'] ?? '').toString());
-          if ((_model.bioController?.text ?? '').isEmpty) _model.bioController?.text = (p['bio'] ?? '').toString();
-          if ((_model.pricingPerHourController?.text ?? '').isEmpty) _model.pricingPerHourController?.text = (p['pricing']?['perHour'] ?? '').toString();
-          if ((_model.pricingPerJobController?.text ?? '').isEmpty) _model.pricingPerJobController?.text = (p['pricing']?['perJob'] ?? '').toString();
-          if ((_model.availabilityController?.text ?? '').isEmpty && p['availability'] is List) _model.availabilityController?.text = (p['availability'] as List).map((e)=>e.toString()).join(',');
+          if ((_model.experienceController?.text ?? '').isEmpty)
+            _model.experienceController?.text =
+                (p['experience'] ?? '').toString();
+          if ((_model.certificationsController?.text ?? '').isEmpty)
+            _model.certificationsController?.text = (p['certifications'] is List
+                ? (p['certifications'] as List)
+                    .map((e) => e.toString())
+                    .join(',')
+                : (p['certifications'] ?? '').toString());
+          if ((_model.bioController?.text ?? '').isEmpty)
+            _model.bioController?.text = (p['bio'] ?? '').toString();
+          if ((_model.pricingPerHourController?.text ?? '').isEmpty)
+            _model.pricingPerHourController?.text =
+                (p['pricing']?['perHour'] ?? '').toString();
+          if ((_model.pricingPerJobController?.text ?? '').isEmpty)
+            _model.pricingPerJobController?.text =
+                (p['pricing']?['perJob'] ?? '').toString();
+          if ((_model.availabilityController?.text ?? '').isEmpty &&
+              p['availability'] is List)
+            _model.availabilityController?.text =
+                (p['availability'] as List).map((e) => e.toString()).join(',');
           // Parse availability into structured list so UI chips are visible when editing
           final availText = (_model.availabilityController?.text ?? '').trim();
           if (availText.isNotEmpty) {
-            final parts = availText.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+            final parts = availText
+                .split(',')
+                .map((s) => s.trim())
+                .where((s) => s.isNotEmpty)
+                .toList();
             _availabilityList = List<String>.from(parts);
             // try to parse first entry into selected day & time pickers: format 'Day HH:mm-HH:mm'
             try {
@@ -457,11 +508,15 @@ class _ArtisanProfileupdateWidgetState
               if (segs.length >= 2) {
                 final day = segs.first;
                 final times = segs.sublist(1).join(' ');
-                final timesParts = times.split('-').map((s) => s.trim()).toList();
+                final timesParts =
+                    times.split('-').map((s) => s.trim()).toList();
                 if (timesParts.length == 2) {
                   final parseTime = (String t) {
                     final tt = t.split(':');
-                    if (tt.length >= 2) return TimeOfDay(hour: int.tryParse(tt[0]) ?? 0, minute: int.tryParse(tt[1]) ?? 0);
+                    if (tt.length >= 2)
+                      return TimeOfDay(
+                          hour: int.tryParse(tt[0]) ?? 0,
+                          minute: int.tryParse(tt[1]) ?? 0);
                     return null;
                   };
                   final sT = parseTime(timesParts[0]);
@@ -484,7 +539,9 @@ class _ArtisanProfileupdateWidgetState
                 'perHour': p['pricing']?['perHour'],
                 'perJob': p['pricing']?['perJob'],
               };
-            } else if ((_model.pricingPerHourController?.text ?? '').isNotEmpty || (_model.pricingPerJobController?.text ?? '').isNotEmpty) {
+            } else if ((_model.pricingPerHourController?.text ?? '')
+                    .isNotEmpty ||
+                (_model.pricingPerJobController?.text ?? '').isNotEmpty) {
               _formData['pricing'] = {
                 'perHour': (_model.pricingPerHourController?.text ?? '').trim(),
                 'perJob': (_model.pricingPerJobController?.text ?? '').trim(),
@@ -493,7 +550,10 @@ class _ArtisanProfileupdateWidgetState
 
             // availability
             if (p['availability'] is List) {
-              _formData['availability'] = (p['availability'] as List).map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
+              _formData['availability'] = (p['availability'] as List)
+                  .map((e) => e.toString())
+                  .where((s) => s.isNotEmpty)
+                  .toList();
             } else if (_availabilityList.isNotEmpty) {
               _formData['availability'] = List<String>.from(_availabilityList);
             }
@@ -501,27 +561,48 @@ class _ArtisanProfileupdateWidgetState
             // serviceArea
             final sa = p['serviceArea'];
             if (sa is Map) {
-              final addrVal = (sa['address'] ?? sa['addr'] ?? sa['display'] ?? '').toString();
-              final radiusVal = sa['radius'] ?? sa['r'] ?? sa['distance'] ?? sa['km'];
-              final coordLat = sa['lat'] ?? sa['latitude'] ?? sa['center']?['lat'];
-              final coordLon = sa['lon'] ?? sa['longitude'] ?? sa['center']?['lon'];
-              final saMap = <String,dynamic>{};
+              final addrVal =
+                  (sa['address'] ?? sa['addr'] ?? sa['display'] ?? '')
+                      .toString();
+              final radiusVal =
+                  sa['radius'] ?? sa['r'] ?? sa['distance'] ?? sa['km'];
+              final coordLat =
+                  sa['lat'] ?? sa['latitude'] ?? sa['center']?['lat'];
+              final coordLon =
+                  sa['lon'] ?? sa['longitude'] ?? sa['center']?['lon'];
+              final saMap = <String, dynamic>{};
               if (addrVal.isNotEmpty) saMap['address'] = addrVal;
-              if (radiusVal != null && radiusVal.toString().isNotEmpty) saMap['radius'] = radiusVal;
-              if (coordLat != null && coordLon != null) saMap['coordinates'] = [(coordLon is num) ? coordLon : double.tryParse(coordLon.toString()), (coordLat is num) ? coordLat : double.tryParse(coordLat.toString())];
+              if (radiusVal != null && radiusVal.toString().isNotEmpty)
+                saMap['radius'] = radiusVal;
+              if (coordLat != null && coordLon != null)
+                saMap['coordinates'] = [
+                  (coordLon is num)
+                      ? coordLon
+                      : double.tryParse(coordLon.toString()),
+                  (coordLat is num)
+                      ? coordLat
+                      : double.tryParse(coordLat.toString())
+                ];
               if (saMap.isNotEmpty) _formData['serviceArea'] = saMap;
             } else {
               // fallback to controllers if they were filled earlier
-              if ((_model.serviceAreaAddressController?.text ?? '').isNotEmpty || (_model.serviceAreaRadiusController?.text ?? '').isNotEmpty) {
-                final saMap = <String,dynamic>{};
-                if ((_model.serviceAreaAddressController?.text ?? '').isNotEmpty) saMap['address'] = _model.serviceAreaAddressController?.text.trim();
-                if ((_model.serviceAreaRadiusController?.text ?? '').isNotEmpty) saMap['radius'] = _model.serviceAreaRadiusController?.text.trim();
-                if (_serviceLat != null && _serviceLon != null) saMap['coordinates'] = [_serviceLon, _serviceLat];
+              if ((_model.serviceAreaAddressController?.text ?? '')
+                      .isNotEmpty ||
+                  (_model.serviceAreaRadiusController?.text ?? '').isNotEmpty) {
+                final saMap = <String, dynamic>{};
+                if ((_model.serviceAreaAddressController?.text ?? '')
+                    .isNotEmpty)
+                  saMap['address'] =
+                      _model.serviceAreaAddressController?.text.trim();
+                if ((_model.serviceAreaRadiusController?.text ?? '').isNotEmpty)
+                  saMap['radius'] =
+                      _model.serviceAreaRadiusController?.text.trim();
+                if (_serviceLat != null && _serviceLon != null)
+                  saMap['coordinates'] = [_serviceLon, _serviceLat];
                 if (saMap.isNotEmpty) _formData['serviceArea'] = saMap;
               }
             }
           } catch (_) {}
-
         } catch (e) {
           if (mounted && kDebugMode) debugPrint('artisan prefill error: $e');
         }
@@ -533,8 +614,10 @@ class _ArtisanProfileupdateWidgetState
           final lat = sa['lat'] ?? sa['latitude'] ?? sa['center']?['lat'];
           final lon = sa['lon'] ?? sa['longitude'] ?? sa['center']?['lon'];
           if (lat != null && lon != null) {
-            _serviceLat = (lat is num) ? lat.toDouble() : double.tryParse(lat.toString());
-            _serviceLon = (lon is num) ? lon.toDouble() : double.tryParse(lon.toString());
+            _serviceLat =
+                (lat is num) ? lat.toDouble() : double.tryParse(lat.toString());
+            _serviceLon =
+                (lon is num) ? lon.toDouble() : double.tryParse(lon.toString());
           }
         }
       } catch (_) {}
@@ -543,24 +626,27 @@ class _ArtisanProfileupdateWidgetState
       try {
         final rawPortfolio = p['portfolio'];
         if (rawPortfolio is List && rawPortfolio.isNotEmpty) {
-          final items = <Map<String,dynamic>>[];
+          final items = <Map<String, dynamic>>[];
           for (final it in rawPortfolio) {
             if (it is Map) {
               final title = it['title']?.toString();
               final desc = it['description']?.toString();
-              final images = <Map<String,String>>[];
+              final images = <Map<String, String>>[];
               if (it['images'] is List) {
                 for (final im in (it['images'] as List)) {
                   if (im is Map) {
                     final url = (im['url'] ?? im['src'] ?? '').toString();
-                    final pid = (im['public_id'] ?? im['publicId'] ?? '').toString();
-                    if (url.isNotEmpty) images.add({'url': url, 'public_id': pid});
+                    final pid =
+                        (im['public_id'] ?? im['publicId'] ?? '').toString();
+                    if (url.isNotEmpty)
+                      images.add({'url': url, 'public_id': pid});
                   } else if (im is String) {
                     images.add({'url': im, 'public_id': ''});
                   }
                 }
               }
-              items.add({'title': title, 'description': desc, 'images': images});
+              items
+                  .add({'title': title, 'description': desc, 'images': images});
             }
           }
           _remotePortfolioItems = items;
@@ -582,8 +668,9 @@ class _ArtisanProfileupdateWidgetState
     setState(() {
       if (itemIndex >= 0 && itemIndex < _remotePortfolioItems.length) {
         final imgs = (_remotePortfolioItems[itemIndex]['images'] is List)
-            ? List<Map<String, dynamic>>.from(_remotePortfolioItems[itemIndex]['images'])
-            : <Map<String,dynamic>>[];
+            ? List<Map<String, dynamic>>.from(
+                _remotePortfolioItems[itemIndex]['images'])
+            : <Map<String, dynamic>>[];
         if (imageIndex >= 0 && imageIndex < imgs.length) {
           imgs.removeAt(imageIndex);
           _remotePortfolioItems[itemIndex]['images'] = imgs;
@@ -591,8 +678,12 @@ class _ArtisanProfileupdateWidgetState
         // If an item has no images and no title/description, consider removing the item entirely
         final title = _remotePortfolioItems[itemIndex]['title'];
         final desc = _remotePortfolioItems[itemIndex]['description'];
-        final remaining = (_remotePortfolioItems[itemIndex]['images'] is List) ? (_remotePortfolioItems[itemIndex]['images'] as List).length : 0;
-        if ((title == null || title.toString().trim().isEmpty) && (desc == null || desc.toString().trim().isEmpty) && remaining == 0) {
+        final remaining = (_remotePortfolioItems[itemIndex]['images'] is List)
+            ? (_remotePortfolioItems[itemIndex]['images'] as List).length
+            : 0;
+        if ((title == null || title.toString().trim().isEmpty) &&
+            (desc == null || desc.toString().trim().isEmpty) &&
+            remaining == 0) {
           _remotePortfolioItems.removeAt(itemIndex);
         }
       }
@@ -601,87 +692,126 @@ class _ArtisanProfileupdateWidgetState
 
   // Save profile: collects fields and calls UserService.updateProfile
   Future<void> _saveProfile() async {
-     setState(() {
-       _isSaving = true;
-       _error = null;
-     });
+    setState(() {
+      _isSaving = true;
+      _error = null;
+    });
 
-     try {
-       // Build artisan payload from accumulated _formData (primary source), merge missing controller values
-       final payload = Map<String, dynamic>.from(_formData);
+    try {
+      // Build artisan payload from accumulated _formData (primary source), merge missing controller values
+      final payload = Map<String, dynamic>.from(_formData);
       // Prepare holder for server response; declared early so multipart branch can assign to it.
       Map<String, dynamic>? updated;
-       // Top-level identity fields (controllers override only if set on controllers)
-       if ((_model.fullNameController?.text ?? '').isNotEmpty) payload['name'] = _model.fullNameController!.text.trim();
-       if ((_model.emailController?.text ?? '').isNotEmpty) payload['email'] = _model.emailController!.text.trim();
-       if ((_model.phoneController?.text ?? '').isNotEmpty) payload['phone'] = _model.phoneController!.text.trim();
-       if ((_model.passwordController?.text ?? '').isNotEmpty) payload['password'] = _model.passwordController!.text.trim();
+      // Top-level identity fields (controllers override only if set on controllers)
+      if ((_model.fullNameController?.text ?? '').isNotEmpty)
+        payload['name'] = _model.fullNameController!.text.trim();
+      if ((_model.emailController?.text ?? '').isNotEmpty)
+        payload['email'] = _model.emailController!.text.trim();
+      if ((_model.phoneController?.text ?? '').isNotEmpty)
+        payload['phone'] = _model.phoneController!.text.trim();
+      if ((_model.passwordController?.text ?? '').isNotEmpty)
+        payload['password'] = _model.passwordController!.text.trim();
 
-       // Ensure artisan-specific fields are present (fall back to controllers if needed)
-       // Handle trade: prefer selected category id/name mapping when available
-       if (payload['trade'] == null || (payload['trade'] is List && (payload['trade'] as List).isEmpty)) {
-         if (_selectedCategoryId != null && _selectedCategoryId!.isNotEmpty) {
-           // send the selected category name as the trade array so backend remains compatible
-           final name = _selectedCategoryName ?? _jobCategories.firstWhere((c) => (c['_id'] ?? c['id'])?.toString() == _selectedCategoryId, orElse: () => {})['name']?.toString() ?? '';
-           if (name.isNotEmpty) payload['trade'] = [name];
-         } else if ((_model.tradeController?.text ?? '').isNotEmpty) {
-           payload['trade'] = _model.tradeController!.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
-         }
-       }
-       if (payload['experience'] == null) {
-         if ((_model.experienceController?.text ?? '').isNotEmpty) {
-           final v = num.tryParse(_model.experienceController!.text.trim());
-           if (v != null) payload['experience'] = v;
-         }
-       }
-       if (payload['certifications'] == null || (payload['certifications'] is List && (payload['certifications'] as List).isEmpty)) {
-         if ((_model.certificationsController?.text ?? '').isNotEmpty) {
-           payload['certifications'] = _model.certificationsController!.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
-         }
-       }
-       if (payload['bio'] == null || (payload['bio'] is String && (payload['bio'] as String).isEmpty)) {
-         if ((_model.bioController?.text ?? '').isNotEmpty) payload['bio'] = _model.bioController!.text.trim();
-       }
+      // Ensure artisan-specific fields are present (fall back to controllers if needed)
+      // Handle trade: prefer selected category id/name mapping when available
+      if (payload['trade'] == null ||
+          (payload['trade'] is List && (payload['trade'] as List).isEmpty)) {
+        if (_selectedCategoryId != null && _selectedCategoryId!.isNotEmpty) {
+          // send the selected category name as the trade array so backend remains compatible
+          final name = _selectedCategoryName ??
+              _jobCategories
+                  .firstWhere(
+                      (c) =>
+                          (c['_id'] ?? c['id'])?.toString() ==
+                          _selectedCategoryId,
+                      orElse: () => {})['name']
+                  ?.toString() ??
+              '';
+          if (name.isNotEmpty) payload['trade'] = [name];
+        } else if ((_model.tradeController?.text ?? '').isNotEmpty) {
+          payload['trade'] = _model.tradeController!.text
+              .split(',')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList();
+        }
+      }
+      if (payload['experience'] == null) {
+        if ((_model.experienceController?.text ?? '').isNotEmpty) {
+          final v = num.tryParse(_model.experienceController!.text.trim());
+          if (v != null) payload['experience'] = v;
+        }
+      }
+      if (payload['certifications'] == null ||
+          (payload['certifications'] is List &&
+              (payload['certifications'] as List).isEmpty)) {
+        if ((_model.certificationsController?.text ?? '').isNotEmpty) {
+          payload['certifications'] = _model.certificationsController!.text
+              .split(',')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList();
+        }
+      }
+      if (payload['bio'] == null ||
+          (payload['bio'] is String && (payload['bio'] as String).isEmpty)) {
+        if ((_model.bioController?.text ?? '').isNotEmpty)
+          payload['bio'] = _model.bioController!.text.trim();
+      }
 
-       // Pricing
-       if (payload['pricing'] == null) payload['pricing'] = {};
-       final phFromData = payload['pricing']?['perHour'];
-       final pjFromData = payload['pricing']?['perJob'];
-       final perHour = phFromData ?? num.tryParse((_model.pricingPerHourController?.text ?? '').trim());
-       final perJob = pjFromData ?? num.tryParse((_model.pricingPerJobController?.text ?? '').trim());
-       if (perHour != null) payload['pricing']['perHour'] = perHour;
-       if (perJob != null) payload['pricing']['perJob'] = perJob;
+      // Pricing
+      if (payload['pricing'] == null) payload['pricing'] = {};
+      final phFromData = payload['pricing']?['perHour'];
+      final pjFromData = payload['pricing']?['perJob'];
+      final perHour = phFromData ??
+          num.tryParse((_model.pricingPerHourController?.text ?? '').trim());
+      final perJob = pjFromData ??
+          num.tryParse((_model.pricingPerJobController?.text ?? '').trim());
+      if (perHour != null) payload['pricing']['perHour'] = perHour;
+      if (perJob != null) payload['pricing']['perJob'] = perJob;
 
-       // Availability
-       // Availability: ensure we always send an array of strings when available.
-       // Priority: existing payload -> in-memory _availabilityList -> availabilityController text
-       List<String> availability = [];
-       try {
-         if (payload['availability'] is List) {
-           availability = List<String>.from((payload['availability'] as List).map((e) => e.toString()).where((s) => s.isNotEmpty));
-         }
-       } catch (_) {}
+      // Availability
+      // Availability: ensure we always send an array of strings when available.
+      // Priority: existing payload -> in-memory _availabilityList -> availabilityController text
+      List<String> availability = [];
+      try {
+        if (payload['availability'] is List) {
+          availability = List<String>.from((payload['availability'] as List)
+              .map((e) => e.toString())
+              .where((s) => s.isNotEmpty));
+        }
+      } catch (_) {}
 
-       if (availability.isEmpty) {
-         if (_availabilityList.isNotEmpty) {
-           availability = List<String>.from(_availabilityList);
-         } else if ((_model.availabilityController?.text ?? '').isNotEmpty) {
-           availability = (_model.availabilityController!.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList());
-         }
-       }
+      if (availability.isEmpty) {
+        if (_availabilityList.isNotEmpty) {
+          availability = List<String>.from(_availabilityList);
+        } else if ((_model.availabilityController?.text ?? '').isNotEmpty) {
+          availability = (_model.availabilityController!.text
+              .split(',')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList());
+        }
+      }
 
-       if (availability.isNotEmpty) payload['availability'] = availability;
+      if (availability.isNotEmpty) payload['availability'] = availability;
 
-       // Service area
-       if (payload['serviceArea'] == null) payload['serviceArea'] = {};
-       if ((payload['serviceArea']?['address'] ?? '').toString().isEmpty && (_model.serviceAreaAddressController?.text ?? '').isNotEmpty) payload['serviceArea']['address'] = _model.serviceAreaAddressController!.text.trim();
-       if ((payload['serviceArea']?['radius'] ?? '').toString().isEmpty) {
-         final r = num.tryParse((_model.serviceAreaRadiusController?.text ?? '').trim());
-         if (r != null) payload['serviceArea']['radius'] = r;
-       }
-       if (payload['serviceArea']?['coordinates'] == null && _serviceLon != null && _serviceLat != null) {
-         payload['serviceArea']['coordinates'] = [_serviceLon, _serviceLat];
-       }
+      // Service area
+      if (payload['serviceArea'] == null) payload['serviceArea'] = {};
+      if ((payload['serviceArea']?['address'] ?? '').toString().isEmpty &&
+          (_model.serviceAreaAddressController?.text ?? '').isNotEmpty)
+        payload['serviceArea']['address'] =
+            _model.serviceAreaAddressController!.text.trim();
+      if ((payload['serviceArea']?['radius'] ?? '').toString().isEmpty) {
+        final r = num.tryParse(
+            (_model.serviceAreaRadiusController?.text ?? '').trim());
+        if (r != null) payload['serviceArea']['radius'] = r;
+      }
+      if (payload['serviceArea']?['coordinates'] == null &&
+          _serviceLon != null &&
+          _serviceLat != null) {
+        payload['serviceArea']['coordinates'] = [_serviceLon, _serviceLat];
+      }
 
       // Validate minimal required fields (name, email, phone still required)
       // Per API docs: artisan profile requires trade and experience. Identity fields
@@ -693,15 +823,18 @@ class _ArtisanProfileupdateWidgetState
         final expText = (_model.experienceController?.text ?? '').trim();
         if (expText.isEmpty) throw Exception('Experience (years) is required');
         final expNum = num.tryParse(expText);
-        if (expNum == null) throw Exception('Experience must be a number (years)');
+        if (expNum == null)
+          throw Exception('Experience must be a number (years)');
         payload['experience'] = expNum;
       }
 
       // Pricing validation: if user entered pricing ensure numeric
       final perHourText = (_model.pricingPerHourController?.text ?? '').trim();
       final perJobText = (_model.pricingPerJobController?.text ?? '').trim();
-      if (perHourText.isNotEmpty && num.tryParse(perHourText) == null) throw Exception('Per hour pricing must be a number');
-      if (perJobText.isNotEmpty && num.tryParse(perJobText) == null) throw Exception('Per job pricing must be a number');
+      if (perHourText.isNotEmpty && num.tryParse(perHourText) == null)
+        throw Exception('Per hour pricing must be a number');
+      if (perJobText.isNotEmpty && num.tryParse(perJobText) == null)
+        throw Exception('Per job pricing must be a number');
 
       // Attach remote portfolio metadata (reflect deletions or changed titles) so server can persist
       if (_remotePortfolioItems.isNotEmpty) {
@@ -722,7 +855,8 @@ class _ArtisanProfileupdateWidgetState
             'title': it['title']?.toString(),
             'description': it['description']?.toString(),
             'images': images,
-            'beforeAfter': (it['beforeAfter'] is bool) ? it['beforeAfter'] : false,
+            'beforeAfter':
+                (it['beforeAfter'] is bool) ? it['beforeAfter'] : false,
           };
         }).toList();
       }
@@ -741,11 +875,15 @@ class _ArtisanProfileupdateWidgetState
         }
         bool sent = false;
         try {
-          if (kDebugMode) debugPrint('Attempting multipart profile update with fileMap keys=${fileMap.keys.toList()}');
+          if (kDebugMode)
+            debugPrint(
+                'Attempting multipart profile update with fileMap keys=${fileMap.keys.toList()}');
           if (_hasArtisanProfile) {
-            updated = await ArtistService.updateMyProfile(payload, fileMap: fileMap);
+            updated =
+                await ArtistService.updateMyProfile(payload, fileMap: fileMap);
           } else {
-            updated = await ArtistService.createMyProfile(payload, fileMap: fileMap);
+            updated =
+                await ArtistService.createMyProfile(payload, fileMap: fileMap);
           }
           sent = updated != null;
         } catch (e) {
@@ -756,16 +894,22 @@ class _ArtisanProfileupdateWidgetState
         if (!sent) {
           // Fallback: upload via attachments/direct Cloudinary and include returned URLs in payload
           try {
-            if (kDebugMode) debugPrint('Falling back to attachments/direct upload for ${localPaths.length} files...');
-            final uploaded = await ArtistService.uploadFilesToAttachments(localPaths);
-            if (kDebugMode) debugPrint('Profile update: uploaded results -> $uploaded');
+            if (kDebugMode)
+              debugPrint(
+                  'Falling back to attachments/direct upload for ${localPaths.length} files...');
+            final uploaded =
+                await ArtistService.uploadFilesToAttachments(localPaths);
+            if (kDebugMode)
+              debugPrint('Profile update: uploaded results -> $uploaded');
             final uploadedUrls = <String>[];
             for (final u in uploaded) {
               final url = (u['url'] ?? '').toString();
               if (url.isNotEmpty) uploadedUrls.add(url);
             }
             if (uploadedUrls.isNotEmpty) {
-              payload['portfolio'] = (payload['portfolio'] is List) ? List.from(payload['portfolio']) : [];
+              payload['portfolio'] = (payload['portfolio'] is List)
+                  ? List.from(payload['portfolio'])
+                  : [];
               payload['portfolio'].add({
                 'title': 'Mobile Uploads',
                 'description': null,
@@ -774,13 +918,14 @@ class _ArtisanProfileupdateWidgetState
               });
             }
           } catch (e) {
-            if (kDebugMode) debugPrint('Profile update: uploadFilesToAttachments failed: $e');
+            if (kDebugMode)
+              debugPrint('Profile update: uploadFilesToAttachments failed: $e');
           }
         }
       }
 
-       // Remove any transient local file reference from payload — we always send JSON with URLs
-       payload.remove('localPortfolioFiles');
+      // Remove any transient local file reference from payload — we always send JSON with URLs
+      payload.remove('localPortfolioFiles');
 
       // If multipart/fallback already returned a response (updated != null),
       // skip the JSON-only request. Otherwise send the JSON payload now.
@@ -791,17 +936,25 @@ class _ArtisanProfileupdateWidgetState
           updated = await ArtistService.createMyProfile(payload);
         }
       } else {
-        if (kDebugMode) debugPrint('Skip JSON create/update because multipart path already returned a response');
+        if (kDebugMode)
+          debugPrint(
+              'Skip JSON create/update because multipart path already returned a response');
       }
 
-      if (updated == null) throw Exception(!_hasArtisanProfile ? 'Profile creation failed' : 'Profile update failed');
+      if (updated == null)
+        throw Exception(!_hasArtisanProfile
+            ? 'Profile creation failed'
+            : 'Profile update failed');
 
       try {
-        if (updated['role'] != null) await TokenStorage.saveRole(updated['role'].toString());
+        if (updated['role'] != null)
+          await TokenStorage.saveRole(updated['role'].toString());
       } catch (_) {}
 
       if (mounted) {
-        final msg = !_hasArtisanProfile ? 'Profile created successfully' : 'Profile updated successfully';
+        final msg = !_hasArtisanProfile
+            ? 'Profile created successfully'
+            : 'Profile updated successfully';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -813,7 +966,8 @@ class _ArtisanProfileupdateWidgetState
             ),
             backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
         );
         // If we just created the profile, mark that we now have one so future saves will update
@@ -823,9 +977,10 @@ class _ArtisanProfileupdateWidgetState
     } catch (e) {
       if (mounted) setState(() => _error = ErrorMessages.humanize(e));
     } finally {
-      if (mounted) setState(() {
-        _isSaving = false;
-      });
+      if (mounted)
+        setState(() {
+          _isSaving = false;
+        });
     }
   }
 
@@ -836,10 +991,10 @@ class _ArtisanProfileupdateWidgetState
   }
 
   Widget _buildStepIndicator() {
-     final theme = Theme.of(context);
-     final Color primaryColor = const Color(0xFFA20025);
+    final theme = Theme.of(context);
+    final Color primaryColor = const Color(0xFFA20025);
 
-     return Container(
+    return Container(
       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
       decoration: BoxDecoration(
         border: Border(
@@ -890,7 +1045,8 @@ class _ArtisanProfileupdateWidgetState
                                 style: TextStyle(
                                   color: isActive
                                       ? Colors.white
-                                      : theme.colorScheme.onSurface.withOpacity(0.5),
+                                      : theme.colorScheme.onSurface
+                                          .withOpacity(0.5),
                                   fontWeight: FontWeight.w600,
                                   fontSize: 16,
                                 ),
@@ -907,7 +1063,8 @@ class _ArtisanProfileupdateWidgetState
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 12,
-                          fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                          fontWeight:
+                              isActive ? FontWeight.w600 : FontWeight.normal,
                           color: isActive || isCompleted
                               ? primaryColor
                               : theme.colorScheme.onSurface.withOpacity(0.5),
@@ -953,22 +1110,24 @@ class _ArtisanProfileupdateWidgetState
     final Color primaryColor = const Color(0xFFA20025);
 
     return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 24),
-          Text(
-            'Professional Details',
-            style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w500),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Tell us about your trade and experience',
-            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface.withOpacity(0.6)),
-          ),
-          const SizedBox(height: 24),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 24),
+        Text(
+          'Professional Details',
+          style: theme.textTheme.headlineSmall
+              ?.copyWith(fontWeight: FontWeight.w500),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Tell us about your trade and experience',
+          style: theme.textTheme.bodyMedium
+              ?.copyWith(color: theme.colorScheme.onSurface.withOpacity(0.6)),
+        ),
+        const SizedBox(height: 24),
 
-          // Service (select from known job categories when available; fallback to free-text)
-          /*
+        // Service (select from known job categories when available; fallback to free-text)
+        /*
           Text('SERVICE', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: theme.colorScheme.onSurface.withOpacity(0.6))),
           const SizedBox(height: 8),
           if (_jobCategories.isNotEmpty) ...[
@@ -1028,57 +1187,102 @@ class _ArtisanProfileupdateWidgetState
             ),
           ],
           */
-          // Service input removed per request - keeping spacing
-          const SizedBox(height: 16),
+        // Service input removed per request - keeping spacing
+        const SizedBox(height: 16),
 
-          // Experience
-          Text('EXPERIENCE (years)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: theme.colorScheme.onSurface.withOpacity(0.6))),
-          const SizedBox(height: 8),
-          TextFormField(
-            controller: _model.experienceController,
-            focusNode: _model.experienceFocusNode,
-            decoration: InputDecoration(
-              hintText: 'e.g. 3',
+        // Experience
+        Text('EXPERIENCE (years)',
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: theme.colorScheme.onSurface.withOpacity(0.6))),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: _model.experienceController,
+          focusNode: _model.experienceFocusNode,
+          decoration: InputDecoration(
+            hintText: 'e.g. 3',
+            filled: true,
+            fillColor: theme.brightness == Brightness.dark
+                ? Colors.grey[900]
+                : Colors.grey[50],
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: primaryColor, width: 1.5)),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          ),
+          keyboardType: TextInputType.number,
+          cursorColor: primaryColor,
+          validator: (v) {
+            if (v == null || v.trim().isEmpty) return 'Experience is required';
+            if (num.tryParse(v.trim()) == null) return 'Enter a valid number';
+            return null;
+          },
+        ),
+        const SizedBox(height: 16),
+
+        // Certifications
+        Text('CERTIFICATIONS (comma separated)',
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: theme.colorScheme.onSurface.withOpacity(0.6))),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: _model.certificationsController,
+          focusNode: _model.certificationsFocusNode,
+          decoration: InputDecoration(
+              hintText: 'e.g. NCCER, OSHA',
               filled: true,
-              fillColor: theme.brightness == Brightness.dark ? Colors.grey[900] : Colors.grey[50],
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: primaryColor, width: 1.5)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            ),
-            keyboardType: TextInputType.number,
-            cursorColor: primaryColor,
-            validator: (v) {
-              if (v == null || v.trim().isEmpty) return 'Experience is required';
-              if (num.tryParse(v.trim()) == null) return 'Enter a valid number';
-              return null;
-            },
-          ),
-          const SizedBox(height: 16),
+              fillColor: theme.brightness == Brightness.dark
+                  ? Colors.grey[900]
+                  : Colors.grey[50],
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none),
+              focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: primaryColor, width: 1.5)),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14)),
+          cursorColor: primaryColor,
+        ),
+        const SizedBox(height: 16),
 
-          // Certifications
-          Text('CERTIFICATIONS (comma separated)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: theme.colorScheme.onSurface.withOpacity(0.6))),
-          const SizedBox(height: 8),
-          TextFormField(
-            controller: _model.certificationsController,
-            focusNode: _model.certificationsFocusNode,
-            decoration: InputDecoration(hintText: 'e.g. NCCER, OSHA', filled: true, fillColor: theme.brightness == Brightness.dark ? Colors.grey[900] : Colors.grey[50], border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: primaryColor, width: 1.5)), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14)),
-            cursorColor: primaryColor,
-          ),
-          const SizedBox(height: 16),
-
-          // Bio
-          Text('BIO', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: theme.colorScheme.onSurface.withOpacity(0.6))),
-          const SizedBox(height: 8),
-          TextFormField(
-            controller: _model.bioController,
-            focusNode: _model.bioFocusNode,
-            maxLines: 4,
-            decoration: InputDecoration(hintText: 'Short description of your services', filled: true, fillColor: theme.brightness == Brightness.dark ? Colors.grey[900] : Colors.grey[50], border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: primaryColor, width: 1.5)), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14)),
-            cursorColor: primaryColor,
-          ),
-          const SizedBox(height: 24),
-        ],
-      );
+        // Bio
+        Text('BIO',
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: theme.colorScheme.onSurface.withOpacity(0.6))),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: _model.bioController,
+          focusNode: _model.bioFocusNode,
+          maxLines: 4,
+          decoration: InputDecoration(
+              hintText: 'Short description of your services',
+              filled: true,
+              fillColor: theme.brightness == Brightness.dark
+                  ? Colors.grey[900]
+                  : Colors.grey[50],
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none),
+              focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: primaryColor, width: 1.5)),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14)),
+          cursorColor: primaryColor,
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
   }
 
   Widget _buildStep2() {
@@ -1086,19 +1290,22 @@ class _ArtisanProfileupdateWidgetState
     final Color primaryColor = const Color(0xFFA20025);
 
     return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 24),
-          Text('Pricing & Availability', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w500)),
-          const SizedBox(height: 8),
-          Text(
-            'Set your pricing structure and availability',
-            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface.withOpacity(0.6)),
-          ),
-          const SizedBox(height: 24),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 24),
+        Text('Pricing & Availability',
+            style: theme.textTheme.headlineSmall
+                ?.copyWith(fontWeight: FontWeight.w500)),
+        const SizedBox(height: 8),
+        Text(
+          'Set your pricing structure and availability',
+          style: theme.textTheme.bodyMedium
+              ?.copyWith(color: theme.colorScheme.onSurface.withOpacity(0.6)),
+        ),
+        const SizedBox(height: 24),
 
-          // Pricing per hour
-          /*
+        // Pricing per hour
+        /*
           Text('PRICING - PER HOUR', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: theme.colorScheme.onSurface.withOpacity(0.6))),
           const SizedBox(height: 8),
           TextFormField(
@@ -1122,177 +1329,249 @@ class _ArtisanProfileupdateWidgetState
           ),
           const SizedBox(height: 16),
           */
-          // Pricing fields removed per request - preserve spacing
-          const SizedBox(height: 16),
+        // Pricing fields removed per request - preserve spacing
+        const SizedBox(height: 16),
 
-          // Availability
-          Text('AVAILABILITY (choose day & time)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: theme.colorScheme.onSurface.withOpacity(0.6))),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: _selectedDay,
-                  isExpanded: true,
-                  isDense: true,
-                  iconSize: 20,
-                  items: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
-                      .map((d) => DropdownMenuItem(value: d, child: Text(d, overflow: TextOverflow.ellipsis)))
-                      .toList(),
-                  onChanged: (v) => setState(() => _selectedDay = v ?? _selectedDay),
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: theme.brightness==Brightness.dark?Colors.grey[900]:Colors.grey[50],
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  ),
+        // Availability
+        Text('AVAILABILITY (choose day & time)',
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: theme.colorScheme.onSurface.withOpacity(0.6))),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                value: _selectedDay,
+                isExpanded: true,
+                isDense: true,
+                iconSize: 20,
+                items: [
+                  'Monday',
+                  'Tuesday',
+                  'Wednesday',
+                  'Thursday',
+                  'Friday',
+                  'Saturday',
+                  'Sunday'
+                ]
+                    .map((d) => DropdownMenuItem(
+                        value: d,
+                        child: Text(d, overflow: TextOverflow.ellipsis)))
+                    .toList(),
+                onChanged: (v) =>
+                    setState(() => _selectedDay = v ?? _selectedDay),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: theme.brightness == Brightness.dark
+                      ? Colors.grey[900]
+                      : Colors.grey[50],
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
               ),
-              const SizedBox(width: 8),
-              Flexible(
-                fit: FlexFit.loose,
-                child: OutlinedButton(
-                  onPressed: _pickTimeRange,
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(0, 40),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                  child: Text(_startTime == null || _endTime == null ? 'Pick time' : '${_startTime!.format(context)} - ${_endTime!.format(context)}', overflow: TextOverflow.ellipsis),
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              fit: FlexFit.loose,
+              child: OutlinedButton(
+                onPressed: _pickTimeRange,
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 40),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
                 ),
+                child: Text(
+                    _startTime == null || _endTime == null
+                        ? 'Pick time'
+                        : '${_startTime!.format(context)} - ${_endTime!.format(context)}',
+                    overflow: TextOverflow.ellipsis),
               ),
-              const SizedBox(width: 8),
-              Flexible(
-                fit: FlexFit.loose,
-                child: ElevatedButton(
-                  onPressed: _addAvailability,
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(0, 40),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    elevation: 0,
-                  ),
-                  child: const Text('Add'),
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              fit: FlexFit.loose,
+              child: ElevatedButton(
+                onPressed: _addAvailability,
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(0, 40),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                  elevation: 0,
                 ),
+                child: const Text('Add'),
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // show chips
-          if (_availabilityList.isNotEmpty) Wrap(
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        // show chips
+        if (_availabilityList.isNotEmpty)
+          Wrap(
             spacing: 8,
-            children: _availabilityList.map((a) => Chip(
-              label: Text(a),
-              onDeleted: () => _removeAvailability(a),
-            )).toList(),
+            children: _availabilityList
+                .map((a) => Chip(
+                      label: Text(a),
+                      onDeleted: () => _removeAvailability(a),
+                    ))
+                .toList(),
           ),
-          const SizedBox(height: 8),
-           // Service area
-          Text('SERVICE AREA - State & LGA', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: theme.colorScheme.onSurface.withOpacity(0.6))),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: _selectedState,
-                  isExpanded: true,
-                  isDense: true,
-                  iconSize: 20,
-                  items: _statesList.map((s) => DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis))).toList(),
-                  onChanged: (v) {
-                    setState(() {
-                      _selectedState = v;
-                      _lgasForSelectedState = v != null ? (_statesLgas[v] ?? []) : [];
-                      _selectedLga = null;
-                      // clear auto-filled address until LGA is chosen
-                      _model.serviceAreaAddressController?.text = '';
-                      _serviceLat = null; _serviceLon = null;
-                    });
-                  },
-                  decoration: InputDecoration(hintText: 'Select state', filled: true, fillColor: theme.brightness==Brightness.dark?Colors.grey[900]:Colors.grey[50], border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
-                ),
+        const SizedBox(height: 8),
+        // Service area
+        Text('SERVICE AREA - State & LGA',
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: theme.colorScheme.onSurface.withOpacity(0.6))),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                value: _selectedState,
+                isExpanded: true,
+                isDense: true,
+                iconSize: 20,
+                items: _statesList
+                    .map((s) => DropdownMenuItem(
+                        value: s,
+                        child: Text(s, overflow: TextOverflow.ellipsis)))
+                    .toList(),
+                onChanged: (v) {
+                  setState(() {
+                    _selectedState = v;
+                    _lgasForSelectedState =
+                        v != null ? (_statesLgas[v] ?? []) : [];
+                    _selectedLga = null;
+                    // clear auto-filled address until LGA is chosen
+                    _model.serviceAreaAddressController?.text = '';
+                    _serviceLat = null;
+                    _serviceLon = null;
+                  });
+                },
+                decoration: InputDecoration(
+                    hintText: 'Select state',
+                    filled: true,
+                    fillColor: theme.brightness == Brightness.dark
+                        ? Colors.grey[900]
+                        : Colors.grey[50],
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 12)),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: _selectedLga,
-                  isExpanded: true,
-                  isDense: true,
-                  items: _lgasForSelectedState.map((s) => DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis))).toList(),
-                  onChanged: (_lgasForSelectedState.isEmpty) ? null : (v) async {
-                    setState(() {
-                      _selectedLga = v;
-                    });
-                    if (v != null && _selectedState != null) {
-                      final addr = '$v, ${_selectedState!}, Nigeria';
-                      _model.serviceAreaAddressController?.text = addr;
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                value: _selectedLga,
+                isExpanded: true,
+                isDense: true,
+                items: _lgasForSelectedState
+                    .map((s) => DropdownMenuItem(
+                        value: s,
+                        child: Text(s, overflow: TextOverflow.ellipsis)))
+                    .toList(),
+                onChanged: (_lgasForSelectedState.isEmpty)
+                    ? null
+                    : (v) async {
+                        setState(() {
+                          _selectedLga = v;
+                        });
+                        if (v != null && _selectedState != null) {
+                          final addr = '$v, ${_selectedState!}, Nigeria';
+                          _model.serviceAreaAddressController?.text = addr;
 
-                      // Attempt to geocode using LocationService (Nominatim) to obtain bounding box
-                      try {
-                        final geo = await LocationService.geocodePlace(addr, limit: 1);
-                        if (geo != null) {
-                          // if boundingbox available: [south, north, west, east]
-                          final bbox = geo['boundingbox'];
-                          if (bbox is List && bbox.length == 4) {
-                            final south = (bbox[0] as num).toDouble();
-                            final north = (bbox[1] as num).toDouble();
-                            final west = (bbox[2] as num).toDouble();
-                            final east = (bbox[3] as num).toDouble();
-                            // diagonal distance in km between (south, west) and (north, east)
-                            final diagKm = _haversineDistance(south, west, north, east);
-                            final approxRadiusKm = (diagKm / 2).ceil();
-                            // set the radius controller text
-                            _model.serviceAreaRadiusController?.text = approxRadiusKm.toString();
-                            // set lat/lon from geocode result if present
-                            if (geo['lat'] != null && geo['lon'] != null) {
-                              setState(() { _serviceLat = (geo['lat'] as num).toDouble(); _serviceLon = (geo['lon'] as num).toDouble(); });
+                          // Attempt to geocode using LocationService (Nominatim) to obtain bounding box
+                          try {
+                            final geo = await LocationService.geocodePlace(addr,
+                                limit: 1);
+                            if (geo != null) {
+                              await _updateApproximateRadius(v, _selectedState!,
+                                  geoData: geo);
+                            } else {
+                              // Fallback: call existing Google geocode to fill coords
+                              await _geocodeAddress(addr);
                             }
-                          } else {
-                            // Fallback: call existing Google geocode to fill coords
+                          } catch (e) {
+                            if (kDebugMode)
+                              debugPrint('LGA geocode/estimate failed: $e');
                             await _geocodeAddress(addr);
                           }
-                        } else {
-                          await _geocodeAddress(addr);
                         }
-                      } catch (e) {
-                        if (kDebugMode) debugPrint('LGA geocode/estimate failed: $e');
-                        await _geocodeAddress(addr);
-                      }
-                    }
-                  },
-                  disabledHint: const Text('Choose state first'),
-                  decoration: InputDecoration(hintText: 'LGA', filled: true, fillColor: theme.brightness==Brightness.dark?Colors.grey[900]:Colors.grey[50], border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
-                ),
+                      },
+                disabledHint: const Text('Choose state first'),
+                decoration: InputDecoration(
+                    hintText: 'LGA',
+                    filled: true,
+                    fillColor: theme.brightness == Brightness.dark
+                        ? Colors.grey[900]
+                        : Colors.grey[50],
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 12)),
               ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text('SERVICE AREA - ADDRESS',
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: theme.colorScheme.onSurface.withOpacity(0.6))),
+        const SizedBox(height: 8),
+        TextFormField(
+            controller: _model.serviceAreaAddressController,
+            focusNode: _model.serviceAreaAddressFocusNode,
+            decoration: InputDecoration(
+                hintText: 'Address (auto-filled from LGA)',
+                filled: true,
+                fillColor: theme.brightness == Brightness.dark
+                    ? Colors.grey[900]
+                    : Colors.grey[50],
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: primaryColor, width: 1.5)),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14)),
+            cursorColor: primaryColor),
+        const SizedBox(height: 8),
+        // Keep coordinates in the widget tree but hide them from the UI so they remain available
+        // programmatically (e.g., for form submission or geocoding) without showing to users.
+        Offstage(
+          offstage: true,
+          child: Column(
+            children: [
+              // These Text widgets are intentionally offstage. Do not remove if you rely on
+              // widget-based value extraction elsewhere; keeping them preserves state.
+              Text('Longitude: ${_serviceLon?.toStringAsFixed(6) ?? "-"}'),
+              const SizedBox(height: 4),
+              Text('Latitude: ${_serviceLat?.toStringAsFixed(6) ?? "-"}'),
             ],
           ),
-          const SizedBox(height: 12),
-          Text('SERVICE AREA - ADDRESS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: theme.colorScheme.onSurface.withOpacity(0.6))),
-          const SizedBox(height: 8),
-          TextFormField(controller: _model.serviceAreaAddressController, focusNode: _model.serviceAreaAddressFocusNode, decoration: InputDecoration(hintText: 'Address (auto-filled from LGA)', filled: true, fillColor: theme.brightness == Brightness.dark ? Colors.grey[900] : Colors.grey[50], border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: primaryColor, width: 1.5)), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14)), cursorColor: primaryColor),
-          const SizedBox(height: 8),
-          // Keep coordinates in the widget tree but hide them from the UI so they remain available
-          // programmatically (e.g., for form submission or geocoding) without showing to users.
-          Offstage(
-            offstage: true,
-            child: Column(
-              children: [
-                // These Text widgets are intentionally offstage. Do not remove if you rely on
-                // widget-based value extraction elsewhere; keeping them preserves state.
-                Text('Longitude: ${_serviceLon?.toStringAsFixed(6) ?? "-"}'),
-                const SizedBox(height: 4),
-                Text('Latitude: ${_serviceLat?.toStringAsFixed(6) ?? "-"}'),
-              ],
-            ),
-          ),
-          if (_isGeocoding) const Padding(padding: EdgeInsets.only(top:8), child: LinearProgressIndicator()),
-          const SizedBox(height: 12),
-          Text('SERVICE AREA - RADIUS (km)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: theme.colorScheme.onSurface.withOpacity(0.6))),
-          const SizedBox(height: 8),
-          TextFormField(controller: _model.serviceAreaRadiusController, focusNode: _model.serviceAreaRadiusFocusNode, decoration: InputDecoration(hintText: 'Radius in km', filled: true, fillColor: theme.brightness == Brightness.dark ? Colors.grey[900] : Colors.grey[50], border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: primaryColor, width: 1.5)), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14)), keyboardType: TextInputType.number, cursorColor: primaryColor),
-          const SizedBox(height: 24),
-        ],
-      );
+        ),
+        if (_isGeocoding)
+          const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: LinearProgressIndicator()),
+        const SizedBox(height: 24),
+      ],
+    );
   }
 
   // Step 3: Portfolio - simplified to only show remote items or an empty state
@@ -1303,9 +1582,13 @@ class _ArtisanProfileupdateWidgetState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 24),
-        Text('Portfolio', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w500)),
+        Text('Portfolio',
+            style: theme.textTheme.headlineSmall
+                ?.copyWith(fontWeight: FontWeight.w500)),
         const SizedBox(height: 8),
-        Text('A portfolio helps customers see your past work.', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface.withOpacity(0.6))),
+        Text('A portfolio helps customers see your past work.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.6))),
         const SizedBox(height: 16),
 
         if (_remotePortfolioItems.isNotEmpty) ...[
@@ -1313,22 +1596,39 @@ class _ArtisanProfileupdateWidgetState
           const SizedBox(height: 8),
           Wrap(spacing: 8, runSpacing: 8, children: [
             for (var i = 0; i < _remotePortfolioItems.length; i++)
-              for (var j = 0; j < ((_remotePortfolioItems[i]['images'] is List) ? (_remotePortfolioItems[i]['images'] as List).length : 0); j++)
+              for (var j = 0;
+                  j <
+                      ((_remotePortfolioItems[i]['images'] is List)
+                          ? (_remotePortfolioItems[i]['images'] as List).length
+                          : 0);
+                  j++)
                 Builder(builder: (context) {
                   final img = (_remotePortfolioItems[i]['images'] as List)[j];
-                  final url = (img is Map) ? (img['url']?.toString() ?? '') : img?.toString() ?? '';
+                  final url = (img is Map)
+                      ? (img['url']?.toString() ?? '')
+                      : img?.toString() ?? '';
                   return Stack(
                     children: [
-                      ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.network(url, width: 96, height: 96, fit: BoxFit.cover, errorBuilder: (c,_,__) => Container(width:96,height:96,color:Colors.grey))),
+                      ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.network(url,
+                              width: 96,
+                              height: 96,
+                              fit: BoxFit.cover,
+                              errorBuilder: (c, _, __) => Container(
+                                  width: 96, height: 96, color: Colors.grey))),
                       Positioned(
                         right: 0,
                         top: 0,
                         child: InkWell(
                           onTap: () => _removeRemoteImage(i, j),
                           child: Container(
-                            decoration: BoxDecoration(color: Colors.black.withOpacity(0.5), shape: BoxShape.circle),
+                            decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.5),
+                                shape: BoxShape.circle),
                             padding: const EdgeInsets.all(4),
-                            child: const Icon(Icons.close, size: 14, color: Colors.white),
+                            child: const Icon(Icons.close,
+                                size: 14, color: Colors.white),
                           ),
                         ),
                       ),
@@ -1350,16 +1650,26 @@ class _ArtisanProfileupdateWidgetState
             for (var i = 0; i < _localPortfolioImagePaths.length; i++)
               Stack(
                 children: [
-                  ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.file(File(_localPortfolioImagePaths[i]), width: 96, height: 96, fit: BoxFit.cover, errorBuilder: (c,_,__) => Container(width:96,height:96,color:Colors.grey))),
+                  ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.file(File(_localPortfolioImagePaths[i]),
+                          width: 96,
+                          height: 96,
+                          fit: BoxFit.cover,
+                          errorBuilder: (c, _, __) => Container(
+                              width: 96, height: 96, color: Colors.grey))),
                   Positioned(
                     right: 0,
                     top: 0,
                     child: InkWell(
                       onTap: () => _removeLocalImage(i),
                       child: Container(
-                        decoration: BoxDecoration(color: Colors.black.withOpacity(0.5), shape: BoxShape.circle),
+                        decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.5),
+                            shape: BoxShape.circle),
                         padding: const EdgeInsets.all(4),
-                        child: const Icon(Icons.close, size: 14, color: Colors.white),
+                        child: const Icon(Icons.close,
+                            size: 14, color: Colors.white),
                       ),
                     ),
                   ),
@@ -1369,29 +1679,34 @@ class _ArtisanProfileupdateWidgetState
           const SizedBox(height: 12),
         ],
 
-         // Picker button
-         Row(
-           children: [
-             Expanded(
-               child: OutlinedButton.icon(
+        // Picker button
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
                 onPressed: _filePickerAvailable ? _pickPortfolioImages : null,
                 icon: const Icon(Icons.photo_library_outlined),
-                label: Text(_filePickerAvailable ? 'Pick images' : 'Picker unavailable'),
-               ),
-             ),
-           ],
-         ),
+                label: Text(_filePickerAvailable
+                    ? 'Pick images'
+                    : 'Picker unavailable'),
+              ),
+            ),
+          ],
+        ),
         if (!_filePickerAvailable)
           Padding(
             padding: const EdgeInsets.only(top: 8.0),
-            child: Text('File picker is not available on this platform. Restart the app after installing native plugins.', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withOpacity(0.6))),
+            child: Text(
+                'File picker is not available on this platform. Restart the app after installing native plugins.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withOpacity(0.6))),
           ),
-         const SizedBox(height: 12),
-       ],
-     );
-      }
+        const SizedBox(height: 12),
+      ],
+    );
+  }
 
-    bool _validateCurrentStep() {
+  bool _validateCurrentStep() {
     // Use Form validators when available, otherwise fall back to step-specific checks
     final formValid = _formKey.currentState?.validate() ?? true;
     if (!formValid) return false;
@@ -1399,7 +1714,10 @@ class _ArtisanProfileupdateWidgetState
     switch (_currentStep) {
       case 0:
         // Require numeric experience (trade field was removed from UI)
-        final hasExperience = (_model.experienceController?.text.trim().isNotEmpty == true) && (num.tryParse(_model.experienceController!.text.trim()) != null);
+        final hasExperience =
+            (_model.experienceController?.text.trim().isNotEmpty == true) &&
+                (num.tryParse(_model.experienceController!.text.trim()) !=
+                    null);
         return hasExperience;
       case 1:
         // Intermediate step: pricing & availability — allow to proceed if fields validated by form
@@ -1410,10 +1728,9 @@ class _ArtisanProfileupdateWidgetState
       default:
         return false;
     }
+  }
 
-    }
-
-    Future<void> _nextStep() async {
+  Future<void> _nextStep() async {
     setState(() {
       _error = null;
     });
@@ -1428,26 +1745,47 @@ class _ArtisanProfileupdateWidgetState
 
     // Save current step values into the _formData accumulator so data travels across steps
     if (_currentStep == 0) {
-      _formData['trade'] = _model.tradeController?.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
-      _formData['experience'] = num.tryParse((_model.experienceController?.text ?? '').trim());
-      _formData['certifications'] = _model.certificationsController?.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      _formData['trade'] = _model.tradeController?.text
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      _formData['experience'] =
+          num.tryParse((_model.experienceController?.text ?? '').trim());
+      _formData['certifications'] = _model.certificationsController?.text
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
       _formData['bio'] = _model.bioController?.text.trim();
     } else if (_currentStep == 1) {
       // collect pricing & availability & service area into formData before final submit
-      final perHour = num.tryParse((_model.pricingPerHourController?.text ?? '').trim());
-      final perJob = num.tryParse((_model.pricingPerJobController?.text ?? '').trim());
+      final perHour =
+          num.tryParse((_model.pricingPerHourController?.text ?? '').trim());
+      final perJob =
+          num.tryParse((_model.pricingPerJobController?.text ?? '').trim());
       if (perHour != null || perJob != null) {
         _formData['pricing'] = {};
         if (perHour != null) _formData['pricing']['perHour'] = perHour;
         if (perJob != null) _formData['pricing']['perJob'] = perJob;
       }
-      if ((_model.availabilityController?.text ?? '').isNotEmpty) _formData['availability'] = _model.availabilityController!.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
-      if ((_model.serviceAreaAddressController?.text ?? '').isNotEmpty || (_model.serviceAreaRadiusController?.text ?? '').isNotEmpty) {
+      if ((_model.availabilityController?.text ?? '').isNotEmpty)
+        _formData['availability'] = _model.availabilityController!.text
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+      if ((_model.serviceAreaAddressController?.text ?? '').isNotEmpty ||
+          (_model.serviceAreaRadiusController?.text ?? '').isNotEmpty) {
         _formData['serviceArea'] = {};
-        if ((_model.serviceAreaAddressController?.text ?? '').isNotEmpty) _formData['serviceArea']['address'] = _model.serviceAreaAddressController!.text.trim();
-        final r = num.tryParse((_model.serviceAreaRadiusController?.text ?? '').trim());
+        if ((_model.serviceAreaAddressController?.text ?? '').isNotEmpty)
+          _formData['serviceArea']['address'] =
+              _model.serviceAreaAddressController!.text.trim();
+        final r = num.tryParse(
+            (_model.serviceAreaRadiusController?.text ?? '').trim());
         if (r != null) _formData['serviceArea']['radius'] = r;
-        if (_serviceLon != null && _serviceLat != null) _formData['serviceArea']['coordinates'] = [_serviceLon, _serviceLat];
+        if (_serviceLon != null && _serviceLat != null)
+          _formData['serviceArea']['coordinates'] = [_serviceLon, _serviceLat];
       }
     }
 
@@ -1458,15 +1796,20 @@ class _ArtisanProfileupdateWidgetState
         if (_currentStep == 1) {
           // step 1 shows pricing/availability/service area — prefill if we have data
           if (_formData['pricing'] is Map) {
-            _model.pricingPerHourController?.text = (_formData['pricing']['perHour'] ?? '').toString();
-            _model.pricingPerJobController?.text = (_formData['pricing']['perJob'] ?? '').toString();
+            _model.pricingPerHourController?.text =
+                (_formData['pricing']['perHour'] ?? '').toString();
+            _model.pricingPerJobController?.text =
+                (_formData['pricing']['perJob'] ?? '').toString();
           }
           if (_formData['availability'] is List) {
-            _model.availabilityController?.text = (_formData['availability'] as List).join(',');
+            _model.availabilityController?.text =
+                (_formData['availability'] as List).join(',');
           }
           if (_formData['serviceArea'] is Map) {
-            _model.serviceAreaAddressController?.text = (_formData['serviceArea']['address'] ?? '').toString();
-            _model.serviceAreaRadiusController?.text = (_formData['serviceArea']['radius'] ?? '').toString();
+            _model.serviceAreaAddressController?.text =
+                (_formData['serviceArea']['address'] ?? '').toString();
+            _model.serviceAreaRadiusController?.text =
+                (_formData['serviceArea']['radius'] ?? '').toString();
           }
         }
       });
@@ -1481,61 +1824,90 @@ class _ArtisanProfileupdateWidgetState
       _formData['email'] = _model.emailController?.text.trim();
       _formData['phone'] = _model.phoneController?.text.trim();
       // include trade/experience if not previously saved
-      if (!_formData.containsKey('trade') && (_model.tradeController?.text ?? '').isNotEmpty) {
-        _formData['trade'] = _model.tradeController!.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      if (!_formData.containsKey('trade') &&
+          (_model.tradeController?.text ?? '').isNotEmpty) {
+        _formData['trade'] = _model.tradeController!.text
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
       }
-      if (!_formData.containsKey('experience') && (_model.experienceController?.text ?? '').isNotEmpty) {
-        _formData['experience'] = num.tryParse(_model.experienceController!.text.trim());
+      if (!_formData.containsKey('experience') &&
+          (_model.experienceController?.text ?? '').isNotEmpty) {
+        _formData['experience'] =
+            num.tryParse(_model.experienceController!.text.trim());
       }
 
       // Attach portfolio metadata if exists
-      if (_remotePortfolioItems.isNotEmpty) _formData['portfolio'] = _remotePortfolioItems;
+      if (_remotePortfolioItems.isNotEmpty)
+        _formData['portfolio'] = _remotePortfolioItems;
 
       // Attach locally picked image metadata so final submit can include references (actual file upload not implemented here)
       if (_localPortfolioImagePaths.isNotEmpty) {
-        _formData['localPortfolioFiles'] = _localPortfolioImagePaths.map((p) => {'path': p, 'name': File(p).uri.pathSegments.isNotEmpty ? File(p).uri.pathSegments.last : p}).toList();
+        _formData['localPortfolioFiles'] = _localPortfolioImagePaths
+            .map((p) => {
+                  'path': p,
+                  'name': File(p).uri.pathSegments.isNotEmpty
+                      ? File(p).uri.pathSegments.last
+                      : p
+                })
+            .toList();
       }
 
       await _saveProfile();
     }
-    }
+  }
 
-    void _previousStep() {
+  void _previousStep() {
     if (_currentStep > 0) {
       setState(() {
         _currentStep--;
         _error = null;
         // restore fields for the step we're returning to
         if (_currentStep == 0) {
-          if (_formData['trade'] is List) _model.tradeController?.text = (_formData['trade'] as List).join(',');
-          if (_formData['experience'] != null) _model.experienceController?.text = _formData['experience'].toString();
-          if (_formData['certifications'] is List) _model.certificationsController?.text = (_formData['certifications'] as List).join(',');
-          if (_formData['bio'] != null) _model.bioController?.text = _formData['bio'].toString();
+          if (_formData['trade'] is List)
+            _model.tradeController?.text =
+                (_formData['trade'] as List).join(',');
+          if (_formData['experience'] != null)
+            _model.experienceController?.text =
+                _formData['experience'].toString();
+          if (_formData['certifications'] is List)
+            _model.certificationsController?.text =
+                (_formData['certifications'] as List).join(',');
+          if (_formData['bio'] != null)
+            _model.bioController?.text = _formData['bio'].toString();
         }
         if (_currentStep == 1) {
           if (_formData['pricing'] is Map) {
-            _model.pricingPerHourController?.text = (_formData['pricing']['perHour'] ?? '').toString();
-            _model.pricingPerJobController?.text = (_formData['pricing']['perJob'] ?? '').toString();
+            _model.pricingPerHourController?.text =
+                (_formData['pricing']['perHour'] ?? '').toString();
+            _model.pricingPerJobController?.text =
+                (_formData['pricing']['perJob'] ?? '').toString();
           }
-          if (_formData['availability'] is List) _model.availabilityController?.text = (_formData['availability'] as List).join(',');
+          if (_formData['availability'] is List)
+            _model.availabilityController?.text =
+                (_formData['availability'] as List).join(',');
           if (_formData['serviceArea'] is Map) {
-            _model.serviceAreaAddressController?.text = (_formData['serviceArea']['address'] ?? '').toString();
-            _model.serviceAreaRadiusController?.text = (_formData['serviceArea']['radius'] ?? '').toString();
+            _model.serviceAreaAddressController?.text =
+                (_formData['serviceArea']['address'] ?? '').toString();
+            _model.serviceAreaRadiusController?.text =
+                (_formData['serviceArea']['radius'] ?? '').toString();
           }
         }
       });
     }
-    }
+  }
 
-    void _removeLocalImage(int index) {
+  void _removeLocalImage(int index) {
     if (index >= 0 && index < _localPortfolioImagePaths.length) {
       setState(() => _localPortfolioImagePaths.removeAt(index));
     }
-    }
+  }
 
-    Future<void> _pickPortfolioImages() async {
+  Future<void> _pickPortfolioImages() async {
     try {
-      final result = await FilePicker.platform.pickFiles(type: FileType.image, allowMultiple: true);
+      final result = await FilePicker.platform
+          .pickFiles(type: FileType.image, allowMultiple: true);
       if (result == null) return; // user canceled
       final added = <String>[];
       for (final f in result.files) {
@@ -1548,7 +1920,8 @@ class _ArtisanProfileupdateWidgetState
       }
       setState(() => _localPortfolioImagePaths.addAll(added));
     } on MissingPluginException catch (e) {
-      if (mounted && kDebugMode) debugPrint('File pick plugin not implemented: $e');
+      if (mounted && kDebugMode)
+        debugPrint('File pick plugin not implemented: $e');
       _showUserError('File picker is not available on this platform');
       setState(() {
         _filePickerAvailable = false;
@@ -1557,38 +1930,44 @@ class _ArtisanProfileupdateWidgetState
       if (mounted && kDebugMode) debugPrint('Image pick error: $e');
       _showUserError(e);
     }
+  }
+
+  Future<void> _fetchJobCategories() async {
+    try {
+      final cats = await JobService.getJobCategories();
+      if (!mounted) return;
+      setState(() {
+        _jobCategories = cats;
+      });
+
+      // If profile prefills already include a trade string, try to match it
+      final pre = (_model.tradeController?.text ?? '').trim();
+      if (pre.isNotEmpty) {
+        final first = pre
+            .split(',')
+            .map((s) => s.trim())
+            .firstWhere((s) => s.isNotEmpty, orElse: () => '');
+        if (first.isNotEmpty) {
+          final match = _jobCategories.firstWhere((c) {
+            final name =
+                (c['name'] ?? c['title'] ?? '').toString().toLowerCase();
+            return name == first.toLowerCase();
+          }, orElse: () => {});
+          final matchId = (match['_id'] ?? match['id'] ?? '').toString();
+          if (matchId.isNotEmpty) {
+            setState(() {
+              _selectedCategoryId = matchId;
+              _selectedCategoryName =
+                  (match['name'] ?? match['title']).toString();
+              _model.tradeController?.text = _selectedCategoryName ?? '';
+            });
+          }
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('Failed to fetch job categories: $e');
     }
-
-   Future<void> _fetchJobCategories() async {
-     try {
-       final cats = await JobService.getJobCategories();
-       if (!mounted) return;
-       setState(() {
-         _jobCategories = cats;
-       });
-
-       // If profile prefills already include a trade string, try to match it
-       final pre = (_model.tradeController?.text ?? '').trim();
-       if (pre.isNotEmpty) {
-         final first = pre.split(',').map((s) => s.trim()).firstWhere((s) => s.isNotEmpty, orElse: () => '');
-         if (first.isNotEmpty) {
-           final match = _jobCategories.firstWhere((c) {
-             final name = (c['name'] ?? c['title'] ?? '').toString().toLowerCase();
-             return name == first.toLowerCase();
-           }, orElse: () => {});
-           if (match is Map && (match['_id'] ?? match['id'] ?? '').toString().isNotEmpty) {
-             setState(() {
-               _selectedCategoryId = (match['_id'] ?? match['id']).toString();
-               _selectedCategoryName = (match['name'] ?? match['title']).toString();
-               _model.tradeController?.text = _selectedCategoryName ?? '';
-             });
-           }
-         }
-       }
-     } catch (e) {
-       if (kDebugMode) debugPrint('Failed to fetch job categories: $e');
-     }
-   }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1606,7 +1985,8 @@ class _ArtisanProfileupdateWidgetState
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final double horizontalPadding = math.min(48.0, constraints.maxWidth * 0.06);
+              final double horizontalPadding =
+                  math.min(48.0, constraints.maxWidth * 0.06);
 
               return Padding(
                 padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
@@ -1625,7 +2005,9 @@ class _ArtisanProfileupdateWidgetState
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          _hasArtisanProfile ? 'Edit Profile' : 'Create Artisan Profile',
+                          _hasArtisanProfile
+                              ? 'Edit Profile'
+                              : 'Create Artisan Profile',
                           style: theme.textTheme.titleLarge?.copyWith(
                             fontWeight: FontWeight.w500,
                             fontSize: 18,
@@ -1650,7 +2032,8 @@ class _ArtisanProfileupdateWidgetState
 
                     // Bottom buttons
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 32, vertical: 24),
                       decoration: BoxDecoration(
                         border: Border(
                           top: BorderSide(
@@ -1671,7 +2054,8 @@ class _ArtisanProfileupdateWidgetState
                                 color: theme.colorScheme.error.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                  color: theme.colorScheme.error.withOpacity(0.2),
+                                  color:
+                                      theme.colorScheme.error.withOpacity(0.2),
                                 ),
                               ),
                               child: Row(
@@ -1693,7 +2077,6 @@ class _ArtisanProfileupdateWidgetState
                                 ],
                               ),
                             ),
-
                           Row(
                             children: [
                               if (_currentStep > 0)
@@ -1701,20 +2084,20 @@ class _ArtisanProfileupdateWidgetState
                                   child: OutlinedButton(
                                     onPressed: _previousStep,
                                     style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(vertical: 16),
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 16),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       side: BorderSide(
-                                        color: theme.colorScheme.onSurface.withOpacity(0.2),
+                                        color: theme.colorScheme.onSurface
+                                            .withOpacity(0.2),
                                       ),
                                     ),
                                     child: const Text('Back'),
                                   ),
                                 ),
-
                               if (_currentStep > 0) const SizedBox(width: 12),
-
                               Expanded(
                                 flex: _currentStep == 0 ? 2 : 1,
                                 child: ElevatedButton(
@@ -1722,7 +2105,8 @@ class _ArtisanProfileupdateWidgetState
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: primaryColor,
                                     foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 16),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
                                     ),
@@ -1741,7 +2125,9 @@ class _ArtisanProfileupdateWidgetState
                                         )
                                       : Text(
                                           _atLastStep
-                                              ? (_hasArtisanProfile ? 'SAVE PROFILE' : 'CREATE PROFILE')
+                                              ? (_hasArtisanProfile
+                                                  ? 'SAVE PROFILE'
+                                                  : 'CREATE PROFILE')
                                               : 'CONTINUE',
                                           style: const TextStyle(
                                             fontWeight: FontWeight.w600,
@@ -1766,17 +2152,89 @@ class _ArtisanProfileupdateWidgetState
   }
 
   // Haversine formula to compute distance in kilometers between two lat/lon points
-  double _haversineDistance(double lat1, double lon1, double lat2, double lon2) {
+  double _haversineDistance(
+      double lat1, double lon1, double lat2, double lon2) {
     const R = 6371.0; // Earth radius in km
     double toRad(double deg) => deg * (math.pi / 180.0);
     final dLat = toRad(lat2 - lat1);
     final dLon = toRad(lon2 - lon1);
     final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(toRad(lat1)) * math.cos(toRad(lat2)) *
-        math.sin(dLon / 2) * math.sin(dLon / 2);
+        math.cos(toRad(lat1)) *
+            math.cos(toRad(lat2)) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
     final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
     return R * c;
   }
+
+  Future<void> _updateApproximateRadius(String lga, String state,
+      {Map<String, dynamic>? geoData}) async {
+    try {
+      final geo = geoData ??
+          await LocationService.geocodePlace('$lga, $state, Nigeria', limit: 1);
+      if (geo == null) return;
+
+      double? lgaLat;
+      double? lgaLon;
+      if (geo['lat'] != null && geo['lon'] != null) {
+        lgaLat = (geo['lat'] as num).toDouble();
+        lgaLon = (geo['lon'] as num).toDouble();
+      }
+
+      double approxRadiusKm = 5.0;
+      final bbox = geo['boundingbox'];
+      if (bbox is List && bbox.length == 4) {
+        final south = (bbox[0] as num).toDouble();
+        final north = (bbox[1] as num).toDouble();
+        final west = (bbox[2] as num).toDouble();
+        final east = (bbox[3] as num).toDouble();
+        final diagKm = _haversineDistance(south, west, north, east);
+        approxRadiusKm = (diagKm / 2);
+      }
+
+      // Get user current position to use as the service center coordinates
+      final userPos = await _getCurrentUserPosition();
+      setState(() {
+        if (userPos != null) {
+          _serviceLat = userPos.latitude;
+          _serviceLon = userPos.longitude;
+        } else if (lgaLat != null && lgaLon != null) {
+          _serviceLat = lgaLat;
+          _serviceLon = lgaLon;
+        }
+      });
+
+      // Final cap to ensure radius remains within a sensible range for local services
+      if (approxRadiusKm > 50) approxRadiusKm = 50;
+
+      setState(() {
+        _model.serviceAreaRadiusController?.text =
+            approxRadiusKm.ceil().toString();
+      });
+    } catch (e) {
+      if (kDebugMode) debugPrint('Failed to update approx radius: $e');
+    }
+  }
+
+  Future<Position?> _getCurrentUserPosition() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return null;
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) return null;
+      }
+
+      if (permission == LocationPermission.deniedForever) return null;
+
+      return await Geolocator.getCurrentPosition(
+        locationSettings:
+            const LocationSettings(accuracy: LocationAccuracy.medium),
+      ).timeout(const Duration(seconds: 5));
+    } catch (_) {
+      return null;
+    }
+  }
 }
-
-

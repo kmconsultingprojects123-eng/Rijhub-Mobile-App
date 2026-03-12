@@ -213,6 +213,7 @@ class NavigationService with WidgetsBindingObserver {
         'VerificationPageWidget': VerificationPageWidget.routePath,
         'LoginAccountWidget': LoginAccountWidget.routePath,
         'CreateAccount2Widget': CreateAccount2Widget.routePath,
+        'JobDetailsPageWidget': JobDetailsPageWidget.routePath,
         // Add other common pages here if you use them with replace-all.
       };
       if (mapByName.containsKey(name)) return mapByName[name];

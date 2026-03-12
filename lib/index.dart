@@ -38,6 +38,7 @@ export '/pages/see_all_images_page/see_all_images_page_widget.dart' show SeeAllI
 export '/pages/job_post_page/job_post_page_widget.dart' show JobPostPageWidget;
 export '/pages/create_job_page1/create_job_page1_widget.dart' show CreateJobPage1Widget;
 export '/pages/job_history_page/job_history_page_widget.dart' show JobHistoryPageWidget;
+export '/pages/job_details_page/job_details_page_widget.dart' show JobDetailsPageWidget;
 export '/pages/job_detail_page/job_detail_page_widget.dart' show JobDetailPageWidget;
 export '/pages/artisan_dashboard_page/artisan_dashboard_page_widget.dart' show ArtisanDashboardPageWidget;
 export '/pages/splash_screen_page2/splash_screen_page2_widget.dart' show SplashScreenPage2Widget;

@@ -16,6 +16,7 @@ import '../../pages/booking_details/booking_details_widget.dart';
 import '../../state/auth_notifier.dart';
 import '../../state/app_state_notifier.dart';
 import '../../pages/verify_otp/verify_otp_widget.dart';
+import '../../pages/job_details_page/job_details_page_widget.dart';
 
 export 'serialization_util.dart';
 export 'ff_navigation_adapters.dart';
@@ -29,389 +30,452 @@ GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
 GoRouter createRouter(AuthNotifier auth) {
   return GoRouter(
-      observers: [routeObserver],
-      // App should start on the static splash page and only proceed to
-      // /splash2 after the static splash's internal delay. Do not auto-redirect
-      // elsewhere on app launch.
-      initialLocation: StaticSplashWidget.routePath,
-      debugLogDiagnostics: true,
-      refreshListenable: auth,
-      // Do not use a global navigatorKey - prefer GoRouter's context-based navigation
-      errorBuilder: (context, state) => AppStateNotifier.instance.showSplashImage
-          ? StaticSplashWidget()
-          : Splash2Widget(),
-      // Global redirect: enforce unauthenticated/guest/authenticated rules
-      redirect: (context, state) {
-        try {
-          final loc = state.uri.path;
+    observers: [routeObserver],
+    // App should start on the static splash page and only proceed to
+    // /splash2 after the static splash's internal delay. Do not auto-redirect
+    // elsewhere on app launch.
+    initialLocation: StaticSplashWidget.routePath,
+    debugLogDiagnostics: true,
+    refreshListenable: auth,
+    // Do not use a global navigatorKey - prefer GoRouter's context-based navigation
+    errorBuilder: (context, state) => AppStateNotifier.instance.showSplashImage
+        ? StaticSplashWidget()
+        : Splash2Widget(),
+    // Global redirect: enforce unauthenticated/guest/authenticated rules
+    redirect: (context, state) {
+      try {
+        final loc = state.uri.path;
 
-          // If unauthenticated, only allow the auth/onboarding flow pages.
-          if (auth.status == AuthStatus.unauthenticated) {
-            final allowed = {
-              StaticSplashWidget.routePath,
-              Splash2Widget.routePath,
-              SplashScreenPage2Widget.routePath,
-              LoginAccountWidget.routePath,
-              CreateAccount2Widget.routePath,
-              VerifyOtpWidget.routePath,
-              // Allow post-signup welcome while auth state is still settling.
-              WelcomeAfterSignupWidget.routePath,
-              // Allow the core verification page (where OTP is entered) so the
-              // app won't redirect to splash2 after register -> adapter navigation.
-              VerificationPageWidget.routePath,
-              // Allow direct access to the forget password page without redirect
-              ForgetPasswordWidget.routePath,
-            };
-            if (allowed.contains(loc)) return null;
-            // Redirect any other path to splash2 so user must choose login/register/guest
-            return Splash2Widget.routePath;
-          }
+        // If unauthenticated, only allow the auth/onboarding flow pages.
+        if (auth.status == AuthStatus.unauthenticated) {
+          final allowed = {
+            StaticSplashWidget.routePath,
+            Splash2Widget.routePath,
+            SplashScreenPage2Widget.routePath,
+            LoginAccountWidget.routePath,
+            CreateAccount2Widget.routePath,
+            VerifyOtpWidget.routePath,
+            // Allow post-signup welcome while auth state is still settling.
+            WelcomeAfterSignupWidget.routePath,
+            // Allow the core verification page (where OTP is entered) so the
+            // app won't redirect to splash2 after register -> adapter navigation.
+            VerificationPageWidget.routePath,
+            // Allow direct access to the forget password page without redirect
+            ForgetPasswordWidget.routePath,
+          };
+          if (allowed.contains(loc)) return null;
+          // Redirect any other path to splash2 so user must choose login/register/guest
+          return Splash2Widget.routePath;
+        }
 
-          // If authenticated, prevent navigating back to login/register routes.
-          // NOTE: the WelcomeAfterSignup page must remain accessible right after
-          // a successful registration/verification, so we don't block it here.
-          if (auth.isAuthenticated && (loc == LoginAccountWidget.routePath || loc == CreateAccount2Widget.routePath)) {
-            // Redirect to role-specific landing
-            if (auth.status == AuthStatus.authenticatedArtisan) return ArtisanDashboardPageWidget.routePath;
-            return HomePageWidget.routePath;
-          }
+        // If authenticated, prevent navigating back to login/register routes.
+        // NOTE: the WelcomeAfterSignup page must remain accessible right after
+        // a successful registration/verification, so we don't block it here.
+        if (auth.isAuthenticated &&
+            (loc == LoginAccountWidget.routePath ||
+                loc == CreateAccount2Widget.routePath)) {
+          // Redirect to role-specific landing
+          if (auth.status == AuthStatus.authenticatedArtisan)
+            return ArtisanDashboardPageWidget.routePath;
+          return HomePageWidget.routePath;
+        }
 
-          // Guests: no global redirects; allow browsing
-        } catch (_) {}
-        return null;
-      },
-      // Build the FFRoute list here so we can log the registered routes in debug mode
-      routes: () {
-        final ffRoutes = <FFRoute>[
-          // Static splash: first screen on app launch. It will navigate to /splash2
-          // after its internal delay. The router should not auto-redirect from here.
-          FFRoute(
-            name: StaticSplashWidget.routeName,
-            path: StaticSplashWidget.routePath,
-            builder: (context, params) => StaticSplashWidget(),
+        // Guests: no global redirects; allow browsing
+      } catch (_) {}
+      return null;
+    },
+    // Build the FFRoute list here so we can log the registered routes in debug mode
+    routes: () {
+      final ffRoutes = <FFRoute>[
+        // Static splash: first screen on app launch. It will navigate to /splash2
+        // after its internal delay. The router should not auto-redirect from here.
+        FFRoute(
+          name: StaticSplashWidget.routeName,
+          path: StaticSplashWidget.routePath,
+          builder: (context, params) => StaticSplashWidget(),
+        ),
+        FFRoute(
+          name: '_initialize',
+          path: '/',
+          builder: (context, _) => AppStateNotifier.instance.showSplashImage
+              ? StaticSplashWidget()
+              : Splash2Widget(),
+        ),
+        FFRoute(
+          name: CreateAccount2Widget.routeName,
+          path: CreateAccount2Widget.routePath,
+          requireNoAuth: true,
+          builder: (context, params) => CreateAccount2Widget(
+            initialRole: params.getParam<String>('role', ParamType.String),
           ),
-          FFRoute(
-            name: '_initialize',
-            path: '/',
-            builder: (context, _) => AppStateNotifier.instance.showSplashImage ? StaticSplashWidget() : Splash2Widget(),
+        ),
+        FFRoute(
+          name: Splash2Widget.routeName,
+          path: Splash2Widget.routePath,
+          builder: (context, params) => Splash2Widget(),
+        ),
+        FFRoute(
+          name: LoginAccountWidget.routeName,
+          path: LoginAccountWidget.routePath,
+          requireNoAuth: true,
+          builder: (context, params) => LoginAccountWidget(),
+        ),
+        FFRoute(
+          name: VerifyOtpWidget.routeName,
+          path: VerifyOtpWidget.routePath,
+          requireNoAuth: true,
+          builder: (context, params) => VerifyOtpWidget(
+            phone: params.getParam<String>('phone', ParamType.String),
+            reference: params.getParam<String>('reference', ParamType.String),
+            email: params.getParam<String>('email', ParamType.String),
           ),
-          FFRoute(
-            name: CreateAccount2Widget.routeName,
-            path: CreateAccount2Widget.routePath,
-            requireNoAuth: true,
-            builder: (context, params) => CreateAccount2Widget(
-              initialRole: params.getParam<String>('role', ParamType.String),
-            ),
-          ),
-          FFRoute(
-            name: Splash2Widget.routeName,
-            path: Splash2Widget.routePath,
-            builder: (context, params) => Splash2Widget(),
-          ),
-          FFRoute(
-            name: LoginAccountWidget.routeName,
-            path: LoginAccountWidget.routePath,
-            requireNoAuth: true,
-            builder: (context, params) => LoginAccountWidget(),
-          ),
-          FFRoute(
-            name: VerifyOtpWidget.routeName,
-            path: VerifyOtpWidget.routePath,
-            requireNoAuth: true,
-            builder: (context, params) => VerifyOtpWidget(
-              phone: params.getParam<String>('phone', ParamType.String),
-              reference: params.getParam<String>('reference', ParamType.String),
-              email: params.getParam<String>('email', ParamType.String),
-            ),
-          ),
-          FFRoute(
-              name: ProfileWidget.routeName,
-              path: ProfileWidget.routePath,
-              requireAuth: true,
-              builder: (context, params) {
-                final isArtisan = AppStateNotifier.instance.profile?['role']?.toString().toLowerCase().contains('artisan') ?? false;
-                final profilePage = isArtisan ? ArtisanProfilepageWidget() : ProfileWidget();
-                final showDiscoverNow = !(AppStateNotifier.instance.profile?['role']?.toString().toLowerCase().contains('artisan') ?? false);
-                return params.isEmpty
-                    ? NavBarPage(initialPage: 'profile', showDiscover: showDiscoverNow)
-                    : NavBarPage(
-                        initialPage: 'profile',
-                        page: profilePage,
-                        showDiscover: showDiscoverNow,
-                      );
-              }),
-          FFRoute(
-            name: SearchPageWidget.routeName,
-            path: SearchPageWidget.routePath,
-            builder: (context, params) => SearchPageWidget(),
-          ),
-          FFRoute(
-              name: BookingPageWidget.routeName,
-              path: BookingPageWidget.routePath,
-              builder: (context, params) {
-                final showDiscoverNow = !(AppStateNotifier.instance.profile?['role']?.toString().toLowerCase().contains('artisan') ?? false);
-                return params.isEmpty
-                  ? NavBarPage(initialPage: 'BookingPage', showDiscover: showDiscoverNow)
+        ),
+        FFRoute(
+            name: ProfileWidget.routeName,
+            path: ProfileWidget.routePath,
+            requireAuth: true,
+            builder: (context, params) {
+              final isArtisan = AppStateNotifier.instance.profile?['role']
+                      ?.toString()
+                      .toLowerCase()
+                      .contains('artisan') ??
+                  false;
+              final profilePage =
+                  isArtisan ? ArtisanProfilepageWidget() : ProfileWidget();
+              final showDiscoverNow = !(AppStateNotifier
+                      .instance.profile?['role']
+                      ?.toString()
+                      .toLowerCase()
+                      .contains('artisan') ??
+                  false);
+              return params.isEmpty
+                  ? NavBarPage(
+                      initialPage: 'profile', showDiscover: showDiscoverNow)
+                  : NavBarPage(
+                      initialPage: 'profile',
+                      page: profilePage,
+                      showDiscover: showDiscoverNow,
+                    );
+            }),
+        FFRoute(
+          name: SearchPageWidget.routeName,
+          path: SearchPageWidget.routePath,
+          builder: (context, params) => SearchPageWidget(),
+        ),
+        FFRoute(
+            name: BookingPageWidget.routeName,
+            path: BookingPageWidget.routePath,
+            builder: (context, params) {
+              final showDiscoverNow = !(AppStateNotifier
+                      .instance.profile?['role']
+                      ?.toString()
+                      .toLowerCase()
+                      .contains('artisan') ??
+                  false);
+              return params.isEmpty
+                  ? NavBarPage(
+                      initialPage: 'BookingPage', showDiscover: showDiscoverNow)
                   : NavBarPage(
                       initialPage: 'BookingPage',
                       page: BookingPageWidget(),
                       showDiscover: showDiscoverNow,
                     );
-              }),
-          FFRoute(
-            name: NotificationPageWidget.routeName,
-            path: NotificationPageWidget.routePath,
-            builder: (context, params) => NotificationPageWidget(),
-          ),
-          FFRoute(
-              name: HomePageWidget.routeName,
-              path: HomePageWidget.routePath,
-              builder: (context, params) {
-                final showDiscoverNow = !(AppStateNotifier.instance.profile?['role']?.toString().toLowerCase().contains('artisan') ?? false);
-                return params.isEmpty
-                  ? NavBarPage(initialPage: 'homePage', showDiscover: showDiscoverNow)
-                  : HomePageWidget();
-              },
-          ),
-          FFRoute(
-              name: DiscoverPageWidget.routeName,
-              path: DiscoverPageWidget.routePath,
-              builder: (context, params) {
-                final showDiscoverNow = !(AppStateNotifier.instance.profile?['role']?.toString().toLowerCase().contains('artisan') ?? false);
-                return params.isEmpty
-                  ? NavBarPage(initialPage: 'DiscoverPage', showDiscover: showDiscoverNow)
+            }),
+        FFRoute(
+          name: NotificationPageWidget.routeName,
+          path: NotificationPageWidget.routePath,
+          builder: (context, params) => NotificationPageWidget(),
+        ),
+        FFRoute(
+          name: HomePageWidget.routeName,
+          path: HomePageWidget.routePath,
+          builder: (context, params) {
+            final showDiscoverNow = !(AppStateNotifier.instance.profile?['role']
+                    ?.toString()
+                    .toLowerCase()
+                    .contains('artisan') ??
+                false);
+            return params.isEmpty
+                ? NavBarPage(
+                    initialPage: 'homePage', showDiscover: showDiscoverNow)
+                : HomePageWidget();
+          },
+        ),
+        FFRoute(
+            name: DiscoverPageWidget.routeName,
+            path: DiscoverPageWidget.routePath,
+            builder: (context, params) {
+              final showDiscoverNow = !(AppStateNotifier
+                      .instance.profile?['role']
+                      ?.toString()
+                      .toLowerCase()
+                      .contains('artisan') ??
+                  false);
+              return params.isEmpty
+                  ? NavBarPage(
+                      initialPage: 'DiscoverPage',
+                      showDiscover: showDiscoverNow)
                   : NavBarPage(
                       initialPage: 'DiscoverPage',
                       page: DiscoverPageWidget(),
                       showDiscover: showDiscoverNow,
                     );
-              }),
-          FFRoute(
-            name: AllServicepageWidget.routeName,
-            path: AllServicepageWidget.routePath,
-            builder: (context, params) => AllServicepageWidget(),
-          ),
-          FFRoute(
-            name: MessageClientWidget.routeName,
-            path: MessageClientWidget.routePath,
+            }),
+        FFRoute(
+          name: AllServicepageWidget.routeName,
+          path: AllServicepageWidget.routePath,
+          builder: (context, params) => AllServicepageWidget(),
+        ),
+        FFRoute(
+          name: MessageClientWidget.routeName,
+          path: MessageClientWidget.routePath,
+          builder: (context, params) {
+            // Read bookingId/threadId via FFParameters helper (supports query/path/extras)
+            final bid = params.getParam<String>('bookingId', ParamType.String);
+            final tid = params.getParam<String>('threadId', ParamType.String);
+            return MessageClientWidget(
+              bookingId: bid,
+              threadId: tid,
+            );
+          },
+        ),
+        FFRoute(
+          name: EditProfileUserWidget.routeName,
+          path: EditProfileUserWidget.routePath,
+          builder: (context, params) => EditProfileUserWidget(),
+        ),
+        FFRoute(
+          name: ArtisanCompleteProfileWidget.routeName,
+          path: ArtisanCompleteProfileWidget.routePath,
+          builder: (context, params) => ArtisanCompleteProfileWidget(),
+        ),
+        FFRoute(
+          name: UserWalletpageWidget.routeName,
+          path: UserWalletpageWidget.routePath,
+          builder: (context, params) => UserWalletpageWidget(),
+        ),
+        FFRoute(
+          name: CreatePostpageWidget.routeName,
+          path: CreatePostpageWidget.routePath,
+          builder: (context, params) => CreatePostpageWidget(),
+        ),
+        FFRoute(
+          name: JobPublishpageWidget.routeName,
+          path: JobPublishpageWidget.routePath,
+          builder: (context, params) => JobPublishpageWidget(),
+        ),
+        FFRoute(
+          name: UpdateProfilepageWidget.routeName,
+          path: UpdateProfilepageWidget.routePath,
+          builder: (context, params) => UpdateProfilepageWidget(),
+        ),
+        FFRoute(
+          name: ArtisanProfileupdateWidget.routeName,
+          path: ArtisanProfileupdateWidget.routePath,
+          builder: (context, params) => ArtisanProfileupdateWidget(),
+        ),
+        FFRoute(
+          name: ContactUsPageWidget.routeName,
+          path: ContactUsPageWidget.routePath,
+          builder: (context, params) => ContactUsPageWidget(),
+        ),
+        FFRoute(
+          name: ForgetPasswordWidget.routeName,
+          path: ForgetPasswordWidget.routePath,
+          builder: (context, params) => ForgetPasswordWidget(),
+        ),
+        FFRoute(
+          name: UpdatePasswordWidget.routeName,
+          path: UpdatePasswordWidget.routePath,
+          builder: (context, params) => UpdatePasswordWidget(),
+        ),
+        FFRoute(
+          name: VerificationPageWidget.routeName,
+          path: VerificationPageWidget.routePath,
+          builder: (context, params) => VerificationPageWidget(),
+        ),
+        FFRoute(
+          name: RequestQuotePageWidget.routeName,
+          path: RequestQuotePageWidget.routePath,
+          builder: (context, params) => RequestQuotePageWidget(),
+        ),
+        FFRoute(
+          name: PaymentScreenPage3Widget.routeName,
+          path: PaymentScreenPage3Widget.routePath,
+          builder: (context, params) => PaymentScreenPage3Widget(),
+        ),
+        FFRoute(
+          name: ReviewRatingsPageWidget.routeName,
+          path: ReviewRatingsPageWidget.routePath,
+          builder: (context, params) => ReviewRatingsPageWidget(),
+        ),
+        FFRoute(
+          name: RequestArtisanPage1Widget.routeName,
+          path: RequestArtisanPage1Widget.routePath,
+          requireAuth: true,
+          builder: (context, params) => RequestArtisanPage1Widget(),
+        ),
+        FFRoute(
+          name: QuoteSummaryPage2Widget.routeName,
+          path: QuoteSummaryPage2Widget.routePath,
+          builder: (context, params) => QuoteSummaryPage2Widget(),
+        ),
+        FFRoute(
+          name: CompeletePaymentPage4Widget.routeName,
+          path: CompeletePaymentPage4Widget.routePath,
+          builder: (context, params) => CompeletePaymentPage4Widget(),
+        ),
+        FFRoute(
+          name: DepositSuccessPageWidget.routeName,
+          path: DepositSuccessPageWidget.routePath,
+          builder: (context, params) => DepositSuccessPageWidget(),
+          requireAuth: true,
+        ),
+        FFRoute(
+          name: ArtisanProfilepageWidget.routeName,
+          path: ArtisanProfilepageWidget.routePath,
+          builder: (context, params) {
+            final showDiscoverNow = !(AppStateNotifier.instance.profile?['role']
+                    ?.toString()
+                    .toLowerCase()
+                    .contains('artisan') ??
+                false);
+            return params.isEmpty
+                ? NavBarPage(
+                    initialPage: 'profile', showDiscover: showDiscoverNow)
+                : ArtisanProfilepageWidget();
+          },
+        ),
+        FFRoute(
+          name: ArtisanJobsHistoryWidget.routeName,
+          path: ArtisanJobsHistoryWidget.routePath,
+          builder: (context, params) => ArtisanJobsHistoryWidget(),
+        ),
+        FFRoute(
+          name: SeeAllImagesPageWidget.routeName,
+          path: SeeAllImagesPageWidget.routePath,
+          builder: (context, params) => SeeAllImagesPageWidget(),
+        ),
+        FFRoute(
+            name: JobPostPageWidget.routeName,
+            path: JobPostPageWidget.routePath,
             builder: (context, params) {
-              // Read bookingId/threadId via FFParameters helper (supports query/path/extras)
-              final bid = params.getParam<String>('bookingId', ParamType.String);
-              final tid = params.getParam<String>('threadId', ParamType.String);
-              return MessageClientWidget(
-                bookingId: bid,
-                threadId: tid,
-              );
-            },
-          ),
-          FFRoute(
-            name: EditProfileUserWidget.routeName,
-            path: EditProfileUserWidget.routePath,
-            builder: (context, params) => EditProfileUserWidget(),
-          ),
-          FFRoute(
-            name: ArtisanCompleteProfileWidget.routeName,
-            path: ArtisanCompleteProfileWidget.routePath,
-            builder: (context, params) => ArtisanCompleteProfileWidget(),
-          ),
-          FFRoute(
-            name: UserWalletpageWidget.routeName,
-            path: UserWalletpageWidget.routePath,
-            builder: (context, params) => UserWalletpageWidget(),
-          ),
-          FFRoute(
-            name: CreatePostpageWidget.routeName,
-            path: CreatePostpageWidget.routePath,
-            builder: (context, params) => CreatePostpageWidget(),
-          ),
-          FFRoute(
-            name: JobPublishpageWidget.routeName,
-            path: JobPublishpageWidget.routePath,
-            builder: (context, params) => JobPublishpageWidget(),
-          ),
-          FFRoute(
-            name: UpdateProfilepageWidget.routeName,
-            path: UpdateProfilepageWidget.routePath,
-            builder: (context, params) => UpdateProfilepageWidget(),
-          ),
-          FFRoute(
-            name: ArtisanProfileupdateWidget.routeName,
-            path: ArtisanProfileupdateWidget.routePath,
-            builder: (context, params) => ArtisanProfileupdateWidget(),
-          ),
-          FFRoute(
-            name: ContactUsPageWidget.routeName,
-            path: ContactUsPageWidget.routePath,
-            builder: (context, params) => ContactUsPageWidget(),
-          ),
-          FFRoute(
-            name: ForgetPasswordWidget.routeName,
-            path: ForgetPasswordWidget.routePath,
-            builder: (context, params) => ForgetPasswordWidget(),
-          ),
-          FFRoute(
-            name: UpdatePasswordWidget.routeName,
-            path: UpdatePasswordWidget.routePath,
-            builder: (context, params) => UpdatePasswordWidget(),
-          ),
-          FFRoute(
-            name: VerificationPageWidget.routeName,
-            path: VerificationPageWidget.routePath,
-            builder: (context, params) => VerificationPageWidget(),
-          ),
-          FFRoute(
-            name: RequestQuotePageWidget.routeName,
-            path: RequestQuotePageWidget.routePath,
-            builder: (context, params) => RequestQuotePageWidget(),
-          ),
-          FFRoute(
-            name: PaymentScreenPage3Widget.routeName,
-            path: PaymentScreenPage3Widget.routePath,
-            builder: (context, params) => PaymentScreenPage3Widget(),
-          ),
-          FFRoute(
-            name: ReviewRatingsPageWidget.routeName,
-            path: ReviewRatingsPageWidget.routePath,
-            builder: (context, params) => ReviewRatingsPageWidget(),
-          ),
-          FFRoute(
-            name: RequestArtisanPage1Widget.routeName,
-            path: RequestArtisanPage1Widget.routePath,
-            requireAuth: true,
-            builder: (context, params) => RequestArtisanPage1Widget(),
-          ),
-          FFRoute(
-            name: QuoteSummaryPage2Widget.routeName,
-            path: QuoteSummaryPage2Widget.routePath,
-            builder: (context, params) => QuoteSummaryPage2Widget(),
-          ),
-          FFRoute(
-            name: CompeletePaymentPage4Widget.routeName,
-            path: CompeletePaymentPage4Widget.routePath,
-            builder: (context, params) => CompeletePaymentPage4Widget(),
-          ),
-          FFRoute(
-            name: DepositSuccessPageWidget.routeName,
-            path: DepositSuccessPageWidget.routePath,
-            builder: (context, params) => DepositSuccessPageWidget(),
-            requireAuth: true,
-          ),
-          FFRoute(
-            name: ArtisanProfilepageWidget.routeName,
-            path: ArtisanProfilepageWidget.routePath,
-            builder: (context, params) {
-              final showDiscoverNow = !(AppStateNotifier.instance.profile?['role']?.toString().toLowerCase().contains('artisan') ?? false);
+              final showDiscoverNow = !(AppStateNotifier
+                      .instance.profile?['role']
+                      ?.toString()
+                      .toLowerCase()
+                      .contains('artisan') ??
+                  false);
               return params.isEmpty
-                  ? NavBarPage(initialPage: 'profile', showDiscover: showDiscoverNow)
-                  : ArtisanProfilepageWidget();
-            },
-          ),
-          FFRoute(
-            name: ArtisanJobsHistoryWidget.routeName,
-            path: ArtisanJobsHistoryWidget.routePath,
-            builder: (context, params) => ArtisanJobsHistoryWidget(),
-          ),
-          FFRoute(
-            name: SeeAllImagesPageWidget.routeName,
-            path: SeeAllImagesPageWidget.routePath,
-            builder: (context, params) => SeeAllImagesPageWidget(),
-          ),
-          FFRoute(
-              name: JobPostPageWidget.routeName,
-              path: JobPostPageWidget.routePath,
-              builder: (context, params) {
-                final showDiscoverNow = !(AppStateNotifier.instance.profile?['role']?.toString().toLowerCase().contains('artisan') ?? false);
-                return params.isEmpty
-                  ? NavBarPage(initialPage: 'JobPostPage', showDiscover: showDiscoverNow)
+                  ? NavBarPage(
+                      initialPage: 'JobPostPage', showDiscover: showDiscoverNow)
                   : NavBarPage(
                       initialPage: 'JobPostPage',
                       page: JobPostPageWidget(),
                       showDiscover: showDiscoverNow,
                     );
-              }),
-          FFRoute(
-            name: ArtisanKycWidget.routeName,
-            path: ArtisanKycWidget.routePath,
-            requireAuth: true,
-            builder: (context, params) => ArtisanKycGuard(),
+            }),
+        FFRoute(
+          name: ArtisanKycWidget.routeName,
+          path: ArtisanKycWidget.routePath,
+          requireAuth: true,
+          builder: (context, params) => ArtisanKycGuard(),
+        ),
+        FFRoute(
+          name: CreateJobPage1Widget.routeName,
+          path: CreateJobPage1Widget.routePath,
+          builder: (context, params) => CreateJobPage1Widget(),
+        ),
+        FFRoute(
+          name: JobHistoryPageWidget.routeName,
+          path: JobHistoryPageWidget.routePath,
+          builder: (context, params) => JobHistoryPageWidget(),
+        ),
+        FFRoute(
+          name: JobDetailPageWidget.routeName,
+          path: JobDetailPageWidget.routePath,
+          builder: (context, params) => JobDetailPageWidget(),
+        ),
+        FFRoute(
+          name: JobDetailsPageWidget.routeName,
+          path: JobDetailsPageWidget.routePath,
+          builder: (context, params) => JobDetailsPageWidget(
+            job: params.getParam<Map<String, dynamic>>('job', ParamType.JSON) ??
+                {},
           ),
-          FFRoute(
-            name: CreateJobPage1Widget.routeName,
-            path: CreateJobPage1Widget.routePath,
-            builder: (context, params) => CreateJobPage1Widget(),
+        ),
+        FFRoute(
+          name: ArtisanDashboardPageWidget.routeName,
+          path: ArtisanDashboardPageWidget.routePath,
+          builder: (context, params) {
+            final showDiscoverNow = !(AppStateNotifier.instance.profile?['role']
+                    ?.toString()
+                    .toLowerCase()
+                    .contains('artisan') ??
+                false);
+            return NavBarPage(
+                initialPage: 'homePage', showDiscover: showDiscoverNow);
+          },
+        ),
+        FFRoute(
+          name: SplashScreenPage2Widget.routeName,
+          path: SplashScreenPage2Widget.routePath,
+          builder: (context, params) => SplashScreenPage2Widget(),
+        ),
+        FFRoute(
+          name: WelcomeAfterSignupWidget.routeName,
+          path: WelcomeAfterSignupWidget.routePath,
+          // Do not mark this route as `requireNoAuth` so the welcome screen
+          // remains reachable immediately after successful verification.
+          builder: (context, params) => WelcomeAfterSignupWidget(
+            role: params.getParam<String>('role', ParamType.String),
+            name: params.getParam<String>('name', ParamType.String),
           ),
-          FFRoute(
-            name: JobHistoryPageWidget.routeName,
-            path: JobHistoryPageWidget.routePath,
-            builder: (context, params) => JobHistoryPageWidget(),
+        ),
+        FFRoute(
+          name: 'BookingDetails',
+          path: BookingDetailsWidget.routePath,
+          builder: (context, params) => BookingDetailsWidget(
+            bookingId: params.getParam<String>('bookingId', ParamType.String),
+            threadId: params.getParam<String>('threadId', ParamType.String),
+            jobTitle: params.getParam<String>('jobTitle', ParamType.String),
+            bookingPrice:
+                params.getParam<String>('bookingPrice', ParamType.String),
+            bookingDateTime:
+                params.getParam<String>('bookingDateTime', ParamType.String),
+            success: params.getParam<bool>('success', ParamType.bool),
           ),
-          FFRoute(
-            name: JobDetailPageWidget.routeName,
-            path: JobDetailPageWidget.routePath,
-            builder: (context, params) => JobDetailPageWidget(),
+        ),
+        // Backwards-compatible alias route so external links or legacy callers
+        // using '/bookingDetailsPage' continue to work.
+        FFRoute(
+          name: 'BookingDetailsPage',
+          path: '/bookingDetailsPage',
+          builder: (context, params) => BookingDetailsWidget(
+            bookingId: params.getParam<String>('bookingId', ParamType.String),
+            threadId: params.getParam<String>('threadId', ParamType.String),
+            jobTitle: params.getParam<String>('jobTitle', ParamType.String),
+            bookingPrice:
+                params.getParam<String>('bookingPrice', ParamType.String),
+            bookingDateTime:
+                params.getParam<String>('bookingDateTime', ParamType.String),
+            success: params.getParam<bool>('success', ParamType.bool),
           ),
-          FFRoute(
-            name: ArtisanDashboardPageWidget.routeName,
-            path: ArtisanDashboardPageWidget.routePath,
-            builder: (context, params) {
-              final showDiscoverNow = !(AppStateNotifier.instance.profile?['role']?.toString().toLowerCase().contains('artisan') ?? false);
-              return NavBarPage(initialPage: 'homePage', showDiscover: showDiscoverNow);
-            },
-          ),
-          FFRoute(
-            name: SplashScreenPage2Widget.routeName,
-            path: SplashScreenPage2Widget.routePath,
-            builder: (context, params) => SplashScreenPage2Widget(),
-          ),
-          FFRoute(
-            name: WelcomeAfterSignupWidget.routeName,
-            path: WelcomeAfterSignupWidget.routePath,
-            // Do not mark this route as `requireNoAuth` so the welcome screen
-            // remains reachable immediately after successful verification.
-            builder: (context, params) => WelcomeAfterSignupWidget(
-              role: params.getParam<String>('role', ParamType.String),
-              name: params.getParam<String>('name', ParamType.String),
-            ),
-          ),
-          FFRoute(
-            name: 'BookingDetails',
-            path: BookingDetailsWidget.routePath,
-            builder: (context, params) => BookingDetailsWidget(
-              bookingId: params.getParam<String>('bookingId', ParamType.String),
-              threadId: params.getParam<String>('threadId', ParamType.String),
-              jobTitle: params.getParam<String>('jobTitle', ParamType.String),
-              bookingPrice: params.getParam<String>('bookingPrice', ParamType.String),
-              bookingDateTime: params.getParam<String>('bookingDateTime', ParamType.String),
-              success: params.getParam<bool>('success', ParamType.bool),
-            ),
-          ),
-          // Backwards-compatible alias route so external links or legacy callers
-          // using '/bookingDetailsPage' continue to work.
-          FFRoute(
-            name: 'BookingDetailsPage',
-            path: '/bookingDetailsPage',
-            builder: (context, params) => BookingDetailsWidget(
-              bookingId: params.getParam<String>('bookingId', ParamType.String),
-              threadId: params.getParam<String>('threadId', ParamType.String),
-              jobTitle: params.getParam<String>('jobTitle', ParamType.String),
-              bookingPrice: params.getParam<String>('bookingPrice', ParamType.String),
-              bookingDateTime: params.getParam<String>('bookingDateTime', ParamType.String),
-              success: params.getParam<bool>('success', ParamType.bool),
-            ),
-          ),
-        ];
+        ),
+      ];
 
-        final goRoutes = ffRoutes.map((r) => r.toRoute()).toList();
-        if (kDebugMode) {
-          try {
-            final registered = ffRoutes.map((r) => '${r.name}:${r.path}').join(', ');
-            debugPrint('Registered routes: $registered');
-          } catch (_) {}
-        }
+      final goRoutes = ffRoutes.map((r) => r.toRoute()).toList();
+      if (kDebugMode) {
+        try {
+          final registered =
+              ffRoutes.map((r) => '${r.name}:${r.path}').join(', ');
+          debugPrint('Registered routes: $registered');
+        } catch (_) {}
+      }
 
-        return goRoutes;
-      }(),
-    );
+      return goRoutes;
+    }(),
+  );
 }
 
 extension NavParamExtensions on Map<String, String?> {
@@ -539,46 +603,46 @@ class FFRoute {
           }
           return null;
         },
-         pageBuilder: (context, state) {
-           fixStatusBarOniOS16AndBelow(context);
-           final ffParams = FFParameters(state, asyncParams);
-           final page = ffParams.hasFutures
-               ? FutureBuilder(
-                   future: ffParams.completeFutures(),
-                   builder: (context, _) => builder(context, ffParams),
-                 )
-               : builder(context, ffParams);
+        pageBuilder: (context, state) {
+          fixStatusBarOniOS16AndBelow(context);
+          final ffParams = FFParameters(state, asyncParams);
+          final page = ffParams.hasFutures
+              ? FutureBuilder(
+                  future: ffParams.completeFutures(),
+                  builder: (context, _) => builder(context, ffParams),
+                )
+              : builder(context, ffParams);
           // Don't block rendering of routes for unauthenticated users here.
           // Protected actions must check `AuthNotifier.instance.isLoggedIn`
           // and navigate to the login page when required.
           final child = page;
 
-            final transitionInfo = state.transitionInfo;
-            return transitionInfo.hasTransition
-                ? CustomTransitionPage(
-                    key: state.pageKey,
+          final transitionInfo = state.transitionInfo;
+          return transitionInfo.hasTransition
+              ? CustomTransitionPage(
+                  key: state.pageKey,
+                  child: child,
+                  transitionDuration: transitionInfo.duration,
+                  transitionsBuilder:
+                      (context, animation, secondaryAnimation, child) =>
+                          PageTransition(
+                    type: transitionInfo.transitionType,
+                    duration: transitionInfo.duration,
+                    reverseDuration: transitionInfo.duration,
+                    alignment: transitionInfo.alignment,
                     child: child,
-                    transitionDuration: transitionInfo.duration,
-                    transitionsBuilder:
-                        (context, animation, secondaryAnimation, child) =>
-                            PageTransition(
-                      type: transitionInfo.transitionType,
-                      duration: transitionInfo.duration,
-                      reverseDuration: transitionInfo.duration,
-                      alignment: transitionInfo.alignment,
-                      child: child,
-                    ).buildTransitions(
-                      context,
-                      animation,
-                      secondaryAnimation,
-                      child,
-                    ),
-                  )
-                : MaterialPage(key: state.pageKey, child: child);
-          },
-          routes: routes,
-        );
- }
+                  ).buildTransitions(
+                    context,
+                    animation,
+                    secondaryAnimation,
+                    child,
+                  ),
+                )
+              : MaterialPage(key: state.pageKey, child: child);
+        },
+        routes: routes,
+      );
+}
 
 /// A lightweight page that prompts unauthenticated users to sign in using the
 /// existing `ensureAuthenticatedOrPrompt` bottom-sheet. After the user either
@@ -603,7 +667,8 @@ class _AuthRequiredGateState extends State<AuthRequiredGate> {
         try {
           await ensureAuthenticatedOrPrompt(context,
               title: 'Sign in to continue',
-              message: 'You must be signed in to view this page. Sign in now to gain full access.');
+              message:
+                  'You must be signed in to view this page. Sign in now to gain full access.');
         } catch (_) {}
         // After prompt completes, dismiss this route — the user shouldn't
         // remain on the protected page when unauthenticated.
