@@ -486,9 +486,20 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
         await _navigateBasedOnRole();
       } else {
         final err = res['error'];
-        final message = (err is Map && err['message'] != null)
+        String message = (err is Map && err['message'] != null)
             ? err['message'].toString()
             : (err != null ? err.toString() : 'Google sign-in failed');
+        // Include code/details when available so users see real errors (e.g. on Android)
+        if (err is Map) {
+          final code = err['code']?.toString();
+          final details = err['details']?.toString();
+          if (code != null && code.isNotEmpty && !message.contains(code)) {
+            message = '$message [code: $code]';
+          }
+          if (details != null && details.isNotEmpty && details.length < 150) {
+            message = '$message. $details';
+          }
+        }
         AppNotification.showError(context, message);
       }
     } catch (e) {

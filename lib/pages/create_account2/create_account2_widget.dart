@@ -454,11 +454,22 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
 
   void _handleGoogleSignInError(Map<String, dynamic> res) {
     final err = res['error'];
-    final message = (err is Map && err['message'] != null)
+    String message = (err is Map && err['message'] != null)
         ? err['message'].toString()
         : (err != null ? err.toString() : 'Google sign-in failed');
+    // Append code/details when available so users see the real error
+    // (e.g. signInFailed, developerError) instead of generic messages
+    if (err is Map) {
+      final code = err['code']?.toString();
+      final details = err['details']?.toString();
+      if (code != null && code.isNotEmpty) {
+        message = message.contains(code) ? message : '$message [code: $code]';
+      }
+      if (details != null && details.isNotEmpty && details.length < 200) {
+        message = '$message\n$details';
+      }
+    }
     if (!mounted) return;
-    if (message == 'Google sign-in cancelled') return;
     AuthErrorHandler.showErrorDialog(context, message);
   }
 

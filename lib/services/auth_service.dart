@@ -731,20 +731,27 @@ class AuthService {
         print(
             '│ [Google Sign-In] authenticate() returned account: ${account.email}');
       } on GoogleSignInException catch (e) {
-        // User cancelled or other auth issues.
+        // Return the actual error details so users see real errors on Android
+        // (config errors, SIGN_IN_FAILED, etc. are often misreported as "cancelled").
         // ignore: avoid_print
-        print('│ [Google Sign-In] GoogleSignInException: code=${e.code}');
+        print('│ [Google Sign-In] GoogleSignInException: code=${e.code} description=${e.description}');
         print(
             '└──────────────────────────────────────────────────────────────────────────────');
-        if (e.code == GoogleSignInExceptionCode.canceled ||
-            e.code == GoogleSignInExceptionCode.interrupted ||
-            e.code == GoogleSignInExceptionCode.uiUnavailable) {
-          return {
-            'success': false,
-            'error': {'message': 'Google sign-in cancelled'}
-          };
-        }
-        rethrow;
+        final detailMsg = e.description?.trim();
+        final codeStr = e.code.toString().replaceFirst('GoogleSignInExceptionCode.', '');
+        final message = detailMsg != null && detailMsg.isNotEmpty
+            ? detailMsg
+            : (e.code == GoogleSignInExceptionCode.canceled
+                ? 'User cancelled'
+                : 'Google Sign-In failed ($codeStr)');
+        return {
+          'success': false,
+          'error': {
+            'message': message,
+            'code': codeStr,
+            if (e.details != null) 'details': e.details.toString(),
+          }
+        };
       }
 
       final auth = account.authentication;
