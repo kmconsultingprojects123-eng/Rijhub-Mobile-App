@@ -1040,10 +1040,17 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
             onChanged: (v) => setState(() => _acceptedTos = v ?? false),
             fillColor: WidgetStateProperty.resolveWith<Color?>((states) {
               if (states.contains(WidgetState.selected)) return _primaryColor;
-              return Colors.transparent;
+              // Use a visible fill when unchecked so the checkbox is always visible
+              final isDark = Theme.of(context).brightness == Brightness.dark;
+              return isDark
+                  ? Colors.white.withOpacity(0.25)
+                  : _getSurfaceAlpha(0.2);
             }),
             checkColor: Colors.white,
-            side: const BorderSide(color: Colors.white),
+            side: BorderSide(
+              color: _getSurfaceAlpha(0.7),
+              width: 2,
+            ),
           ),
           const SizedBox(width: 8),
           GestureDetector(
