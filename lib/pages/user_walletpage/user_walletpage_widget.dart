@@ -1925,7 +1925,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                       MainAxisAlignment.spaceBetween,
                                   children: [
                                     Text(
-                                      'Total Balance',
+                                      // Show label based on role: artisans see balance, clients see expenses
+                                      _isArtisan ? 'Total Balance' : 'Total Expenses',
                                       style:
                                           theme.textTheme.bodyMedium?.copyWith(
                                         color: colorScheme.onSurface
@@ -1958,12 +1959,6 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                             borderRadius:
                                                 BorderRadius.circular(12),
                                           ),
-                                          child: Icon(
-                                            Icons
-                                                .account_balance_wallet_rounded,
-                                            color: colorScheme.primary,
-                                            size: 20,
-                                          ),
                                         ),
                                       ],
                                     ),
@@ -1984,11 +1979,16 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                         _hideBalance
                                             ? '*****'
                                             : _formatAmount(
-                                                _wallet?['total'] ??
-                                                    _wallet?['balance'] ??
-                                                    _wallet?['totalEarned'] ??
-                                                    _wallet?['totalSpent'] ??
-                                                    0,
+                                                // For artisans show balance/total; for clients show expenses/spent
+                                                _isArtisan
+                                                    ? (_wallet?['total'] ??
+                                                        _wallet?['balance'] ??
+                                                        _wallet?['totalEarned'] ??
+                                                        0)
+                                                    : (_wallet?['totalSpent'] ??
+                                                        _wallet?['totalExpenses'] ??
+                                                        _wallet?['spent'] ??
+                                                        0),
                                               ),
                                         style: theme.textTheme.headlineMedium
                                             ?.copyWith(

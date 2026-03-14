@@ -2157,7 +2157,7 @@ class _BookingCard extends StatelessWidget {
   final String? initialThreadId;
 
   // New parameters for message handling
-  final void Function(BuildContext, String, String, String, String, String)
+  final void Function(BuildContext, String? , String? , String, String, String)
       onMessage;
   final bool isFetchingThread;
 
@@ -2495,8 +2495,8 @@ class _BookingCard extends StatelessWidget {
                                 try {
                                   onMessage(
                                       context,
-                                      effectiveBookingId ?? '',
-                                      effectiveThreadId ?? '',
+                                      effectiveBookingId,
+                                      effectiveThreadId,
                                       jobTitle,
                                       priceStr,
                                       dateStr);

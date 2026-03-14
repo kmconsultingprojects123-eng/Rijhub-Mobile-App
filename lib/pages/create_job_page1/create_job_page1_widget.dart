@@ -381,19 +381,16 @@ class _CreateJobPage1WidgetState extends State<CreateJobPage1Widget> {
           (value is String && value.trim().isEmpty) ||
           (value is List && value.isEmpty));
 
-      await JobService.createJob(payload);
+      // Capture created job response (JobService returns the created object on success)
+      final created = await JobService.createJob(payload);
 
       if (mounted) {
         AppNotification.showSuccess(context, 'Job created successfully');
-        // After creating a job, return to the previous page with a truthy result
-        // so the caller can refresh its list if needed (e.g. jobPostPage).
-        // Use pop(true) instead of navigating to a new route or using context.go().
+        // Return the created job object to the caller so it can update UI immediately.
         try {
-          // Prefer go_router's context.pop when available
-          context.pop(true);
+          context.pop(created ?? true);
         } catch (_) {
-          // Fallback to Navigator if pop extension isn't available
-          Navigator.of(context).pop(true);
+          Navigator.of(context).pop(created ?? true);
         }
       }
     } catch (e) {

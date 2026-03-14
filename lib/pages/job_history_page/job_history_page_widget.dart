@@ -5,13 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../services/job_service.dart';
 import '../create_job_page1/create_job_page1_widget.dart';
-import '../edit_job_page/edit_job_page_widget.dart';
+import '../../widgets/edit_job_form.dart';
 import '../job_details_page/job_details_page_widget.dart';
 import '../message_client/message_client_widget.dart';
 import '../../utils/navigation_utils.dart';
 import '../../utils/auth_guard.dart';
 import '../../services/user_service.dart';
 import '../../utils/app_notification.dart';
+import '../../utils/job_events.dart';
 import '../../utils/error_messages.dart';
 
 class JobHistoryPageWidget extends StatefulWidget {
@@ -35,6 +36,7 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
   final List<String> _tabs = ['Posted', 'Completed'];
   TextEditingController? _searchController;
   Timer? _debounce;
+  StreamSubscription<Map<String, dynamic>>? _jobEventsSub;
 
   @override
   void initState() {
@@ -49,12 +51,32 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
         _loadJobs(query: _searchController!.text.trim());
       });
     });
+
+    // Subscribe to job updated events so history updates in real time
+    try {
+      _jobEventsSub = JobEvents.jobUpdatedStream.listen((updated) {
+        if (!mounted) return;
+        try {
+          final updatedId = (updated['id'] ?? updated['_id'] ?? updated['jobId'])?.toString() ?? '';
+          if (updatedId.isEmpty) return;
+          final idx = _jobs.indexWhere((j) => ((j['_id'] ?? j['id'] ?? j['jobId'])?.toString() ?? '') == updatedId);
+          setState(() {
+            if (idx >= 0) {
+              _jobs[idx] = Map<String, dynamic>.from(updated);
+            } else {
+              _jobs.insert(0, Map<String, dynamic>.from(updated));
+            }
+          });
+        } catch (_) {}
+      });
+    } catch (_) {}
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
     _searchController?.dispose();
+    try { _jobEventsSub?.cancel(); } catch (_) {}
     super.dispose();
   }
 
@@ -201,18 +223,41 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
     // Create a normalized copy of the job to ensure EditJobForm gets the fields it expects.
     final Map<String, dynamic> prefilledJob = Map<String, dynamic>.from(job);
 
-    // Title/company/description
+    // Basic textual fields
+    prefilledJob['id'] = (job['_id'] ?? job['id'] ?? job['jobId'] ?? '').toString();
     prefilledJob['title'] = (job['title'] ?? job['jobTitle'] ?? job['name'] ?? '').toString();
-    prefilledJob['company'] = (job['company'] ?? job['employer'] ?? '').toString();
+    prefilledJob['company'] = (job['company'] ?? job['employer'] ?? job['companyName'] ?? '').toString();
     prefilledJob['description'] = (job['description'] ?? job['details'] ?? job['desc'] ?? '').toString();
 
     // Location/address
-    prefilledJob['location'] = (job['location'] ?? job['address'] ?? job['venue'] ?? '').toString();
+    prefilledJob['location'] = (job['location'] is String)
+        ? job['location']
+        : (job['address'] ?? job['venue'] ?? job['place'] ?? '')?.toString();
 
-    // Budget: prefer budget, fall back to price/amount; keep numeric or string form
+    // Price / budget normalization (keep original if possible)
     prefilledJob['budget'] = job['budget'] ?? job['price'] ?? job['amount'] ?? job['salary'] ?? '';
+    prefilledJob['price'] = job['price'] ?? job['amount'] ?? job['salary'] ?? prefilledJob['budget'];
 
-    // Trade/skills: ensure a List when possible
+    // Currency / negotiable / duration / type
+    prefilledJob['currency'] = job['currency'] ?? job['budgetCurrency'] ?? job['currencyCode'];
+    prefilledJob['negotiable'] = job['negotiable'] ?? job['isNegotiable'] ?? false;
+    prefilledJob['duration'] = job['duration'] ?? job['job_duration'] ?? job['timeFrame'];
+    prefilledJob['jobType'] = job['jobType'] ?? job['type'] ?? job['job_type'];
+
+    // Images / media / attachments
+    try {
+      if (job['images'] != null) {
+        prefilledJob['images'] = job['images'];
+      } else if (job['photos'] != null) {
+        prefilledJob['images'] = job['photos'];
+      } else if (job['media'] != null) {
+        prefilledJob['images'] = job['media'];
+      } else if (job['attachments'] != null) {
+        prefilledJob['images'] = job['attachments'];
+      }
+    } catch (_) {}
+
+    // Skills / trade: prefer list, accept comma-separated string
     try {
       if (job['trade'] is List) {
         prefilledJob['trade'] = List.from(job['trade']);
@@ -222,6 +267,35 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
         prefilledJob['trade'] = (job['skills'] as String).split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
       } else if (job['trade'] is String && (job['trade'] as String).trim().isNotEmpty) {
         prefilledJob['trade'] = (job['trade'] as String).split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      }
+    } catch (_) {}
+
+    // Subservice / skills ids and names (map common API shapes to CreateJobPage expectations)
+    try {
+      final dynamic sids = job['subCategoryIds'] ?? job['sub_category_ids'] ?? job['subCategories'] ?? job['subCategoryId'] ?? job['sub_category_id'] ?? job['serviceIds'];
+      if (sids is List) {
+        prefilledJob['subCategoryIds'] = sids.map((e) => e?.toString() ?? '').where((s) => s.isNotEmpty).toList();
+      } else if (sids is String || sids is num) {
+        final s = sids.toString(); if (s.isNotEmpty) prefilledJob['subCategoryIds'] = [s];
+      } else if (sids is Map) {
+        final id = (sids['_id'] ?? sids['id'])?.toString(); if (id != null) prefilledJob['subCategoryIds'] = [id];
+      }
+
+      final dynamic snames = job['subCategoryNames'] ?? job['sub_category_names'] ?? job['services'] ?? job['serviceNames'];
+      if (snames is List) {
+        prefilledJob['subCategoryNames'] = snames.map((e) => e?.toString() ?? '').where((s) => s.isNotEmpty).toList();
+      } else if (job['services'] is List) {
+        prefilledJob['subCategoryNames'] = (job['services'] as List).map((s) => (s is Map ? ((s['name'] ?? s['title'])?.toString() ?? '') : s.toString())).where((s) => s.isNotEmpty).toList();
+      }
+    } catch (_) {}
+
+    // If trade isn't set but we have subCategoryNames, use those as trade (CreateJob prefers this)
+    try {
+      if (prefilledJob['trade'] == null || (prefilledJob['trade'] is List && (prefilledJob['trade'] as List).isEmpty)) {
+        if (prefilledJob['subCategoryNames'] != null) {
+          final names = List<String>.from(prefilledJob['subCategoryNames']);
+          if (names.isNotEmpty) prefilledJob['trade'] = names;
+        }
       }
     } catch (_) {}
 
@@ -250,8 +324,23 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
       }
     } catch (_) {}
 
-    // Schedule/deadline
-    prefilledJob['schedule'] = job['schedule'] ?? job['deadline'] ?? job['dueDate'] ?? job['date'];
+    // Schedule/deadline normalization
+    prefilledJob['schedule'] = job['schedule'] ?? job['deadline'] ?? job['dueDate'] ?? job['date'] ?? job['createdAt'];
+    try {
+      final sched = prefilledJob['schedule'];
+      if (sched != null) {
+        if (sched is num) {
+          final n = sched.toInt();
+          final dt = (n > 1e12) ? DateTime.fromMillisecondsSinceEpoch(n) : DateTime.fromMillisecondsSinceEpoch(n * 1000);
+          prefilledJob['schedule'] = dt.toIso8601String();
+        } else if (sched is String) {
+          final parsed = DateTime.tryParse(sched);
+          if (parsed != null) prefilledJob['schedule'] = parsed.toIso8601String();
+        } else if (sched is DateTime) {
+          prefilledJob['schedule'] = sched.toIso8601String();
+        }
+      }
+    } catch (_) {}
 
     // Category id normalization
     try {
@@ -262,8 +351,38 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
       }
     } catch (_) {}
 
-    // Experience/type
-    prefilledJob['type'] = job['type'] ?? job['experience'] ?? job['experienceLevel'];
+    // Experience/type normalization to tokens used by CreateJobPage ('entry','mid','senior')
+    try {
+      final rawExp = (job['experienceLevel'] ?? job['type'] ?? job['experience'])?.toString();
+      if (rawExp != null) {
+        final low = rawExp.toLowerCase();
+        if (low == 'entry' || low.contains('entry')) {
+          prefilledJob['experienceLevel'] = 'entry';
+        } else if (low == 'mid' || low.contains('mid')) {
+          prefilledJob['experienceLevel'] = 'mid';
+        } else if (low == 'senior' || low.contains('senior')) {
+          prefilledJob['experienceLevel'] = 'senior';
+        } else {
+          prefilledJob['experienceLevel'] = rawExp;
+        }
+      }
+    } catch (_) {}
+
+    // Ensure coordinates are [lon, lat] doubles (also accept geo or location.geo)
+    try {
+      final coordsRaw = prefilledJob['coordinates'] ?? job['geo'] ?? job['location']?['coordinates'];
+      if (coordsRaw is List && coordsRaw.length >= 2) {
+        prefilledJob['coordinates'] = List<double>.from(coordsRaw.map((e) => (e is num) ? e.toDouble() : double.tryParse(e.toString()) ?? 0.0));
+      } else if (coordsRaw is Map) {
+        final lat = (coordsRaw['lat'] ?? coordsRaw['latitude'])?.toString();
+        final lon = (coordsRaw['lon'] ?? coordsRaw['longitude'])?.toString();
+        if (lat != null && lon != null) {
+          final latN = double.tryParse(lat);
+          final lonN = double.tryParse(lon);
+          if (latN != null && lonN != null) prefilledJob['coordinates'] = [lonN, latN];
+        }
+      }
+    } catch (_) {}
 
     showModalBottomSheet(
       context: context,
@@ -383,12 +502,33 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                         // Pass the normalized job so the form fields are prefilled consistently
                         job: prefilledJob,
                         embedded: true,
-                        onUpdated: () {
-                          // Close the sheet and refresh jobs
+                        onUpdated: (Map<String, dynamic> updatedJob) {
+                          // Close the sheet and update local list so changes appear immediately.
+                          try { Navigator.pop(context); } catch (_) {}
+
+                          if (!mounted) return;
+
                           try {
-                            Navigator.pop(context);
-                          } catch (_) {}
-                          _loadJobs(query: _searchController!.text.trim());
+                            final updatedId = (updatedJob['id'] ?? updatedJob['_id'] ?? updatedJob['jobId'])?.toString() ?? '';
+                            if (updatedId.isNotEmpty) {
+                              final idx = _jobs.indexWhere((j) => ((j['_id'] ?? j['id'] ?? j['jobId'])?.toString() ?? '') == updatedId);
+                              setState(() {
+                                if (idx >= 0) {
+                                  // replace in-place
+                                  _jobs[idx] = updatedJob;
+                                } else {
+                                  // not found locally (e.g., pagination/filtering) -> insert at top
+                                  _jobs.insert(0, updatedJob);
+                                }
+                              });
+                            } else {
+                              // If updated response lacks id, fall back to full refresh
+                              _loadJobs(query: _searchController!.text.trim());
+                            }
+                          } catch (_) {
+                            // On any failure, do a safe refresh
+                            try { _loadJobs(query: _searchController!.text.trim()); } catch (_) {}
+                          }
                         },
                       ),
                     ),
@@ -513,7 +653,7 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
     final budget = job['budget'];
     String budgetText = '';
     if (budget != null) {
-      final numVal = (budget is num) ? budget : num.tryParse(budget.toString().replaceAll(RegExp(r'[^0-9.-]'), ''));
+      final numVal = (budget is num) ? budget : num.tryParse(_stripNumericDotHyphen(budget.toString()));
       if (numVal != null) {
         budgetText = '₦${NumberFormat('#,##0', 'en_US').format(numVal)}';
       }
@@ -1158,6 +1298,13 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
     );
   }
 
+  // Helper: remove any character that isn't a digit, dot or minus sign
+  String _stripNumericDotHyphen(String s) {
+    if (s.isEmpty) return '';
+    const allowed = '0123456789.-';
+    return s.split('').where((c) => allowed.contains(c)).join();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -1165,7 +1312,6 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
     final isDark = theme.brightness == Brightness.dark;
     final screenWidth = MediaQuery.of(context).size.width;
     final isSmallScreen = screenWidth < 360;
-    final isTablet = screenWidth > 600;
 
     // Filter jobs based on selected tab
     final filteredJobs = _jobs.where((job) {
