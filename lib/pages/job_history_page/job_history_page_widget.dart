@@ -853,7 +853,7 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                                 child: OutlinedButton(
                                   onPressed: () {
                                     try {
-                                      NavigationUtils.safePushNoAuth(context, JobDetailsPageWidget(job: job));
+                                      NavigationUtils.safePushRoute(context, JobDetailsPageWidget.routePath, extra: {'job': job});
                                     } catch (_) {}
                                   },
                                   style: OutlinedButton.styleFrom(
@@ -988,7 +988,7 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                                 OutlinedButton(
                                   onPressed: () {
                                     try {
-                                      NavigationUtils.safePushNoAuth(context, JobDetailsPageWidget(job: job));
+                                      NavigationUtils.safePushRoute(context, JobDetailsPageWidget.routePath, extra: {'job': job});
                                     } catch (_) {}
                                   },
                                   style: OutlinedButton.styleFrom(

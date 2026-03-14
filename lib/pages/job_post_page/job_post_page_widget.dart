@@ -743,7 +743,7 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                         padding: const EdgeInsets.only(bottom: 16.0),
                         child: InkWell(
                           onTap: () async {
-                            await NavigationUtils.safePush(context, JobDetailsPageWidget(job: job));
+                            await NavigationUtils.safePushRoute(context, JobDetailsPageWidget.routePath, extra: {'job': job});
                           },
                           borderRadius: BorderRadius.circular(16),
                           child: Container(
@@ -838,7 +838,7 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                                       ),
                                       ElevatedButton(
                                         onPressed: () async {
-                                          await NavigationUtils.safePush(context, JobDetailsPageWidget(job: job));
+                                          await NavigationUtils.safePushRoute(context, JobDetailsPageWidget.routePath, extra: {'job': job});
                                         },
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: colorScheme.primary,

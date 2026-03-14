@@ -744,6 +744,42 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
     return null;
   }
 
+  // Helper to update a booking in the local list while preserving nested data
+  // like customer/artisan objects that might be missing from partial API responses.
+  void _updateBookingState(String id, Map<String, dynamic>? next) {
+    if (!mounted) return;
+    final index = _bookings.indexWhere((b) =>
+        (b['_id']?.toString() ??
+            b['booking']?['_id']?.toString() ??
+            b['id']?.toString()) ==
+        id);
+    if (index == -1) return;
+
+    setState(() {
+      final old = _bookings[index];
+      if (next != null) {
+        // Create a copy to avoid side-effects
+        final Map<String, dynamic> updated = Map<String, dynamic>.from(next);
+
+        // Preserve critical nested objects if they are missing in the new payload
+        final keysToPreserve = [
+          'customer',
+          'customerUser',
+          'artisan',
+          'artisanUser',
+          'booking',
+          'artisanProfile'
+        ];
+        for (final k in keysToPreserve) {
+          if (updated[k] == null && old[k] != null) {
+            updated[k] = old[k];
+          }
+        }
+        _bookings[index] = updated;
+      }
+    });
+  }
+
   void _onProfileTap(BuildContext context, Map<String, dynamic> booking) async {
     // Determine counterpart (customer when current user is artisan, else artisan)
     final bool isArtisan = _isArtisan;
@@ -932,20 +968,20 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
                   : Map<String, dynamic>.from(d));
         }
 
-        setState(() {
-          if (index != -1) {
-            if (fresh != null) {
-              _bookings[index] = fresh;
-            } else if (updated != null) {
-              _bookings[index] = updated;
-            } else {
+        if (fresh != null) {
+          _updateBookingState(id, fresh);
+        } else if (updated != null) {
+          _updateBookingState(id, updated);
+        } else {
+          setState(() {
+            if (index != -1) {
               _bookings[index]['booking'] = {
                 ...?_bookings[index]['booking'],
                 'status': 'accepted'
               };
             }
-          }
-        });
+          });
+        }
         if (!mounted) return;
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Booking accepted')));
@@ -1048,21 +1084,22 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
                   ? Map<String, dynamic>.from(d['booking'])
                   : Map<String, dynamic>.from(d));
         }
-        setState(() {
-          if (index != -1) {
-            if (fresh != null) {
-              _bookings[index] = fresh;
-            } else if (updated != null) {
-              _bookings[index] = updated;
-            } else {
+
+        if (fresh != null) {
+          _updateBookingState(id, fresh);
+        } else if (updated != null) {
+          _updateBookingState(id, updated);
+        } else {
+          setState(() {
+            if (index != -1) {
               _bookings[index]['booking'] = {
                 ...?_bookings[index]['booking'],
                 'status': 'cancelled',
                 'refundStatus': 'refunded'
               };
             }
-          }
-        });
+          });
+        }
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('Booking rejected. Refund will be processed.')));
@@ -1240,21 +1277,22 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
                   ? Map<String, dynamic>.from(d['booking'])
                   : Map<String, dynamic>.from(d));
         }
-        setState(() {
-          if (index != -1) {
-            if (fresh != null) {
-              _bookings[index] = fresh;
-            } else if (updated != null) {
-              _bookings[index] = updated;
-            } else {
+
+        if (fresh != null) {
+          _updateBookingState(id, fresh);
+        } else if (updated != null) {
+          _updateBookingState(id, updated);
+        } else {
+          setState(() {
+            if (index != -1) {
               _bookings[index]['booking'] = {
                 ...?_bookings[index]['booking'],
                 'status': 'cancelled',
                 'refundStatus': 'refunded'
               };
             }
-          }
-        });
+          });
+        }
         if (!mounted) return;
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Booking cancelled.')));
@@ -1431,21 +1469,21 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
                   ? Map<String, dynamic>.from(decoded['booking'])
                   : null);
         }
-        setState(() {
-          if (index != -1) {
-            if (fresh != null) {
-              _bookings[index] = fresh;
-            } else if (updated != null) {
-              _bookings[index] = updated;
-            } else {
+
+        if (fresh != null) {
+          _updateBookingState(id, fresh);
+        } else if (updated != null) {
+          _updateBookingState(id, updated);
+        } else {
+          setState(() {
+            if (index != -1) {
               _bookings[index]['booking'] = {
                 ...?_bookings[index]['booking'],
                 'status': 'completed'
               };
             }
-          }
-        });
-
+          });
+        }
         if (!mounted) return;
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Job marked complete.')));
@@ -2141,9 +2179,10 @@ class _BookingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final data = booking['booking'] is Map ? booking['booking'] : booking;
     final counterpart = (isArtisan
-        ? (booking['customer'] ?? booking['customerUser'])
-        : (booking['artisan'] ?? booking['artisanUser']));
+        ? (data['customer'] ?? data['customerUser'] ?? booking['customer'] ?? booking['customerUser'])
+        : (data['artisan'] ?? data['artisanUser'] ?? booking['artisan'] ?? booking['artisanUser']));
     final name = _extractName(counterpart);
     final profileUrl = _extractProfileUrl(counterpart);
     final jobTitle = _extractJobTitle(booking);

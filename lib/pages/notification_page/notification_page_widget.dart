@@ -145,14 +145,9 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
         final job = await ServiceNotif.NotificationService.fetchJobById(jobId.toString());
         if (job != null) {
           try {
-            await NavigationUtils.safePush(context, JobDetailsPageWidget(job: job));
+            await NavigationUtils.safePushRoute(context, JobDetailsPageWidget.routePath, extra: {'job': job});
             return;
-          } catch (_) {
-            try {
-              await NavigationUtils.safePush(context, JobDetailsPageWidget(job: job));
-              return;
-            } catch (_) {}
-          }
+          } catch (_) {}
         }
       }
 
