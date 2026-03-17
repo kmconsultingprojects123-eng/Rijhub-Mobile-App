@@ -851,7 +851,35 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
           focusNode: _phoneFocusNode,
           autofillHints: const [AutofillHints.telephoneNumber],
           keyboardType: TextInputType.phone,
-          decoration: _buildInputDecoration(theme, isDark, '+234'),
+          decoration: _buildInputDecoration(theme, isDark, '8012345678')
+              .copyWith(
+            prefixIcon: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('🇳🇬', style: TextStyle(fontSize: 20)),
+                  const SizedBox(width: 6),
+                  Text(
+                    '+234',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    height: 20,
+                    width: 1,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.25),
+                  ),
+                ],
+              ),
+            ),
+            prefixIconConstraints:
+                const BoxConstraints(minWidth: 0, minHeight: 48),
+          ),
           style: const TextStyle(fontSize: 16),
           textInputAction: TextInputAction.next,
           validator: Validators.validatePhone,

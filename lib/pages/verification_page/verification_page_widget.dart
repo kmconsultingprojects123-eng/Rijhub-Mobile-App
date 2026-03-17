@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '/services/token_storage.dart';
 import '/services/auth_service.dart';
 import '../../utils/phone_utils.dart';
@@ -152,7 +153,7 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
           name: _userName ?? '',
           email: _email ?? '',
           password: widget.password ?? '',
-          phone: _phone ?? '',
+          // phone: _phone ?? '',
           role: widget.role ?? 'customer',
         );
 
@@ -179,9 +180,12 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
       final body = result['data'] ?? result;
       if (body is Map) {
         token = (body['token'] ?? body['data']?['token'])?.toString();
-        parsedRole = (body['role'] ?? body['user']?['role'] ?? body['data']?['role'])?.toString();
+        parsedRole =
+            (body['role'] ?? body['user']?['role'] ?? body['data']?['role'])
+                ?.toString();
       }
-      if (parsedRole != null && parsedRole.isNotEmpty) parsedRole = parsedRole.toLowerCase();
+      if (parsedRole != null && parsedRole.isNotEmpty)
+        parsedRole = parsedRole.toLowerCase();
     } catch (_) {
       token = null;
       parsedRole = null;
@@ -401,20 +405,25 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
 
     if (!mounted) return;
 
-    // Navigate to appropriate landing page
+    // Use GoRouter.go() so GoRouter's internal state is updated correctly.
+    // The imperative Navigator.pushAndRemoveUntil conflicts with GoRouter when
+    // the router has already redirected away from this page (making the widget
+    // context unmounted), causing safeReplaceAllWith to bail out silently.
     try {
+      final router = GoRouter.of(context);
       if (role.contains('artisan')) {
-        await NavigationUtils.safeReplaceAllWith(context, ArtisanDashboardPageWidget());
+        router.go(ArtisanDashboardPageWidget.routePath);
       } else {
-        await NavigationUtils.safeReplaceAllWith(context, HomePageWidget());
+        router.go(HomePageWidget.routePath);
       }
     } catch (_) {
-      // Fallback navigation
+      // Fallback to imperative navigation if GoRouter is unavailable
       try {
         if (role.contains('artisan')) {
-          await NavigationUtils.safePushReplacement(context, ArtisanDashboardPageWidget());
+          await NavigationUtils.safeReplaceAllWith(
+              context, ArtisanDashboardPageWidget());
         } else {
-          await NavigationUtils.safePushReplacement(context, HomePageWidget());
+          await NavigationUtils.safeReplaceAllWith(context, HomePageWidget());
         }
       } catch (_) {}
     }
@@ -440,16 +449,13 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
     if (_otpExpired) {
       _startCountdown();
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('A new code will be requested.'))
-      );
+          const SnackBar(content: Text('A new code will be requested.')));
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('To resend, go back to the registration screen and try again.')
-        )
-    );
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+            'To resend, go back to the registration screen and try again.')));
   }
 
   // MARK: - State Helpers
@@ -501,9 +507,7 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
   }
 
   Widget _buildLoading() {
-    return const Scaffold(
-        body: Center(child: CircularProgressIndicator())
-    );
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 
   Color _getBackgroundColor() {
@@ -546,9 +550,9 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
     return Text(
       'Verify phone',
       style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-        fontWeight: FontWeight.w400,
-        letterSpacing: -0.5,
-      ),
+            fontWeight: FontWeight.w400,
+            letterSpacing: -0.5,
+          ),
     );
   }
 
@@ -557,9 +561,12 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
       'Enter the one-time code sent to your phone to verify your account.',
       textAlign: TextAlign.center,
       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-        color: Theme.of(context).colorScheme.onSurface.withAlpha((0.5 * 255).toInt()),
-        fontWeight: FontWeight.w300,
-      ),
+            color: Theme.of(context)
+                .colorScheme
+                .onSurface
+                .withAlpha((0.5 * 255).toInt()),
+            fontWeight: FontWeight.w300,
+          ),
     );
   }
 
@@ -573,9 +580,8 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
         const SizedBox(height: 8),
         Text(
           _displayPhone!,
-          style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold
-          ),
+          style: theme.textTheme.titleMedium
+              ?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
         _buildCountdown(theme, opacity),
@@ -590,17 +596,14 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
       children: [
         Text(
           'Expires in ',
-          style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurface.withAlpha(opacity)
-          ),
+          style: theme.textTheme.bodySmall
+              ?.copyWith(color: theme.colorScheme.onSurface.withAlpha(opacity)),
         ),
         const SizedBox(width: 6),
         Text(
           _formatDuration(_remaining),
-          style: theme.textTheme.bodyMedium?.copyWith(
-              color: _primaryColor,
-              fontWeight: FontWeight.w700
-          ),
+          style: theme.textTheme.bodyMedium
+              ?.copyWith(color: _primaryColor, fontWeight: FontWeight.w700),
         ),
       ],
     );
@@ -632,10 +635,8 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
             width: 1.5,
           ),
         ),
-        contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16.0,
-            vertical: 16.0
-        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
       ),
     );
   }
@@ -656,14 +657,11 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
         onPressed: _isButtonDisabled ? null : _submitOtp,
         child: _submitting
             ? _buildLoadingIndicator()
-            : const Text(
-            'VERIFY',
-            style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.5
-            )
-        ),
+            : const Text('VERIFY',
+                style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5)),
       ),
     );
   }
@@ -674,9 +672,8 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
       width: 20,
       child: CircularProgressIndicator(
         strokeWidth: 2,
-        valueColor: AlwaysStoppedAnimation(
-            Theme.of(context).colorScheme.onPrimary
-        ),
+        valueColor:
+            AlwaysStoppedAnimation(Theme.of(context).colorScheme.onPrimary),
       ),
     );
   }
@@ -686,12 +683,8 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
       onPressed: _handleResendCode,
       child: Text(
         _otpExpired ? 'Request new code' : 'Resend code',
-        style: TextStyle(
-            color: _primaryColor,
-            fontWeight: FontWeight.w600
-        ),
+        style: TextStyle(color: _primaryColor, fontWeight: FontWeight.w600),
       ),
     );
   }
 }
-

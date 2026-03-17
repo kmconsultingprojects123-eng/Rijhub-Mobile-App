@@ -3086,80 +3086,19 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
   // When no artisan profile exists, compute a partial score from user-level fields
   void _computeProfileCompletion() {
     try {
-      // Prefer server-side authoritative value if available
-      final serverProgress = _artisanProfile?['profileProgress'];
-      if (serverProgress != null) {
-        double parsed = 0.0;
-        try {
-          if (serverProgress is num)
-            parsed = serverProgress.toDouble();
-          else
-            parsed = double.tryParse(serverProgress.toString()) ?? 0.0;
-        } catch (_) {
-          parsed = 0.0;
+      double completion = 0.0;
+      final serverValue = _artisanProfile?['profileCompletion'] ??
+          _artisanProfile?['profileProgress'];
+      if (serverValue != null) {
+        if (serverValue is num) {
+          completion = serverValue.toDouble();
+        } else {
+          completion = double.tryParse(serverValue.toString()) ?? 0.0;
         }
-        if (parsed > 1.0) parsed = parsed / 100.0; // normalise percentages
-        parsed = parsed.clamp(0.0, 1.0);
-        if (mounted) setState(() => _profileCompletion = parsed);
-        return;
+        if (completion > 1.0) completion = completion / 100.0;
+        completion = completion.clamp(0.0, 1.0);
       }
-
-      // Determine KYC state (local cache or model flag) - only count when fully verified
-      final bool kycDone = (_kycVerifiedLocal || _model.isVerified == true);
-      final double kycScore = kycDone ? 0.40 : 0.0;
-
-      final pd = _model.profileData ?? <String, dynamic>{};
-      final ap = _artisanProfile ?? <String, dynamic>{};
-
-      // If there's no artisan document yet, show partial progress from user-level fields
-      if (!_hasArtisanProfile) {
-        int present = 0;
-        const int totalUserFields = 3; // name, phone, avatar
-
-        // name
-        final namePresent = ((pd['name'] ?? pd['fullName'] ?? pd['username'])
-                ?.toString()
-                .trim()
-                .isNotEmpty) ==
-            true;
-        if (namePresent) present++;
-
-        // phone
-        final phonePresent = ((pd['phone'] ?? pd['telephone'] ?? pd['contact'])
-                ?.toString()
-                .trim()
-                .isNotEmpty) ==
-            true;
-        if (phonePresent) present++;
-
-        // avatar
-        final avatarPresent = ((_model.profileImageUrl != null &&
-                _model.profileImageUrl.toString().trim().isNotEmpty) ||
-            (pd['profileImage'] != null &&
-                pd['profileImage']?.toString().isNotEmpty == true));
-        if (avatarPresent) present++;
-
-        final double profilePortion =
-            (present / totalUserFields) * 0.40; // profile weight is 40%
-        double total = (kycScore + profilePortion).clamp(0.0, 1.0);
-        // if kyc done and user-level fields all present, consider fully verified
-        if (kycDone && present == totalUserFields) total = 1.0;
-        if (mounted) setState(() => _profileCompletion = total);
-        return;
-      }
-
-      // With an artisan profile present, compute full artisan profile completion
-      // Profile fields to check: name, phone, bio, avatar, categories
-      // Since creating an artisan profile does not require admin approval,
-      // treat the existence of the artisan document as the profile portion
-      // being complete immediately (grant the full 40% profile score). The
-      // KYC portion still requires authoritative approval and is handled
-      // separately.
-      final double profilePortion = 0.40;
-      double total = (kycScore + profilePortion).clamp(0.0, 1.0);
-      // If both KYC and profile are done, mark as fully verified (100%).
-      if (kycDone) total = (1.0).clamp(0.0, 1.0);
-      if (mounted) setState(() => _profileCompletion = total);
+      if (mounted) setState(() => _profileCompletion = completion);
     } catch (e) {
       if (kDebugMode) debugPrint('Error computing profile completion: $e');
       if (mounted) setState(() => _profileCompletion = 0.0);

@@ -91,39 +91,97 @@ class _ProfileWidgetState extends State<ProfileWidget> {
   void _loadCachedData() {
     if (_cachedProfileData != null && !_isCacheStale) {
       setState(() {
-        displayName = (_cachedProfileData!['name'] ?? _cachedProfileData!['fullName'] ?? _cachedProfileData!['username'] ?? _cachedProfileData!['displayName'])?.toString();
-        userEmail = (_cachedProfileData!['email'] ?? _cachedProfileData!['contact'] ?? _cachedProfileData!['username'])?.toString();
-        userPhone = (_cachedProfileData!['phone'] ?? _cachedProfileData!['phoneNumber'] ?? _cachedProfileData!['mobile'])?.toString();
-        profileImageUrl = (_cachedProfileData!['profileImage'] is Map) ? (_cachedProfileData!['profileImage']['url']?.toString() ?? '') : (_cachedProfileData!['profileImage'] ?? _cachedProfileData!['photo'] ?? _cachedProfileData!['avatar'])?.toString();
-        userLocation = (_cachedProfileData!['location'] ?? _cachedProfileData!['city'] ?? _cachedProfileData!['serviceArea']?['address'])?.toString() ?? '';
+        displayName = (_cachedProfileData!['name'] ??
+                _cachedProfileData!['fullName'] ??
+                _cachedProfileData!['username'] ??
+                _cachedProfileData!['displayName'])
+            ?.toString();
+        userEmail = (_cachedProfileData!['email'] ??
+                _cachedProfileData!['contact'] ??
+                _cachedProfileData!['username'])
+            ?.toString();
+        userPhone = (_cachedProfileData!['phone'] ??
+                _cachedProfileData!['phoneNumber'] ??
+                _cachedProfileData!['mobile'])
+            ?.toString();
+        profileImageUrl = (_cachedProfileData!['profileImage'] is Map)
+            ? (_cachedProfileData!['profileImage']['url']?.toString() ?? '')
+            : (_cachedProfileData!['profileImage'] ??
+                    _cachedProfileData!['photo'] ??
+                    _cachedProfileData!['avatar'])
+                ?.toString();
+        userLocation = (_cachedProfileData!['location'] ??
+                    _cachedProfileData!['city'] ??
+                    _cachedProfileData!['serviceArea']?['address'])
+                ?.toString() ??
+            '';
       });
     }
 
     if (_cachedArtisanData != null && !_isCacheStale) {
       setState(() {
-        artisanTrade = (_cachedArtisanData!['trade'] ?? _cachedArtisanData!['occupation'] ?? _cachedArtisanData!['profession'] ?? _cachedArtisanData!['job'])?.toString();
-        artisanRating = (_cachedArtisanData!['rating'] ?? _cachedArtisanData!['avgRating'] ?? _cachedArtisanData!['ratingAverage'] ?? _cachedArtisanData!['score']) != null
-            ? double.tryParse((_cachedArtisanData!['rating'] ?? _cachedArtisanData!['avgRating'] ?? _cachedArtisanData!['ratingAverage'] ?? _cachedArtisanData!['score']).toString())
+        artisanTrade = (_cachedArtisanData!['trade'] ??
+                _cachedArtisanData!['occupation'] ??
+                _cachedArtisanData!['profession'] ??
+                _cachedArtisanData!['job'])
+            ?.toString();
+        artisanRating = (_cachedArtisanData!['rating'] ??
+                    _cachedArtisanData!['avgRating'] ??
+                    _cachedArtisanData!['ratingAverage'] ??
+                    _cachedArtisanData!['score']) !=
+                null
+            ? double.tryParse((_cachedArtisanData!['rating'] ??
+                    _cachedArtisanData!['avgRating'] ??
+                    _cachedArtisanData!['ratingAverage'] ??
+                    _cachedArtisanData!['score'])
+                .toString())
             : null;
-        artisanExperienceYears = (_cachedArtisanData!['experienceYears'] ?? _cachedArtisanData!['experience'] ?? _cachedArtisanData!['yearsExperience']) != null
-            ? int.tryParse((_cachedArtisanData!['experienceYears'] ?? _cachedArtisanData!['experience'] ?? _cachedArtisanData!['yearsExperience']).toString())
+        artisanExperienceYears = (_cachedArtisanData!['experienceYears'] ??
+                    _cachedArtisanData!['experience'] ??
+                    _cachedArtisanData!['yearsExperience']) !=
+                null
+            ? int.tryParse((_cachedArtisanData!['experienceYears'] ??
+                    _cachedArtisanData!['experience'] ??
+                    _cachedArtisanData!['yearsExperience'])
+                .toString())
             : null;
-        artisanVerified = (_cachedArtisanData!['verified'] ?? _cachedArtisanData!['isVerified'] ?? _cachedArtisanData!['kycVerified']) is bool
-            ? (_cachedArtisanData!['verified'] ?? _cachedArtisanData!['isVerified'] ?? _cachedArtisanData!['kycVerified']) as bool
-            : ((_cachedArtisanData!['verified'] ?? _cachedArtisanData!['isVerified'] ?? _cachedArtisanData!['kycVerified']) != null
-            ? (_cachedArtisanData!['verified'] ?? _cachedArtisanData!['isVerified'] ?? _cachedArtisanData!['kycVerified']).toString().toLowerCase() == 'true'
-            : null);
+        artisanVerified = (_cachedArtisanData!['verified'] ??
+                _cachedArtisanData!['isVerified'] ??
+                _cachedArtisanData!['kycVerified']) is bool
+            ? (_cachedArtisanData!['verified'] ??
+                _cachedArtisanData!['isVerified'] ??
+                _cachedArtisanData!['kycVerified']) as bool
+            : ((_cachedArtisanData!['verified'] ??
+                        _cachedArtisanData!['isVerified'] ??
+                        _cachedArtisanData!['kycVerified']) !=
+                    null
+                ? (_cachedArtisanData!['verified'] ??
+                            _cachedArtisanData!['isVerified'] ??
+                            _cachedArtisanData!['kycVerified'])
+                        .toString()
+                        .toLowerCase() ==
+                    'true'
+                : null);
 
         artisanPortfolio = [];
-        final candidates = [_cachedArtisanData!['portfolio'], _cachedArtisanData!['portfolioImages'], _cachedArtisanData!['images'], _cachedArtisanData!['photos'], _cachedArtisanData!['media']];
+        final candidates = [
+          _cachedArtisanData!['portfolio'],
+          _cachedArtisanData!['portfolioImages'],
+          _cachedArtisanData!['images'],
+          _cachedArtisanData!['photos'],
+          _cachedArtisanData!['media']
+        ];
         for (final pc in candidates) {
           if (pc == null) continue;
           if (pc is List) {
             for (final item in pc) {
               if (item == null) continue;
-              if (item is String) artisanPortfolio.add(item);
-              else if (item is Map && item['url'] != null) artisanPortfolio.add(item['url'].toString());
-              else if (item is Map && item['path'] != null) artisanPortfolio.add(item['path'].toString());
+              if (item is String)
+                artisanPortfolio.add(item);
+              else if (item is Map && item['url'] != null)
+                artisanPortfolio.add(item['url'].toString());
+              else if (item is Map && item['path'] != null)
+                artisanPortfolio.add(item['path'].toString());
             }
           }
         }
@@ -137,12 +195,24 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text('Log out?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
-        content: Text('Are you sure you want to log out?', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withAlpha((0.7 * 255).toInt()))),
+        title: Text('Log out?',
+            style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Theme.of(context).colorScheme.onSurface)),
+        content: Text('Are you sure you want to log out?',
+            style: TextStyle(
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withAlpha((0.7 * 255).toInt()))),
         actions: [
-          TextButton(onPressed: () => Navigator.of(c).pop(false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.of(c).pop(false),
+              child: const Text('Cancel')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error),
             onPressed: () => Navigator.of(c).pop(true),
             child: const Text('Log out'),
           ),
@@ -172,7 +242,8 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     } catch (_) {
       // As a last resort, use NavigationService to perform a router-aware replace
       try {
-        await NavigationService.instance.go(context, SplashScreenPage2Widget.routePath);
+        await NavigationService.instance
+            .go(context, SplashScreenPage2Widget.routePath);
       } catch (_) {
         // Final fallback to imperative Navigator replacement
         try {
@@ -191,15 +262,26 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text('Delete account?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface)),
+        title: Text('Delete account?',
+            style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Theme.of(context).colorScheme.onSurface)),
         content: Text(
           'This will permanently delete your account and all related data. This action is irreversible. Are you sure you want to continue?',
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withAlpha((0.7 * 255).toInt())),
+          style: TextStyle(
+              color: Theme.of(context)
+                  .colorScheme
+                  .onSurface
+                  .withAlpha((0.7 * 255).toInt())),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(c).pop(false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.of(c).pop(false),
+              child: const Text('Cancel')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error),
             onPressed: () => Navigator.of(c).pop(true),
             child: const Text('Delete account'),
           ),
@@ -215,10 +297,12 @@ class _ProfileWidgetState extends State<ProfileWidget> {
       final client = ApiClient();
       final url = '$API_BASE_URL/api/users/me';
       final token = await TokenStorage.getToken();
-      final headers = <String, String>{ 'Accept': 'application/json' };
-      if (token != null && token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
+      final headers = <String, String>{'Accept': 'application/json'};
+      if (token != null && token.isNotEmpty)
+        headers['Authorization'] = 'Bearer $token';
 
-      final resp = await client.safeDelete(url, headers: headers, context: context);
+      final resp =
+          await client.safeDelete(url, headers: headers, context: context);
       if (resp.ok) {
         // Clear caches
         _cachedProfileData = null;
@@ -231,48 +315,55 @@ class _ProfileWidgetState extends State<ProfileWidget> {
         } catch (_) {}
 
         // Notify user and navigate to splash/login
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text('Account deleted')));
+        ScaffoldMessenger.maybeOf(context)
+            ?.showSnackBar(SnackBar(content: Text('Account deleted')));
 
         try {
           GoRouter.of(context).go(SplashScreenPage2Widget.routePath);
         } catch (_) {
           try {
-            await NavigationService.instance.go(context, SplashScreenPage2Widget.routePath);
+            await NavigationService.instance
+                .go(context, SplashScreenPage2Widget.routePath);
           } catch (_) {
             try {
-              Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => SplashScreenPage2Widget()), (r) => false);
+              Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => SplashScreenPage2Widget()),
+                  (r) => false);
             } catch (_) {}
           }
         }
       } else {
         // safeDelete already shows a user-friendly message via ApiErrorHandler
         if (resp.message.isNotEmpty) {
-          ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(resp.message)));
+          ScaffoldMessenger.maybeOf(context)
+              ?.showSnackBar(SnackBar(content: Text(resp.message)));
         }
       }
     } catch (e) {
       // Best-effort: show a simple error
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text('Unable to delete account. Please try again.')));
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+          content: Text('Unable to delete account. Please try again.')));
     } finally {
       if (mounted) setState(() => _deletingAccount = false);
     }
   }
 
-    // Validate candidate URL/path before using Image.network
-    bool _isValidHttpUrl(String? url) {
+  // Validate candidate URL/path before using Image.network
+  bool _isValidHttpUrl(String? url) {
     if (url == null) return false;
     final s = url.trim();
     if (s.isEmpty) return false;
     final lower = s.toLowerCase();
     // Accept absolute http(s) URLs
-    if (lower.startsWith('http://') || lower.startsWith('https://')) return true;
+    if (lower.startsWith('http://') || lower.startsWith('https://'))
+      return true;
     // Accept protocol-relative URLs (e.g. //example.com/path) — will resolve in network contexts
     if (lower.startsWith('//')) return true;
     // Accept data URIs for inline images
     if (lower.startsWith('data:image/')) return true;
     // Do NOT treat local filesystem paths (starting with '/') as network URLs for Image.network
     return false;
-    }
+  }
 
   Future<void> _loadProfile() async {
     if (!mounted || _isLoading) return;
@@ -294,10 +385,24 @@ class _ProfileWidgetState extends State<ProfileWidget> {
           _cachedProfileData = Map<String, dynamic>.from(profile);
 
           setState(() {
-            displayName = (profile['name'] ?? profile['fullName'] ?? profile['username'] ?? profile['displayName'])?.toString();
-            userEmail = (profile['email'] ?? profile['contact'] ?? profile['username'])?.toString();
-            userPhone = (profile['phone'] ?? profile['phoneNumber'] ?? profile['mobile'])?.toString();
-            profileImageUrl = (profile['profileImage'] is Map) ? (profile['profileImage']['url']?.toString() ?? '') : (profile['profileImage'] ?? profile['photo'] ?? profile['avatar'])?.toString();
+            displayName = (profile['name'] ??
+                    profile['fullName'] ??
+                    profile['username'] ??
+                    profile['displayName'])
+                ?.toString();
+            userEmail =
+                (profile['email'] ?? profile['contact'] ?? profile['username'])
+                    ?.toString();
+            userPhone = (profile['phone'] ??
+                    profile['phoneNumber'] ??
+                    profile['mobile'])
+                ?.toString();
+            profileImageUrl = (profile['profileImage'] is Map)
+                ? (profile['profileImage']['url']?.toString() ?? '')
+                : (profile['profileImage'] ??
+                        profile['photo'] ??
+                        profile['avatar'])
+                    ?.toString();
           });
         }
       }
@@ -319,11 +424,20 @@ class _ProfileWidgetState extends State<ProfileWidget> {
           bool profileRoleIsArtisan = false;
           try {
             if (_cachedProfileData != null) {
-              final candidates = [_cachedProfileData!['role'], _cachedProfileData!['type'], _cachedProfileData!['accountType'], _cachedProfileData!['userType'], _cachedProfileData!['authProvider']];
+              final candidates = [
+                _cachedProfileData!['role'],
+                _cachedProfileData!['type'],
+                _cachedProfileData!['accountType'],
+                _cachedProfileData!['userType'],
+                _cachedProfileData!['authProvider']
+              ];
               for (final c in candidates) {
                 if (c == null) continue;
                 final s = c.toString().toLowerCase();
-                if (s.contains('artisan')) { profileRoleIsArtisan = true; break; }
+                if (s.contains('artisan')) {
+                  profileRoleIsArtisan = true;
+                  break;
+                }
               }
             }
           } catch (_) {}
@@ -345,12 +459,13 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                     break;
                   }
                 }
-                if ((userId == null || userId.isEmpty) && _cachedProfileData!['user'] is Map && _cachedProfileData!['user']['_id'] != null) {
+                if ((userId == null || userId.isEmpty) &&
+                    _cachedProfileData!['user'] is Map &&
+                    _cachedProfileData!['user']['_id'] != null) {
                   userId = _cachedProfileData!['user']['_id'].toString();
                 }
                 if (userId != null && userId.isNotEmpty) {
                   finalArtisan = await ArtistService.getByUserId(userId);
-
                 }
               } catch (e) {}
             }
@@ -363,29 +478,68 @@ class _ProfileWidgetState extends State<ProfileWidget> {
               _cachedArtisanData = art;
 
               setState(() {
-                artisanTrade = (art['trade'] ?? art['occupation'] ?? art['profession'] ?? art['job'])?.toString();
-                artisanRating = (art['rating'] ?? art['avgRating'] ?? art['ratingAverage'] ?? art['score']) != null
-                    ? double.tryParse((art['rating'] ?? art['avgRating'] ?? art['ratingAverage'] ?? art['score']).toString())
+                artisanTrade = (art['trade'] ??
+                        art['occupation'] ??
+                        art['profession'] ??
+                        art['job'])
+                    ?.toString();
+                artisanRating = (art['rating'] ??
+                            art['avgRating'] ??
+                            art['ratingAverage'] ??
+                            art['score']) !=
+                        null
+                    ? double.tryParse((art['rating'] ??
+                            art['avgRating'] ??
+                            art['ratingAverage'] ??
+                            art['score'])
+                        .toString())
                     : null;
-                artisanExperienceYears = (art['experienceYears'] ?? art['experience'] ?? art['yearsExperience']) != null
-                    ? int.tryParse((art['experienceYears'] ?? art['experience'] ?? art['yearsExperience']).toString())
+                artisanExperienceYears = (art['experienceYears'] ??
+                            art['experience'] ??
+                            art['yearsExperience']) !=
+                        null
+                    ? int.tryParse((art['experienceYears'] ??
+                            art['experience'] ??
+                            art['yearsExperience'])
+                        .toString())
                     : null;
-                artisanVerified = (art['verified'] ?? art['isVerified'] ?? art['kycVerified']) is bool
-                    ? (art['verified'] ?? art['isVerified'] ?? art['kycVerified']) as bool
-                    : ((art['verified'] ?? art['isVerified'] ?? art['kycVerified']) != null
-                    ? (art['verified'] ?? art['isVerified'] ?? art['kycVerified']).toString().toLowerCase() == 'true'
-                    : null);
+                artisanVerified = (art['verified'] ??
+                        art['isVerified'] ??
+                        art['kycVerified']) is bool
+                    ? (art['verified'] ??
+                        art['isVerified'] ??
+                        art['kycVerified']) as bool
+                    : ((art['verified'] ??
+                                art['isVerified'] ??
+                                art['kycVerified']) !=
+                            null
+                        ? (art['verified'] ??
+                                    art['isVerified'] ??
+                                    art['kycVerified'])
+                                .toString()
+                                .toLowerCase() ==
+                            'true'
+                        : null);
 
                 artisanPortfolio = [];
-                final candidates = [art['portfolio'], art['portfolioImages'], art['images'], art['photos'], art['media']];
+                final candidates = [
+                  art['portfolio'],
+                  art['portfolioImages'],
+                  art['images'],
+                  art['photos'],
+                  art['media']
+                ];
                 for (final pc in candidates) {
                   if (pc == null) continue;
                   if (pc is List) {
                     for (final item in pc) {
                       if (item == null) continue;
-                      if (item is String) artisanPortfolio.add(item);
-                      else if (item is Map && item['url'] != null) artisanPortfolio.add(item['url'].toString());
-                      else if (item is Map && item['path'] != null) artisanPortfolio.add(item['path'].toString());
+                      if (item is String)
+                        artisanPortfolio.add(item);
+                      else if (item is Map && item['url'] != null)
+                        artisanPortfolio.add(item['url'].toString());
+                      else if (item is Map && item['path'] != null)
+                        artisanPortfolio.add(item['path'].toString());
                     }
                   }
                 }
@@ -406,25 +560,30 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                   docs = List<dynamic>.from(apiResp.data['data']);
                 else if (apiResp.data is Map && apiResp.data['items'] is List)
                   docs = List<dynamic>.from(apiResp.data['items']);
-                else if (apiResp.data is Map && apiResp.data['services'] is List) docs = [apiResp.data];
+                else if (apiResp.data is Map &&
+                    apiResp.data['services'] is List) docs = [apiResp.data];
 
                 if (docs != null && docs.isNotEmpty) {
                   final List<Map<String, dynamic>> flattened = [];
                   for (final doc in docs) {
                     if (doc == null) continue;
                     if (doc is! Map) continue;
-                    final d = Map<String, dynamic>.from(doc.cast<String, dynamic>());
+                    final d =
+                        Map<String, dynamic>.from(doc.cast<String, dynamic>());
                     final artisanServiceId = (d['_id'] ?? d['id'])?.toString();
-                    final servicesArr = d['services'] ?? d['serviceList'] ?? d['items'];
-                    final docCategoryId = (d['categoryId'] ?? d['category']) is Map
-                        ? ((d['categoryId'] ?? d['category'])['_id'] ??
-                                (d['categoryId'] ?? d['category'])['id'])
-                            ?.toString()
-                        : (d['categoryId'] ?? d['category'])?.toString();
+                    final servicesArr =
+                        d['services'] ?? d['serviceList'] ?? d['items'];
+                    final docCategoryId =
+                        (d['categoryId'] ?? d['category']) is Map
+                            ? ((d['categoryId'] ?? d['category'])['_id'] ??
+                                    (d['categoryId'] ?? d['category'])['id'])
+                                ?.toString()
+                            : (d['categoryId'] ?? d['category'])?.toString();
                     if (servicesArr is List) {
                       for (final s in servicesArr) {
                         if (s == null || s is! Map) continue;
-                        final sub = Map<String, dynamic>.from(s.cast<String, dynamic>());
+                        final sub = Map<String, dynamic>.from(
+                            s.cast<String, dynamic>());
                         final subRaw = sub['subCategoryId'] ??
                             sub['sub_category_id'] ??
                             sub['_id'] ??
@@ -433,7 +592,8 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                         String? subName;
                         if (subRaw is Map) {
                           subId = (subRaw['_id'] ?? subRaw['id'])?.toString();
-                          subName = (subRaw['name'] ?? subRaw['title'])?.toString();
+                          subName =
+                              (subRaw['name'] ?? subRaw['title'])?.toString();
                         } else {
                           subId = subRaw?.toString();
                         }
@@ -447,7 +607,8 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                             'artisanServiceId': artisanServiceId,
                             'categoryId': docCategoryId,
                             'subCategoryId': subId,
-                            'serviceEntryId': (sub['_id'] ?? sub['id'])?.toString(),
+                            'serviceEntryId':
+                                (sub['_id'] ?? sub['id'])?.toString(),
                             'price': price,
                             'currency': sub['currency'] ?? 'NGN',
                             'categoryName': d['categoryName'] ?? d['name'],
@@ -474,7 +635,6 @@ class _ProfileWidgetState extends State<ProfileWidget> {
 
       // Mark cache as fresh
       _isCacheStale = false;
-
     } catch (e) {
       // Silent error
     } finally {
@@ -484,7 +644,8 @@ class _ProfileWidgetState extends State<ProfileWidget> {
 
   Future<dynamic> _pushEditProfile() async {
     try {
-      final res = await NavigationUtils.safePush(context, const EditProfileUserWidget());
+      final res = await NavigationUtils.safePush(
+          context, const EditProfileUserWidget());
       if (res != null) return res;
     } catch (e) {
       // Silent error
@@ -493,9 +654,11 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     try {
       final root = appNavigatorKey.currentState;
       if (root != null) {
-        return await root.push(MaterialPageRoute(builder: (_) => const EditProfileUserWidget()));
+        return await root.push(
+            MaterialPageRoute(builder: (_) => const EditProfileUserWidget()));
       } else {
-        return await Navigator.of(context, rootNavigator: true).push(MaterialPageRoute(builder: (_) => const EditProfileUserWidget()));
+        return await Navigator.of(context, rootNavigator: true).push(
+            MaterialPageRoute(builder: (_) => const EditProfileUserWidget()));
       }
     } catch (e) {
       // Silent error
@@ -509,7 +672,8 @@ class _ProfileWidgetState extends State<ProfileWidget> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Theme.of(context).cardColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (BuildContext ctx) {
         final theme = Theme.of(ctx);
         final colorScheme = theme.colorScheme;
@@ -532,18 +696,23 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                       height: 4,
                       margin: const EdgeInsets.only(bottom: 12),
                       decoration: BoxDecoration(
-                        color: colorScheme.onSurface.withAlpha((0.12 * 255).toInt()),
+                        color: colorScheme.onSurface
+                            .withAlpha((0.12 * 255).toInt()),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
                   ),
-                  Text('My Services', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+                  Text('My Services',
+                      style: theme.textTheme.titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 12),
                   Wrap(
                     alignment: WrapAlignment.start,
                     spacing: 8,
                     runSpacing: 8,
-                    children: artisanServices.map((s) => ServicePill(service: s)).toList(),
+                    children: artisanServices
+                        .map((s) => ServicePill(service: s))
+                        .toList(),
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
@@ -552,10 +721,15 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                       onPressed: () => Navigator.of(ctx).pop(),
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        side: BorderSide(color: colorScheme.onSurface.withAlpha((0.08 * 255).toInt())),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        side: BorderSide(
+                            color: colorScheme.onSurface
+                                .withAlpha((0.08 * 255).toInt())),
                       ),
-                      child: Text('Close', style: theme.textTheme.titleMedium?.copyWith(color: colorScheme.onSurface)),
+                      child: Text('Close',
+                          style: theme.textTheme.titleMedium
+                              ?.copyWith(color: colorScheme.onSurface)),
                     ),
                   ),
                 ],
@@ -582,22 +756,33 @@ class _ProfileWidgetState extends State<ProfileWidget> {
     try {
       final profile = AppStateNotifier.instance.profile;
       if (profile != null) {
-        final candidates = [profile['role'], profile['type'], profile['accountType'], profile['userType'], profile['authProvider']];
+        final candidates = [
+          profile['role'],
+          profile['type'],
+          profile['accountType'],
+          profile['userType'],
+          profile['authProvider']
+        ];
         for (final c in candidates) {
           if (c == null) continue;
           final s = c.toString().toLowerCase();
-          if (s.contains('artisan')) { profileRoleIsArtisan = true; break; }
+          if (s.contains('artisan')) {
+            profileRoleIsArtisan = true;
+            break;
+          }
         }
       }
     } catch (_) {}
 
-    final bool _isArtisanUser = profileRoleIsArtisan || (_cachedArtisanData != null && _cachedArtisanData!.isNotEmpty);
+    final bool _isArtisanUser = profileRoleIsArtisan ||
+        (_cachedArtisanData != null && _cachedArtisanData!.isNotEmpty);
 
     // Ensure this page is inside NavBarPage so the bottom navigation shows.
     // Only redirect automatically when the current router location actually
     // points to the profile path. This avoids clobbering other navigations
     // (for example when About/Support call GoRouter.go('/infoPage')).
-    final bool _isNestedNavBar = context.findAncestorWidgetOfExactType<NavBarPage>() != null;
+    final bool _isNestedNavBar =
+        context.findAncestorWidgetOfExactType<NavBarPage>() != null;
     if (!_isNestedNavBar) {
       bool shouldRedirect = true;
       try {
@@ -607,7 +792,9 @@ class _ProfileWidgetState extends State<ProfileWidget> {
         final String cfgStr = cfg?.toString() ?? '';
         // If the current router configuration string doesn't contain the profile
         // path, assume we're navigating elsewhere and avoid replacing the NavBar.
-        if (cfgStr.isNotEmpty && !cfgStr.contains(ProfileWidget.routePath) && !cfgStr.contains('/profile')) {
+        if (cfgStr.isNotEmpty &&
+            !cfgStr.contains(ProfileWidget.routePath) &&
+            !cfgStr.contains('/profile')) {
           shouldRedirect = false;
         }
       } catch (_) {
@@ -617,9 +804,13 @@ class _ProfileWidgetState extends State<ProfileWidget> {
       if (shouldRedirect) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           try {
-            NavigationUtils.safePushReplacement(context, NavBarPage(initialPage: 'profile'));
+            NavigationUtils.safePushReplacement(
+                context, NavBarPage(initialPage: 'profile'));
           } catch (_) {
-            try { Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => NavBarPage(initialPage: 'profile'))); } catch (_) {}
+            try {
+              Navigator.of(context).pushReplacement(MaterialPageRoute(
+                  builder: (_) => NavBarPage(initialPage: 'profile')));
+            } catch (_) {}
           }
         });
       }
@@ -639,13 +830,16 @@ class _ProfileWidgetState extends State<ProfileWidget> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: onSurfaceAlpha10, width: 1)),
+                border: Border(
+                    bottom: BorderSide(color: onSurfaceAlpha10, width: 1)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const SizedBox(width: 48),
-                  Text('Profile', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w500, fontSize: 18)),
+                  Text('Profile',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w500, fontSize: 18)),
                   if (_isLoading)
                     SizedBox(
                       width: 48,
@@ -674,7 +868,8 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(24.0, 0.0, 24.0, MediaQuery.of(context).padding.bottom + 140.0),
+                    padding: EdgeInsets.fromLTRB(24.0, 0.0, 24.0,
+                        MediaQuery.of(context).padding.bottom + 140.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
@@ -702,15 +897,38 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                               final result = await _pushEditProfile();
                               if (result is Map<String, dynamic>) {
                                 // Update cache with new data
-                                _cachedProfileData = Map<String, dynamic>.from(result);
+                                _cachedProfileData =
+                                    Map<String, dynamic>.from(result);
                                 _isCacheStale = false;
 
                                 setState(() {
-                                  displayName = (result['name'] ?? result['fullName'] ?? result['username'] ?? result['displayName'])?.toString();
-                                  userEmail = (result['email'] ?? result['contact'] ?? result['username'])?.toString();
-                                  userPhone = (result['phone'] ?? result['phoneNumber'] ?? result['mobile'])?.toString();
-                                  profileImageUrl = (result['profileImage'] is Map) ? (result['profileImage']['url']?.toString() ?? '') : (result['profileImage'] ?? result['photo'] ?? result['avatar'])?.toString();
-                                  userLocation = (result['location'] ?? result['city'] ?? result['serviceArea']?['address'])?.toString() ?? '';
+                                  displayName = (result['name'] ??
+                                          result['fullName'] ??
+                                          result['username'] ??
+                                          result['displayName'])
+                                      ?.toString();
+                                  userEmail = (result['email'] ??
+                                          result['contact'] ??
+                                          result['username'])
+                                      ?.toString();
+                                  userPhone = (result['phone'] ??
+                                          result['phoneNumber'] ??
+                                          result['mobile'])
+                                      ?.toString();
+                                  profileImageUrl =
+                                      (result['profileImage'] is Map)
+                                          ? (result['profileImage']['url']
+                                                  ?.toString() ??
+                                              '')
+                                          : (result['profileImage'] ??
+                                                  result['photo'] ??
+                                                  result['avatar'])
+                                              ?.toString();
+                                  userLocation = (result['location'] ??
+                                              result['city'] ??
+                                              result['serviceArea']?['address'])
+                                          ?.toString() ??
+                                      '';
                                 });
                               } else {
                                 await _loadProfile();
@@ -732,17 +950,39 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                                 final result = await _pushEditProfile();
                                 if (result is Map<String, dynamic>) {
                                   // Update cache with new data
-                                  _cachedProfileData = Map<String, dynamic>.from(result);
+                                  _cachedProfileData =
+                                      Map<String, dynamic>.from(result);
                                   _isCacheStale = false;
 
                                   setState(() {
-                                    displayName = (result['name'] ?? result['fullName'] ?? result['username'] ?? result['displayName'])?.toString();
-                                    userEmail = (result['email'] ?? result['contact'] ?? result['username'])?.toString();
-                                    userPhone = (result['phone'] ?? result['phoneNumber'] ?? result['mobile'])?.toString();
-                                    profileImageUrl = (result['profileImage'] is Map)
-                                        ? (result['profileImage']['url']?.toString() ?? '')
-                                        : (result['profileImage'] ?? result['photo'] ?? result['avatar'])?.toString();
-                                    userLocation = (result['location'] ?? result['city'] ?? result['serviceArea']?['address'])?.toString() ?? '';
+                                    displayName = (result['name'] ??
+                                            result['fullName'] ??
+                                            result['username'] ??
+                                            result['displayName'])
+                                        ?.toString();
+                                    userEmail = (result['email'] ??
+                                            result['contact'] ??
+                                            result['username'])
+                                        ?.toString();
+                                    userPhone = (result['phone'] ??
+                                            result['phoneNumber'] ??
+                                            result['mobile'])
+                                        ?.toString();
+                                    profileImageUrl =
+                                        (result['profileImage'] is Map)
+                                            ? (result['profileImage']['url']
+                                                    ?.toString() ??
+                                                '')
+                                            : (result['profileImage'] ??
+                                                    result['photo'] ??
+                                                    result['avatar'])
+                                                ?.toString();
+                                    userLocation = (result['location'] ??
+                                                result['city'] ??
+                                                result['serviceArea']
+                                                    ?['address'])
+                                            ?.toString() ??
+                                        '';
                                   });
                                 } else {
                                   await _loadProfile();
@@ -757,32 +997,52 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                               if (!ok) return;
                               try {
                                 // Determine role synchronously from cached profile
-                                final profile = AppStateNotifier.instance.profile;
+                                final profile =
+                                    AppStateNotifier.instance.profile;
                                 bool isArtisan = false;
                                 try {
                                   if (profile != null) {
-                                    final candidates = [profile['role'], profile['type'], profile['accountType'], profile['userType'], profile['authProvider']];
+                                    final candidates = [
+                                      profile['role'],
+                                      profile['type'],
+                                      profile['accountType'],
+                                      profile['userType'],
+                                      profile['authProvider']
+                                    ];
                                     for (final c in candidates) {
                                       if (c == null) continue;
                                       final s = c.toString().toLowerCase();
-                                      if (s.contains('artisan')) { isArtisan = true; break; }
+                                      if (s.contains('artisan')) {
+                                        isArtisan = true;
+                                        break;
+                                      }
                                     }
                                   }
                                 } catch (_) {}
 
                                 if (isArtisan) {
                                   try {
-                                    GoRouter.of(context).pushNamed(ArtisanJobsHistoryWidget.routeName);
+                                    GoRouter.of(context).pushNamed(
+                                        ArtisanJobsHistoryWidget.routeName);
                                     return;
                                   } catch (_) {
-                                    try { NavigationUtils.safePush(context, const ArtisanJobsHistoryWidget()); return; } catch (_) {}
+                                    try {
+                                      NavigationUtils.safePush(context,
+                                          const ArtisanJobsHistoryWidget());
+                                      return;
+                                    } catch (_) {}
                                   }
                                 } else {
                                   try {
-                                    GoRouter.of(context).pushNamed(JobHistoryPageWidget.routeName);
+                                    GoRouter.of(context).pushNamed(
+                                        JobHistoryPageWidget.routeName);
                                     return;
                                   } catch (_) {
-                                    try { NavigationUtils.safePush(context, const JobHistoryPageWidget()); return; } catch (_) {}
+                                    try {
+                                      NavigationUtils.safePush(context,
+                                          const JobHistoryPageWidget());
+                                      return;
+                                    } catch (_) {}
                                   }
                                 }
                               } catch (_) {}
@@ -791,14 +1051,44 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                           onWallet: () {
                             ensureSignedInForAction(context).then((ok) async {
                               if (!ok) return;
-                              try { GoRouter.of(context).pushNamed(UserWalletpageWidget.routeName); return; } catch (e) { try { NavigationUtils.safePush(context, const UserWalletpageWidget()); return; } catch (_) {} }
+                              try {
+                                GoRouter.of(context)
+                                    .pushNamed(UserWalletpageWidget.routeName);
+                                return;
+                              } catch (e) {
+                                try {
+                                  NavigationUtils.safePush(
+                                      context, const UserWalletpageWidget());
+                                  return;
+                                } catch (_) {}
+                              }
                             });
                           },
                           onHelpSupport: () {
-                            try { GoRouter.of(context).pushNamed(SupportPageWidget.routeName); return; } catch (e) { try { NavigationUtils.safePush(context, const SupportPageWidget()); return; } catch (_) {} }
+                            try {
+                              GoRouter.of(context)
+                                  .pushNamed(SupportPageWidget.routeName);
+                              return;
+                            } catch (e) {
+                              try {
+                                NavigationUtils.safePush(
+                                    context, const SupportPageWidget());
+                                return;
+                              } catch (_) {}
+                            }
                           },
                           onAboutUs: () {
-                            try { GoRouter.of(context).pushNamed(InfoPageWidget.routeName); return; } catch (e) { try { NavigationUtils.safePush(context, const InfoPageWidget()); return; } catch (_) {} }
+                            try {
+                              GoRouter.of(context)
+                                  .pushNamed(InfoPageWidget.routeName);
+                              return;
+                            } catch (e) {
+                              try {
+                                NavigationUtils.safePush(
+                                    context, const InfoPageWidget());
+                                return;
+                              } catch (_) {}
+                            }
                           },
                           // The Verification menu item was intentionally commented out per request.
                           // onVerification: () {
@@ -814,48 +1104,82 @@ class _ProfileWidgetState extends State<ProfileWidget> {
 
                                   try {
                                     if (_cachedProfileData != null) {
-                                      final candidates = ['_id', 'id', 'userId', 'user_id', 'uid'];
+                                      final candidates = [
+                                        '_id',
+                                        'id',
+                                        'userId',
+                                        'user_id',
+                                        'uid'
+                                      ];
                                       for (final k in candidates) {
                                         final v = _cachedProfileData![k];
-                                        if (v != null && v.toString().isNotEmpty) {
+                                        if (v != null &&
+                                            v.toString().isNotEmpty) {
                                           artisanUserId = v.toString();
                                           break;
                                         }
                                       }
-                                      if ((artisanUserId == null || artisanUserId.isEmpty) && _cachedProfileData!['user'] is Map && _cachedProfileData!['user']['_id'] != null) {
-                                        artisanUserId = _cachedProfileData!['user']['_id'].toString();
+                                      if ((artisanUserId == null ||
+                                              artisanUserId.isEmpty) &&
+                                          _cachedProfileData!['user'] is Map &&
+                                          _cachedProfileData!['user']['_id'] !=
+                                              null) {
+                                        artisanUserId =
+                                            _cachedProfileData!['user']['_id']
+                                                .toString();
                                       }
                                     }
                                   } catch (_) {}
 
                                   // If still missing, try TokenStorage which should contain the login's user id
-                                  if (artisanUserId == null || artisanUserId.isEmpty) {
+                                  if (artisanUserId == null ||
+                                      artisanUserId.isEmpty) {
                                     try {
-                                      final tid = await TokenStorage.getUserId();
-                                      if (tid != null && tid.isNotEmpty) artisanUserId = tid;
+                                      final tid =
+                                          await TokenStorage.getUserId();
+                                      if (tid != null && tid.isNotEmpty)
+                                        artisanUserId = tid;
                                     } catch (_) {}
                                   }
 
                                   // If we now have a user id but no artisan record cached, try to fetch the artisan by user id
-                                  if ((artisanUserId != null && artisanUserId.isNotEmpty) && (_cachedArtisanData == null || _cachedArtisanData!['userId'] == null && _cachedArtisanData!['user'] == null)) {
+                                  if ((artisanUserId != null &&
+                                          artisanUserId.isNotEmpty) &&
+                                      (_cachedArtisanData == null ||
+                                          _cachedArtisanData!['userId'] ==
+                                                  null &&
+                                              _cachedArtisanData!['user'] ==
+                                                  null)) {
                                     try {
-                                      final byUser = await ArtistService.getByUserId(artisanUserId);
+                                      final byUser =
+                                          await ArtistService.getByUserId(
+                                              artisanUserId);
                                       if (byUser != null) {
-                                        _cachedArtisanData = Map<String, dynamic>.from(byUser);
+                                        _cachedArtisanData =
+                                            Map<String, dynamic>.from(byUser);
                                       }
                                     } catch (_) {}
                                   }
 
                                   // Navigate passing the user id (this is what's expected by many endpoints)
                                   try {
-                                    if (artisanUserId != null && artisanUserId.isNotEmpty) {
+                                    if (artisanUserId != null &&
+                                        artisanUserId.isNotEmpty) {
                                       try {
-                                        NavigationUtils.safePush(context, MyServicePageWidget(artisanId: artisanUserId));
+                                        NavigationUtils.safePush(
+                                            context,
+                                            MyServicePageWidget(
+                                                artisanId: artisanUserId));
                                         return;
                                       } catch (_) {}
 
                                       try {
-                                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => MyServicePageWidget(artisanId: artisanUserId)));
+                                        Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                                builder: (_) =>
+                                                    MyServicePageWidget(
+                                                        artisanId:
+                                                            artisanUserId)));
                                         return;
                                       } catch (_) {}
                                     }
@@ -863,11 +1187,15 @@ class _ProfileWidgetState extends State<ProfileWidget> {
 
                                   // Final fallback: open MyServicePage for current authenticated user
                                   try {
-                                    NavigationUtils.safePush(context, const MyServicePageWidget());
+                                    NavigationUtils.safePush(
+                                        context, const MyServicePageWidget());
                                     return;
                                   } catch (_) {
                                     try {
-                                      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyServicePageWidget()));
+                                      Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                              builder: (_) =>
+                                                  const MyServicePageWidget()));
                                       return;
                                     } catch (_) {}
                                   }
@@ -887,20 +1215,26 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                             child: ElevatedButton(
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: colorScheme.error,
-                                padding: const EdgeInsets.symmetric(vertical: 16),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
                               ),
                               onPressed: _handleLogout,
                               child: _loggingOut
                                   ? SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                                  : Text('Log out', style: theme.textTheme.titleMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w500)),
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : Text('Log out',
+                                      style: theme.textTheme.titleMedium
+                                          ?.copyWith(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w500)),
                             ),
                           ),
                         ),
@@ -915,32 +1249,42 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                             child: OutlinedButton(
                               style: OutlinedButton.styleFrom(
                                 side: BorderSide(color: colorScheme.error),
-                                padding: const EdgeInsets.symmetric(vertical: 16),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
                               ),
                               onPressed: _handleDeleteAccount,
                               child: _deletingAccount
                                   ? SizedBox(
                                       width: 20,
                                       height: 20,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.error),
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: colorScheme.error),
                                     )
-                                  : Text('Delete account', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: colorScheme.error, fontWeight: FontWeight.w600)),
+                                  : Text('Delete account',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                              color: colorScheme.error,
+                                              fontWeight: FontWeight.w600)),
                             ),
                           ),
                         ),
 
                         const SizedBox(height: 40),
-                        ],
+                      ],
                     ),
                   ),
                 ),
               ),
             ),
-        ],
+          ],
         ),
       ),
-      );
+    );
   }
 }
 
@@ -985,9 +1329,12 @@ class _ProfileHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final onSurfaceAlpha30 = colorScheme.onSurface.withAlpha((0.3 * 255).toInt());
-    final onSurfaceAlpha50 = colorScheme.onSurface.withAlpha((0.5 * 255).toInt());
-    final onSurfaceAlpha60 = colorScheme.onSurface.withAlpha((0.6 * 255).toInt());
+    final onSurfaceAlpha30 =
+        colorScheme.onSurface.withAlpha((0.3 * 255).toInt());
+    final onSurfaceAlpha50 =
+        colorScheme.onSurface.withAlpha((0.5 * 255).toInt());
+    final onSurfaceAlpha60 =
+        colorScheme.onSurface.withAlpha((0.6 * 255).toInt());
 
     return GestureDetector(
       onTap: onTap,
@@ -1006,32 +1353,34 @@ class _ProfileHeader extends StatelessWidget {
                 child: ClipOval(
                   child: isValidHttpUrl(profileImageUrl)
                       ? Image.network(
-                    profileImageUrl!,
-                    fit: BoxFit.cover,
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return Center(
-                        child: CircularProgressIndicator(
-                          value: loadingProgress.expectedTotalBytes != null
-                              ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
-                              : null,
-                          color: colorScheme.primary,
-                        ),
-                      );
-                    },
-                    errorBuilder: (context, error, stackTrace) => Icon(
-                      Icons.person_outline,
-                      size: 48,
-                      color: onSurfaceAlpha30,
-                    ),
-                    cacheWidth: 200, // Optimize image loading
-                    cacheHeight: 200,
-                  )
+                          profileImageUrl!,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Center(
+                              child: CircularProgressIndicator(
+                                value: loadingProgress.expectedTotalBytes !=
+                                        null
+                                    ? loadingProgress.cumulativeBytesLoaded /
+                                        loadingProgress.expectedTotalBytes!
+                                    : null,
+                                color: colorScheme.primary,
+                              ),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) => Icon(
+                            Icons.person_outline,
+                            size: 48,
+                            color: onSurfaceAlpha30,
+                          ),
+                          cacheWidth: 200, // Optimize image loading
+                          cacheHeight: 200,
+                        )
                       : Icon(
-                    Icons.person_outline,
-                    size: 48,
-                    color: onSurfaceAlpha30,
-                  ),
+                          Icons.person_outline,
+                          size: 48,
+                          color: onSurfaceAlpha30,
+                        ),
                 ),
               ),
               Positioned(
@@ -1043,9 +1392,11 @@ class _ProfileHeader extends StatelessWidget {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: colorScheme.primary,
-                    border: Border.all(color: isDark ? Colors.black : Colors.white, width: 3),
+                    border: Border.all(
+                        color: isDark ? Colors.black : Colors.white, width: 3),
                   ),
-                  child: Icon(Icons.edit_outlined, size: 16, color: colorScheme.onPrimary),
+                  child: Icon(Icons.edit_outlined,
+                      size: 16, color: colorScheme.onPrimary),
                 ),
               ),
             ],
@@ -1060,7 +1411,8 @@ class _ProfileHeader extends StatelessWidget {
               Flexible(
                 child: Text(
                   displayName ?? 'User',
-                  style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
+                  style: theme.textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.w600),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1069,9 +1421,18 @@ class _ProfileHeader extends StatelessWidget {
               if (isArtisan && artisanVerified == true) ...[
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(color: Colors.green.withAlpha(30), borderRadius: BorderRadius.circular(12)),
-                  child: Row(children: [ const Icon(Icons.verified, size: 14, color: Colors.green), const SizedBox(width: 6), Text('KYC verified', style: theme.textTheme.bodySmall?.copyWith(color: Colors.green, fontWeight: FontWeight.w600)), ]),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                      color: Colors.green.withAlpha(30),
+                      borderRadius: BorderRadius.circular(12)),
+                  child: Row(children: [
+                    const Icon(Icons.verified, size: 14, color: Colors.green),
+                    const SizedBox(width: 6),
+                    Text('KYC verified',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: Colors.green, fontWeight: FontWeight.w600)),
+                  ]),
                 ),
               ],
             ],
@@ -1079,7 +1440,8 @@ class _ProfileHeader extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             userEmail ?? '',
-            style: theme.textTheme.bodyMedium?.copyWith(color: onSurfaceAlpha60),
+            style:
+                theme.textTheme.bodyMedium?.copyWith(color: onSurfaceAlpha60),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1089,7 +1451,8 @@ class _ProfileHeader extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Icon(Icons.location_on_outlined, size: 14, color: onSurfaceAlpha50),
+                Icon(Icons.location_on_outlined,
+                    size: 14, color: onSurfaceAlpha50),
                 const SizedBox(height: 4),
                 Tooltip(
                   message: userLocation!,
@@ -1100,7 +1463,8 @@ class _ProfileHeader extends StatelessWidget {
                     child: Text(
                       userLocation!,
                       textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall?.copyWith(color: onSurfaceAlpha60),
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: onSurfaceAlpha60),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -1115,7 +1479,8 @@ class _ProfileHeader extends StatelessWidget {
               child: SizedBox(
                 height: 18,
                 width: 18,
-                child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.primary),
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: colorScheme.primary),
               ),
             ),
           if (isArtisan && artisanError != null && !loadingArtisan)
@@ -1124,10 +1489,14 @@ class _ProfileHeader extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(artisanError!, style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.error)),
+                  Text(artisanError!,
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: colorScheme.error)),
                   const SizedBox(width: 8),
                   TextButton(
-                    onPressed: () => context.findAncestorStateOfType<_ProfileWidgetState>()?._loadProfile(),
+                    onPressed: () => context
+                        .findAncestorStateOfType<_ProfileWidgetState>()
+                        ?._loadProfile(),
                     child: const Text('Retry'),
                   ),
                 ],
@@ -1149,21 +1518,28 @@ class _ProfileHeader extends StatelessWidget {
                   if (artisanServices.length > 3)
                     GestureDetector(
                       onTap: () {
-                        final parentState = context.findAncestorStateOfType<_ProfileWidgetState>();
-                        if (parentState != null) return parentState._showServicesModal();
+                        final parentState = context
+                            .findAncestorStateOfType<_ProfileWidgetState>();
+                        if (parentState != null)
+                          return parentState._showServicesModal();
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: colorScheme.onSurface.withAlpha((0.04 * 255).toInt()),
+                          color: colorScheme.onSurface
+                              .withAlpha((0.04 * 255).toInt()),
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: colorScheme.onSurface.withAlpha((0.06 * 255).toInt())),
+                          border: Border.all(
+                              color: colorScheme.onSurface
+                                  .withAlpha((0.06 * 255).toInt())),
                         ),
                         child: Text(
                           '+${artisanServices.length - 3} More',
                           style: theme.textTheme.bodySmall?.copyWith(
                             fontWeight: FontWeight.w600,
-                            color: colorScheme.onSurface.withAlpha((0.8 * 255).toInt()),
+                            color: colorScheme.onSurface
+                                .withAlpha((0.8 * 255).toInt()),
                           ),
                         ),
                       ),
@@ -1186,24 +1562,34 @@ class _ProfileHeader extends StatelessWidget {
                         // Normalize trade label: remove surrounding brackets or decode JSON list
                         String label = (artisanTrade ?? '');
                         try {
-                          if (label.trim().startsWith('[') && label.trim().endsWith(']')) {
+                          if (label.trim().startsWith('[') &&
+                              label.trim().endsWith(']')) {
                             final parsed = jsonDecode(label);
-                            if (parsed is List) label = parsed.map((e) => e?.toString() ?? '').where((s) => s.isNotEmpty).join(', ');
+                            if (parsed is List)
+                              label = parsed
+                                  .map((e) => e?.toString() ?? '')
+                                  .where((s) => s.isNotEmpty)
+                                  .join(', ');
                           }
                         } catch (_) {
                           // fallback: strip leading/trailing brackets
-                          if (label.startsWith('[') && label.endsWith(']')) label = label.substring(1, label.length - 1);
+                          if (label.startsWith('[') && label.endsWith(']'))
+                            label = label.substring(1, label.length - 1);
                         }
 
                         return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
-                            color: colorScheme.primary.withAlpha((0.12 * 255).toInt()),
+                            color: colorScheme.primary
+                                .withAlpha((0.12 * 255).toInt()),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
                             label,
-                            style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600, color: colorScheme.primary),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: colorScheme.primary),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -1219,7 +1605,8 @@ class _ProfileHeader extends StatelessWidget {
                     const SizedBox(width: 8),
                     Icon(Icons.star, size: 14, color: Colors.amber),
                     const SizedBox(width: 4),
-                    Text(artisanRating!.toStringAsFixed(1), style: theme.textTheme.bodySmall),
+                    Text(artisanRating!.toStringAsFixed(1),
+                        style: theme.textTheme.bodySmall),
                   ],
                 ],
               ),
@@ -1243,12 +1630,13 @@ class _ProfileHeader extends StatelessWidget {
                         height: 80,
                         child: url.isNotEmpty
                             ? Image.network(
-                          url,
-                          fit: BoxFit.cover,
-                          cacheWidth: 240,
-                          cacheHeight: 160,
-                          errorBuilder: (_, __, ___) => Container(color: colorScheme.surface),
-                        )
+                                url,
+                                fit: BoxFit.cover,
+                                cacheWidth: 240,
+                                cacheHeight: 160,
+                                errorBuilder: (_, __, ___) =>
+                                    Container(color: colorScheme.surface),
+                              )
                             : Container(color: colorScheme.surface),
                       ),
                     );
@@ -1286,20 +1674,29 @@ class _ProfileMenuSection extends StatelessWidget {
     required this.colorScheme,
   });
 
-  Widget _buildMenuItem({required IconData icon, required String title, required VoidCallback onTap, Color? iconColor}) {
+  Widget _buildMenuItem(
+      {required IconData icon,
+      required String title,
+      required VoidCallback onTap,
+      Color? iconColor}) {
     return ListTile(
       onTap: onTap,
       leading: Container(
         width: 40,
         height: 40,
         decoration: BoxDecoration(
-          color: (iconColor ?? colorScheme.primary).withAlpha((0.1 * 255).toInt()),
+          color:
+              (iconColor ?? colorScheme.primary).withAlpha((0.1 * 255).toInt()),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Icon(icon, size: 20, color: iconColor ?? colorScheme.primary),
       ),
-      title: Text(title, style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500)),
-      trailing: Icon(Icons.chevron_right_rounded, color: colorScheme.onSurface.withAlpha((0.3 * 255).toInt()), size: 20),
+      title: Text(title,
+          style:
+              theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500)),
+      trailing: Icon(Icons.chevron_right_rounded,
+          color: colorScheme.onSurface.withAlpha((0.3 * 255).toInt()),
+          size: 20),
       contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
     );
   }
@@ -1311,13 +1708,19 @@ class _ProfileMenuSection extends StatelessWidget {
       children: [
         const Padding(
           padding: EdgeInsets.only(left: 16.0, bottom: 12),
-          child: Text('GENERAL', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 1.0)),
+          child: Text('GENERAL',
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.0)),
         ),
         Card(
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: colorScheme.onSurface.withAlpha((0.1 * 255).toInt()), width: 1),
+            side: BorderSide(
+                color: colorScheme.onSurface.withAlpha((0.1 * 255).toInt()),
+                width: 1),
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 8.0),
@@ -1328,27 +1731,38 @@ class _ProfileMenuSection extends StatelessWidget {
                   title: 'Edit Profile',
                   onTap: onEditProfile,
                 ),
-                const Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Divider(height: 1)),
+                const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Divider(height: 1)),
                 _buildMenuItem(
                   icon: Icons.work_outline,
                   title: 'My Jobs',
                   onTap: onMyJobs,
                 ),
-                const Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Divider(height: 1)),
-                if (onMyService != null) const Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Divider(height: 1)),
+                const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Divider(height: 1)),
+                if (onMyService != null)
+                  const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Divider(height: 1)),
                 if (onMyService != null)
                   _buildMenuItem(
                     icon: Icons.room_service_outlined,
                     title: 'My service',
                     onTap: onMyService!,
                   ),
-                const Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Divider(height: 1)),
+                const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Divider(height: 1)),
                 _buildMenuItem(
                   icon: Icons.account_balance_wallet_outlined,
                   title: 'Wallet',
                   onTap: onWallet,
                 ),
-                const Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Divider(height: 1)),
+                const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Divider(height: 1)),
                 // The Verification menu item was intentionally commented out per request.
                 // _buildMenuItem(
                 //   icon: Icons.verified_user_outlined,
@@ -1363,13 +1777,19 @@ class _ProfileMenuSection extends StatelessWidget {
         const SizedBox(height: 16),
         const Padding(
           padding: EdgeInsets.only(left: 16.0, bottom: 12),
-          child: Text('INFO', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 1.0)),
+          child: Text('INFO',
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.0)),
         ),
         Card(
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: colorScheme.onSurface.withAlpha((0.1 * 255).toInt()), width: 1),
+            side: BorderSide(
+                color: colorScheme.onSurface.withAlpha((0.1 * 255).toInt()),
+                width: 1),
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 8.0),
@@ -1380,7 +1800,9 @@ class _ProfileMenuSection extends StatelessWidget {
                   title: 'About Us',
                   onTap: onAboutUs,
                 ),
-                const Padding(padding: EdgeInsets.symmetric(horizontal: 16.0), child: Divider(height: 1)),
+                const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Divider(height: 1)),
                 _buildMenuItem(
                   icon: Icons.help_outline,
                   title: 'Help & Support',
@@ -1402,13 +1824,16 @@ class ServicePill extends StatelessWidget {
   final bool compact;
   final VoidCallback? onTap;
 
-  const ServicePill({Key? key, required this.service, this.compact = false, this.onTap}) : super(key: key);
+  const ServicePill(
+      {Key? key, required this.service, this.compact = false, this.onTap})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final serviceName = service['subCategoryName'] ?? service['name'] ?? 'Service';
+    final serviceName =
+        service['subCategoryName'] ?? service['name'] ?? 'Service';
     final price = service['price'] ?? service['amount'];
     final currency = service['currency'] ?? 'NGN';
 
@@ -1419,11 +1844,14 @@ class ServicePill extends StatelessWidget {
         waitDuration: const Duration(milliseconds: 300),
         showDuration: const Duration(seconds: 3),
         child: Container(
-          padding: compact ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4) : const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          padding: compact
+              ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4)
+              : const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
             color: colorScheme.primary.withAlpha((0.12 * 255).toInt()),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: colorScheme.primary.withAlpha((0.08 * 255).toInt())),
+            border: Border.all(
+                color: colorScheme.primary.withAlpha((0.08 * 255).toInt())),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -1431,14 +1859,18 @@ class ServicePill extends StatelessWidget {
               Flexible(
                 child: Text(
                   serviceName,
-                  style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600, color: colorScheme.primary),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600, color: colorScheme.primary),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (!compact && (price != null && price.toString().isNotEmpty)) ...[
+              if (!compact &&
+                  (price != null && price.toString().isNotEmpty)) ...[
                 const SizedBox(width: 6),
-                Text('$price $currency', style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.primary)),
+                Text('$price $currency',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: colorScheme.primary)),
               ],
             ],
           ),

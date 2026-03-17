@@ -1108,16 +1108,17 @@ class AuthService {
     return null;
   }
 
-  /// Completes registration/verification by sending the Firebase ID token to the backend.
+  /// Completes registration by sending the Firebase ID token to the backend.
+  /// Uses POST /api/auth/registeruserfirebase.
+  /// The phone number is verified by Firebase and extracted from the ID token server-side.
   static Future<Map<String, dynamic>> registerWithFirebaseToken({
     required String idToken,
     required String name,
     required String email,
     required String password,
-    required String phone,
     required String role,
   }) async {
-    final uri = Uri.parse('$API_BASE_URL/api/register-user-with-firebase-token');
+    final uri = Uri.parse('$API_BASE_URL/api/auth/registeruserfirebase');
 
     try {
       final reqBody = {
@@ -1125,7 +1126,6 @@ class AuthService {
         'name': name,
         'email': email.trim().toLowerCase(),
         'password': password,
-        'phone': phone,
         'role': role,
       };
 
@@ -1145,6 +1145,79 @@ class AuthService {
         await _persistTokenAndRole(body);
         return {'success': true, 'data': body};
       }
+
+      if (status == 408)
+        return {
+          'success': false,
+          'error': {'message': 'Request timed out'}
+        };
+      if (status == 599)
+        return {
+          'success': false,
+          'error': {'message': 'Network error'}
+        };
+
+      return {
+        'success': false,
+        'error': body ?? {'message': 'HTTP $status', 'headers': resp.headers}
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': {'message': e.toString()}
+      };
+    }
+  }
+
+  /// Completes OTP-backed registration by sending the Firebase ID token as a
+  /// provider reference. Uses POST /api/auth/verify-registration-reference.
+  ///
+  /// Call this after the server has created a pending RegistrationOtp record
+  /// (via /api/auth/register) and the client has completed Firebase phone
+  /// verification to obtain an ID token.
+  ///
+  /// [email] must match the email used during the initial registration call.
+  /// [reference] is the Firebase ID token obtained from [verifyOtpWithFirebase].
+  static Future<Map<String, dynamic>> verifyRegistrationWithReference({
+    required String email,
+    required String reference,
+  }) async {
+    final uri =
+        Uri.parse('$API_BASE_URL/api/auth/verify-registration-reference');
+
+    try {
+      final reqBody = {
+        'email': email.trim().toLowerCase(),
+        'reference': reference,
+      };
+
+      final headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': 'RijHub-Mobile/1.0',
+      };
+
+      final resp = await _postWithRetries(uri,
+          body: reqBody, headers: headers, timeoutSeconds: 20, maxAttempts: 2);
+
+      final status = resp.statusCode;
+      final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
+
+      if (status >= 200 && status < 300) {
+        await _persistTokenAndRole(body);
+        return {'success': true, 'data': body};
+      }
+
+      if (status == 408)
+        return {
+          'success': false,
+          'error': {'message': 'Request timed out'}
+        };
+      if (status == 599)
+        return {
+          'success': false,
+          'error': {'message': 'Network error'}
+        };
 
       return {
         'success': false,
