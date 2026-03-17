@@ -620,7 +620,24 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
         onVerificationFailed: (FirebaseAuthException e) {
           if (!mounted) return;
           setState(() => _isCreatingAccount = false);
-          AuthErrorHandler.showErrorDialog(context, e.message ?? 'Verification failed');
+          // Firebase error code 39 / status 17499 is a carrier-level SMS
+          // delivery failure common with Airtel Nigeria. Show a helpful
+          // message instead of the vague "internal error" from Firebase.
+          final msg = e.message ?? '';
+          final isCarrierBlock = msg.contains('Error code:39') ||
+              msg.contains('17499') ||
+              (e.code == 'unknown' && msg.contains('internal error'));
+          if (isCarrierBlock) {
+            AuthErrorHandler.showErrorDialog(
+              context,
+              'SMS delivery failed for this number. Some carriers (e.g. Airtel) '
+              'block automated verification messages. Please try a different '
+              'phone number (MTN, Glo, or 9mobile).',
+            );
+          } else {
+            AuthErrorHandler.showErrorDialog(
+                context, e.message ?? 'Verification failed');
+          }
         },
         onVerificationCompleted: (PhoneAuthCredential credential) async {
           // Auto-verification (rare but possible)

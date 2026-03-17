@@ -231,6 +231,7 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
       context: context,
       isDismissible: false,
       enableDrag: false,
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => _buildWelcomeSheet(displayName, role),
     );
@@ -241,6 +242,10 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    // Use MediaQuery bottom padding to push content above the system
+    // navigation bar on devices with gesture nav / soft keys.
+    final bottomInset = MediaQuery.of(context).viewPadding.bottom;
+
     return Container(
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
@@ -249,126 +254,132 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
           topRight: Radius.circular(30),
         ),
       ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Success animation/icon
-              Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.check_circle,
-                  color: Colors.green,
-                  size: 60,
+      constraints: BoxConstraints(
+        minHeight: MediaQuery.of(context).size.height * 0.75,
+      ),
+      child: SingleChildScrollView(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 32,
+          // Ensure the button clears the system navigation bar
+          bottom: 32 + bottomInset,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Success animation/icon
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.check_circle,
+                color: Colors.green,
+                size: 60,
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Welcome header
+            Text(
+              'Welcome to RIJHUB! 🎉',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: _primaryColor,
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Personalized greeting
+            Text(
+              'Hello, $name',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // Welcome message
+            Text(
+              isArtisan
+                  ? 'Your artisan account has been successfully verified. You can now start receiving job requests and growing your business.'
+                  : 'Your account has been successfully verified. You can now explore and hire skilled artisans in your area.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.7),
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // Feature highlights
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: _primaryColor.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: _primaryColor.withOpacity(0.1),
                 ),
               ),
-              const SizedBox(height: 24),
-
-              // Welcome header
-              Text(
-                'Welcome to RIJHUB! 🎉',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: _primaryColor,
-                ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildFeatureItem(
+                    icon: isArtisan ? Icons.work_outline : Icons.search,
+                    label: isArtisan ? 'Manage Jobs' : 'Find Artisans',
+                  ),
+                  Container(
+                    height: 30,
+                    width: 1,
+                    color: _primaryColor.withOpacity(0.2),
+                  ),
+                  _buildFeatureItem(
+                    icon: Icons.message_outlined,
+                    label: 'Chat',
+                  ),
+                  Container(
+                    height: 30,
+                    width: 1,
+                    color: _primaryColor.withOpacity(0.2),
+                  ),
+                  _buildFeatureItem(
+                    icon: Icons.payment_outlined,
+                    label: 'Secure Payments',
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
+            ),
+            const SizedBox(height: 32),
 
-              // Personalized greeting
-              Text(
-                'Hello, $name',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
+            // Get Started button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _primaryColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 2,
                 ),
-              ),
-              const SizedBox(height: 8),
-
-              // Welcome message
-              Text(
-                isArtisan
-                    ? 'Your artisan account has been successfully verified. You can now start receiving job requests and growing your business.'
-                    : 'Your account has been successfully verified. You can now explore and hire skilled artisans in your area.',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurface.withOpacity(0.7),
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              // Feature highlights
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: _primaryColor.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: _primaryColor.withOpacity(0.1),
+                onPressed: () => _navigateToDashboard(role),
+                child: const Text(
+                  'Get Started',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildFeatureItem(
-                      icon: isArtisan ? Icons.work_outline : Icons.search,
-                      label: isArtisan ? 'Manage Jobs' : 'Find Artisans',
-                    ),
-                    Container(
-                      height: 30,
-                      width: 1,
-                      color: _primaryColor.withOpacity(0.2),
-                    ),
-                    _buildFeatureItem(
-                      icon: Icons.message_outlined,
-                      label: 'Chat',
-                    ),
-                    Container(
-                      height: 30,
-                      width: 1,
-                      color: _primaryColor.withOpacity(0.2),
-                    ),
-                    _buildFeatureItem(
-                      icon: Icons.payment_outlined,
-                      label: 'Secure Payments',
-                    ),
-                  ],
-                ),
               ),
-              const SizedBox(height: 32),
-
-              // Get Started button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _primaryColor,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 2,
-                  ),
-                  onPressed: () => _navigateToDashboard(role),
-                  child: const Text(
-                    'Get Started',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
