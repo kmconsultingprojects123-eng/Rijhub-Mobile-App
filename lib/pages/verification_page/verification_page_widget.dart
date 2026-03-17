@@ -5,11 +5,17 @@ import '/services/auth_service.dart';
 import '../../utils/phone_utils.dart';
 import '/index.dart';
 import '../../utils/navigation_utils.dart';
-import '../../utils/awesome_dialogs.dart';
 import '../../state/auth_notifier.dart';
 
 class VerificationPageWidget extends StatefulWidget {
-  const VerificationPageWidget({super.key});
+  const VerificationPageWidget({
+    super.key,
+    this.password,
+    this.role,
+  });
+
+  final String? password;
+  final String? role;
 
   static String routeName = 'VerificationPage';
   static String routePath = '/verificationPageCore';
@@ -128,34 +134,40 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
     _setSubmitting(true);
 
     try {
-      final result = await _performVerification(otp);
+      // 1. Verify OTP with Firebase
+      if (_reference == null || _reference!.isEmpty) {
+        _setError('Missing verification ID. Please try again.');
+        return;
+      }
 
-      if (result['success'] == true) {
-        await _handleVerificationSuccess(result);
+      final idToken = await AuthService.verifyOtpWithFirebase(
+        verificationId: _reference!,
+        smsCode: otp,
+      );
+
+      if (idToken != null) {
+        // 2. Send ID Token to backend to complete registration/verification
+        final result = await AuthService.registerWithFirebaseToken(
+          idToken: idToken,
+          name: _userName ?? '',
+          email: _email ?? '',
+          password: widget.password ?? '',
+          phone: _phone ?? '',
+          role: widget.role ?? 'customer',
+        );
+
+        if (result['success'] == true) {
+          await _handleVerificationSuccess(result);
+        } else {
+          _handleVerificationError(result);
+        }
       } else {
-        _handleVerificationError(result);
+        _setError('Firebase verification failed. Please try again.');
       }
     } catch (e) {
-      _setError('An error occurred. Please try again.');
+      _setError('Invalid OTP. Please check the code and try again.');
     } finally {
       if (mounted) _setSubmitting(false);
-    }
-  }
-
-  Future<Map<String, dynamic>> _performVerification(String otp) async {
-    if (_reference?.isNotEmpty ?? false) {
-      return await AuthService.verifySendchamp(
-          email: _email,
-          phone: _phone,
-          reference: _reference!,
-          otp: otp
-      );
-    } else if (_email?.isNotEmpty ?? false) {
-      return await AuthService.verifyOtpByEmail(email: _email!, otp: otp);
-    } else if (_phone?.isNotEmpty ?? false) {
-      return await AuthService.verifyOtp(phone: _phone!, otp: otp);
-    } else {
-      throw Exception('No email or phone available for verification');
     }
   }
 
@@ -209,7 +221,6 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
   }
 
   Future<void> _showWelcomeBottomSheet(String role) async {
-    final isArtisan = role.contains('artisan');
     final displayName = _userName?.isNotEmpty == true ? _userName! : 'there';
 
     await showModalBottomSheet(

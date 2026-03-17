@@ -45,6 +45,9 @@ GoRouter createRouter(AuthNotifier auth) {
     redirect: (context, state) {
       try {
         final loc = state.uri.path;
+        if (kDebugMode) {
+          print('🛤️ Router: loc=$loc, status=${auth.status}, auth.isAuthenticated=${auth.isAuthenticated}');
+        }
 
         // If unauthenticated, only allow the auth/onboarding flow pages.
         if (auth.status == AuthStatus.unauthenticated) {
@@ -128,6 +131,8 @@ GoRouter createRouter(AuthNotifier auth) {
             phone: params.getParam<String>('phone', ParamType.String),
             reference: params.getParam<String>('reference', ParamType.String),
             email: params.getParam<String>('email', ParamType.String),
+            password: params.getParam<String>('password', ParamType.String),
+            role: params.getParam<String>('role', ParamType.String),
           ),
         ),
         FFRoute(
@@ -292,7 +297,10 @@ GoRouter createRouter(AuthNotifier auth) {
         FFRoute(
           name: VerificationPageWidget.routeName,
           path: VerificationPageWidget.routePath,
-          builder: (context, params) => VerificationPageWidget(),
+          builder: (context, params) => VerificationPageWidget(
+            password: params.getParam<String>('password', ParamType.String),
+            role: params.getParam<String>('role', ParamType.String),
+          ),
         ),
         FFRoute(
           name: RequestQuotePageWidget.routeName,

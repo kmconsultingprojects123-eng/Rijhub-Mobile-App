@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'create_account2_model.dart';
 import '/services/auth_service.dart';
 import '/services/token_storage.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../state/auth_notifier.dart';
 import '../../utils/awesome_dialogs.dart';
 import 'package:flutter/foundation.dart';
@@ -102,6 +103,8 @@ class AuthNavigationService {
     required String phone,
     String? reference,
     String? email,
+    String? password,
+    String? role,
   }) async {
     try {
       await Navigator.pushReplacement(
@@ -111,6 +114,8 @@ class AuthNavigationService {
             phone: phone,
             reference: reference,
             email: email,
+            password: password,
+            role: role,
           ),
         ),
       );
@@ -203,7 +208,6 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
   final _formKey = GlobalKey<FormState>();
 
   String? _effectiveRole;
-  bool _navigateScheduled = false;
   bool _isCreatingAccount = false;
   bool _passwordVisible = false;
   bool _acceptedTos = false;
@@ -213,8 +217,6 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
     return defaultTargetPlatform == TargetPlatform.iOS ||
         defaultTargetPlatform == TargetPlatform.macOS;
   }
-
-  Map<String, dynamic>? _googleProfile;
 
   @override
   void initState() {
@@ -248,7 +250,6 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
     final profile = await TokenStorage.getGoogleProfile();
     if (profile != null && mounted) {
       setState(() {
-        _googleProfile = profile;
         _model.fullNameTextController?.text =
             (profile['name'] ?? '').toString();
         _model.emailAddressTextController?.text =
@@ -274,10 +275,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
       role = RoleUtils.normalize(role);
       if (kDebugMode) debugPrint('CreateAccount2 resolved role: $role');
       // Normalize some common synonyms (client -> customer)
-      if (role != null) {
-        final v = role.trim().toLowerCase();
-        if (v == 'client') role = 'customer';
-      }
+      final v = role.trim().toLowerCase();
+      if (v == 'client') role = 'customer';
 
       // Debug log to help trace navigation role propagation during testing
       if (kDebugMode)
@@ -418,7 +417,6 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
 
     if (profile != null) {
       setState(() {
-        _googleProfile = profile;
         _model.fullNameTextController?.text =
             (profile['name'] ?? '').toString();
         _model.emailAddressTextController?.text =
@@ -427,20 +425,8 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
       await TokenStorage.saveGoogleProfile(profile);
     }
 
-    final reference = _extractSendchampReference(res);
-    final pendingRegistrationData = res['data'];
-    final phone = _phoneController.text.trim();
-
-    if (pendingRegistrationData != null && phone.isNotEmpty) {
-      await _navigateToVerification(
-        phone: phone,
-        reference: reference,
-        email: _model.emailAddressTextController?.text.trim(),
-      );
-      return;
-    }
-
-    await _saveRecentRegistration(reference);
+    // After Google sign in, if profile is new, we still need to collect phone.
+    // In this app's current flow, it seems to just show success dialog.
     if (!mounted) return;
 
     await showAppSuccessDialog(
@@ -448,7 +434,6 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
       title: 'Google signed in',
       desc:
           'We prefilled your name and email. Complete the form to finish creating your account.',
-      onOk: () => _handlePartialRegistrationNavigation(reference),
     );
   }
 
@@ -595,147 +580,59 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
     try {
       final normalizedRole =
           RoleUtils.normalize(_effectiveRole ?? widget.initialRole);
-      final res = await AuthService.register(
-        name: _model.fullNameTextController?.text.trim() ?? '',
-        email: _model.emailAddressTextController?.text.trim() ?? '',
-        password: _passwordController.text,
-        role: normalizedRole,
-        phone: normalizePhoneForApi(_phoneController.text.trim()),
-        persist: false,
-      ).timeout(AuthConstants.apiTimeout);
+      final phone = normalizePhoneForApi(_phoneController.text.trim());
 
-      if (res['success'] == true) {
-        await _processSuccessfulRegistration(res);
-      } else {
-        AuthErrorHandler.showErrorDialog(context, res['error']);
-      }
+      // Instead of direct register, we use Firebase Phone Verification first.
+                await AuthService.verifyPhoneNumber(
+                  phoneNumber: phone,
+                  onCodeSent: (String verificationId, int? resendToken) async {
+                    print('✅ UI: onCodeSent received from Firebase. Navigating...');
+                    if (!mounted) return;
+                    setState(() => _isCreatingAccount = false);
+
+          // Save details for later use after OTP verification
+          await TokenStorage.saveRecentRegistration(
+            name: _model.fullNameTextController?.text.trim(),
+            email: _model.emailAddressTextController?.text.trim(),
+            phone: phone,
+            reference: verificationId, // Use verificationId as reference
+          );
+
+                    // Store the password and role for the final registration call
+                    if (mounted) {
+                      print('🚀 UI: Navigating to VerifyOtp via Named Route...');
+                      // Use GoRouter directly — safePushRoute checks isGuestSession()
+                      // which returns true for unauthenticated users and would block
+                      // navigation during the registration flow.
+                      final uri = Uri(
+                        path: VerifyOtpWidget.routePath,
+                        queryParameters: {
+                          'phone': phone,
+                          'reference': verificationId,
+                          'email': _model.emailAddressTextController?.text.trim() ?? '',
+                          'password': _passwordController.text,
+                          'role': normalizedRole,
+                        },
+                      );
+                      GoRouter.of(context).push(uri.toString());
+                    }
+        },
+        onVerificationFailed: (FirebaseAuthException e) {
+          if (!mounted) return;
+          setState(() => _isCreatingAccount = false);
+          AuthErrorHandler.showErrorDialog(context, e.message ?? 'Verification failed');
+        },
+        onVerificationCompleted: (PhoneAuthCredential credential) async {
+          // Auto-verification (rare but possible)
+        },
+        onCodeAutoRetrievalTimeout: (String verificationId) {
+          // Timeout
+        },
+      );
     } catch (e) {
-      AuthErrorHandler.showErrorDialog(context, e);
-    } finally {
       if (mounted) setState(() => _isCreatingAccount = false);
+      AuthErrorHandler.showErrorDialog(context, e);
     }
-  }
-
-  Future<void> _processSuccessfulRegistration(Map<String, dynamic> res) async {
-    final reference = _extractSendchampReference(res);
-    await _saveRecentRegistration(reference);
-
-    final serverMessage = _extractServerMessage(res);
-    final phone = _phoneController.text.trim();
-    final email = _model.emailAddressTextController?.text.trim();
-
-    if (serverMessage != null && mounted) {
-      await showAppSuccessDialog(
-        context,
-        title: 'Registration',
-        desc: serverMessage,
-        onOk: () =>
-            _handleSuccessfulRegistrationNavigation(phone, reference, email),
-      );
-    } else {
-      await _showSuccessToastAndNavigate(phone, reference, email);
-    }
-  }
-
-  // ========== Helper Methods ==========
-  String? _extractSendchampReference(Map<String, dynamic> res) {
-    try {
-      if (res['reference'] != null) return res['reference'].toString();
-      final data = res['data'];
-      if (data is Map) {
-        return (data['reference'] ??
-                data['sendchamp']?['reference'] ??
-                data['delivered']?['reference'])
-            ?.toString();
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  String? _extractServerMessage(Map<String, dynamic> res) {
-    try {
-      if (res['message'] is String) return res['message'] as String;
-      if (res['data'] is Map && res['data']['message'] is String) {
-        return res['data']['message'] as String;
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  Future<void> _saveRecentRegistration(String? reference) async {
-    try {
-      await TokenStorage.saveRecentRegistration(
-        name: _model.fullNameTextController?.text.trim(),
-        email: _model.emailAddressTextController?.text.trim(),
-        phone: normalizePhoneForApi(_phoneController.text.trim()),
-        reference: reference,
-      );
-    } catch (_) {}
-  }
-
-  void _handlePartialRegistrationNavigation(String? reference) {
-    Future.microtask(() async {
-      if (!mounted || _navigateScheduled) return;
-      final phone = _phoneController.text.trim();
-      if (phone.isNotEmpty) {
-        await _navigateToVerification(
-          phone: phone,
-          reference: reference,
-          email: _model.emailAddressTextController?.text.trim(),
-        );
-      }
-    });
-  }
-
-  void _handleSuccessfulRegistrationNavigation(
-      String phone, String? reference, String? email) {
-    Future.microtask(() async {
-      if (!mounted || _navigateScheduled) return;
-      await _navigateToVerification(
-          phone: phone, reference: reference, email: email);
-    });
-  }
-
-  Future<void> _showSuccessToastAndNavigate(
-      String phone, String? reference, String? email) async {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.white, size: 20),
-            SizedBox(width: 8),
-            Expanded(child: Text('Account created successfully')),
-          ],
-        ),
-        backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        duration: AuthConstants.toastDuration,
-      ),
-    );
-
-    await Future.delayed(AuthConstants.dialogDelay);
-    if (!mounted || _navigateScheduled) return;
-    await _navigateToVerification(
-        phone: phone, reference: reference, email: email);
-  }
-
-  Future<void> _navigateToVerification({
-    required String phone,
-    String? reference,
-    String? email,
-  }) async {
-    if (_navigateScheduled) return;
-    _navigateScheduled = true;
-
-    await AuthNavigationService.goToVerification(
-      context: context,
-      phone: phone,
-      reference: reference,
-      email: email,
-    );
   }
 
   void _navigateBack() => Navigator.of(context).maybePop();
@@ -1093,580 +990,6 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
       ),
     );
   }
-
-  /*
-                const SizedBox(height: 40.0),
-                Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Full Name Field
-                      Text(
-                        'FULL NAME',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: theme.colorScheme.onSurface
-                              .withAlpha((0.6 * 255).toInt()),
-                          letterSpacing: 1.0,
-                        ),
-                      ),
-                      const SizedBox(height: 8.0),
-                      TextFormField(
-                        controller: _model.fullNameTextController,
-                        focusNode: _model.fullNameFocusNode,
-                        autofillHints: const [AutofillHints.name],
-                        decoration: InputDecoration(
-                          hintText: 'John Doe',
-                          hintStyle: TextStyle(
-                            color: theme.colorScheme.onSurface
-                                .withAlpha((0.3 * 255).toInt()),
-                          ),
-                          filled: true,
-                          fillColor:
-                              isDark ? Colors.grey[900] : Colors.grey[50],
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12.0),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12.0),
-                            borderSide: BorderSide(
-                              color: primaryColor,
-                              width: 1.5,
-                            ),
-                          ),
-                          errorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12.0),
-                            borderSide: BorderSide(
-                              color: theme.colorScheme.error,
-                              width: 1.0,
-                            ),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16.0,
-                            vertical: 16.0,
-                          ),
-                        ),
-                        style: TextStyle(
-                          color: theme.colorScheme.onSurface,
-                          fontSize: 16,
-                        ),
-                        textInputAction: TextInputAction.next,
-                        validator: _validateName,
-                        onFieldSubmitted: (_) => FocusScope.of(context)
-                            .requestFocus(_model.emailAddressFocusNode),
-                      ),
-
-                      const SizedBox(height: 20.0),
-
-                      // Email Field
-                      Text(
-                        'EMAIL',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: theme.colorScheme.onSurface
-                              .withAlpha((0.6 * 255).toInt()),
-                          letterSpacing: 1.0,
-                        ),
-                      ),
-                      const SizedBox(height: 8.0),
-                      TextFormField(
-                        controller: _model.emailAddressTextController,
-                        focusNode: _model.emailAddressFocusNode,
-                        autofillHints: const [AutofillHints.email],
-                        keyboardType: TextInputType.emailAddress,
-                        decoration: InputDecoration(
-                          hintText: 'your@email.com',
-                          hintStyle: TextStyle(
-                            color: theme.colorScheme.onSurface
-                                .withAlpha((0.3 * 255).toInt()),
-                          ),
-                          filled: true,
-                          fillColor:
-                              isDark ? Colors.grey[900] : Colors.grey[50],
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12.0),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12.0),
-                            borderSide: BorderSide(
-                              color: primaryColor,
-                              width: 1.5,
-                            ),
-                          ),
-                          errorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12.0),
-                            borderSide: BorderSide(
-                              color: theme.colorScheme.error,
-                              width: 1.0,
-                            ),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16.0,
-                            vertical: 16.0,
-                          ),
-                        ),
-                        style: TextStyle(
-                          color: theme.colorScheme.onSurface,
-                          fontSize: 16,
-                        ),
-                        textInputAction: TextInputAction.next,
-                        validator: _validateEmail,
-                        onFieldSubmitted: (_) => FocusScope.of(context)
-                            .requestFocus(_phoneFocusNode),
-                      ),
-
-                      const SizedBox(height: 20.0),
-
-                      // Phone Number Field
-                      Text(
-                        'PHONE NUMBER',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: theme.colorScheme.onSurface
-                              .withAlpha((0.6 * 255).toInt()),
-                          letterSpacing: 1.0,
-                        ),
-                      ),
-                      const SizedBox(height: 8.0),
-                      TextFormField(
-                        controller: _phoneController,
-                        focusNode: _phoneFocusNode,
-                        autofillHints: const [AutofillHints.telephoneNumber],
-                        keyboardType: TextInputType.phone,
-                        decoration: InputDecoration(
-                          hintText: '+1234567890',
-                          hintStyle: TextStyle(
-                            color: theme.colorScheme.onSurface
-                                .withAlpha((0.3 * 255).toInt()),
-                          ),
-                          filled: true,
-                          fillColor:
-                              isDark ? Colors.grey[900] : Colors.grey[50],
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12.0),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12.0),
-                            borderSide: BorderSide(
-                              color: primaryColor,
-                              width: 1.5,
-                            ),
-                          ),
-                          errorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12.0),
-                            borderSide: BorderSide(
-                              color: theme.colorScheme.error,
-                              width: 1.0,
-                            ),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16.0,
-                            vertical: 16.0,
-                          ),
-                        ),
-                        style: TextStyle(
-                          color: theme.colorScheme.onSurface,
-                          fontSize: 16,
-                        ),
-                        textInputAction: TextInputAction.next,
-                        validator: _validatePhone,
-                        onFieldSubmitted: (_) => FocusScope.of(context)
-                            .requestFocus(_passwordFocusNode),
-                      ),
-
-                      const SizedBox(height: 20.0),
-
-                      // Password Field
-                      Text(
-                        'PASSWORD',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: theme.colorScheme.onSurface
-                              .withAlpha((0.6 * 255).toInt()),
-                          letterSpacing: 1.0,
-                        ),
-                      ),
-                      const SizedBox(height: 8.0),
-                      TextFormField(
-                        controller: _passwordController,
-                        focusNode: _passwordFocusNode,
-                        obscureText: !_passwordVisible,
-                        decoration: InputDecoration(
-                          hintText: '••••••••',
-                          hintStyle: TextStyle(
-                            color: theme.colorScheme.onSurface
-                                .withAlpha((0.3 * 255).toInt()),
-                          ),
-                          filled: true,
-                          fillColor:
-                              isDark ? Colors.grey[900] : Colors.grey[50],
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12.0),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12.0),
-                            borderSide: BorderSide(
-                              color: primaryColor,
-                              width: 1.5,
-                            ),
-                          ),
-                          errorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12.0),
-                            borderSide: BorderSide(
-                              color: theme.colorScheme.error,
-                              width: 1.0,
-                            ),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16.0,
-                            vertical: 16.0,
-                          ),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _passwordVisible
-                                  ? Icons.visibility_outlined
-                                  : Icons.visibility_off_outlined,
-                              color: theme.colorScheme.onSurface
-                                  .withAlpha((0.4 * 255).toInt()),
-                              size: 20,
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                _passwordVisible = !_passwordVisible;
-                              });
-                            },
-                          ),
-                        ),
-                        style: TextStyle(
-                          color: theme.colorScheme.onSurface,
-                          fontSize: 16,
-                        ),
-                        textInputAction: TextInputAction.done,
-                        validator: _validatePassword,
-                        onFieldSubmitted: (_) => _handleCreateAccount(),
-                      ),
-
-                      // Create Account Button
-                      const SizedBox(height: 32.0),
-
-                      // Accept T&C and Privacy Policy (required)
-                      Center(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Checkbox(
-                              value: _acceptedTos,
-                              onChanged: (v) {
-                                if (!mounted) return;
-                                setState(() => _acceptedTos = v ?? false);
-                              },
-                              // Unchecked: white outline & transparent fill. Checked: primaryColor fill, white tick.
-                              fillColor:
-                                  MaterialStateProperty.resolveWith<Color?>(
-                                      (states) {
-                                if (states.contains(MaterialState.selected))
-                                  return primaryColor;
-                                return Colors.transparent;
-                              }),
-                              checkColor: Colors.white,
-                              side: BorderSide(
-                                  color: isDark ? Colors.white : Colors.black,
-                                  width: 1.5),
-                            ),
-                            // const SizedBox(width: 5),
-                            // Tap non-link text to toggle the checkbox; link spans still open URLs.
-                            GestureDetector(
-                              onTap: () {
-                                if (!mounted) return;
-                                setState(() => _acceptedTos = !_acceptedTos);
-                              },
-                              child: Text.rich(
-                                TextSpan(
-                                  style: TextStyle(
-                                    color: Theme.of(context)
-                                        .textTheme
-                                        .bodyMedium
-                                        ?.color,
-                                    fontSize:
-                                        11, // slightly smaller to keep whole text on one line
-                                  ),
-                                  children: [
-                                    const TextSpan(text: 'I accept the '),
-                                    TextSpan(
-                                      text: 'T&C',
-                                      recognizer: _tncRecognizer,
-                                      style: TextStyle(
-                                        color: primaryColor,
-                                        fontWeight: FontWeight.w600,
-                                        decoration: TextDecoration.underline,
-                                        fontSize: 10,
-                                      ),
-                                    ),
-                                    const TextSpan(text: ' and the '),
-                                    TextSpan(
-                                      text: 'Privacy Policy',
-                                      recognizer: _privacyRecognizer,
-                                      style: TextStyle(
-                                        color: primaryColor,
-                                        fontWeight: FontWeight.w600,
-                                        decoration: TextDecoration.underline,
-                                        fontSize: 11,
-                                      ),
-                                    ),
-                                    const TextSpan(text: ' of Rijhub'),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryColor,
-                          foregroundColor: colorScheme.onPrimary,
-                          padding: const EdgeInsets.symmetric(vertical: 18.0),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12.0),
-                          ),
-                          elevation: 0,
-                        ),
-                        onPressed:
-                            _isCreatingAccount ? null : _handleCreateAccount,
-                        child: _isCreatingAccount
-                            ? SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation(
-                                    colorScheme.onPrimary,
-                                  ),
-                                ),
-                              )
-                            : Text(
-                                'CREATE ACCOUNT',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                      ),
-
-                      // Divider
-                      const SizedBox(height: 48.0),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Divider(
-                              color: theme.colorScheme.onSurface
-                                  .withAlpha((0.1 * 255).toInt()),
-                              thickness: 1,
-                            ),
-                          ),
-                          Padding(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 16.0),
-                            child: Text(
-                              'OR',
-                              style: TextStyle(
-                                color: theme.colorScheme.onSurface
-                                    .withAlpha((0.3 * 255).toInt()),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w400,
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: Divider(
-                              color: theme.colorScheme.onSurface
-                                  .withAlpha((0.1 * 255).toInt()),
-                              thickness: 1,
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      // Google Sign In Button
-                      const SizedBox(height: 24.0),
-                      OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(
-                            color: primaryColor,
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 12.0, horizontal: 12.0),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12.0),
-                          ),
-                        ),
-                        // Google Sign-In enabled
-                        onPressed: _handleGoogleSignIn,
-                        child: LayoutBuilder(builder: (context, constraints) {
-                          // Keep content constrained to avoid overflow on narrow screens
-                          return Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              // Match login page: 24x24 asset icon and centered label
-                              SizedBox(
-                                height: 24,
-                                width: 24,
-                                child: Builder(builder: (ctx) {
-                                  try {
-                                    return Image.asset(
-                                      'assets/images/google.webp',
-                                      fit: BoxFit.contain,
-                                      errorBuilder:
-                                          (context, error, stackTrace) {
-                                        return Icon(
-                                          Icons.g_mobiledata,
-                                          color: primaryColor,
-                                          size: 20,
-                                        );
-                                      },
-                                    );
-                                  } catch (_) {
-                                    return Icon(
-                                      Icons.g_mobiledata,
-                                      color: primaryColor,
-                                      size: 20,
-                                    );
-                                  }
-                                }),
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                'Continue with Google',
-                                style: TextStyle(
-                                  color: primaryColor,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          );
-                        }),
-                      ),
-
-                      // Apple Sign In Button (Apple platforms only)
-                      if (_isAppleSignInAvailable) ...[
-                        const SizedBox(height: 12.0),
-                        OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(
-                                color: isDark ? Colors.white : Colors.black),
-                            backgroundColor:
-                                isDark ? Colors.white : Colors.black,
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 12.0, horizontal: 12.0),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12.0),
-                            ),
-                          ),
-                          onPressed: _handleAppleSignIn,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.apple,
-                                color: isDark ? Colors.black : Colors.white,
-                                size: 24,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                'Continue with Apple',
-                                style: TextStyle(
-                                  color: isDark ? Colors.black : Colors.white,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-
-                      // Already have an account? Log in
-                      const SizedBox(height: 24.0),
-                      Center(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Already have an account?',
-                              style: TextStyle(
-                                color: theme.colorScheme.onSurface
-                                    .withAlpha((0.7 * 255).toInt()),
-                                fontSize: 14,
-                                fontWeight: FontWeight.w400,
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                // Direct navigation to Login page so tap immediately routes there.
-                                if (!mounted) return;
-                                try {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          const LoginAccountWidget(),
-                                    ),
-                                  );
-                                } catch (e) {
-                                  // Fallback to safe helpers if direct push fails for any reason
-                                  try {
-                                    NavigationUtils.safePushNoAuth(
-                                        context, const LoginAccountWidget());
-                                  } catch (_) {
-                                    try {
-                                      NavigationUtils.safePush(
-                                          context, const LoginAccountWidget());
-                                    } catch (_) {}
-                                  }
-                                }
-                              },
-                              style: TextButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                      vertical: 4.0)),
-                              child: Text(
-                                'Log in',
-                                style: TextStyle(
-                                  color: primaryColor,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // Bottom spacing
-                      const SizedBox(height: 60.0),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-*/
 
   Widget _buildCreateAccountButton() {
     return ElevatedButton(

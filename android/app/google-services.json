@@ -12,7 +12,36 @@
           "package_name": "com.rijhub.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "174728322654-35k99qg613fvo8qcgt9ldq3bj0l5o70a.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.rijhub.app",
+            "certificate_hash": "c530faf481ed7eaec6be40a1b52156031d25a26d"
+          }
+        },
+        {
+          "client_id": "174728322654-409q0ljmu5lolafjni60j4n27f9q635g.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.rijhub.app",
+            "certificate_hash": "86ccf2a9956525f6e769e87dd6034cf24ea7b6a9"
+          }
+        },
+        {
+          "client_id": "174728322654-701kumgdr9r9udcattn0agojp8bdo76t.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.rijhub.app",
+            "certificate_hash": "3559f363f8b92e9a6e2f46b5a2d19438e6fc416e"
+          }
+        },
+        {
+          "client_id": "174728322654-6ldaocoj4idarkp03jvd5feppfgp96m2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBA_uya2rkcN-dh5yyjLHjx8bK_FQ6ISPE"
@@ -20,7 +49,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "174728322654-6ldaocoj4idarkp03jvd5feppfgp96m2.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "174728322654-rjg0aka0i3ujrmkkeuqesa1v12djnriq.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.rijhub.app"
+              }
+            }
+          ]
         }
       }
     }

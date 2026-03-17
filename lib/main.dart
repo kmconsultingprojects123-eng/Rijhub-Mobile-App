@@ -10,6 +10,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import '/services/notification_controller.dart';
@@ -47,6 +48,16 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   print('🔥 Firebase initialized');
+
+  // Initialize App Check (Step 4)
+  // Use Debug Provider for development, Play Integrity for Production
+  await FirebaseAppCheck.instance.activate(
+    androidProvider:
+        kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
+    appleProvider: AppleProvider.deviceCheck,
+  );
+  print(
+      '✅ App Check activated (${kDebugMode ? 'Debug Mode' : 'Production Mode'})');
 
   // Register background message handler (required for background/terminated data messages).
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);

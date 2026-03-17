@@ -3,19 +3,28 @@
 // can read it from `TokenStorage.getRecentRegistration()`.
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '/services/token_storage.dart';
 import '/index.dart';
-import '../../utils/navigation_utils.dart';
 import '../../utils/phone_utils.dart';
 
 class VerifyOtpWidget extends StatefulWidget {
-  const VerifyOtpWidget({super.key, this.phone, this.reference, this.email, Object? $creationLocation});
+  const VerifyOtpWidget({
+    super.key,
+    this.phone,
+    this.reference,
+    this.email,
+    this.password,
+    this.role,
+    Object? $creationLocation,
+  });
 
   final String? phone;
-  // Provider reference returned by server (SendChamp reference). Optional.
+  // Provider reference returned by server (SendChamp reference or Firebase verificationId).
   final String? reference;
-  // Email passed via query string from registration page. Optional.
   final String? email;
+  final String? password;
+  final String? role;
 
   static String routeName = 'VerifyOtp';
   static String routePath = '/verificationPage';
@@ -53,22 +62,19 @@ class _VerifyOtpWidgetState extends State<VerifyOtpWidget> {
       if (!mounted) return;
       if (!_initialized) {
         _initialized = true;
-        // Replace current route with the core VerificationPageWidget to avoid
-        // stacking duplicate pages when users go back.
-        try {
-          // Use pushReplacement to avoid triggering router-level replace-all
-          // logic which can be intercepted by global redirects. This keeps
-          // navigation imperative and avoids accidental redirection to splash.
-          await NavigationUtils.safePushReplacement(context, VerificationPageWidget());
-        } catch (_) {
-          // Fallback: simple push replacement
-          try {
-            NavigationUtils.safePushReplacement(context, VerificationPageWidget());
-          } catch (_) {
-            // As a last resort, just push the page normally
-            Navigator.of(context).push(MaterialPageRoute(builder: (_) => VerificationPageWidget()));
-          }
-        }
+        // Replace current route with the core VerificationPageWidget.
+        // Use GoRouter directly — safePushRoute checks isGuestSession() which
+        // returns true for unauthenticated users and would block navigation
+        // during the registration/verification flow.
+        if (!mounted) return;
+        final uri = Uri(
+          path: VerificationPageWidget.routePath,
+          queryParameters: {
+            'password': widget.password ?? '',
+            'role': widget.role ?? '',
+          },
+        );
+        GoRouter.of(context).pushReplacement(uri.toString());
       }
     });
   }

@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:crypto/crypto.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../api_config.dart';
 import 'token_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -164,7 +165,8 @@ class AuthService {
         } else if (body['user'] is Map) {
           profileToSave = Map<String, dynamic>.from(body['user']);
         }
-        if (profileToSave != null && (profileToSave['_id'] != null || profileToSave['id'] != null)) {
+        if (profileToSave != null &&
+            (profileToSave['_id'] != null || profileToSave['id'] != null)) {
           try {
             await TokenStorage.saveDashboardProfile(profileToSave);
           } catch (_) {}
@@ -306,8 +308,16 @@ class AuthService {
 
       // Map synthetic network/timeout responses to friendly errors so UI shows
       // an actionable message instead of 'HTTP 599' or similar.
-      if (status == 408) return {'success': false, 'error': {'message': 'Request timed out', 'status': status}};
-      if (status == 599) return {'success': false, 'error': {'message': 'Network error', 'status': status}};
+      if (status == 408)
+        return {
+          'success': false,
+          'error': {'message': 'Request timed out', 'status': status}
+        };
+      if (status == 599)
+        return {
+          'success': false,
+          'error': {'message': 'Network error', 'status': status}
+        };
 
       // Include the HTTP status code in the returned error payload so callers
       // can distinguish 'not found' (404) from 'invalid credentials' (401).
@@ -317,7 +327,13 @@ class AuthService {
         return {'success': false, 'error': errMap};
       }
 
-      return {'success': false, 'error': {'message': body != null ? body.toString() : 'HTTP $status', 'status': status}};
+      return {
+        'success': false,
+        'error': {
+          'message': body != null ? body.toString() : 'HTTP $status',
+          'status': status
+        }
+      };
     } catch (e) {
       return {
         'success': false,
@@ -533,11 +549,13 @@ class AuthService {
 
     final uri = Uri.parse('$API_BASE_URL/api/auth/verify-otp');
     try {
-      final bodyPayload = <String, dynamic>{'otp': otp, 'purpose': purpose, 'phone': phone};
+      final bodyPayload = <String, dynamic>{
+        'otp': otp,
+        'purpose': purpose,
+        'phone': phone
+      };
       final resp = await _postWithRetries(uri,
-          body: bodyPayload,
-          timeoutSeconds: 15,
-          maxAttempts: 2);
+          body: bodyPayload, timeoutSeconds: 15, maxAttempts: 2);
       final status = resp.statusCode;
       final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
 
@@ -648,7 +666,11 @@ class AuthService {
     final uri = Uri.parse('$API_BASE_URL/api/auth/verify-otp');
     try {
       final normalizedEmail = email.trim().toLowerCase();
-      final bodyPayload = <String, dynamic>{'otp': otp, 'purpose': purpose, 'email': normalizedEmail};
+      final bodyPayload = <String, dynamic>{
+        'otp': otp,
+        'purpose': purpose,
+        'email': normalizedEmail
+      };
       final resp = await _postWithRetries(uri,
           body: bodyPayload, timeoutSeconds: 15, maxAttempts: 2);
       final status = resp.statusCode;
@@ -734,11 +756,13 @@ class AuthService {
         // Return the actual error details so users see real errors on Android
         // (config errors, SIGN_IN_FAILED, etc. are often misreported as "cancelled").
         // ignore: avoid_print
-        print('│ [Google Sign-In] GoogleSignInException: code=${e.code} description=${e.description}');
+        print(
+            '│ [Google Sign-In] GoogleSignInException: code=${e.code} description=${e.description}');
         print(
             '└──────────────────────────────────────────────────────────────────────────────');
         final detailMsg = e.description?.trim();
-        final codeStr = e.code.toString().replaceFirst('GoogleSignInExceptionCode.', '');
+        final codeStr =
+            e.code.toString().replaceFirst('GoogleSignInExceptionCode.', '');
         final message = detailMsg != null && detailMsg.isNotEmpty
             ? detailMsg
             : (e.code == GoogleSignInExceptionCode.canceled
@@ -1022,5 +1046,115 @@ class AuthService {
       }
     } catch (_) {}
     return null;
+  }
+
+  // ========== Firebase Phone Authentication ==========
+
+  /// Initiates Firebase Phone Verification.
+  static Future<void> verifyPhoneNumber({
+    required String phoneNumber,
+    required Function(String verificationId, int? resendToken) onCodeSent,
+    required Function(FirebaseAuthException e) onVerificationFailed,
+    required Function(PhoneAuthCredential credential) onVerificationCompleted,
+    required Function(String verificationId) onCodeAutoRetrievalTimeout,
+  }) async {
+    // Firebase requires E.164 format (must start with +)
+    var formattedPhone = phoneNumber.trim();
+    if (!formattedPhone.startsWith('+')) {
+      formattedPhone = '+$formattedPhone';
+    }
+
+    await FirebaseAuth.instance.verifyPhoneNumber(
+      phoneNumber: formattedPhone,
+      verificationCompleted: (PhoneAuthCredential credential) {
+        print('🔥 Firebase: Verification Completed (Auto-verify)');
+        onVerificationCompleted(credential);
+      },
+      verificationFailed: (FirebaseAuthException e) {
+        print('🔥 Firebase: Verification Failed - ${e.code}: ${e.message}');
+        onVerificationFailed(e);
+      },
+      codeSent: (String verificationId, int? resendToken) {
+        print('🔥 Firebase: Code Sent! ID: $verificationId');
+        onCodeSent(verificationId, resendToken);
+      },
+      codeAutoRetrievalTimeout: (String verificationId) {
+        print('🔥 Firebase: Auto-retrieval Timeout');
+        onCodeAutoRetrievalTimeout(verificationId);
+      },
+      timeout: const Duration(seconds: 60),
+    );
+  }
+
+  /// Verifies the OTP with Firebase and returns the ID token.
+  static Future<String?> verifyOtpWithFirebase({
+    required String verificationId,
+    required String smsCode,
+  }) async {
+    try {
+      final credential = PhoneAuthProvider.credential(
+        verificationId: verificationId,
+        smsCode: smsCode,
+      );
+      final userCredential =
+          await FirebaseAuth.instance.signInWithCredential(credential);
+      final user = userCredential.user;
+      if (user != null) {
+        return await user.getIdToken();
+      }
+    } catch (e) {
+      rethrow;
+    }
+    return null;
+  }
+
+  /// Completes registration/verification by sending the Firebase ID token to the backend.
+  static Future<Map<String, dynamic>> registerWithFirebaseToken({
+    required String idToken,
+    required String name,
+    required String email,
+    required String password,
+    required String phone,
+    required String role,
+  }) async {
+    final uri = Uri.parse('$API_BASE_URL/api/register-user-with-firebase-token');
+
+    try {
+      final reqBody = {
+        'idToken': idToken,
+        'name': name,
+        'email': email.trim().toLowerCase(),
+        'password': password,
+        'phone': phone,
+        'role': role,
+      };
+
+      final headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': 'RijHub-Mobile/1.0',
+      };
+
+      final resp = await _postWithRetries(uri,
+          body: reqBody, headers: headers, timeoutSeconds: 20, maxAttempts: 2);
+
+      final status = resp.statusCode;
+      final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
+
+      if (status >= 200 && status < 300) {
+        await _persistTokenAndRole(body);
+        return {'success': true, 'data': body};
+      }
+
+      return {
+        'success': false,
+        'error': body ?? {'message': 'HTTP $status', 'headers': resp.headers}
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': {'message': e.toString()}
+      };
+    }
   }
 }

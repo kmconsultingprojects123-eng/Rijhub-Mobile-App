@@ -17,10 +17,7 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      throw UnsupportedError(
-        'DefaultFirebaseOptions have not been configured for web - '
-        'you can reconfigure this by running the FlutterFire CLI again.',
-      );
+      return web;
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -55,6 +52,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '174728322654',
     projectId: 'rijhub-mobile-app-972e3',
     storageBucket: 'rijhub-mobile-app-972e3.firebasestorage.app',
+    authDomain: 'rijhub.com',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
@@ -63,6 +61,20 @@ class DefaultFirebaseOptions {
     messagingSenderId: '174728322654',
     projectId: 'rijhub-mobile-app-972e3',
     storageBucket: 'rijhub-mobile-app-972e3.firebasestorage.app',
+    authDomain: 'rijhub.com',
+    androidClientId: '174728322654-35k99qg613fvo8qcgt9ldq3bj0l5o70a.apps.googleusercontent.com',
+    iosClientId: '174728322654-rjg0aka0i3ujrmkkeuqesa1v12djnriq.apps.googleusercontent.com',
     iosBundleId: 'com.rijhub.app',
   );
+
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyD1czNB6cF1EgGmV1dvXA4t886WNEo-5dA',
+    appId: '1:174728322654:web:0b5273d71a9abdeaf55ecf',
+    messagingSenderId: '174728322654',
+    projectId: 'rijhub-mobile-app-972e3',
+    authDomain: 'rijhub.com',
+    storageBucket: 'rijhub-mobile-app-972e3.firebasestorage.app',
+    measurementId: 'G-9B5GFGJCPX',
+  );
+
 }
