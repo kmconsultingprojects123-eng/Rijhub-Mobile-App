@@ -165,9 +165,11 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
 
   Future<void> _checkConnectivity() async {
     try {
-      final resp = await ApiClient.get('https://www.google.com/generate_204', headers: {'Cache-Control': 'no-cache'}).timeout(const Duration(seconds: 8));
-      final status = resp['status'] as int? ?? 0;
-      if (status >= 200 && status < 400) {
+      final resp = await http.get(
+        Uri.parse('https://www.google.com/generate_204'),
+        headers: {'Cache-Control': 'no-cache'},
+      ).timeout(const Duration(seconds: 8));
+      if (resp.statusCode >= 200 && resp.statusCode < 400) {
         if (mounted) setState(() => _showNetworkError = false);
         await _retryFailedSections();
         await _setLastSuccess();
