@@ -34,6 +34,7 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
   final int _limit = 12;
   bool _hasSearched = false;
   String? _selectedTrade;
+  String? _selectedSubservice;
   String? _errorMessage;
 
   // Minimalist color scheme
@@ -43,16 +44,21 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
   final Color _textSecondary = const Color(0xFF6B7280);
   final Color _borderColor = const Color(0xFFE5E7EB);
 
-  // Job subcategories and search tracking
-  List<Map<String, dynamic>> _allServices = [];
-  List<Map<String, dynamic>> _topServices = [];
-  final Map<String, int> _serviceSearchCount = {};
+  // Service and subcategory management
+  List<Map<String, dynamic>> _allMainServices = [];
+  List<Map<String, dynamic>> _popularServices = [];
+  List<Map<String, dynamic>> _currentSubservices = [];
+  String? _currentMainCategory;
+  String? _currentMainCategoryId;
+  bool _isMainService = false;
+  String? _lastSearchedQuery;
 
-  // Cache for artisan services to avoid redundant API calls
+  // Cache for service data
+  final Map<String, List<Map<String, dynamic>>> _subcategoryCache = {};
   final Map<String, List<String>> _serviceCache = {};
 
-  // Debounce timers map
-  final Map<String, Timer?> _debounceTimers = {};
+  // Search tracking
+  Timer? _searchDebounceTimer;
 
   @override
   void initState() {
@@ -72,10 +78,13 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
       }
     });
 
+    // Load main services on init
+    _loadMainServices();
+
     if (widget.initialQuery != null && widget.initialQuery!.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _model.textController!.text = widget.initialQuery!;
-        _startSearch();
+        _processSearchQuery(widget.initialQuery!);
       });
     } else {
       // No initial query provided -> perform an initial load
@@ -88,21 +97,279 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
       if (!mounted) return;
       setState(() {});
     });
-
-    // Load job subcategories to populate top services on init
-    _loadJobSubcategories();
   }
 
   @override
   void dispose() {
-    // Cancel all debounce timers
-    for (final timer in _debounceTimers.values) {
-      timer?.cancel();
-    }
-    _debounceTimers.clear();
+    _searchDebounceTimer?.cancel();
     _scrollController.dispose();
     _model.dispose();
     super.dispose();
+  }
+
+  /// Load all main services/categories from the API
+  Future<void> _loadMainServices() async {
+    try {
+      final uri = Uri.parse('$API_BASE_URL/api/job-categories?limit=100');
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        List<dynamic>? items;
+
+        if (body is Map && body['data'] is List) {
+          items = body['data'] as List<dynamic>;
+        } else if (body is List) {
+          items = body;
+        }
+
+        if (items != null && items.isNotEmpty) {
+          final mainServices = items
+              .map((e) {
+            if (e is! Map) return null;
+            final m = Map<String, dynamic>.from(e.cast<String, dynamic>());
+            return {
+              'id': m['_id'] ?? m['id'],
+              'name': m['name'] ?? 'Service',
+              'slug': m['slug'] ?? '',
+              'type': 'main',
+            };
+          })
+              .whereType<Map<String, dynamic>>()
+              .toList();
+
+          if (mounted) {
+            setState(() {
+              _allMainServices = mainServices;
+              _updatePopularServices();
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading main services: $e');
+    }
+  }
+
+  /// Update popular services based on search frequency
+  void _updatePopularServices() {
+    if (_allMainServices.isEmpty) return;
+
+    // For now, just take first 5 as popular
+    // You can enhance this with actual search frequency tracking
+    final popular = _allMainServices.take(5).toList();
+    popular.shuffle();
+
+    if (mounted) {
+      setState(() {
+        _popularServices = popular;
+      });
+    }
+  }
+
+  /// Process search query to determine if it matches a main service
+  /// Calculate string similarity score (0.0 to 1.0)
+  double _calculateSimilarity(String s1, String s2) {
+    final s1Lower = s1.toLowerCase().trim();
+    final s2Lower = s2.toLowerCase().trim();
+    
+    if (s1Lower == s2Lower) return 1.0;
+    if (s1Lower.isEmpty || s2Lower.isEmpty) return 0.0;
+    
+    // Substring match (high weight)
+    if (s1Lower.contains(s2Lower) || s2Lower.contains(s1Lower)) return 0.85;
+    
+    // Character overlap similarity
+    final chars1 = s1Lower.split('').toSet();
+    final chars2 = s2Lower.split('').toSet();
+    final intersection = chars1.intersection(chars2).length;
+    final union = chars1.union(chars2).length;
+    
+    return union > 0 ? intersection / union : 0.0;
+  }
+
+  /// Intelligently match query to a main service using multiple strategies
+  Map<String, dynamic>? _findBestServiceMatch(String query) {
+    final normalizedQuery = query.trim().toLowerCase();
+    if (normalizedQuery.isEmpty) return null;
+
+    // Strategy 1: Exact match
+    try {
+      return _allMainServices.firstWhere(
+        (service) => service['name'].toString().toLowerCase() == normalizedQuery,
+        orElse: () => <String, dynamic>{},
+      );
+    } catch (_) {}
+
+    // Strategy 2: Query is contained in service name
+    try {
+      return _allMainServices.firstWhere(
+        (service) => service['name'].toString().toLowerCase().contains(normalizedQuery),
+        orElse: () => <String, dynamic>{},
+      );
+    } catch (_) {}
+
+    // Strategy 3: Service name is contained in query
+    try {
+      return _allMainServices.firstWhere(
+        (service) => normalizedQuery.contains(service['name'].toString().toLowerCase()),
+        orElse: () => <String, dynamic>{},
+      );
+    } catch (_) {}
+
+    // Strategy 4: Fuzzy matching by similarity score
+    Map<String, dynamic>? bestMatch;
+    double bestScore = 0.0;
+    
+    for (final service in _allMainServices) {
+      final serviceName = service['name'].toString();
+      final score = _calculateSimilarity(normalizedQuery, serviceName);
+      
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = service;
+      }
+    }
+
+    // Return match only if similarity exceeds threshold (45%)
+    return (bestScore >= 0.45) ? bestMatch : null;
+  }
+
+  /// Process search query with intelligent Main Service mapping
+  Future<void> _processSearchQuery(String query) async {
+    if (query.isEmpty) {
+      setState(() {
+        _currentMainCategory = null;
+        _currentMainCategoryId = null;
+        _currentSubservices = [];
+        _isMainService = false;
+        _selectedTrade = null;
+        _selectedSubservice = null;
+      });
+      _startSearch();
+      return;
+    }
+
+    if (kDebugMode) debugPrint('SearchPage: Processing query: "$query"');
+
+    // Try to find best matching main service
+    final matchedService = _findBestServiceMatch(query);
+
+    if (matchedService != null && matchedService.isNotEmpty) {
+      // Found a matching main service - map to it
+      final serviceId = matchedService['id'];
+      final serviceName = matchedService['name'];
+      
+      if (kDebugMode) {
+        debugPrint('SearchPage: Mapped query "$query" to main service "$serviceName" (ID: $serviceId)');
+      }
+
+      setState(() {
+        _currentMainCategory = serviceName;
+        _currentMainCategoryId = serviceId;
+        _isMainService = true;
+        _selectedTrade = serviceName;
+        _selectedSubservice = null;
+      });
+
+      // Load sub-services for this main service
+      await _loadSubservicesForMainService(serviceId);
+    } else {
+      // No main service match found - perform generic search
+      if (kDebugMode) debugPrint('SearchPage: No main service match for "$query", performing generic search');
+
+      setState(() {
+        _currentMainCategory = null;
+        _currentMainCategoryId = null;
+        _currentSubservices = [];
+        _isMainService = false;
+        _selectedTrade = null;
+        _selectedSubservice = null;
+      });
+    }
+
+    // Perform the artisan search
+    _startSearch();
+  }
+
+  /// Load subservices for a specific main service
+  Future<void> _loadSubservicesForMainService(String categoryId) async {
+    if (categoryId.isEmpty) return;
+
+    // Check cache first
+    if (_subcategoryCache.containsKey(categoryId)) {
+      if (mounted) {
+        setState(() {
+          _currentSubservices = _subcategoryCache[categoryId] ?? [];
+        });
+      }
+      return;
+    }
+
+    try {
+      final uri = Uri.parse('$API_BASE_URL/api/job-subcategories?categoryId=$categoryId&limit=50');
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        List<dynamic>? items;
+
+        if (body is Map && body['data'] is List) {
+          items = body['data'] as List<dynamic>;
+        } else if (body is List) {
+          items = body;
+        }
+
+        if (items != null && items.isNotEmpty) {
+          final subservices = items
+              .map((e) {
+            if (e is! Map) return null;
+            final m = Map<String, dynamic>.from(e.cast<String, dynamic>());
+            return {
+              'id': m['_id'] ?? m['id'],
+              'name': m['name'] ?? 'Service',
+              'slug': m['slug'] ?? '',
+              'categoryId': categoryId,
+            };
+          })
+              .whereType<Map<String, dynamic>>()
+              .toList();
+
+          // Cache the result
+          _subcategoryCache[categoryId] = subservices;
+
+          if (mounted) {
+            setState(() {
+              _currentSubservices = subservices;
+            });
+          }
+        } else {
+          _subcategoryCache[categoryId] = [];
+          if (mounted) {
+            setState(() {
+              _currentSubservices = [];
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading subservices: $e');
+      _subcategoryCache[categoryId] = [];
+    }
+  }
+
+  /// Handle search input with debounce
+  void _handleSearchInput(String query) {
+    _searchDebounceTimer?.cancel();
+    _searchDebounceTimer = Timer(const Duration(milliseconds: 600), () {
+      if (!mounted) return;
+
+      // Store the query to avoid reprocessing the same query
+      if (query == _lastSearchedQuery) return;
+      _lastSearchedQuery = query;
+
+      _processSearchQuery(query);
+    });
   }
 
   Future<void> _startSearch() async {
@@ -143,17 +410,31 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
 
     try {
       final q = _model.textController!.text.trim();
-      final tradeParam = (_selectedTrade != null && _selectedTrade!.isNotEmpty && _selectedTrade != 'All') ? _selectedTrade : null;
+
+      // Determine search parameters based on whether it's a main service search
+      String? tradeParam;
+      String? subserviceParam;
+
+      if (_isMainService && _currentMainCategory != null) {
+        // If it's a main service search, use the main service as trade
+        tradeParam = _currentMainCategory;
+        subserviceParam = _selectedSubservice;
+      } else {
+        // For random searches, use the raw query
+        tradeParam = q.isNotEmpty ? q : null;
+        subserviceParam = _selectedSubservice;
+      }
+
       if (kDebugMode) {
-        debugPrint('SearchPage._fetchArtisans -> q="$q" tradeParam=$tradeParam page=$_page limit=$_limit');
+        debugPrint('SearchPage._fetchArtisans -> q="$q" tradeParam=$tradeParam subservice=$subserviceParam isMainService=$_isMainService page=$_page limit=$_limit');
       }
 
       final results = await ArtistService.fetchArtisans(
         page: _page,
         limit: _limit,
-        q: q.isNotEmpty ? q : null,
+        q: !_isMainService && q.isNotEmpty ? q : null,
         trade: tradeParam,
-        // No categoryId parameter: searches are not filtered by a UI category selector
+        subCategoryId: subserviceParam,
       );
 
       if (!mounted) return;
@@ -164,6 +445,32 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
           _hasMore = results.length == _limit;
           if (_hasMore) _page++;
         });
+
+        // Extract main category from first artisan's services (if on first page)
+        if (reset && results.isNotEmpty) {
+          final firstArtisan = results.first;
+          if (firstArtisan['services'] is List && (firstArtisan['services'] as List).isNotEmpty) {
+            final firstService = (firstArtisan['services'] as List)[0];
+            if (firstService is Map<String, dynamic>) {
+              final categoryId = firstService['categoryId'];
+              String? extractedCategoryId;
+              String? extractedCategoryName;
+
+              if (categoryId is Map<String, dynamic>) {
+                extractedCategoryId = categoryId['_id']?.toString() ?? categoryId['id']?.toString();
+                extractedCategoryName = categoryId['name']?.toString();
+              } else if (categoryId is String) {
+                extractedCategoryId = categoryId;
+              }
+
+              // Update subservices based on the extracted category
+              if (extractedCategoryId != null && extractedCategoryId.isNotEmpty) {
+                await _loadSubservicesForMainService(extractedCategoryId);
+                if (kDebugMode) debugPrint('SearchPage: Updated subservices for category: $extractedCategoryName (id: $extractedCategoryId)');
+              }
+            }
+          }
+        }
 
         // Batch load services for all artisans
         _batchLoadServices();
@@ -178,7 +485,6 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
           _errorMessage = 'Failed to load artisans. Please check your connection.';
         });
       }
-      return;
     } finally {
       if (mounted) {
         setState(() {
@@ -210,102 +516,6 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
   Future<void> _fetchMore() async {
     if (_isLoadingMore || !_hasMore) return;
     await _fetchArtisans(reset: false);
-  }
-
-  void _debounce(String key, Duration duration, VoidCallback action) {
-    _debounceTimers[key]?.cancel();
-    _debounceTimers[key] = Timer(duration, action);
-  }
-
-  /// Fetch job subcategories from API and build top 5 list
-    Future<void> _loadJobSubcategories({String? categoryId}) async {
-    try {
-      var uriStr = '$API_BASE_URL/api/job-subcategories?limit=100';
-      if (categoryId != null && categoryId.isNotEmpty) {
-        uriStr = '$API_BASE_URL/api/job-subcategories?categoryId=$categoryId&limit=100';
-      }
-      final uri = Uri.parse(uriStr);
-      final response = await http.get(uri).timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        final body = jsonDecode(response.body);
-        List<dynamic>? items;
-
-        if (body is Map && body['data'] is List) {
-          items = body['data'] as List<dynamic>;
-        } else if (body is List) {
-          items = body;
-        }
-
-        if (items != null && items.isNotEmpty) {
-          final services = items
-              .map((e) {
-            if (e is! Map) return null;
-            final m = Map<String, dynamic>.from(e.cast<String, dynamic>());
-            // Preserve category linkage when available
-            String? catId;
-            if (m['categoryId'] != null) catId = (m['categoryId'] is Map) ? (m['categoryId']['_id'] ?? m['categoryId']['id'])?.toString() : m['categoryId']?.toString();
-            if (m['category'] != null && catId == null) catId = (m['category'] is Map) ? (m['category']['_id'] ?? m['category']['id'])?.toString() : m['category']?.toString();
-            return {
-              'id': m['_id'] ?? m['id'],
-              'name': m['name'] ?? 'Service',
-              'slug': m['slug'] ?? '',
-              'categoryId': catId,
-            };
-          })
-              .whereType<Map<String, dynamic>>()
-              .toList();
-
-          if (mounted) {
-            setState(() {
-              // Populate the master services list which is used to build top services
-              _allServices = services;
-              _updateTopServices();
-            });
-          }
-        } else {
-          // No services returned for this category — clear top services
-          if (mounted) {
-            setState(() {
-              _allServices = [];
-              _updateTopServices();
-            });
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('Error loading job subcategories: $e');
-    }
-    }
-
-
-  /// Track service selection and update top services
-  void _trackServiceSearch(String serviceId, String serviceName) {
-    _serviceSearchCount[serviceId] = (_serviceSearchCount[serviceId] ?? 0) + 1;
-    _updateTopServices();
-  }
-
-  /// Update top 5 services based on search frequency and shuffle
-  void _updateTopServices() {
-    if (_allServices.isEmpty) return;
-
-    // Sort by search count (descending)
-    final sorted = List<Map<String, dynamic>>.from(_allServices);
-    sorted.sort((a, b) {
-      final countA = _serviceSearchCount[a['id']] ?? 0;
-      final countB = _serviceSearchCount[b['id']] ?? 0;
-      return countB.compareTo(countA);
-    });
-
-    // Take top 5 and shuffle for variety
-    final top = sorted.take(5).toList();
-    top.shuffle();
-
-    if (mounted) {
-      setState(() {
-        _topServices = top;
-      });
-    }
   }
 
   /// Check if URL is valid
@@ -538,6 +748,157 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
         ),
       ),
     );
+  }
+
+  /// Build the tabs section based on current search context
+  Widget _buildTabsSection(bool isDark, double horizontalPadding, double filterChipHeight, bool isSmallScreen) {
+    if (_isMainService && _currentMainCategory != null) {
+      // Show main service and its subservices
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Main service chip (always visible)
+          Padding(
+            padding: EdgeInsets.only(
+              bottom: 12,
+              left: horizontalPadding,
+              right: horizontalPadding,
+            ),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildEnhancedFilterChip(
+                    label: _currentMainCategory!,
+                    selected: true,
+                    onTap: () {
+                      // Clear subservice filter but keep main service
+                      setState(() {
+                        _selectedSubservice = null;
+                      });
+                      _startSearch();
+                    },
+                    isDark: isDark,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Subservices (if available)
+          if (_currentSubservices.isNotEmpty)
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: EdgeInsets.only(
+                    left: horizontalPadding,
+                    right: horizontalPadding,
+                    bottom: 8,
+                  ),
+                  child: Text(
+                    'Sub-services',
+                    style: TextStyle(
+                      fontSize: isSmallScreen ? 12 : 13,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? const Color(0xFFD1D5DB) : _textSecondary,
+                    ),
+                  ),
+                ),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: List.generate(
+                      _currentSubservices.length,
+                      (index) {
+                        final subservice = _currentSubservices[index];
+                        final subserviceName = subservice['name'] ?? 'Service';
+                        final subserviceId = subservice['id'] ?? '';
+                        final selected = _selectedSubservice == subserviceId;
+
+                        return _buildEnhancedFilterChip(
+                          label: subserviceName,
+                          selected: selected,
+                          onTap: () {
+                            setState(() {
+                              _selectedSubservice = selected ? null : subserviceId;
+                            });
+                            _startSearch();
+                          },
+                          isDark: isDark,
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      );
+    } else {
+      // Show popular services for random/browsing mode
+      return _popularServices.isEmpty
+          ? const SizedBox.shrink()
+          : Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.only(
+              left: horizontalPadding,
+              right: horizontalPadding,
+              bottom: 8,
+            ),
+            child: Text(
+              'Popular Services',
+              style: TextStyle(
+                fontSize: isSmallScreen ? 12 : 13,
+                fontWeight: FontWeight.w600,
+                color: isDark ? const Color(0xFFD1D5DB) : _textSecondary,
+              ),
+            ),
+          ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: List.generate(
+                _popularServices.length,
+                (index) {
+                  final service = _popularServices[index];
+                  final serviceName = service['name'] ?? 'Service';
+                  final selected = _selectedTrade == serviceName;
+
+                  return _buildEnhancedFilterChip(
+                    label: serviceName,
+                    selected: selected,
+                    onTap: () {
+                      setState(() {
+                        _selectedTrade = selected ? null : serviceName;
+                        _model.textController?.text = selected ? '' : serviceName;
+                      });
+
+                      if (!selected) {
+                        // When tapping a popular service, treat it as a main service search
+                        _processSearchQuery(serviceName);
+                      } else {
+                        _startSearch();
+                      }
+                    },
+                    isDark: isDark,
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      );
+    }
   }
 
   Widget _buildArtisanCard(BuildContext context, Map<String, dynamic> artisan) {
@@ -1095,133 +1456,86 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
                   horizontal: horizontalPadding,
                   vertical: isSmallScreen ? 12 : 16,
                 ),
-                child: Column(
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF1F2937) : _surfaceColor,
-                        borderRadius: BorderRadius.circular(isSmallScreen ? 10 : 12),
-                        boxShadow: isDark ? null : [
-                          BoxShadow(
-                            color: Colors.black.withAlpha((0.02 * 255).round()),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1F2937) : _surfaceColor,
+                    borderRadius: BorderRadius.circular(isSmallScreen ? 10 : 12),
+                    boxShadow: isDark ? null : [
+                      BoxShadow(
+                        color: Colors.black.withAlpha((0.02 * 255).round()),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
                       ),
-                      child: TextFormField(
-                        controller: _model.textController,
-                        focusNode: _model.textFieldFocusNode,
-                        onTap: () {
-                          if (!mounted) return;
-                          setState(() {
-                            _selectedTrade = null;
-                          });
-                        },
-                        onChanged: (_) => _debounce(
-                          '_searchDebounce',
-                          const Duration(milliseconds: 600),
-                          _startSearch,
-                        ),
-                        textInputAction: TextInputAction.search,
-                        onFieldSubmitted: (_) => _startSearch(),
-                        style: TextStyle(
-                          fontSize: isSmallScreen ? 14 : 15,
-                          color: isDark ? Colors.white : _textPrimary,
-                          height: 1.4,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Search artisans...',
-                          hintStyle: TextStyle(
-                            color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
-                            fontSize: isSmallScreen ? 14 : 15,
-                          ),
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: isSmallScreen ? 16 : 20,
-                            vertical: isSmallScreen ? 16 : 18,
-                          ),
-                          prefixIcon: Icon(
-                            Icons.search_rounded,
-                            color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
-                            size: isSmallScreen ? 18 : 20,
-                          ),
-                          suffixIcon: _model.textController!.text.isNotEmpty
-                              ? IconButton(
-                            icon: Icon(
-                              Icons.clear_rounded,
-                              size: isSmallScreen ? 16 : 18,
-                              color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
-                            ),
-                            onPressed: () {
-                              _model.textController?.clear();
-                              setState(() {});
-                              _startSearch();
-                            },
-                          )
-                              : null,
-                        ),
-                      ),
+                    ],
+                  ),
+                  child: TextFormField(
+                    controller: _model.textController,
+                    focusNode: _model.textFieldFocusNode,
+                    onTap: () {
+                      if (!mounted) return;
+                      setState(() {
+                        _selectedTrade = null;
+                        _selectedSubservice = null;
+                      });
+                    },
+                    onChanged: _handleSearchInput,
+                    textInputAction: TextInputAction.search,
+                    onFieldSubmitted: (value) => _processSearchQuery(value),
+                    style: TextStyle(
+                      fontSize: isSmallScreen ? 14 : 15,
+                      color: isDark ? Colors.white : _textPrimary,
+                      height: 1.4,
                     ),
-
-                    // Category selector removed — keeping a small spacer for layout
-                    const SizedBox(height: 8),
-
-                  ],
-                ),
-              ),
-
-              // Trade Filters - ENHANCED container with dynamic services
-              Container(
-                height: filterChipHeight,
-                margin: EdgeInsets.only(
-                  bottom: screenHeight < 700 ? 12 : 16,
-                ),
-                child: _topServices.isEmpty
-                    ? Center(
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation(_primaryColor),
+                    decoration: InputDecoration(
+                      hintText: 'Search artisans or services...',
+                      hintStyle: TextStyle(
+                        color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
+                        fontSize: isSmallScreen ? 14 : 15,
+                      ),
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: isSmallScreen ? 16 : 20,
+                        vertical: isSmallScreen ? 16 : 18,
+                      ),
+                      prefixIcon: Icon(
+                        Icons.search_rounded,
+                        color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
+                        size: isSmallScreen ? 18 : 20,
+                      ),
+                      suffixIcon: _model.textController!.text.isNotEmpty
+                          ? IconButton(
+                        icon: Icon(
+                          Icons.clear_rounded,
+                          size: isSmallScreen ? 16 : 18,
+                          color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
+                        ),
+                        onPressed: () {
+                          _model.textController?.clear();
+                          setState(() {
+                            _currentMainCategory = null;
+                            _currentMainCategoryId = null;
+                            _currentSubservices = [];
+                            _isMainService = false;
+                            _selectedTrade = null;
+                            _selectedSubservice = null;
+                            _lastSearchedQuery = null;
+                          });
+                          _startSearch();
+                        },
+                      )
+                          : null,
                     ),
                   ),
-                )
-                    : ListView.builder(
-                  padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _topServices.length,
-                  itemBuilder: (context, index) {
-                    final service = _topServices[index];
-                    final serviceName = service['name'] ?? 'Service';
-                    final serviceId = service['id'] ?? '';
-                    final selected = _selectedTrade == serviceName;
-                    return _buildEnhancedFilterChip(
-                      label: serviceName,
-                      selected: selected,
-                      onTap: () {
-                        if (!mounted) return;
-                        setState(() {
-                          _selectedTrade = selected ? null : serviceName;
-                          _model.textController?.text = selected ? '' : serviceName;
-                        });
-                        // Track the service search
-                        if (!selected && serviceId.isNotEmpty) {
-                          _trackServiceSearch(serviceId, serviceName);
-                        }
-                        _startSearch();
-                      },
-                      isDark: isDark,
-                    );
-                  },
                 ),
               ),
+
+              // Dynamic Tabs Section
+              _buildTabsSection(isDark, horizontalPadding, filterChipHeight, isSmallScreen),
 
               // Divider with responsive height
               Container(
                 height: 1,
-                margin: EdgeInsets.symmetric(horizontal: horizontalPadding),
+                margin: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 8),
                 decoration: BoxDecoration(
                   border: Border(
                     bottom: BorderSide(

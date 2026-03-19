@@ -484,6 +484,51 @@ class AuthService {
     }
   }
 
+  /// Reset password using the reset token. This calls
+  /// POST /api/auth/reset-password and returns the server response.
+  /// On success, it includes the JWT for signing in.
+  static Future<Map<String, dynamic>> resetPassword({
+    required String resetToken,
+    required String newPassword,
+  }) async {
+    final uri = Uri.parse('$API_BASE_URL/api/auth/reset-password');
+    try {
+      final resp = await _postWithRetries(uri,
+          body: {'resetToken': resetToken, 'newPassword': newPassword},
+          timeoutSeconds: 20, maxAttempts: 2);
+      final status = resp.statusCode;
+      final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
+
+      if (status >= 200 && status < 300) {
+        // On success, the server returns JWT, so we can sign in the user
+        await _persistTokenAndRole(body);
+        return {'success': true, 'data': body};
+      }
+
+      // Map synthetic responses to a standard error shape
+      if (status == 408)
+        return {
+          'success': false,
+          'error': {'message': 'Request timed out'}
+        };
+      if (status == 599)
+        return {
+          'success': false,
+          'error': {'message': 'Network error'}
+        };
+
+      return {
+        'success': false,
+        'error': body ?? {'message': 'HTTP $status'}
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': {'message': e.toString()}
+      };
+    }
+  }
+
   /// Check whether an email address exists on the platform.
   ///
   /// IMPORTANT: This method assumes the backend exposes a safe endpoint

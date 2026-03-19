@@ -290,6 +290,14 @@ GoRouter createRouter(AuthNotifier auth) {
           builder: (context, params) => ForgetPasswordWidget(),
         ),
         FFRoute(
+          name: ResetPasswordWidget.routeName,
+          path: ResetPasswordWidget.routePath,
+          builder: (context, params) => ResetPasswordWidget(
+            token: params.getParam<String>('token', ParamType.String),
+            email: params.getParam<String>('email', ParamType.String),
+          ),
+        ),
+        FFRoute(
           name: UpdatePasswordWidget.routeName,
           path: UpdatePasswordWidget.routePath,
           builder: (context, params) => UpdatePasswordWidget(),
