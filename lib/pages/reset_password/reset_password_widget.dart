@@ -10,6 +10,7 @@ import 'package:easy_debounce/easy_debounce.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
+import '/index.dart';
 import '../login_account/login_account_widget.dart';
 import 'reset_password_model.dart';
 export 'reset_password_model.dart';
@@ -300,10 +301,17 @@ class _ResetPasswordWidgetState extends State<ResetPasswordWidget> {
                             if (resp['success'] == true) {
                               AppNotification.showSuccess(context, 'Password reset successfully. You are now logged in.');
                               await Future.delayed(const Duration(milliseconds: 400));
-                              // Refresh auth state
+                              // Refresh auth state so router knows we're authenticated
                               await AuthNotifier.instance.refreshAuth();
-                              // Navigate to home or appropriate page
-                              if (mounted) context.go('/'); // or HomePageWidget.routePath
+                              // Navigate to the appropriate dashboard based on role
+                              if (mounted) {
+                                final role = AuthNotifier.instance.userRole ?? '';
+                                if (role.toLowerCase().contains('artisan')) {
+                                  context.go(ArtisanDashboardPageWidget.routePath);
+                                } else {
+                                  context.go(HomePageWidget.routePath);
+                                }
+                              }
                             } else {
                               String msg = 'Could not reset password.';
                               if (resp['error'] is Map && resp['error']['message'] != null) {

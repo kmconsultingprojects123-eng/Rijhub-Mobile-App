@@ -65,6 +65,10 @@ GoRouter createRouter(AuthNotifier auth) {
             VerificationPageWidget.routePath,
             // Allow direct access to the forget password page without redirect
             ForgetPasswordWidget.routePath,
+            // Allow the forgot-password OTP verification page
+            ForgotPasswordOtpWidget.routePath,
+            // Allow the reset-password page (reached after OTP verification)
+            ResetPasswordWidget.routePath,
           };
           if (allowed.contains(loc)) return null;
           // Redirect any other path to splash2 so user must choose login/register/guest
@@ -288,6 +292,13 @@ GoRouter createRouter(AuthNotifier auth) {
           name: ForgetPasswordWidget.routeName,
           path: ForgetPasswordWidget.routePath,
           builder: (context, params) => ForgetPasswordWidget(),
+        ),
+        FFRoute(
+          name: ForgotPasswordOtpWidget.routeName,
+          path: ForgotPasswordOtpWidget.routePath,
+          builder: (context, params) => ForgotPasswordOtpWidget(
+            email: params.getParam<String>('email', ParamType.String) ?? '',
+          ),
         ),
         FFRoute(
           name: ResetPasswordWidget.routeName,

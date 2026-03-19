@@ -18,6 +18,7 @@ export '/pages/update_profilepage/update_profilepage_widget.dart' show UpdatePro
 export '/pages/artisan_profileupdate/artisan_profileupdate_widget.dart' show ArtisanProfileupdateWidget;
 export '/pages/contact_us_page/contact_us_page_widget.dart' show ContactUsPageWidget;
 export '/pages/forget_password/forget_password_widget.dart' show ForgetPasswordWidget;
+export '/pages/forgot_password_otp/forgot_password_otp_widget.dart' show ForgotPasswordOtpWidget;
 export '/pages/reset_password/reset_password_widget.dart' show ResetPasswordWidget;
 export '/pages/update_password/update_password_widget.dart' show UpdatePasswordWidget;
 export '/pages/verification_page/verification_page_widget.dart' show VerificationPageWidget;

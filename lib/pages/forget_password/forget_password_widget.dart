@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import '../login_account/login_account_widget.dart';
+import '../forgot_password_otp/forgot_password_otp_widget.dart';
 import 'forget_password_model.dart';
 export 'forget_password_model.dart';
 
@@ -227,11 +228,17 @@ class _ForgetPasswordWidgetState extends State<ForgetPasswordWidget> {
                             if (resp['success'] == true) {
                               final message = (resp['data'] is Map && resp['data']['message'] != null)
                                   ? resp['data']['message'].toString()
-                                  : 'If an account with that email exists, a password reset link has been sent.';
+                                  : 'A verification code has been sent to your email.';
                               AppNotification.showSuccess(context, message);
                               await Future.delayed(const Duration(milliseconds: 400));
-                              // After success, go to login page (use context.go to avoid stacking)
-                              if (mounted) context.go(LoginAccountWidget.routePath);
+                              // Navigate to OTP verification screen
+                              if (mounted) {
+                                final uri = Uri(
+                                  path: ForgotPasswordOtpWidget.routePath,
+                                  queryParameters: {'email': email},
+                                );
+                                context.go(uri.toString());
+                              }
                             } else {
                               String msg = 'Could not request password reset.';
                               if (resp['error'] is Map && resp['error']['message'] != null) msg = resp['error']['message'].toString();
