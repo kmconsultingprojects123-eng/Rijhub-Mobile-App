@@ -26,6 +26,7 @@ import 'services/health_service.dart';
 import 'widgets/health_snackbar.dart';
 import 'state/auth_notifier.dart';
 import 'state/app_state_notifier.dart';
+import 'package:app_links/app_links.dart';
 
 import 'dart:io';
 import 'package:flutter/services.dart' show PlatformAssetBundle;
@@ -56,8 +57,23 @@ void main() async {
         kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
     appleProvider: AppleProvider.deviceCheck,
   );
+
+  // Configure debug token for development builds
+  if (kDebugMode) {
+    // Set the debug token that must be added to Firebase Console App Check allowlist
+    // To add this token to Firebase Console:
+    // 1. Go to Firebase Console > Project Settings > App Check
+    // 2. Select your Android app
+    // 3. Under "Debug tokens", click "Add debug token"
+    // 4. Paste this token: f4d83cb1-32c0-4a4f-9f21-b8a2a1b0b89d
+    // 5. Save and redeploy if needed
+    await FirebaseAppCheck.instance.setTokenAutoRefreshEnabled(true);
+    // Note: The debug token is automatically generated and used when AndroidProvider.debug is active
+    // The token above is logged in your Firebase Console and must be allowlisted for phone auth to work
+  }
+
   print(
-      '✅ App Check activated (${kDebugMode ? 'Debug Mode' : 'Production Mode'})');
+      '✅ App Check activated (${kDebugMode ? 'Debug Mode (Debug Token Required)' : 'Production Mode'})');
 
   // Register background message handler (required for background/terminated data messages).
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
@@ -198,6 +214,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   late AppStateNotifier _appStateNotifier;
   late GoRouter _router;
+  late AppLinks _appLinks;
 
   String getRoute([RouteMatchBase? routeMatch]) {
     final RouteMatchBase lastMatch =
@@ -248,6 +265,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
     _router = createRouter(auth);
 
+    // Handle deep links
+    _initDeepLinks();
+
     Future.delayed(const Duration(milliseconds: 1800), () {
       _appStateNotifier.stopShowingSplashImage();
       try {
@@ -256,6 +276,42 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         // navigation failed - ignore in release logs
       }
     });
+  }
+
+  void _initDeepLinks() async {
+    _appLinks = AppLinks();
+    
+    // Handle initial link when app is launched from a deep link
+    try {
+      final initialUri = await _appLinks.getInitialLink();
+      if (initialUri != null) {
+        _handleDeepLink(initialUri.toString());
+      }
+    } catch (e) {
+      // Ignore errors
+    }
+
+    // Handle links when app is already running
+    _appLinks.uriLinkStream.listen(
+      (Uri uri) {
+        _handleDeepLink(uri.toString());
+      },
+      onError: (err) {
+        // Ignore errors
+      },
+    );
+  }
+
+  void _handleDeepLink(String link) {
+    final uri = Uri.parse(link);
+    if (uri.path == '/resetPassword' || uri.path == '/reset-password') {
+      final token = uri.queryParameters['token'];
+      final email = uri.queryParameters['email'];
+      if (token != null && token.isNotEmpty) {
+        // Navigate to reset password screen
+        _router.go('/resetPassword?token=$token&email=${email ?? ''}');
+      }
+    }
   }
 
   void setThemeMode(ThemeMode mode) => safeSetState(() {

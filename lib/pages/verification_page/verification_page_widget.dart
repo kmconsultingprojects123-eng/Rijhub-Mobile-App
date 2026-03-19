@@ -487,29 +487,195 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
 
     return Scaffold(
       backgroundColor: _getBackgroundColor(),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          onPressed: () => Navigator.of(context).maybePop(),
+          color: Colors.grey[600],
+        ),
+      ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 32.0),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 40.0),
-              _buildBackButton(),
-              const SizedBox(height: 28.0),
-              _buildIcon(),
-              const SizedBox(height: 28.0),
-              _buildTitle(),
-              const SizedBox(height: 8.0),
-              _buildSubtitle(),
-              const SizedBox(height: 20.0),
-              if (_displayPhone != null) _buildPhoneInfo(),
-              _buildOtpField(),
-              const SizedBox(height: 16),
-              _buildVerifyButton(),
-              const SizedBox(height: 8),
-              _buildResendButton(),
+              const SizedBox(height: 20),
+
+              // Title
+              Text(
+                'Verify phone',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white
+                      : Colors.black87,
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              // Subtitle
+              Text(
+                'Enter the one-time code sent to your phone to verify your account.',
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Colors.grey[600],
+                  height: 1.4,
+                ),
+              ),
+
               const SizedBox(height: 40),
+
+              // Phone info and timer
+              if (_displayPhone != null) ...[
+                Text(
+                  'We sent an SMS with a verification code to:',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Text(
+                      _displayPhone!,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _primaryColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _formatDuration(_remaining),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: _primaryColor,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 40),
+              ],
+
+              // OTP Field
+              TextField(
+                controller: _otpController,
+                keyboardType: TextInputType.number,
+                textInputAction: TextInputAction.done,
+                style: const TextStyle(
+                  fontSize: 18,
+                  letterSpacing: 2,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Enter verification code',
+                  hintStyle: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[400],
+                    letterSpacing: 0,
+                  ),
+                  filled: true,
+                  fillColor: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.grey[900]
+                      : Colors.grey[50],
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: _primaryColor,
+                      width: 1.5,
+                    ),
+                  ),
+                  errorText: _errorMessage,
+                  contentPadding: const EdgeInsets.all(18),
+                ),
+                onSubmitted: (_) => _submitOtp(),
+              ),
+
+              const SizedBox(height: 24),
+
+              // Verify Button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _primaryColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  onPressed: _isButtonDisabled ? null : _submitOtp,
+                  child: _submitting
+                      ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                      : const Text(
+                    'Verify',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Resend Code Button
+              Center(
+                child: TextButton(
+                  onPressed: _handleResendCode,
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(50, 30),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text(
+                    _otpExpired ? 'Request new code' : 'Resend code',
+                    style: TextStyle(
+                      color: _primaryColor,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+
+              const Spacer(),
+
+              // Optional: Add some bottom padding
+              const SizedBox(height: 20),
             ],
           ),
         ),
@@ -518,184 +684,16 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
   }
 
   Widget _buildLoading() {
-    return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    return const Scaffold(
+      body: Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
   }
 
   Color _getBackgroundColor() {
     return Theme.of(context).brightness == Brightness.dark
         ? Colors.black
         : Colors.white;
-  }
-
-  Widget _buildBackButton() {
-    final opacity = (0.6 * 255).toInt();
-
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: IconButton(
-        icon: const Icon(Icons.chevron_left_rounded),
-        color: Theme.of(context).colorScheme.onSurface.withAlpha(opacity),
-        onPressed: () => Navigator.of(context).maybePop(),
-        iconSize: 32,
-      ),
-    );
-  }
-
-  Widget _buildIcon() {
-    return Container(
-      width: 80,
-      height: 80,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: _primaryColor.withAlpha((0.1 * 255).toInt()),
-      ),
-      child: Icon(
-        Icons.sms_outlined,
-        size: 40,
-        color: _primaryColor,
-      ),
-    );
-  }
-
-  Widget _buildTitle() {
-    return Text(
-      'Verify phone',
-      style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-            fontWeight: FontWeight.w400,
-            letterSpacing: -0.5,
-          ),
-    );
-  }
-
-  Widget _buildSubtitle() {
-    return Text(
-      'Enter the one-time code sent to your phone to verify your account.',
-      textAlign: TextAlign.center,
-      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: Theme.of(context)
-                .colorScheme
-                .onSurface
-                .withAlpha((0.5 * 255).toInt()),
-            fontWeight: FontWeight.w300,
-          ),
-    );
-  }
-
-  Widget _buildPhoneInfo() {
-    final theme = Theme.of(context);
-    final opacity = (0.6 * 255).toInt();
-
-    return Column(
-      children: [
-        Text('We sent an SMS with a verification code to:'),
-        const SizedBox(height: 8),
-        Text(
-          _displayPhone!,
-          style: theme.textTheme.titleMedium
-              ?.copyWith(fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        _buildCountdown(theme, opacity),
-        const SizedBox(height: 16),
-      ],
-    );
-  }
-
-  Widget _buildCountdown(ThemeData theme, int opacity) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(
-          'Expires in ',
-          style: theme.textTheme.bodySmall
-              ?.copyWith(color: theme.colorScheme.onSurface.withAlpha(opacity)),
-        ),
-        const SizedBox(width: 6),
-        Text(
-          _formatDuration(_remaining),
-          style: theme.textTheme.bodyMedium
-              ?.copyWith(color: _primaryColor, fontWeight: FontWeight.w700),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildOtpField() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return TextField(
-      controller: _otpController,
-      keyboardType: TextInputType.visiblePassword,
-      textCapitalization: TextCapitalization.characters,
-      enableSuggestions: false,
-      autocorrect: false,
-      decoration: InputDecoration(
-        labelText: 'OTP',
-        hintText: 'Enter verification code',
-        errorText: _errorMessage,
-        filled: true,
-        fillColor: isDark ? Colors.grey[900] : Colors.grey[50],
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12.0),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12.0),
-          borderSide: BorderSide(
-            color: _primaryColor,
-            width: 1.5,
-          ),
-        ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
-      ),
-    );
-  }
-
-  Widget _buildVerifyButton() {
-    return FractionallySizedBox(
-      widthFactor: 0.5,
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: _primaryColor,
-          foregroundColor: Theme.of(context).colorScheme.onPrimary,
-          padding: const EdgeInsets.symmetric(vertical: 18.0),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12.0),
-          ),
-          elevation: 0,
-        ),
-        onPressed: _isButtonDisabled ? null : _submitOtp,
-        child: _submitting
-            ? _buildLoadingIndicator()
-            : const Text('VERIFY',
-                style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5)),
-      ),
-    );
-  }
-
-  Widget _buildLoadingIndicator() {
-    return SizedBox(
-      height: 20,
-      width: 20,
-      child: CircularProgressIndicator(
-        strokeWidth: 2,
-        valueColor:
-            AlwaysStoppedAnimation(Theme.of(context).colorScheme.onPrimary),
-      ),
-    );
-  }
-
-  Widget _buildResendButton() {
-    return TextButton(
-      onPressed: _handleResendCode,
-      child: Text(
-        _otpExpired ? 'Request new code' : 'Resend code',
-        style: TextStyle(color: _primaryColor, fontWeight: FontWeight.w600),
-      ),
-    );
   }
 }
