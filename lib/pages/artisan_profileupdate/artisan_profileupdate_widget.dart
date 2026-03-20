@@ -9,6 +9,7 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:math' as math;
 import '../../google_maps_config.dart';
 import '../../utils/error_messages.dart';
+import '../../utils/image_compress.dart';
 import '../../services/user_service.dart';
 import '../../services/token_storage.dart';
 import '../../services/artist_service.dart';
@@ -78,6 +79,9 @@ class _ArtisanProfileupdateWidgetState
       _selectedCategoryName; // cached name for saving when categories not present
   // Track whether file picker is available on this platform
   bool _filePickerAvailable = true;
+  // Upload progress tracking
+  String? _uploadProgressLabel;
+  double _uploadProgress = 0.0; // 0.0 to 1.0
 
   @override
   void initState() {
@@ -861,17 +865,44 @@ class _ArtisanProfileupdateWidgetState
         }).toList();
       }
 
-      // If the user selected local images in this session, instead of attempting
-      // to call backend signing endpoints (which may not exist), encode files
-      // as base64 data URIs and include them directly in the JSON payload as
-      // an additional portfolio item. This avoids multipart/signature flows
-      // and keeps the request JSON-only as required by the server.
+      // If the user selected local images in this session, compress them first
+      // then upload with progress tracking.
       if (_localPortfolioImagePaths.isNotEmpty) {
         final localPaths = List<String>.from(_localPortfolioImagePaths);
+        final totalSteps = localPaths.length * 2; // compress + upload per file
+        var completedSteps = 0;
+
+        // Step 1: Compress images
+        if (mounted) {
+          setState(() {
+            _uploadProgressLabel = 'Compressing images...';
+            _uploadProgress = 0.0;
+          });
+        }
+        final compressedPaths = await ImageCompressUtil.compressAll(
+          localPaths,
+          onProgress: (done, total) {
+            completedSteps = done;
+            if (mounted) {
+              setState(() {
+                _uploadProgressLabel = 'Compressing image $done of $total...';
+                _uploadProgress = completedSteps / totalSteps;
+              });
+            }
+          },
+        );
+
+        // Step 2: Upload compressed images
+        if (mounted) {
+          setState(() {
+            _uploadProgressLabel = 'Uploading images...';
+          });
+        }
+
         // Build numbered field names: portfolioImage1, portfolioImage2, ...
         final fileMap = <String, List<String>>{};
-        for (var i = 0; i < localPaths.length; i++) {
-          fileMap['portfolioImage${i + 1}'] = [localPaths[i]];
+        for (var i = 0; i < compressedPaths.length; i++) {
+          fileMap['portfolioImage${i + 1}'] = [compressedPaths[i]];
         }
         bool sent = false;
         try {
@@ -886,6 +917,15 @@ class _ArtisanProfileupdateWidgetState
                 await ArtistService.createMyProfile(payload, fileMap: fileMap);
           }
           sent = updated != null;
+          if (sent) {
+            completedSteps = totalSteps;
+            if (mounted) {
+              setState(() {
+                _uploadProgress = 1.0;
+                _uploadProgressLabel = 'Upload complete!';
+              });
+            }
+          }
         } catch (e) {
           if (kDebugMode) debugPrint('Multipart profile update failed: $e');
           sent = false;
@@ -896,9 +936,15 @@ class _ArtisanProfileupdateWidgetState
           try {
             if (kDebugMode)
               debugPrint(
-                  'Falling back to attachments/direct upload for ${localPaths.length} files...');
-            final uploaded =
-                await ArtistService.uploadFilesToAttachments(localPaths);
+                  'Falling back to attachments/direct upload for ${compressedPaths.length} files...');
+            if (mounted) {
+              setState(() {
+                _uploadProgressLabel = 'Uploading images (fallback)...';
+              });
+            }
+            final uploaded = await ArtistService.uploadFilesToAttachments(
+                    compressedPaths)
+                .timeout(const Duration(seconds: 60));
             if (kDebugMode)
               debugPrint('Profile update: uploaded results -> $uploaded');
             final uploadedUrls = <String>[];
@@ -917,9 +963,30 @@ class _ArtisanProfileupdateWidgetState
                 'beforeAfter': false,
               });
             }
+            if (mounted) {
+              setState(() {
+                _uploadProgress = 1.0;
+                _uploadProgressLabel = 'Upload complete!';
+              });
+            }
           } catch (e) {
             if (kDebugMode)
               debugPrint('Profile update: uploadFilesToAttachments failed: $e');
+            if (mounted) {
+              setState(() {
+                _uploadProgressLabel = 'Image upload failed — saving without images';
+              });
+            }
+          }
+        }
+
+        // Clean up compressed temp files (don't delete originals)
+        for (var i = 0; i < compressedPaths.length; i++) {
+          if (compressedPaths[i] != localPaths[i]) {
+            try {
+              final f = File(compressedPaths[i]);
+              if (await f.exists()) await f.delete();
+            } catch (_) {}
           }
         }
       }
@@ -977,10 +1044,13 @@ class _ArtisanProfileupdateWidgetState
     } catch (e) {
       if (mounted) setState(() => _error = ErrorMessages.humanize(e));
     } finally {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _isSaving = false;
+          _uploadProgressLabel = null;
+          _uploadProgress = 0.0;
         });
+      }
     }
   }
 
@@ -2045,6 +2115,50 @@ class _ArtisanProfileupdateWidgetState
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          if (_uploadProgressLabel != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 16),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          _uploadProgressLabel!,
+                                          style: theme.textTheme.bodySmall?.copyWith(
+                                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                                          ),
+                                        ),
+                                      ),
+                                      Text(
+                                        '${(_uploadProgress * 100).toInt()}%',
+                                        style: theme.textTheme.bodySmall?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                          color: primaryColor,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: LinearProgressIndicator(
+                                      value: _uploadProgress,
+                                      backgroundColor: theme.colorScheme.onSurface.withOpacity(0.1),
+                                      valueColor: AlwaysStoppedAnimation(primaryColor),
+                                      minHeight: 6,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           if (_error != null)
                             Container(
                               width: double.infinity,

@@ -1329,6 +1329,13 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
       final List<Map<String, dynamic>> services =
           await _fetchJobSubcategoriesForArtisan(artisan, ctx);
 
+      // Mutable state — declared outside the builder so it survives
+      // framework-driven rebuilds of the bottom-sheet route.
+      final Set<String> selected = {};
+      int stepIndex = 0;
+      DateTime? chosenDateTime;
+      bool showDateTimeError = false;
+
       final result = await showModalBottomSheet<Map<String, dynamic>>(
         context: ctx,
         isScrollControlled: true,
@@ -1338,12 +1345,6 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
         ),
         builder: (context) {
           final theme = FlutterFlowTheme.of(context);
-
-          // Local mutable state
-          final Set<String> selected = {};
-          int stepIndex = 0;
-          DateTime? chosenDateTime;
-          bool _showDateTimeError = false;
 
           num _toNum(dynamic v) {
             if (v == null) return 0;
@@ -1424,7 +1425,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
               chosenDateTime = dt;
               _scheduleCtrl.text =
                   DateFormat('EEE, MMM d, yyyy • h:mm a').format(dt);
-              _showDateTimeError = false;
+              showDateTimeError = false;
             });
           }
 
@@ -1731,8 +1732,8 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                     color: _surfaceColor(),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: _showDateTimeError ? Colors.red : _borderColor(),
-                      width: _showDateTimeError ? 1.5 : 1,
+                      color: showDateTimeError ? Colors.red : _borderColor(),
+                      width: showDateTimeError ? 1.5 : 1,
                     ),
                   ),
                   child: Column(
@@ -1803,7 +1804,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                     ],
                   ),
                 ),
-                if (_showDateTimeError)
+                if (showDateTimeError)
                   Padding(
                     padding: const EdgeInsets.only(top: 8, left: 16),
                     child: Row(
@@ -1914,8 +1915,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                                 // Validate date/time is selected
                                 if (_scheduleCtrl.text.isEmpty ||
                                     chosenDateTime == null) {
-                                  setModalState(
-                                      () => _showDateTimeError = true);
+                                  setModalState(() => showDateTimeError = true);
                                   return;
                                 }
 
@@ -2408,7 +2408,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
 
                       Flexible(
                         child: SingleChildScrollView(
-                          physics: const BouncingScrollPhysics(),
+                          physics: const ClampingScrollPhysics(),
                           child: _buildStepContent(setModalState),
                         ),
                       ),
