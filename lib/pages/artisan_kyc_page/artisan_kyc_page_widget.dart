@@ -8,6 +8,7 @@ import '/state/app_state_notifier.dart';
 import '/services/token_storage.dart';
 import 'package:flutter/services.dart';
 import '../../utils/error_messages.dart';
+import '../../utils/image_compress.dart';
 import 'package:flutter/foundation.dart';
 import '../../services/job_service.dart';
 import '../../services/api_client.dart';
@@ -30,12 +31,14 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
 
   // Step 1 fields
   final TextEditingController _businessNameCtrl = TextEditingController();
-  final TextEditingController _countryCtrl = TextEditingController(text: 'Nigeria');
+  final TextEditingController _countryCtrl =
+      TextEditingController(text: 'Nigeria');
   final TextEditingController _stateCtrl = TextEditingController();
   final TextEditingController _lgaCtrl = TextEditingController();
   String _idType = 'national_id';
   // NOTE: service category is now a dropdown backed by JobService
-  final TextEditingController _serviceCategoryCtrl = TextEditingController(); // kept as fallback
+  final TextEditingController _serviceCategoryCtrl =
+      TextEditingController(); // kept as fallback
   List<Map<String, dynamic>> _categories = [];
   String? _selectedCategoryId;
   final TextEditingController _yearsExperienceCtrl = TextEditingController();
@@ -49,6 +52,9 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
   String? _error;
   String? _successMessage;
   Map<String, String> _fieldErrors = {};
+  // Upload progress tracking
+  String? _uploadProgressLabel;
+  double _uploadProgress = 0.0;
 
   final List<String> _stepTitles = [
     'Business Details',
@@ -130,73 +136,132 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
         }
       }
     } catch (e) {
-      setState(() => _error = ErrorMessages.humanize(e, context: 'file_select'));
+      setState(
+          () => _error = ErrorMessages.humanize(e, context: 'file_select'));
     }
   }
 
   Future<void> _fetchStates() async {
     try {
-      setState(() { _loadingStates = true; });
+      setState(() {
+        _loadingStates = true;
+      });
 
       // Prefer client-side LocationService which is now restricted to Abuja FCT.
       final states = await LocationService.fetchNigeriaStates();
-      if (mounted) setState(() { _states = states; });
-
+      if (mounted)
+        setState(() {
+          _states = states;
+        });
     } catch (e) {
-      if (kDebugMode) debugPrint('Failed to load states via LocationService: $e');
+      if (kDebugMode)
+        debugPrint('Failed to load states via LocationService: $e');
 
       // fallback to existing API call if needed
       try {
-        final resp = await ApiClient.get('$API_BASE_URL/api/locations/nigeria/states', headers: {'Content-Type': 'application/json'});
-        if (resp['status'] is int && resp['status'] >= 200 && resp['status'] < 300) {
-          final body = resp['json'] ?? (resp['body']?.isNotEmpty == true ? jsonDecode(resp['body'] as String) : null);
+        final resp = await ApiClient.get(
+            '$API_BASE_URL/api/locations/nigeria/states',
+            headers: {'Content-Type': 'application/json'});
+        if (resp['status'] is int &&
+            resp['status'] >= 200 &&
+            resp['status'] < 300) {
+          final body = resp['json'] ??
+              (resp['body']?.isNotEmpty == true
+                  ? jsonDecode(resp['body'] as String)
+                  : null);
           List<dynamic>? list;
-          if (body is Map && body['data'] is List) list = body['data'] as List<dynamic>;
-          else if (body is List) list = body as List<dynamic>;
-          else if (body is Map && body['states'] is List) list = body['states'] as List<dynamic>;
+          if (body is Map && body['data'] is List)
+            list = body['data'] as List<dynamic>;
+          else if (body is List)
+            list = body as List<dynamic>;
+          else if (body is Map && body['states'] is List)
+            list = body['states'] as List<dynamic>;
 
           if (list != null) {
-            final names = list.map((e) => e is String ? e : (e is Map && e['name'] != null ? e['name'].toString() : e.toString())).toList().cast<String>();
-            if (mounted) setState(() { _states = names; });
+            final names = list
+                .map((e) => e is String
+                    ? e
+                    : (e is Map && e['name'] != null
+                        ? e['name'].toString()
+                        : e.toString()))
+                .toList()
+                .cast<String>();
+            if (mounted)
+              setState(() {
+                _states = names;
+              });
           }
         }
       } catch (e) {
         if (kDebugMode) debugPrint('Failed to load states: $e');
       }
     } finally {
-      if (mounted) setState(() { _loadingStates = false; });
+      if (mounted)
+        setState(() {
+          _loadingStates = false;
+        });
     }
   }
 
   Future<void> _fetchLgasForState(String state) async {
     try {
-      setState(() { _loadingLgas = true; _lgas = []; _lgaCtrl.text = ''; });
+      setState(() {
+        _loadingLgas = true;
+        _lgas = [];
+        _lgaCtrl.text = '';
+      });
 
       // If the requested state isn't allowed, return empty list.
       final lgas = await LocationService.fetchNigeriaLgas(state);
-      if (mounted) setState(() { _lgas = lgas; });
+      if (mounted)
+        setState(() {
+          _lgas = lgas;
+        });
 
       // if LocationService returned nothing, fall back to API
       if (lgas.isEmpty) {
-        final uri = '$API_BASE_URL/api/locations/nigeria/lgas?state=${Uri.encodeQueryComponent(state)}';
-        final resp = await ApiClient.get(uri, headers: {'Content-Type': 'application/json'});
-        if (resp['status'] is int && resp['status'] >= 200 && resp['status'] < 300) {
-          final body = resp['json'] ?? (resp['body']?.isNotEmpty == true ? jsonDecode(resp['body'] as String) : null);
+        final uri =
+            '$API_BASE_URL/api/locations/nigeria/lgas?state=${Uri.encodeQueryComponent(state)}';
+        final resp = await ApiClient.get(uri,
+            headers: {'Content-Type': 'application/json'});
+        if (resp['status'] is int &&
+            resp['status'] >= 200 &&
+            resp['status'] < 300) {
+          final body = resp['json'] ??
+              (resp['body']?.isNotEmpty == true
+                  ? jsonDecode(resp['body'] as String)
+                  : null);
           List<dynamic>? list;
-          if (body is Map && body['data'] is List) list = body['data'] as List<dynamic>;
-          else if (body is List) list = body as List<dynamic>;
-          else if (body is Map && body['lgas'] is List) list = body['lgas'] as List<dynamic>;
+          if (body is Map && body['data'] is List)
+            list = body['data'] as List<dynamic>;
+          else if (body is List)
+            list = body as List<dynamic>;
+          else if (body is Map && body['lgas'] is List)
+            list = body['lgas'] as List<dynamic>;
 
           if (list != null) {
-            final names = list.map((e) => e is String ? e : (e is Map && e['name'] != null ? e['name'].toString() : e.toString())).toList().cast<String>();
-            if (mounted) setState(() { _lgas = names; });
+            final names = list
+                .map((e) => e is String
+                    ? e
+                    : (e is Map && e['name'] != null
+                        ? e['name'].toString()
+                        : e.toString()))
+                .toList()
+                .cast<String>();
+            if (mounted)
+              setState(() {
+                _lgas = names;
+              });
           }
         }
       }
     } catch (e) {
       if (kDebugMode) debugPrint('Failed to load lgas for $state: $e');
     } finally {
-      if (mounted) setState(() { _loadingLgas = false; });
+      if (mounted)
+        setState(() {
+          _loadingLgas = false;
+        });
     }
   }
 
@@ -243,20 +308,21 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
                     child: Center(
                       child: isCompleted
                           ? Icon(
-                        Icons.check,
-                        color: Colors.white,
-                        size: 20,
-                      )
+                              Icons.check,
+                              color: Colors.white,
+                              size: 20,
+                            )
                           : Text(
-                        (index + 1).toString(),
-                        style: TextStyle(
-                          color: isActive
-                              ? Colors.white
-                              : theme.colorScheme.onSurface.withOpacity(0.5),
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                        ),
-                      ),
+                              (index + 1).toString(),
+                              style: TextStyle(
+                                color: isActive
+                                    ? Colors.white
+                                    : theme.colorScheme.onSurface
+                                        .withOpacity(0.5),
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                              ),
+                            ),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -264,7 +330,8 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
                     _stepTitles[index],
                     style: TextStyle(
                       fontSize: 12,
-                      fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                      fontWeight:
+                          isActive ? FontWeight.w600 : FontWeight.normal,
                       color: isActive || isCompleted
                           ? theme.colorScheme.primary
                           : theme.colorScheme.onSurface.withOpacity(0.5),
@@ -498,32 +565,48 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
               child: _loadingStates
                   ? Padding(
                       padding: const EdgeInsets.symmetric(vertical: 12.0),
-                      child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.0))),
+                      child: Center(
+                          child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child:
+                                  CircularProgressIndicator(strokeWidth: 2.0))),
                     )
                   : DropdownButtonFormField<String>(
-                       value: _stateCtrl.text.isNotEmpty ? _stateCtrl.text : null,
-                       hint: Text('Select state'),
-                       decoration: InputDecoration(
-                         contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0), borderSide: BorderSide.none),
-                         focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0), borderSide: BorderSide(color: primaryColor, width: 1.5)),
-                       ),
-                       isExpanded: true,
-                       items: _states.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                       onChanged: (value) {
-                         final v = value ?? '';
-                         setState(() {
-                           _stateCtrl.text = v;
-                           _lgaCtrl.text = '';
-                           _lgas = [];
-                         });
-                         if (v.isNotEmpty) _fetchLgasForState(v);
-                       },
-                       validator: (value) {
-                         if (value == null || value.trim().isEmpty) return 'State is required';
-                         return null;
-                       },
-                     ),
+                      value:
+                          _stateCtrl.text.isNotEmpty ? _stateCtrl.text : null,
+                      hint: Text('Select state'),
+                      decoration: InputDecoration(
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16.0, vertical: 12.0),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12.0),
+                            borderSide: BorderSide.none),
+                        focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12.0),
+                            borderSide:
+                                BorderSide(color: primaryColor, width: 1.5)),
+                      ),
+                      isExpanded: true,
+                      items: _states
+                          .map(
+                              (s) => DropdownMenuItem(value: s, child: Text(s)))
+                          .toList(),
+                      onChanged: (value) {
+                        final v = value ?? '';
+                        setState(() {
+                          _stateCtrl.text = v;
+                          _lgaCtrl.text = '';
+                          _lgas = [];
+                        });
+                        if (v.isNotEmpty) _fetchLgasForState(v);
+                      },
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty)
+                          return 'State is required';
+                        return null;
+                      },
+                    ),
             ),
             if (_fieldErrors['state'] != null)
               Padding(
@@ -557,27 +640,44 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
               child: _loadingLgas
                   ? Padding(
                       padding: const EdgeInsets.symmetric(vertical: 12.0),
-                      child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.0))),
+                      child: Center(
+                          child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child:
+                                  CircularProgressIndicator(strokeWidth: 2.0))),
                     )
                   : DropdownButtonFormField<String>(
-                       value: _lgaCtrl.text.isNotEmpty ? _lgaCtrl.text : null,
-                       hint: Text('Select LGA'),
-                       decoration: InputDecoration(
-                         contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0), borderSide: BorderSide.none),
-                         focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12.0), borderSide: BorderSide(color: primaryColor, width: 1.5)),
-                       ),
-                       isExpanded: true,
-                       items: _lgas.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                       onChanged: (value) {
-                         final v = value ?? '';
-                         setState(() { _lgaCtrl.text = v; });
-                       },
-                       validator: (value) {
-                         if (value == null || value.trim().isEmpty) return 'LGA is required';
-                         return null;
-                       },
-                     ),
+                      value: _lgaCtrl.text.isNotEmpty ? _lgaCtrl.text : null,
+                      hint: Text('Select LGA'),
+                      decoration: InputDecoration(
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16.0, vertical: 12.0),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12.0),
+                            borderSide: BorderSide.none),
+                        focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12.0),
+                            borderSide:
+                                BorderSide(color: primaryColor, width: 1.5)),
+                      ),
+                      isExpanded: true,
+                      items: _lgas
+                          .map(
+                              (s) => DropdownMenuItem(value: s, child: Text(s)))
+                          .toList(),
+                      onChanged: (value) {
+                        final v = value ?? '';
+                        setState(() {
+                          _lgaCtrl.text = v;
+                        });
+                      },
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty)
+                          return 'LGA is required';
+                        return null;
+                      },
+                    ),
             ),
             if (_fieldErrors['lga'] != null)
               Padding(
@@ -1024,9 +1124,9 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
           borderRadius: BorderRadius.circular(12.0),
           border: file != null
               ? Border.all(
-            color: primaryColor,
-            width: 1.5,
-          )
+                  color: primaryColor,
+                  width: 1.5,
+                )
               : null,
         ),
         padding: const EdgeInsets.all(16.0),
@@ -1046,9 +1146,7 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        file != null
-                            ? 'Change file'
-                            : 'Click to upload',
+                        file != null ? 'Change file' : 'Click to upload',
                         style: TextStyle(
                           color: theme.colorScheme.onSurface,
                           fontSize: 16,
@@ -1068,7 +1166,8 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
                 ),
                 if (file != null)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: primaryColor.withAlpha((0.1 * 255).toInt()),
                       borderRadius: BorderRadius.circular(20),
@@ -1187,10 +1286,17 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
                   title: 'Business Details',
                   items: [
                     _buildReviewItem('Business Name', _businessNameCtrl.text),
-                    _buildReviewItem('ID Type', _idType.replaceAll('_', ' ').toUpperCase()),
-                    _buildReviewItem('Profile Photo', _profileImage != null ? '✓ Uploaded' : '✗ Not uploaded'),
-                    _buildReviewItem('ID Front', _idFront != null ? '✓ Uploaded' : '✗ Not uploaded'),
-                    _buildReviewItem('ID Back', _idBack != null ? '✓ Uploaded' : '✗ Not uploaded'),
+                    _buildReviewItem(
+                        'ID Type', _idType.replaceAll('_', ' ').toUpperCase()),
+                    _buildReviewItem(
+                        'Profile Photo',
+                        _profileImage != null
+                            ? '✓ Uploaded'
+                            : '✗ Not uploaded'),
+                    _buildReviewItem('ID Front',
+                        _idFront != null ? '✓ Uploaded' : '✗ Not uploaded'),
+                    _buildReviewItem('ID Back',
+                        _idBack != null ? '✓ Uploaded' : '✗ Not uploaded'),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -1210,10 +1316,17 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
                 _buildReviewSection(
                   title: 'Documents',
                   items: [
-                    _buildReviewItem('ID Type', _idType.replaceAll('_', ' ').toUpperCase()),
-                    _buildReviewItem('Profile Photo', _profileImage != null ? '✓ Uploaded' : '✗ Not uploaded'),
-                    _buildReviewItem('ID Front', _idFront != null ? '✓ Uploaded' : '✗ Not uploaded'),
-                    _buildReviewItem('ID Back', _idBack != null ? '✓ Uploaded' : '✗ Not uploaded'),
+                    _buildReviewItem(
+                        'ID Type', _idType.replaceAll('_', ' ').toUpperCase()),
+                    _buildReviewItem(
+                        'Profile Photo',
+                        _profileImage != null
+                            ? '✓ Uploaded'
+                            : '✗ Not uploaded'),
+                    _buildReviewItem('ID Front',
+                        _idFront != null ? '✓ Uploaded' : '✗ Not uploaded'),
+                    _buildReviewItem('ID Back',
+                        _idBack != null ? '✓ Uploaded' : '✗ Not uploaded'),
                   ],
                 ),
               ],
@@ -1360,12 +1473,12 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
     }
   }
 
-    // Removed the widget-local parseFieldErrors function so the file will use
-    // the shared `parseFieldErrors(http.Response)` defined in
-    // `lib/services/kyc_service.dart`. This ensures server validation responses
-    // are parsed consistently and field error keys are mapped (snake/camel).
+  // Removed the widget-local parseFieldErrors function so the file will use
+  // the shared `parseFieldErrors(http.Response)` defined in
+  // `lib/services/kyc_service.dart`. This ensures server validation responses
+  // are parsed consistently and field error keys are mapped (snake/camel).
 
-    Future<void> _submitKYC() async {
+  Future<void> _submitKYC() async {
     setState(() {
       _isSubmitting = true;
       _error = null;
@@ -1381,7 +1494,10 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
         'lga': _lgaCtrl.text.trim(),
         'IdType': _idType,
         // Prefer sending category id (if selected), otherwise fallback to free-text name
-        'serviceCategory': (_selectedCategoryId != null && _selectedCategoryId!.isNotEmpty) ? _selectedCategoryId! : _serviceCategoryCtrl.text.trim(),
+        'serviceCategory':
+            (_selectedCategoryId != null && _selectedCategoryId!.isNotEmpty)
+                ? _selectedCategoryId!
+                : _serviceCategoryCtrl.text.trim(),
         'yearsExperience': _yearsExperienceCtrl.text.trim(),
       };
 
@@ -1392,18 +1508,27 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
 
       // Client-side validation: ensure required text fields and files are present
       final clientErrors = <String, String>{};
-      if (fields['businessName'] == null || fields['businessName']!.isEmpty) clientErrors['businessName'] = 'Business name is required';
-      if (fields['country'] == null || fields['country']!.isEmpty) clientErrors['country'] = 'Country is required';
-      if (fields['state'] == null || fields['state']!.isEmpty) clientErrors['state'] = 'State is required';
-      if (fields['lga'] == null || fields['lga']!.isEmpty) clientErrors['lga'] = 'LGA is required';
-      if (fields['IdType'] == null || fields['IdType']!.isEmpty) clientErrors['IdType'] = 'ID type is required';
+      if (fields['businessName'] == null || fields['businessName']!.isEmpty)
+        clientErrors['businessName'] = 'Business name is required';
+      if (fields['country'] == null || fields['country']!.isEmpty)
+        clientErrors['country'] = 'Country is required';
+      if (fields['state'] == null || fields['state']!.isEmpty)
+        clientErrors['state'] = 'State is required';
+      if (fields['lga'] == null || fields['lga']!.isEmpty)
+        clientErrors['lga'] = 'LGA is required';
+      if (fields['IdType'] == null || fields['IdType']!.isEmpty)
+        clientErrors['IdType'] = 'ID type is required';
       // serviceCategory and yearsExperience are optional/hidden in UI per request
       // if (fields['serviceCategory'] == null || fields['serviceCategory']!.isEmpty) clientErrors['serviceCategory'] = 'Service category is required';
       // if (fields['yearsExperience'] == null || fields['yearsExperience']!.isEmpty) clientErrors['yearsExperience'] = 'Years of experience is required';
 
-      if (!files.containsKey('profileImage') || files['profileImage']!.isEmpty) clientErrors['profileImage'] = 'Profile image is required';
-      if (!files.containsKey('IdUploadFront') || files['IdUploadFront']!.isEmpty) clientErrors['IdUploadFront'] = 'ID front image is required';
-      if (!files.containsKey('IdUploadBack') || files['IdUploadBack']!.isEmpty) clientErrors['IdUploadBack'] = 'ID back image is required';
+      if (!files.containsKey('profileImage') || files['profileImage']!.isEmpty)
+        clientErrors['profileImage'] = 'Profile image is required';
+      if (!files.containsKey('IdUploadFront') ||
+          files['IdUploadFront']!.isEmpty)
+        clientErrors['IdUploadFront'] = 'ID front image is required';
+      if (!files.containsKey('IdUploadBack') || files['IdUploadBack']!.isEmpty)
+        clientErrors['IdUploadBack'] = 'ID back image is required';
 
       if (clientErrors.isNotEmpty) {
         setState(() {
@@ -1418,27 +1543,64 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
       if (token == null || token.isEmpty) {
         setState(() {
           _isSubmitting = false;
-          _error = 'You must be signed in to submit KYC. Please login and try again.';
+          _error =
+              'You must be signed in to submit KYC. Please login and try again.';
         });
         return;
       }
-      // yearsExperience validation skipped because the field is hidden/commented per request
-      // final y = int.tryParse(fields['yearsExperience'] ?? '');
-      // if (y == null || y < 0) {
-      //   setState(() {
-      //     _isSubmitting = false;
-      //     _fieldErrors = {'yearsExperience': 'Enter a valid non-negative number'};
-      //     _error = 'Please correct the highlighted fields.';
-      //   });
-      //   return;
-      // }
+
+      // Compress images before uploading to reduce size and speed up submission
+      final filePaths = <String>[];
+      final fileLabels = <String>[];
+      for (final entry in files.entries) {
+        for (final f in entry.value) {
+          filePaths.add(f.path);
+          fileLabels.add(entry.key);
+        }
+      }
+
+      if (filePaths.isNotEmpty) {
+        setState(() {
+          _uploadProgressLabel = 'Compressing images...';
+          _uploadProgress = 0.0;
+        });
+
+        final compressedPaths = await ImageCompressUtil.compressAll(
+          filePaths,
+          onProgress: (done, total) {
+            if (mounted) {
+              setState(() {
+                _uploadProgressLabel = 'Compressing image $done of $total...';
+                _uploadProgress =
+                    done / (total * 2); // first half is compression
+              });
+            }
+          },
+        );
+
+        // Rebuild the files map with compressed versions
+        files.clear();
+        for (var i = 0; i < compressedPaths.length; i++) {
+          final key = fileLabels[i];
+          files.putIfAbsent(key, () => []);
+          files[key]!.add(File(compressedPaths[i]));
+        }
+
+        setState(() {
+          _uploadProgressLabel = 'Uploading documents...';
+          _uploadProgress = 0.5;
+        });
+      }
+
       // Use the enhanced submit which will try direct signed uploads and
       // sensible JSON fallbacks when the server rejects multipart.
-      final resp = await KycService.submitKycEnhanced(fields, files, token: token);
+      final resp =
+          await KycService.submitKycEnhanced(fields, files, token: token);
 
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         setState(() {
-          _successMessage = 'KYC submitted successfully! Your application is under review.';
+          _successMessage =
+              'KYC submitted successfully! Your application is under review.';
         });
 
         try {
@@ -1446,7 +1608,7 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
           await TokenStorage.saveKycStatus('pending');
           // Keep kycVerified false until admin approves
           await TokenStorage.saveKycVerified(false);
-         } catch (_) {}
+        } catch (_) {}
 
         // Navigate back after delay
         Future.delayed(const Duration(seconds: 2), () {
@@ -1489,11 +1651,15 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
         });
       }
     } finally {
-      setState(() {
-        _isSubmitting = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+          _uploadProgressLabel = null;
+          _uploadProgress = 0.0;
+        });
+      }
     }
-   }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1514,7 +1680,8 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
             children: [
               // Header with back button
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
                 child: Row(
                   children: [
                     IconButton(
@@ -1545,7 +1712,8 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
 
               // Bottom buttons
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
                 decoration: BoxDecoration(
                   border: Border(
                     top: BorderSide(
@@ -1556,6 +1724,55 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
                 ),
                 child: Column(
                   children: [
+                    // Upload progress indicator
+                    if (_uploadProgressLabel != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              children: [
+                                const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    _uploadProgressLabel!,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: theme.colorScheme.onSurface
+                                          .withOpacity(0.7),
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  '${(_uploadProgress * 100).toInt()}%',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: primaryColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: _uploadProgress,
+                                backgroundColor: theme.colorScheme.onSurface
+                                    .withOpacity(0.1),
+                                valueColor:
+                                    AlwaysStoppedAnimation(primaryColor),
+                                minHeight: 6,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     // Error/Success messages
                     if (_error != null)
                       Container(
@@ -1629,20 +1846,20 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
                             child: OutlinedButton(
                               onPressed: _previousStep,
                               style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 16),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 side: BorderSide(
-                                  color: theme.colorScheme.onSurface.withOpacity(0.2),
+                                  color: theme.colorScheme.onSurface
+                                      .withOpacity(0.2),
                                 ),
                               ),
                               child: const Text('Back'),
                             ),
                           ),
-
                         if (_currentStep > 0) const SizedBox(width: 12),
-
                         Expanded(
                           flex: _currentStep == 0 ? 2 : 1,
                           child: ElevatedButton(
@@ -1658,22 +1875,22 @@ class _ArtisanKycPageWidgetState extends State<ArtisanKycPageWidget> {
                             ),
                             child: _isSubmitting
                                 ? SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation(
-                                  Colors.white,
-                                ),
-                              ),
-                            )
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
                                 : Text(
-                              _currentStep == 2 ? 'SUBMIT' : 'CONTINUE',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
+                                    _currentStep == 2 ? 'SUBMIT' : 'CONTINUE',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
                           ),
                         ),
                       ],
