@@ -28,6 +28,9 @@ const kTransitionInfoKey = '__transition_info__';
 // references `appNavigatorKey`; keep it defined to avoid widespread changes.
 GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
+// Track the last valid route so we can redirect reCAPTCHA returns back to it.
+String _lastValidRoute = Splash2Widget.routePath;
+
 GoRouter createRouter(AuthNotifier auth) {
   return GoRouter(
     observers: [routeObserver],
@@ -51,6 +54,14 @@ GoRouter createRouter(AuthNotifier auth) {
 
         // If unauthenticated, only allow the auth/onboarding flow pages.
         if (auth.status == AuthStatus.unauthenticated) {
+          // Firebase reCAPTCHA fallback (iOS phone auth) returns to the app
+          // via a deep link that resolves to "/link". This is not a real route,
+          // so redirect back to wherever the user was before reCAPTCHA opened.
+          if (loc == '/link') return _lastValidRoute;
+
+          // Track the last valid route for reCAPTCHA recovery.
+          _lastValidRoute = loc;
+
           final allowed = {
             StaticSplashWidget.routePath,
             Splash2Widget.routePath,

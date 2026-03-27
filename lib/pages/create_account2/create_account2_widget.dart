@@ -582,40 +582,48 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
           RoleUtils.normalize(_effectiveRole ?? widget.initialRole);
       final phone = normalizePhoneForApi(_phoneController.text.trim());
 
+      // Capture router and form values before the async gap. On iOS the
+      // reCAPTCHA fallback navigates away from this page, so by the time
+      // onCodeSent fires the widget may be unmounted and context invalid.
+      final router = GoRouter.of(context);
+      final savedName = _model.fullNameTextController?.text.trim();
+      final savedEmail = _model.emailAddressTextController?.text.trim() ?? '';
+      final savedPassword = _passwordController.text;
+
       // Instead of direct register, we use Firebase Phone Verification first.
                 await AuthService.verifyPhoneNumber(
                   phoneNumber: phone,
                   onCodeSent: (String verificationId, int? resendToken) async {
                     print('✅ UI: onCodeSent received from Firebase. Navigating...');
-                    if (!mounted) return;
-                    setState(() => _isCreatingAccount = false);
 
-          // Save details for later use after OTP verification
+          // Save details for later use after OTP verification.
+          // Do this before any mounted check so data is persisted
+          // even if the widget was disposed by iOS reCAPTCHA navigation.
           await TokenStorage.saveRecentRegistration(
-            name: _model.fullNameTextController?.text.trim(),
-            email: _model.emailAddressTextController?.text.trim(),
+            name: savedName,
+            email: savedEmail,
             phone: phone,
-            reference: verificationId, // Use verificationId as reference
+            reference: verificationId,
           );
 
-                    // Store the password and role for the final registration call
                     if (mounted) {
+                      setState(() => _isCreatingAccount = false);
+                    }
+
                       print('🚀 UI: Navigating to VerifyOtp via Named Route...');
-                      // Use GoRouter directly — safePushRoute checks isGuestSession()
-                      // which returns true for unauthenticated users and would block
-                      // navigation during the registration flow.
+                      // Use the captured router reference — it stays valid even
+                      // if this widget was unmounted by iOS reCAPTCHA return.
                       final uri = Uri(
                         path: VerifyOtpWidget.routePath,
                         queryParameters: {
                           'phone': phone,
                           'reference': verificationId,
-                          'email': _model.emailAddressTextController?.text.trim() ?? '',
-                          'password': _passwordController.text,
+                          'email': savedEmail,
+                          'password': savedPassword,
                           'role': normalizedRole,
                         },
                       );
-                      GoRouter.of(context).push(uri.toString());
-                    }
+                      router.push(uri.toString());
         },
         onVerificationFailed: (FirebaseAuthException e) {
           if (!mounted) return;

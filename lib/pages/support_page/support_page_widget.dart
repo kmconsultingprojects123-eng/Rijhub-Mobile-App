@@ -12,12 +12,14 @@ class SupportPageWidget extends StatelessWidget {
 
   Future<void> _launchEmail(BuildContext context, String email) async {
     final uri = Uri(scheme: 'mailto', path: email);
-    if (!await launchUrl(uri)) AppNotification.showError(context, 'Could not open mail client');
+    if (!await launchUrl(uri))
+      AppNotification.showError(context, 'Could not open mail client');
   }
 
   Future<void> _launchPhone(BuildContext context, String phone) async {
     final uri = Uri.parse('tel:$phone');
-    if (!await launchUrl(uri)) AppNotification.showError(context, 'Could not dial');
+    if (!await launchUrl(uri))
+      AppNotification.showError(context, 'Could not dial');
   }
 
   Widget _buildContactCard({
@@ -87,7 +89,8 @@ class SupportPageWidget extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: backgroundColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
@@ -202,7 +205,8 @@ class SupportPageWidget extends StatelessWidget {
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 24.0, vertical: 32.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -250,7 +254,8 @@ class SupportPageWidget extends StatelessWidget {
                         title: 'Email Support',
                         subtitle: 'Get help via email',
                         actionText: 'Send Email',
-                        onTap: () => _launchEmail(context, 'support@rijhub.com'),
+                        onTap: () =>
+                            _launchEmail(context, 'support@rijhub.com'),
                         backgroundColor: primaryColor,
                         iconColor: primaryColor,
                       ),
@@ -271,86 +276,86 @@ class SupportPageWidget extends StatelessWidget {
                       const SizedBox(height: 16),
 
                       // AI Support Call
-                      Card(
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          side: BorderSide(
-                            color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-                            width: 1.5,
-                          ),
-                        ),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(16),
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => const AiSupportCallWidget()),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 56,
-                                  height: 56,
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        primaryColor,
-                                        primaryColor.withAlpha(179),
-                                      ],
-                                    ),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Center(
-                                    child: Icon(
-                                      Icons.support_agent_rounded,
-                                      color: Colors.white,
-                                      size: 26,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'AI Voice Support',
-                                        style: theme.titleMedium?.copyWith(
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Talk to our AI assistant — available 24/7',
-                                        style: theme.bodyMedium?.copyWith(
-                                          color: theme.secondaryText,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: primaryColor.withAlpha(26),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Text(
-                                    'Call Now',
-                                    style: TextStyle(
-                                      color: primaryColor,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
+                      // Card(
+                      //   elevation: 0,
+                      //   shape: RoundedRectangleBorder(
+                      //     borderRadius: BorderRadius.circular(16),
+                      //     side: BorderSide(
+                      //       color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                      //       width: 1.5,
+                      //     ),
+                      //   ),
+                      //   child: InkWell(
+                      //     borderRadius: BorderRadius.circular(16),
+                      //     onTap: () => Navigator.of(context).push(
+                      //       MaterialPageRoute(builder: (_) => const AiSupportCallWidget()),
+                      //     ),
+                      //     child: Padding(
+                      //       padding: const EdgeInsets.all(20),
+                      //       child: Row(
+                      //         children: [
+                      //           Container(
+                      //             width: 56,
+                      //             height: 56,
+                      //             decoration: BoxDecoration(
+                      //               gradient: LinearGradient(
+                      //                 colors: [
+                      //                   primaryColor,
+                      //                   primaryColor.withAlpha(179),
+                      //                 ],
+                      //               ),
+                      //               shape: BoxShape.circle,
+                      //             ),
+                      //             child: const Center(
+                      //               child: Icon(
+                      //                 Icons.support_agent_rounded,
+                      //                 color: Colors.white,
+                      //                 size: 26,
+                      //               ),
+                      //             ),
+                      //           ),
+                      //           const SizedBox(width: 16),
+                      //           Expanded(
+                      //             child: Column(
+                      //               crossAxisAlignment: CrossAxisAlignment.start,
+                      //               children: [
+                      //                 Text(
+                      //                   'AI Voice Support',
+                      //                   style: theme.titleMedium?.copyWith(
+                      //                     fontWeight: FontWeight.w600,
+                      //                     fontSize: 16,
+                      //                   ),
+                      //                 ),
+                      //                 const SizedBox(height: 4),
+                      //                 Text(
+                      //                   'Talk to our AI assistant — available 24/7',
+                      //                   style: theme.bodyMedium?.copyWith(
+                      //                     color: theme.secondaryText,
+                      //                   ),
+                      //                 ),
+                      //               ],
+                      //             ),
+                      //           ),
+                      //           Container(
+                      //             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      //             decoration: BoxDecoration(
+                      //               color: primaryColor.withAlpha(26),
+                      //               borderRadius: BorderRadius.circular(20),
+                      //             ),
+                      //             child: Text(
+                      //               'Call Now',
+                      //               style: TextStyle(
+                      //                 color: primaryColor,
+                      //                 fontSize: 12,
+                      //                 fontWeight: FontWeight.w600,
+                      //               ),
+                      //             ),
+                      //           ),
+                      //         ],
+                      //       ),
+                      //     ),
+                      //   ),
+                      // ),
 
                       const SizedBox(height: 40),
 
@@ -373,28 +378,32 @@ class SupportPageWidget extends StatelessWidget {
                           _buildFAQItem(
                             context: context,
                             question: 'How do I verify my account?',
-                            answer: 'Go to your profile settings and navigate to the KYC section. Follow the step-by-step instructions to upload required documents for verification.',
+                            answer:
+                                'Go to your profile settings and navigate to the KYC section. Follow the step-by-step instructions to upload required documents for verification.',
                             index: 1,
                           ),
                           const SizedBox(height: 16),
                           _buildFAQItem(
                             context: context,
                             question: 'How do I get paid for my services?',
-                            answer: 'Connect your bank account in the Wallet section or use our in-app wallet feature. Payments are processed securely within 1-3 business days.',
+                            answer:
+                                'Connect your bank account in the Wallet section or use our in-app wallet feature. Payments are processed securely within 1-3 business days.',
                             index: 2,
                           ),
                           const SizedBox(height: 16),
                           _buildFAQItem(
                             context: context,
                             question: 'How can I cancel a booking?',
-                            answer: 'Go to My Jobs section, select the booking you want to cancel, and follow the cancellation process. Please note cancellation policies may apply.',
+                            answer:
+                                'Go to My Jobs section, select the booking you want to cancel, and follow the cancellation process. Please note cancellation policies may apply.',
                             index: 3,
                           ),
                           const SizedBox(height: 16),
                           _buildFAQItem(
                             context: context,
                             question: 'What payment methods are accepted?',
-                            answer: 'We accept credit/debit cards, mobile money, and bank transfers. All payments are secured with encryption and fraud protection.',
+                            answer:
+                                'We accept credit/debit cards, mobile money, and bank transfers. All payments are secured with encryption and fraud protection.',
                             index: 4,
                           ),
                         ],
@@ -421,7 +430,9 @@ class SupportPageWidget extends StatelessWidget {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
                           side: BorderSide(
-                            color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                            color: isDark
+                                ? Colors.grey.shade800
+                                : Colors.grey.shade200,
                             width: 1.5,
                           ),
                         ),
@@ -449,7 +460,8 @@ class SupportPageWidget extends StatelessWidget {
                                   const SizedBox(width: 16),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           'Live Chat Support',
@@ -469,7 +481,8 @@ class SupportPageWidget extends StatelessWidget {
                                     ),
                                   ),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 6),
                                     decoration: BoxDecoration(
                                       color: primaryColor.withOpacity(0.1),
                                       borderRadius: BorderRadius.circular(20),
@@ -490,7 +503,9 @@ class SupportPageWidget extends StatelessWidget {
                                 width: double.infinity,
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
-                                  color: isDark ? Colors.grey.shade900 : Colors.grey.shade50,
+                                  color: isDark
+                                      ? Colors.grey.shade900
+                                      : Colors.grey.shade50,
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Column(
