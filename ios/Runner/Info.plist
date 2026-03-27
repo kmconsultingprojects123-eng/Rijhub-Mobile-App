@@ -75,10 +75,13 @@
 	<string>RijHub needs access to your photo library to let you select and upload images for your profile, service listings, and project galleries.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>RijHub needs camera access to let you take photos for your profile, service listings, and project galleries.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>RijHub needs microphone access for AI-powered voice support calls.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
+		<string>audio</string>
 		<string>fetch</string>
 		<string>remote-notification</string>
 	</array>

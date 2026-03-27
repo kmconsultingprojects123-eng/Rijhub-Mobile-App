@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../flutter_flow/flutter_flow_theme.dart';
 import '../../utils/app_notification.dart';
+import 'ai_support_call_widget.dart';
 
 class SupportPageWidget extends StatelessWidget {
   const SupportPageWidget({super.key});
@@ -265,6 +266,90 @@ class SupportPageWidget extends StatelessWidget {
                         onTap: () => _launchPhone(context, '08053466666'),
                         backgroundColor: Colors.green,
                         iconColor: Colors.green,
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // AI Support Call
+                      Card(
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: BorderSide(
+                            color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const AiSupportCallWidget()),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 56,
+                                  height: 56,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        primaryColor,
+                                        primaryColor.withAlpha(179),
+                                      ],
+                                    ),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Center(
+                                    child: Icon(
+                                      Icons.support_agent_rounded,
+                                      color: Colors.white,
+                                      size: 26,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'AI Voice Support',
+                                        style: theme.titleMedium?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Talk to our AI assistant — available 24/7',
+                                        style: theme.bodyMedium?.copyWith(
+                                          color: theme.secondaryText,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: primaryColor.withAlpha(26),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    'Call Now',
+                                    style: TextStyle(
+                                      color: primaryColor,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
 
                       const SizedBox(height: 40),

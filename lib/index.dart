@@ -36,6 +36,7 @@ export '/pages/info_page/info_page_widget.dart' show InfoPageWidget;
 export '/pages/terms_page/terms_page_widget.dart' show TermsPageWidget;
 export '/pages/privacy_page/privacy_page_widget.dart' show PrivacyPageWidget;
 export '/pages/support_page/support_page_widget.dart' show SupportPageWidget;
+export '/pages/support_page/ai_support_call_widget.dart' show AiSupportCallWidget;
 export '/pages/see_all_images_page/see_all_images_page_widget.dart' show SeeAllImagesPageWidget;
 export '/pages/job_post_page/job_post_page_widget.dart' show JobPostPageWidget;
 export '/pages/create_job_page1/create_job_page1_widget.dart' show CreateJobPage1Widget;
