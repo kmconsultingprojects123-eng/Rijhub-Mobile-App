@@ -8,6 +8,7 @@ import '../../utils/phone_utils.dart';
 import '/index.dart';
 import '../../utils/navigation_utils.dart';
 import '../../state/auth_notifier.dart';
+import '../../flutter_flow/flutter_flow_theme.dart';
 
 class VerificationPageWidget extends StatefulWidget {
   const VerificationPageWidget({
@@ -32,7 +33,6 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
   static const int _otpLength = 6;
 
   // Colors
-  static const Color _roseColor = Color(0xFFF43F5E);
   static const Color _darkBg = Color(0xFF09090B);
   static const Color _darkInputBg = Color(0xFF18181B);
   static const Color _darkButtonBg = Color(0xFF27272A);
@@ -294,6 +294,7 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
   Widget _buildWelcomeSheet(String name, String role) {
     final isArtisan = role.toLowerCase().contains('artisan');
     final theme = Theme.of(context);
+    final ffTheme = FlutterFlowTheme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final bottomInset = MediaQuery.of(context).viewPadding.bottom;
 
@@ -336,7 +337,7 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
               'Welcome to RIJHUB!',
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.bold,
-                color: _roseColor,
+                color: ffTheme.primary,
               ),
             ),
             const SizedBox(height: 12),
@@ -361,10 +362,10 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: _roseColor.withOpacity(0.05),
+                color: ffTheme.primary.withOpacity(0.05),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: _roseColor.withOpacity(0.1),
+                  color: ffTheme.primary.withOpacity(0.1),
                 ),
               ),
               child: Row(
@@ -373,24 +374,27 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
                   _buildFeatureItem(
                     icon: isArtisan ? Icons.work_outline : Icons.search,
                     label: isArtisan ? 'Manage Jobs' : 'Find Artisans',
+                    primaryColor: ffTheme.primary,
                   ),
                   Container(
                     height: 30,
                     width: 1,
-                    color: _roseColor.withOpacity(0.2),
+                    color: ffTheme.primary.withOpacity(0.2),
                   ),
                   _buildFeatureItem(
                     icon: Icons.message_outlined,
                     label: 'Chat',
+                    primaryColor: ffTheme.primary,
                   ),
                   Container(
                     height: 30,
                     width: 1,
-                    color: _roseColor.withOpacity(0.2),
+                    color: ffTheme.primary.withOpacity(0.2),
                   ),
                   _buildFeatureItem(
                     icon: Icons.payment_outlined,
                     label: 'Secure Payments',
+                    primaryColor: ffTheme.primary,
                   ),
                 ],
               ),
@@ -400,7 +404,7 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
               width: double.infinity,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _roseColor,
+                  backgroundColor: ffTheme.primary,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
@@ -424,18 +428,18 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
     );
   }
 
-  Widget _buildFeatureItem({required IconData icon, required String label}) {
+  Widget _buildFeatureItem({required IconData icon, required String label, required Color primaryColor}) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: _roseColor, size: 24),
+        Icon(icon, color: primaryColor, size: 24),
         const SizedBox(height: 4),
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w500,
-            color: _roseColor,
+            color: primaryColor,
           ),
         ),
       ],
@@ -515,6 +519,7 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
     if (_loading) return _buildLoading();
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final ffTheme = FlutterFlowTheme.of(context);
 
     return Scaffold(
       backgroundColor: isDark ? _darkBg : Colors.white,
@@ -553,23 +558,23 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  color: _roseColor.withOpacity(0.1),
+                  color: ffTheme.primary.withOpacity(0.1),
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFFE11D48).withOpacity(0.2),
+                      color: ffTheme.primary.withOpacity(0.2),
                       blurRadius: 30,
                       spreadRadius: -5,
                     ),
                   ],
                   border: Border.all(
-                    color: _roseColor.withOpacity(0.2),
+                    color: ffTheme.primary.withOpacity(0.2),
                     width: 1,
                   ),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.chat_bubble_outline_rounded,
-                  color: _roseColor,
+                  color: ffTheme.primary,
                   size: 32,
                 ),
               ),
@@ -645,10 +650,10 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
                   ),
                   Text(
                     _formatDuration(_remaining),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: _roseColor,
+                      color: ffTheme.primary,
                       height: 1.68,
                     ),
                   ),
@@ -691,8 +696,8 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                              color: _roseColor,
+                            borderSide: BorderSide(
+                              color: ffTheme.primary,
                               width: 1.5,
                             ),
                           ),
@@ -710,9 +715,9 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
                 const SizedBox(height: 12),
                 Text(
                   _errorMessage!,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: _roseColor,
+                    color: ffTheme.primary,
                   ),
                 ),
               ],
@@ -727,7 +732,7 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _isButtonDisabled
                         ? (isDark ? _darkButtonBg : Colors.grey[200])
-                        : _roseColor,
+                        : ffTheme.primary,
                     foregroundColor: _isButtonDisabled
                         ? (isDark ? _darkButtonText : Colors.grey[400])
                         : Colors.white,
@@ -773,10 +778,10 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
                   ),
                   child: Text(
                     _otpExpired ? 'Request new code' : 'Resend code',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: _roseColor,
+                      color: ffTheme.primary,
                       height: 1.68,
                     ),
                   ),
@@ -793,10 +798,11 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
 
   Widget _buildLoading() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final ffTheme = FlutterFlowTheme.of(context);
     return Scaffold(
       backgroundColor: isDark ? _darkBg : Colors.white,
-      body: const Center(
-        child: CircularProgressIndicator(color: _roseColor),
+      body: Center(
+        child: CircularProgressIndicator(color: ffTheme.primary),
       ),
     );
   }
