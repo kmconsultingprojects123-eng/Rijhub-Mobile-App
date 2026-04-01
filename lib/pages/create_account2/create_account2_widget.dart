@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'create_account2_model.dart';
 import '/services/auth_service.dart';
 import '/services/token_storage.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+// import 'package:firebase_auth/firebase_auth.dart'; // Firebase phone auth disabled
 import '../../state/auth_notifier.dart';
 import '../../utils/awesome_dialogs.dart';
 import 'package:flutter/foundation.dart';
@@ -582,78 +582,57 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
           RoleUtils.normalize(_effectiveRole ?? widget.initialRole);
       final phone = normalizePhoneForApi(_phoneController.text.trim());
 
-      // Capture router and form values before the async gap. On iOS the
-      // reCAPTCHA fallback navigates away from this page, so by the time
-      // onCodeSent fires the widget may be unmounted and context invalid.
       final router = GoRouter.of(context);
       final savedName = _model.fullNameTextController?.text.trim();
       final savedEmail = _model.emailAddressTextController?.text.trim() ?? '';
       final savedPassword = _passwordController.text;
 
-      // Instead of direct register, we use Firebase Phone Verification first.
-                await AuthService.verifyPhoneNumber(
-                  phoneNumber: phone,
-                  onCodeSent: (String verificationId, int? resendToken) async {
-                    print('✅ UI: onCodeSent received from Firebase. Navigating...');
-
-          // Save details for later use after OTP verification.
-          // Do this before any mounted check so data is persisted
-          // even if the widget was disposed by iOS reCAPTCHA navigation.
-          await TokenStorage.saveRecentRegistration(
-            name: savedName,
-            email: savedEmail,
-            phone: phone,
-            reference: verificationId,
-          );
-
-                    if (mounted) {
-                      setState(() => _isCreatingAccount = false);
-                    }
-
-                      print('🚀 UI: Navigating to VerifyOtp via Named Route...');
-                      // Use the captured router reference — it stays valid even
-                      // if this widget was unmounted by iOS reCAPTCHA return.
-                      final uri = Uri(
-                        path: VerifyOtpWidget.routePath,
-                        queryParameters: {
-                          'phone': phone,
-                          'reference': verificationId,
-                          'email': savedEmail,
-                          'password': savedPassword,
-                          'role': normalizedRole,
-                        },
-                      );
-                      router.push(uri.toString());
-        },
-        onVerificationFailed: (FirebaseAuthException e) {
-          if (!mounted) return;
-          setState(() => _isCreatingAccount = false);
-          // Firebase error code 39 / status 17499 is a carrier-level SMS
-          // delivery failure common with Airtel Nigeria. Show a helpful
-          // message instead of the vague "internal error" from Firebase.
-          final msg = e.message ?? '';
-          final isCarrierBlock = msg.contains('Error code:39') ||
-              msg.contains('17499') ||
-              (e.code == 'unknown' && msg.contains('internal error'));
-          if (isCarrierBlock) {
-            AuthErrorHandler.showErrorDialog(
-              context,
-              'SMS delivery failed for this number. Some carriers (e.g. Airtel) '
-              'block automated verification messages. Please try a different '
-              'phone number (MTN, Glo, or 9mobile).',
-            );
-          } else {
-            AuthErrorHandler.showErrorDialog(
-                context, e.message ?? 'Verification failed');
-          }
-        },
-        onVerificationCompleted: (PhoneAuthCredential credential) async {
-          // Auto-verification (rare but possible)
-        },
-        onCodeAutoRetrievalTimeout: (String verificationId) {
-          // Timeout
-        },
+      // Register via backend — user is stored in a temporary collection
+      // and an OTP is sent via the configured provider (phone/email).
+      final result = await AuthService.register(
+        name: savedName ?? '',
+        email: savedEmail,
+        password: savedPassword,
+        phone: phone,
+        role: normalizedRole,
+        persist: false, // Don't persist token yet — user must verify OTP first
       );
+
+      if (result['success'] == true) {
+        // Save details for later use after OTP verification.
+        await TokenStorage.saveRecentRegistration(
+          name: savedName,
+          email: savedEmail,
+          phone: phone,
+        );
+
+        if (mounted) {
+          setState(() => _isCreatingAccount = false);
+        }
+
+        final uri = Uri(
+          path: VerifyOtpWidget.routePath,
+          queryParameters: {
+            'phone': phone,
+            'email': savedEmail,
+            'password': savedPassword,
+            'role': normalizedRole,
+          },
+        );
+        router.push(uri.toString());
+      } else {
+        if (mounted) setState(() => _isCreatingAccount = false);
+        final error = result['error'];
+        String errorMsg = 'Registration failed. Please try again.';
+        if (error is Map && error['message'] != null) {
+          errorMsg = error['message'].toString();
+        } else if (error != null) {
+          errorMsg = error.toString();
+        }
+        if (mounted) {
+          AuthErrorHandler.showErrorDialog(context, errorMsg);
+        }
+      }
     } catch (e) {
       if (mounted) setState(() => _isCreatingAccount = false);
       AuthErrorHandler.showErrorDialog(context, e);

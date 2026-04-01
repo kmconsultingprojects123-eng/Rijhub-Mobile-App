@@ -197,32 +197,23 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
     _setSubmitting(true);
 
     try {
-      if (_reference == null || _reference!.isEmpty) {
-        _setError('Missing verification ID. Please try again.');
+      if (_email == null || _email!.isEmpty) {
+        _setError('Missing email. Please go back and try again.');
         return;
       }
 
-      final idToken = await AuthService.verifyOtpWithFirebase(
-        verificationId: _reference!,
-        smsCode: otp,
+      // Verify OTP via backend — POST /api/auth/verify-otp with { email, otp }
+      final result = await AuthService.verifyOtpByEmail(
+        email: _email!,
+        otp: otp,
+        purpose: 'registration',
+        persist: true,
       );
 
-      if (idToken != null) {
-        final result = await AuthService.registerWithFirebaseToken(
-          idToken: idToken,
-          name: _userName ?? '',
-          email: _email ?? '',
-          password: widget.password ?? '',
-          role: widget.role ?? 'customer',
-        );
-
-        if (result['success'] == true) {
-          await _handleVerificationSuccess(result);
-        } else {
-          _handleVerificationError(result);
-        }
+      if (result['success'] == true) {
+        await _handleVerificationSuccess(result);
       } else {
-        _setError('Firebase verification failed. Please try again.');
+        _handleVerificationError(result);
       }
     } catch (e) {
       _setError('Invalid OTP. Please check the code and try again.');
@@ -487,19 +478,37 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
   Future<void> _handleResendCode() async {
     if (!mounted) return;
 
-    if (_otpExpired) {
+    if (_email == null || _email!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Missing email. Please go back and try again.')));
+      return;
+    }
+
+    // Call POST /api/auth/resend-otp
+    final result = await AuthService.resendOtp(
+      email: _email!,
+      phone: _phone,
+    );
+
+    if (!mounted) return;
+
+    if (result['success'] == true) {
       _startCountdown();
       for (final c in _otpControllers) {
         c.clear();
       }
+      _setError(null);
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('A new code will be requested.')));
-      return;
+          const SnackBar(content: Text('A new code has been sent.')));
+    } else {
+      final error = result['error'];
+      String msg = 'Could not resend OTP. Please try again.';
+      if (error is Map && error['message'] != null) {
+        msg = error['message'].toString();
+      }
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(msg)));
     }
-
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text(
-            'To resend, go back to the registration screen and try again.')));
   }
 
   // MARK: - State Helpers

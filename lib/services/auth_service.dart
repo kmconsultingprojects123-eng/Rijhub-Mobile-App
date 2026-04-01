@@ -1093,102 +1093,139 @@ class AuthService {
     return null;
   }
 
-  // ========== Firebase Phone Authentication ==========
+  // ========== Firebase Phone Authentication (DISABLED) ==========
+  // Firebase phone OTP is no longer used for registration.
+  // Registration now goes through /api/auth/register (stores user in temp
+  // collection) → /api/auth/verify-otp → user finalised on backend.
 
-  /// Initiates Firebase Phone Verification.
-  static Future<void> verifyPhoneNumber({
-    required String phoneNumber,
-    required Function(String verificationId, int? resendToken) onCodeSent,
-    required Function(FirebaseAuthException e) onVerificationFailed,
-    required Function(PhoneAuthCredential credential) onVerificationCompleted,
-    required Function(String verificationId) onCodeAutoRetrievalTimeout,
-  }) async {
-    // Firebase requires E.164 format (must start with +)
-    var formattedPhone = phoneNumber.trim();
-    if (!formattedPhone.startsWith('+')) {
-      formattedPhone = '+$formattedPhone';
-    }
+  // static Future<void> verifyPhoneNumber({
+  //   required String phoneNumber,
+  //   required Function(String verificationId, int? resendToken) onCodeSent,
+  //   required Function(FirebaseAuthException e) onVerificationFailed,
+  //   required Function(PhoneAuthCredential credential) onVerificationCompleted,
+  //   required Function(String verificationId) onCodeAutoRetrievalTimeout,
+  // }) async {
+  //   var formattedPhone = phoneNumber.trim();
+  //   if (!formattedPhone.startsWith('+')) {
+  //     formattedPhone = '+$formattedPhone';
+  //   }
+  //   await FirebaseAuth.instance.verifyPhoneNumber(
+  //     phoneNumber: formattedPhone,
+  //     verificationCompleted: (PhoneAuthCredential credential) {
+  //       onVerificationCompleted(credential);
+  //     },
+  //     verificationFailed: (FirebaseAuthException e) {
+  //       onVerificationFailed(e);
+  //     },
+  //     codeSent: (String verificationId, int? resendToken) {
+  //       onCodeSent(verificationId, resendToken);
+  //     },
+  //     codeAutoRetrievalTimeout: (String verificationId) {
+  //       onCodeAutoRetrievalTimeout(verificationId);
+  //     },
+  //     timeout: const Duration(seconds: 60),
+  //   );
+  // }
 
-    await FirebaseAuth.instance.verifyPhoneNumber(
-      phoneNumber: formattedPhone,
-      verificationCompleted: (PhoneAuthCredential credential) {
-        print('🔥 Firebase: Verification Completed (Auto-verify)');
-        onVerificationCompleted(credential);
-      },
-      verificationFailed: (FirebaseAuthException e) {
-        print('🔥 Firebase: Verification Failed - ${e.code}: ${e.message}');
-        onVerificationFailed(e);
-      },
-      codeSent: (String verificationId, int? resendToken) {
-        print('🔥 Firebase: Code Sent! ID: $verificationId');
-        onCodeSent(verificationId, resendToken);
-      },
-      codeAutoRetrievalTimeout: (String verificationId) {
-        print('🔥 Firebase: Auto-retrieval Timeout');
-        onCodeAutoRetrievalTimeout(verificationId);
-      },
-      timeout: const Duration(seconds: 60),
-    );
-  }
+  // static Future<String?> verifyOtpWithFirebase({
+  //   required String verificationId,
+  //   required String smsCode,
+  // }) async {
+  //   try {
+  //     final credential = PhoneAuthProvider.credential(
+  //       verificationId: verificationId,
+  //       smsCode: smsCode,
+  //     );
+  //     final userCredential =
+  //         await FirebaseAuth.instance.signInWithCredential(credential);
+  //     final user = userCredential.user;
+  //     if (user != null) {
+  //       return await user.getIdToken();
+  //     }
+  //   } catch (e) {
+  //     rethrow;
+  //   }
+  //   return null;
+  // }
 
-  /// Verifies the OTP with Firebase and returns the ID token.
-  static Future<String?> verifyOtpWithFirebase({
-    required String verificationId,
-    required String smsCode,
-  }) async {
-    try {
-      final credential = PhoneAuthProvider.credential(
-        verificationId: verificationId,
-        smsCode: smsCode,
-      );
-      final userCredential =
-          await FirebaseAuth.instance.signInWithCredential(credential);
-      final user = userCredential.user;
-      if (user != null) {
-        return await user.getIdToken();
-      }
-    } catch (e) {
-      rethrow;
-    }
-    return null;
-  }
+  // static Future<Map<String, dynamic>> registerWithFirebaseToken({
+  //   required String idToken,
+  //   required String name,
+  //   required String email,
+  //   required String password,
+  //   required String role,
+  // }) async {
+  //   final uri = Uri.parse('$API_BASE_URL/api/auth/registeruserfirebase');
+  //   try {
+  //     final reqBody = {
+  //       'idToken': idToken,
+  //       'name': name,
+  //       'email': email.trim().toLowerCase(),
+  //       'password': password,
+  //       'role': role,
+  //     };
+  //     final headers = {
+  //       'Content-Type': 'application/json',
+  //       'Accept': 'application/json',
+  //       'User-Agent': 'RijHub-Mobile/1.0',
+  //     };
+  //     final resp = await _postWithRetries(uri,
+  //         body: reqBody, headers: headers, timeoutSeconds: 20, maxAttempts: 2);
+  //     final status = resp.statusCode;
+  //     final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
+  //     if (status >= 200 && status < 300) {
+  //       await _persistTokenAndRole(body);
+  //       return {'success': true, 'data': body};
+  //     }
+  //     if (status == 408)
+  //       return {'success': false, 'error': {'message': 'Request timed out'}};
+  //     if (status == 599)
+  //       return {'success': false, 'error': {'message': 'Network error'}};
+  //     return {
+  //       'success': false,
+  //       'error': body ?? {'message': 'HTTP $status', 'headers': resp.headers}
+  //     };
+  //   } catch (e) {
+  //     return {'success': false, 'error': {'message': e.toString()}};
+  //   }
+  // }
 
-  /// Completes registration by sending the Firebase ID token to the backend.
-  /// Uses POST /api/auth/registeruserfirebase.
-  /// The phone number is verified by Firebase and extracted from the ID token server-side.
-  static Future<Map<String, dynamic>> registerWithFirebaseToken({
-    required String idToken,
-    required String name,
+  /// Resend OTP for a pending registration.
+  ///
+  /// Endpoint: POST /api/auth/resend-otp
+  /// Body: { email, phone? }
+  /// Returns 200 on success, 429 if throttled.
+  static Future<Map<String, dynamic>> resendOtp({
     required String email,
-    required String password,
-    required String role,
+    String? phone,
   }) async {
-    final uri = Uri.parse('$API_BASE_URL/api/auth/registeruserfirebase');
-
+    final uri = Uri.parse('$API_BASE_URL/api/auth/resend-otp');
     try {
-      final reqBody = {
-        'idToken': idToken,
-        'name': name,
-        'email': email.trim().toLowerCase(),
-        'password': password,
-        'role': role,
+      final normalizedEmail = email.trim().toLowerCase();
+      final bodyPayload = <String, dynamic>{
+        'email': normalizedEmail,
       };
-
-      final headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'User-Agent': 'RijHub-Mobile/1.0',
-      };
+      if (phone != null && phone.trim().isNotEmpty) {
+        bodyPayload['phone'] = phone.trim();
+      }
 
       final resp = await _postWithRetries(uri,
-          body: reqBody, headers: headers, timeoutSeconds: 20, maxAttempts: 2);
-
+          body: bodyPayload, timeoutSeconds: 15, maxAttempts: 2);
       final status = resp.statusCode;
       final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
 
       if (status >= 200 && status < 300) {
-        await _persistTokenAndRole(body);
         return {'success': true, 'data': body};
+      }
+
+      if (status == 429) {
+        final msg = (body is Map && body['message'] != null)
+            ? body['message'].toString()
+            : 'Please wait before requesting a new code.';
+        return {
+          'success': false,
+          'error': {'message': msg, 'throttled': true}
+        };
       }
 
       if (status == 408)
@@ -1204,7 +1241,7 @@ class AuthService {
 
       return {
         'success': false,
-        'error': body ?? {'message': 'HTTP $status', 'headers': resp.headers}
+        'error': body ?? {'message': 'HTTP $status'}
       };
     } catch (e) {
       return {
@@ -1214,65 +1251,41 @@ class AuthService {
     }
   }
 
-  /// Completes OTP-backed registration by sending the Firebase ID token as a
-  /// provider reference. Uses POST /api/auth/verify-registration-reference.
-  ///
-  /// Call this after the server has created a pending RegistrationOtp record
-  /// (via /api/auth/register) and the client has completed Firebase phone
-  /// verification to obtain an ID token.
-  ///
-  /// [email] must match the email used during the initial registration call.
-  /// [reference] is the Firebase ID token obtained from [verifyOtpWithFirebase].
-  static Future<Map<String, dynamic>> verifyRegistrationWithReference({
-    required String email,
-    required String reference,
-  }) async {
-    final uri =
-        Uri.parse('$API_BASE_URL/api/auth/verify-registration-reference');
-
-    try {
-      final reqBody = {
-        'email': email.trim().toLowerCase(),
-        'reference': reference,
-      };
-
-      final headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'User-Agent': 'RijHub-Mobile/1.0',
-      };
-
-      final resp = await _postWithRetries(uri,
-          body: reqBody, headers: headers, timeoutSeconds: 20, maxAttempts: 2);
-
-      final status = resp.statusCode;
-      final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
-
-      if (status >= 200 && status < 300) {
-        await _persistTokenAndRole(body);
-        return {'success': true, 'data': body};
-      }
-
-      if (status == 408)
-        return {
-          'success': false,
-          'error': {'message': 'Request timed out'}
-        };
-      if (status == 599)
-        return {
-          'success': false,
-          'error': {'message': 'Network error'}
-        };
-
-      return {
-        'success': false,
-        'error': body ?? {'message': 'HTTP $status', 'headers': resp.headers}
-      };
-    } catch (e) {
-      return {
-        'success': false,
-        'error': {'message': e.toString()}
-      };
-    }
-  }
+  // verifyRegistrationWithReference commented out — Firebase phone flow disabled.
+  // static Future<Map<String, dynamic>> verifyRegistrationWithReference({
+  //   required String email,
+  //   required String reference,
+  // }) async {
+  //   final uri =
+  //       Uri.parse('$API_BASE_URL/api/auth/verify-registration-reference');
+  //   try {
+  //     final reqBody = {
+  //       'email': email.trim().toLowerCase(),
+  //       'reference': reference,
+  //     };
+  //     final headers = {
+  //       'Content-Type': 'application/json',
+  //       'Accept': 'application/json',
+  //       'User-Agent': 'RijHub-Mobile/1.0',
+  //     };
+  //     final resp = await _postWithRetries(uri,
+  //         body: reqBody, headers: headers, timeoutSeconds: 20, maxAttempts: 2);
+  //     final status = resp.statusCode;
+  //     final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
+  //     if (status >= 200 && status < 300) {
+  //       await _persistTokenAndRole(body);
+  //       return {'success': true, 'data': body};
+  //     }
+  //     if (status == 408)
+  //       return {'success': false, 'error': {'message': 'Request timed out'}};
+  //     if (status == 599)
+  //       return {'success': false, 'error': {'message': 'Network error'}};
+  //     return {
+  //       'success': false,
+  //       'error': body ?? {'message': 'HTTP $status', 'headers': resp.headers}
+  //     };
+  //   } catch (e) {
+  //     return {'success': false, 'error': {'message': e.toString()}};
+  //   }
+  // }
 }
