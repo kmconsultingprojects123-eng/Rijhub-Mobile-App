@@ -2,8 +2,8 @@
 
 /// Small phone utilities used by registration & verification flows.
 ///
-/// - normalizePhoneForApi: returns E.164 without plus (e.g. 2348012345678)
-///   which matches the project's API docs and SendChamp expectations.
+/// - normalizePhoneForApi: returns E.164 with plus (e.g. +2348012345678)
+///   which matches the backend API expectations.
 /// - formatPhoneForDisplay: returns a human-friendly string like `(+234) 8012345678`.
 
 String normalizePhoneForApi(String raw) {
@@ -23,27 +23,25 @@ String normalizePhoneForApi(String raw) {
   }
 
   // If user typed a local number starting with 0 (e.g., 0801234...), convert
-  // to 234... by stripping the leading 0 and prefixing 234.
+  // to +234... by stripping the leading 0 and prefixing +234.
   if (s.startsWith('0')) {
-    s = '234' + s.substring(1);
-    return s;
+    return '+234${s.substring(1)}';
   }
 
-  // If it already starts with country code (e.g., 234...) return as-is
-  if (RegExp(r'^234\d{7,}$').hasMatch(s)) return s;
+  // If it already starts with country code (e.g., 234...) return with +
+  if (RegExp(r'^234\d{7,}$').hasMatch(s)) return '+$s';
 
-  // If it starts with other country code (not 234) and includes only digits,
-  // keep it as-is (do not force +234 on non-Nigerian numbers).
-  if (RegExp(r'^\d{7,}$').hasMatch(s)) {
-    // If it's a short local form without leading zero (e.g., 8012345678)
-    // assume Nigerian number and prefix 234.
-    // Treat 10-digit numbers starting with 7/8/9 as Nigerian local numbers.
-    if (s.length == 10 && RegExp(r'^[789]\d{8}').hasMatch(s)) {
-      return '234' + s;
-    }
+  // If it's a short local form without leading zero (e.g., 8012345678)
+  // assume Nigerian number and prefix +234.
+  // Treat 10-digit numbers starting with 7/8/9 as Nigerian local numbers.
+  if (s.length == 10 && RegExp(r'^[789]\d{8}').hasMatch(s)) {
+    return '+234$s';
   }
 
-  return s;
+  // For other digit-only strings (likely already have country code), add +
+  if (RegExp(r'^\d{7,}$').hasMatch(s)) return '+$s';
+
+  return '+$s';
 }
 
 String formatPhoneForDisplay(String apiPhone) {

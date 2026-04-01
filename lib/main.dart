@@ -280,7 +280,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   void _initDeepLinks() async {
     _appLinks = AppLinks();
-    
+
     // Handle initial link when app is launched from a deep link
     try {
       final initialUri = await _appLinks.getInitialLink();
