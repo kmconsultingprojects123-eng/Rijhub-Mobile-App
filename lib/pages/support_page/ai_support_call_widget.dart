@@ -66,6 +66,13 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
   Timer? _elapsedTimer;
   late final AnimationController _pulseController;
 
+  // ---- Call lifecycle limits ----
+  static const _maxCallDuration = Duration(minutes: 15);
+  static const _silenceTimeout = Duration(seconds: 60);
+  static const _silenceWarningAt = Duration(seconds: 45);
+  DateTime _lastActivityTime = DateTime.now();
+  bool _silenceWarningSent = false;
+
   // TODO: Replace with your real Gemini API key before testing, remove before pushing.
   static const _geminiApiKey = '';
 
@@ -236,10 +243,13 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
         _startElapsedTimer();
       }
       ..onAudioReceived = (bytes) {
+        _lastActivityTime = DateTime.now();
         _onAudioChunk(bytes);
       }
       ..onTextReceived = (text) {
         if (!mounted) return;
+        _lastActivityTime = DateTime.now();
+        _silenceWarningSent = false;
         setState(() => _transcriptSnippet = text);
       }
       ..onTurnComplete = () {
@@ -337,6 +347,8 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
       _recorderStreamCtrl = StreamController<Uint8List>();
       _recorderSub = _recorderStreamCtrl!.stream.listen((data) {
         if (!_isMuted) {
+          _lastActivityTime = DateTime.now();
+          _silenceWarningSent = false;
           _gemini.sendAudioChunk(data);
         }
       });
@@ -592,14 +604,63 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
 
   void _startElapsedTimer() {
     _elapsedTimer?.cancel();
+    _lastActivityTime = DateTime.now();
+    _silenceWarningSent = false;
     _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       setState(() => _elapsed += const Duration(seconds: 1));
 
-      // Check escalation flag each tick.
-      if (_gemini.escalationRequested && _callState == _CallState.active) {
+      if (_callState != _CallState.active) return;
+
+      // 1. AI requested end_call — gracefully exit.
+      if (_gemini.endCallRequested) {
+        _endCall();
+        if (mounted) Navigator.of(context).pop();
+        return;
+      }
+
+      // 2. AI requested escalation.
+      if (_gemini.escalationRequested) {
         setState(() => _callState = _CallState.escalating);
         _showEscalationDialog();
+        return;
+      }
+
+      // 3. Max call duration reached — warn at 14min, end at 15min.
+      if (_elapsed >= _maxCallDuration) {
+        _gemini.sendText(
+          '[System: The call has reached the maximum duration. '
+          'Please wrap up and say goodbye to the user.]',
+        );
+        // Give AI 15 seconds to say goodbye, then force end.
+        Future.delayed(const Duration(seconds: 15), () {
+          if (mounted && _callState == _CallState.active) {
+            _endCall();
+            Navigator.of(context).pop();
+          }
+        });
+        return;
+      }
+      if (_elapsed == _maxCallDuration - const Duration(minutes: 1)) {
+        _gemini.sendText(
+          '[System: One minute remaining on this call. '
+          'Start wrapping up and ask if the user needs anything else.]',
+        );
+      }
+
+      // 4. Silence / inactivity timeout.
+      final silenceDuration = DateTime.now().difference(_lastActivityTime);
+      if (silenceDuration >= _silenceTimeout) {
+        _endCall();
+        if (mounted) Navigator.of(context).pop();
+        return;
+      }
+      if (!_silenceWarningSent && silenceDuration >= _silenceWarningAt) {
+        _silenceWarningSent = true;
+        _gemini.sendText(
+          '[System: The user has been silent for a while. '
+          'Ask if they are still there. If no response, the call will end soon.]',
+        );
       }
     });
   }

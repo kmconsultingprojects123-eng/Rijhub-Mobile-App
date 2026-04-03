@@ -40,6 +40,9 @@ class GeminiLiveService {
   bool _escalationRequested = false;
   bool get escalationRequested => _escalationRequested;
 
+  bool _endCallRequested = false;
+  bool get endCallRequested => _endCallRequested;
+
   // Mic suppression: true while model is speaking (echo suppression),
   // during playback, or after an audioStreamEnd nudge.
   bool _micSuppressed = false;
@@ -134,6 +137,27 @@ class GeminiLiveService {
                       'reason': {
                         'type': 'STRING',
                         'description': 'Brief reason for escalation',
+                      }
+                    },
+                    'required': ['reason'],
+                  },
+                ),
+                FunctionDeclaration(
+                  name: 'end_call',
+                  description:
+                      'Call this function to end the support call gracefully. '
+                      'Use it when: the user says goodbye or thanks and has no '
+                      'more questions, you have confirmed the issue is resolved '
+                      'and the user has nothing else, or the user explicitly '
+                      'asks to hang up or end the call.',
+                  parameters: {
+                    'type': 'OBJECT',
+                    'properties': {
+                      'reason': {
+                        'type': 'STRING',
+                        'description':
+                            'Brief reason for ending (e.g. "issue_resolved", '
+                            '"user_said_goodbye", "user_requested_end")',
                       }
                     },
                     'required': ['reason'],
@@ -339,6 +363,14 @@ class GeminiLiveService {
             id: call.id ?? '',
             name: 'escalate_to_human',
             response: {'result': 'Connecting user to human support now.'},
+          );
+        } else if (call.name == 'end_call') {
+          _endCallRequested = true;
+          debugPrint('[GeminiLive] end_call requested by AI: ${call.args}');
+          _session?.sendFunctionResponse(
+            id: call.id ?? '',
+            name: 'end_call',
+            response: {'result': 'Ending the call now. Goodbye.'},
           );
         }
       }
