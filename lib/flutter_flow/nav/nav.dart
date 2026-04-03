@@ -91,7 +91,10 @@ GoRouter createRouter(AuthNotifier auth) {
         // a successful registration/verification, so we don't block it here.
         if (auth.isAuthenticated &&
             (loc == LoginAccountWidget.routePath ||
-                loc == CreateAccount2Widget.routePath)) {
+                loc == CreateAccount2Widget.routePath ||
+                loc == Splash2Widget.routePath ||
+                loc == StaticSplashWidget.routePath ||
+                loc == SplashScreenPage2Widget.routePath)) {
           // Redirect to role-specific landing
           if (auth.status == AuthStatus.authenticatedArtisan)
             return ArtisanDashboardPageWidget.routePath;

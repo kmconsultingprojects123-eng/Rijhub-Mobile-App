@@ -1,6 +1,7 @@
 import 'dart:math' show sin, pi;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../state/auth_notifier.dart';
 
 class StaticSplashWidget extends StatefulWidget {
   const StaticSplashWidget({super.key});
@@ -49,8 +50,18 @@ class _StaticSplashWidgetState extends State<StaticSplashWidget> with TickerProv
       await Future.delayed(const Duration(milliseconds: 1400));
       if (!mounted) return;
       try {
-        // Use GoRouter navigation to replace the current location.
-        GoRouter.of(context).go('/splash2');
+        final auth = AuthNotifier.instance;
+        if (auth.isAuthenticated) {
+          // Already authenticated — skip splash2 and go straight to the
+          // appropriate landing page.
+          if (auth.status == AuthStatus.authenticatedArtisan) {
+            GoRouter.of(context).go('/artisanDashboardPage');
+          } else {
+            GoRouter.of(context).go('/homePage');
+          }
+        } else {
+          GoRouter.of(context).go('/splash2');
+        }
       } catch (_) {
         // If GoRouter is not available for some reason, do nothing — the
         // rest of the app can still proceed via manual taps on the splash.
