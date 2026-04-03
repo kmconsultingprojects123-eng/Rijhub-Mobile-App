@@ -643,23 +643,10 @@ class _ProfileWidgetState extends State<ProfileWidget> {
   }
 
   Future<dynamic> _pushEditProfile() async {
+    if (!mounted) return null;
     try {
-      final res = await NavigationUtils.safePush(
-          context, const EditProfileUserWidget());
-      if (res != null) return res;
-    } catch (e) {
-      // Silent error
-    }
-
-    try {
-      final root = appNavigatorKey.currentState;
-      if (root != null) {
-        return await root.push(
-            MaterialPageRoute(builder: (_) => const EditProfileUserWidget()));
-      } else {
-        return await Navigator.of(context, rootNavigator: true).push(
-            MaterialPageRoute(builder: (_) => const EditProfileUserWidget()));
-      }
+      return await Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const EditProfileUserWidget()));
     } catch (e) {
       // Silent error
     }
