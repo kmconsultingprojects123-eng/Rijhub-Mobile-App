@@ -7,6 +7,8 @@ import '../../services/notification_service.dart' as ServiceNotif;
 import '../../state/app_state_notifier.dart';
 import '../job_details_page/job_details_page_widget.dart';
 import '../message_client/message_client_widget.dart';
+import '../profile/special_request_details_widget.dart';
+import '../../services/special_service_request_service.dart';
 import '../../utils/navigation_utils.dart';
 import '../../utils/app_notification.dart';
 export 'notification_page_model.dart';
@@ -37,16 +39,22 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
   Future<void> _loadNotifications() async {
     setState(() => _loadingNotifications = true);
     try {
-      final resp = await ServiceNotif.NotificationService.fetchNotifications(page: 1, perPage: 50);
+      final resp = await ServiceNotif.NotificationService.fetchNotifications(
+          page: 1, perPage: 50);
       List<dynamic> items = [];
       if (resp == null) {
         items = [];
       } else if (resp is Map) {
-        if (resp.containsKey('data') && resp['data'] is List) items = resp['data'];
-        else if (resp.containsKey('notifications') && resp['notifications'] is List) items = resp['notifications'];
-        else if (resp.containsKey('items') && resp['items'] is List) items = resp['items'];
+        if (resp.containsKey('data') && resp['data'] is List)
+          items = resp['data'];
+        else if (resp.containsKey('notifications') &&
+            resp['notifications'] is List)
+          items = resp['notifications'];
+        else if (resp.containsKey('items') && resp['items'] is List)
+          items = resp['items'];
         else {
-          final listVal = resp.values.firstWhere((v) => v is List, orElse: () => null);
+          final listVal =
+              resp.values.firstWhere((v) => v is List, orElse: () => null);
           if (listVal is List) items = listVal;
         }
       } else if (resp is List) {
@@ -82,7 +90,11 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
 
       _loadNotifications();
       _scrollController.addListener(() {
-        if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200 && !_loadingMore && _hasMore && !_loadingNotifications) {
+        if (_scrollController.position.pixels >=
+                _scrollController.position.maxScrollExtent - 200 &&
+            !_loadingMore &&
+            _hasMore &&
+            !_loadingNotifications) {
           _loadMoreNotifications();
         }
       });
@@ -101,15 +113,22 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
     setState(() => _loadingMore = true);
     try {
       final nextPage = _page + 1;
-      final resp = await ServiceNotif.NotificationService.fetchNotifications(page: nextPage, perPage: _perPage);
+      final resp = await ServiceNotif.NotificationService.fetchNotifications(
+          page: nextPage, perPage: _perPage);
       List<dynamic> items = [];
-      if (resp == null) items = [];
+      if (resp == null)
+        items = [];
       else if (resp is Map) {
-        if (resp.containsKey('data') && resp['data'] is List) items = resp['data'];
-        else if (resp.containsKey('notifications') && resp['notifications'] is List) items = resp['notifications'];
-        else if (resp.containsKey('items') && resp['items'] is List) items = resp['items'];
+        if (resp.containsKey('data') && resp['data'] is List)
+          items = resp['data'];
+        else if (resp.containsKey('notifications') &&
+            resp['notifications'] is List)
+          items = resp['notifications'];
+        else if (resp.containsKey('items') && resp['items'] is List)
+          items = resp['items'];
         else {
-          final listVal = resp.values.firstWhere((v) => v is List, orElse: () => null);
+          final listVal =
+              resp.values.firstWhere((v) => v is List, orElse: () => null);
           if (listVal is List) items = listVal;
         }
       } else if (resp is List) items = resp;
@@ -129,6 +148,15 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
 
   Future<void> _handleNotificationTap(dynamic n) async {
     try {
+      final payload = n['payload'] is Map
+          ? Map<String, dynamic>.from(n['payload'])
+          : (n['data'] is Map
+              ? Map<String, dynamic>.from(n['data'])
+              : <String, dynamic>{});
+      final type = n['type']?.toString() ?? payload['type']?.toString();
+      final requestId = n['requestId']?.toString() ??
+          payload['requestId']?.toString() ??
+          payload['specialServiceRequestId']?.toString();
       final jobId = n['jobId'] ?? n['job'] ?? n['data']?['jobId'];
       final bookingId = n['bookingId'] ?? n['data']?['bookingId'];
       // Extract possible thread/chat id from the notification payload
@@ -137,15 +165,33 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
         threadId ??= n['data']?['thread']?.toString();
       } catch (_) {}
       try {
-        threadId ??= n['data']?['chat']?['_id']?.toString() ?? n['data']?['chat']?['id']?.toString();
+        threadId ??= n['data']?['chat']?['_id']?.toString() ??
+            n['data']?['chat']?['id']?.toString();
       } catch (_) {}
       final url = n['url'] ?? n['link'] ?? n['data']?['url'];
 
+      if (type == 'special_request' &&
+          requestId != null &&
+          requestId.isNotEmpty) {
+        final request = await SpecialServiceRequestService.fetchById(requestId);
+        if (request != null && mounted) {
+          await Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => SpecialRequestDetailsWidget(request: request),
+            ),
+          );
+          return;
+        }
+      }
+
       if (jobId != null) {
-        final job = await ServiceNotif.NotificationService.fetchJobById(jobId.toString());
+        final job = await ServiceNotif.NotificationService.fetchJobById(
+            jobId.toString());
         if (job != null) {
           try {
-            await NavigationUtils.safePushRoute(context, JobDetailsPageWidget.routePath, extra: {'job': job});
+            await NavigationUtils.safePushRoute(
+                context, JobDetailsPageWidget.routePath,
+                extra: {'job': job});
             return;
           } catch (_) {}
         }
@@ -154,13 +200,15 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
       if (bookingId != null || threadId != null) {
         final bId = bookingId?.toString() ?? n['data']?['booking']?.toString();
         try {
-          await NavigationUtils.safePush(context, MessageClientWidget(
-            bookingId: bId,
-            threadId: threadId?.toString(),
-            jobTitle: n['title']?.toString(),
-            bookingPrice: n['amount']?.toString(),
-            bookingDateTime: n['createdAt']?.toString(),
-          ));
+          await NavigationUtils.safePush(
+              context,
+              MessageClientWidget(
+                bookingId: bId,
+                threadId: threadId?.toString(),
+                jobTitle: n['title']?.toString(),
+                bookingPrice: n['amount']?.toString(),
+                bookingDateTime: n['createdAt']?.toString(),
+              ));
           return;
         } catch (_) {}
       }
@@ -170,7 +218,8 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
         return;
       }
 
-      AppNotification.showInfo(context, n['message']?.toString() ?? 'Opened notification');
+      AppNotification.showInfo(
+          context, n['message']?.toString() ?? 'Opened notification');
     } catch (e) {}
   }
 
@@ -186,6 +235,8 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
 
   IconData _getNotificationIcon(String type) {
     switch (type) {
+      case 'special_request':
+        return Icons.handyman_rounded;
       case 'commission':
         return Icons.palette_rounded;
       case 'review':
@@ -212,6 +263,8 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
   Color _getNotificationColor(String type, BuildContext context) {
     final theme = Theme.of(context);
     switch (type) {
+      case 'special_request':
+        return theme.colorScheme.primary;
       case 'commission':
         return theme.colorScheme.primary;
       case 'review':
@@ -283,10 +336,12 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
                     ),
                     onPressed: () async {
                       try {
-                        final success = await ServiceNotif.NotificationService.markAllRead();
+                        final success = await ServiceNotif.NotificationService
+                            .markAllRead();
                         if (success) {
                           AppStateNotifier.instance.setUnreadNotifications(0);
-                          AppNotification.showSuccess(context, 'All notifications marked as read');
+                          AppNotification.showSuccess(
+                              context, 'All notifications marked as read');
                         }
                       } catch (_) {}
                     },
@@ -299,97 +354,100 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
             Expanded(
               child: _loadingNotifications && _notifications.isEmpty
                   ? ListView.builder(
-                // Add top padding so first card sits below the header
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-                itemCount: 6,
-                itemBuilder: (context, index) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 16.0),
-                    child: _buildSkeletonCard(),
-                  );
-                },
-              )
+                      // Add top padding so first card sits below the header
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                      itemCount: 6,
+                      itemBuilder: (context, index) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 16.0),
+                          child: _buildSkeletonCard(),
+                        );
+                      },
+                    )
                   : _notifications.isEmpty
-                  ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.notifications_none_rounded,
-                        size: 64,
-                        color: colorScheme.onSurface.withOpacity(0.3),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No notifications',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Your notifications will appear here',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurface.withOpacity(0.6),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton(
-                        onPressed: _loadNotifications,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: colorScheme.primary,
-                          foregroundColor: colorScheme.onPrimary,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 32,
-                            vertical: 12,
+                      ? Center(
+                          child: Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 24.0),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.notifications_none_rounded,
+                                  size: 64,
+                                  color: colorScheme.onSurface.withOpacity(0.3),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No notifications',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Your notifications will appear here',
+                                  textAlign: TextAlign.center,
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color:
+                                        colorScheme.onSurface.withOpacity(0.6),
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
+                                ElevatedButton(
+                                  onPressed: _loadNotifications,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: colorScheme.primary,
+                                    foregroundColor: colorScheme.onPrimary,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 32,
+                                      vertical: 12,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    'Refresh',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: _loadNotifications,
+                          color: colorScheme.primary,
+                          child: ListView.builder(
+                            controller: _scrollController,
+                            // Add top padding so first card sits below the header
+                            padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                            itemCount:
+                                _notifications.length + (_hasMore ? 1 : 0),
+                            itemBuilder: (context, index) {
+                              if (index >= _notifications.length) {
+                                return _loadingMore
+                                    ? Padding(
+                                        padding: const EdgeInsets.all(16.0),
+                                        child: Center(
+                                          child: CircularProgressIndicator(
+                                            color: colorScheme.primary,
+                                          ),
+                                        ),
+                                      )
+                                    : const SizedBox();
+                              }
+                              final notification = _notifications[index];
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 12.0),
+                                child: _buildNotificationCard(notification),
+                              );
+                            },
                           ),
                         ),
-                        child: Text(
-                          'Refresh',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-                  : RefreshIndicator(
-                onRefresh: _loadNotifications,
-                color: colorScheme.primary,
-                child: ListView.builder(
-                  controller: _scrollController,
-                  // Add top padding so first card sits below the header
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-                  itemCount: _notifications.length + (_hasMore ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (index >= _notifications.length) {
-                      return _loadingMore
-                          ? Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            color: colorScheme.primary,
-                          ),
-                        ),
-                      )
-                          : const SizedBox();
-                    }
-                    final notification = _notifications[index];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12.0),
-                      child: _buildNotificationCard(notification),
-                    );
-                  },
-                ),
-              ),
             ),
           ],
         ),
@@ -476,8 +534,13 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
     final colorScheme = theme.colorScheme;
 
     final title = notification['title'] ?? 'Notification';
-    final message = notification['message'] ?? '';
-    final type = notification['type'] ?? 'default';
+    final payload = notification['payload'] is Map
+        ? Map<String, dynamic>.from(notification['payload'])
+        : (notification['data'] is Map
+            ? Map<String, dynamic>.from(notification['data'])
+            : <String, dynamic>{});
+    final message = notification['message'] ?? notification['body'] ?? '';
+    final type = notification['type'] ?? payload['type'] ?? 'default';
     final createdAt = notification['createdAt'] != null
         ? DateTime.tryParse(notification['createdAt']) ?? DateTime.now()
         : DateTime.now();
@@ -492,7 +555,9 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
       child: Container(
         width: double.infinity,
         decoration: BoxDecoration(
-          color: isRead ? colorScheme.surface : colorScheme.primary.withOpacity(0.05),
+          color: isRead
+              ? colorScheme.surface
+              : colorScheme.primary.withOpacity(0.05),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isRead
@@ -580,4 +645,3 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
     );
   }
 }
-

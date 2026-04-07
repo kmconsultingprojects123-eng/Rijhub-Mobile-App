@@ -987,4 +987,60 @@ class TokenStorage {
       debugPrint('TokenStorage: deleteKycStatus failed: $e');
     }
   }
+
+  /// Return a best-effort display name for the current user.
+  /// Order of lookup:
+  /// 1. Cached dashboard/profile (common keys: name, fullName, displayName, username)
+  /// 2. Google profile (name/displayName)
+  /// 3. Recent registration cache
+  /// 4. Try to decode the JWT payload for common name fields
+  static Future<String?> getUserName() async {
+    try {
+      try {
+        final dashboard = await getDashboardProfile();
+        if (dashboard != null) {
+          final candidates = ['name', 'fullName', 'full_name', 'displayName', 'display_name', 'username'];
+          for (final k in candidates) {
+            if (dashboard[k] != null) return dashboard[k].toString();
+          }
+        }
+      } catch (_) {}
+
+      try {
+        final google = await getGoogleProfile();
+        if (google != null) {
+          final gCandidates = ['name', 'displayName', 'given_name', 'fullName'];
+          for (final k in gCandidates) {
+            if (google[k] != null) return google[k].toString();
+          }
+        }
+      } catch (_) {}
+
+      try {
+        final recent = await getRecentRegistration();
+        if (recent['name'] != null && (recent['name'] as String).isNotEmpty) return recent['name'];
+      } catch (_) {}
+
+      try {
+        final token = await getToken();
+        if (token != null && token.contains('.')) {
+          final parts = token.split('.');
+          if (parts.length >= 2) {
+            final payload = parts[1];
+            String normalized = payload.replaceAll('-', '+').replaceAll('_', '/');
+            while (normalized.length % 4 != 0) normalized += '=';
+            final decoded = utf8.decode(base64Url.decode(normalized));
+            final map = jsonDecode(decoded);
+            if (map is Map) {
+              final candidates = ['name', 'fullName', 'given_name', 'username', 'sub'];
+              for (final k in candidates) {
+                if (map[k] != null) return map[k].toString();
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    } catch (_) {}
+    return null;
+  }
 }

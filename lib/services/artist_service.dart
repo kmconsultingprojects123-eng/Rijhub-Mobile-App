@@ -1674,69 +1674,21 @@ class ArtistService {
   static Future<List<Map<String, dynamic>>> fetchArtisanServices(
       String artisanUserId,
       {String? token}) async {
-    final headers = <String, String>{'Content-Type': 'application/json'};
-    if (token != null && token.isNotEmpty) {
-      headers['Authorization'] = 'Bearer $token';
-    }
-
-    // Preferred public endpoint per API docs: GET /api/artisan-services/:id
-    final pathUri =
-        Uri.parse('$API_BASE_URL/api/artisan-services/$artisanUserId');
-    final queryUri = Uri.parse('$API_BASE_URL/api/artisan-services')
-        .replace(queryParameters: {'artisanId': artisanUserId});
-
     try {
-      // Try path-based endpoint first
-      final resp = await ApiClient.get(pathUri.toString(), headers: headers);
-      if (resp['status'] is int &&
-          resp['status'] >= 200 &&
-          resp['status'] < 300) {
-        dynamic body = resp['json'] ??
-            (resp['body'] != null ? jsonDecode(resp['body']) : null);
-        if (body == null) return [];
-
-        // If the endpoint returns a single artisan service object, wrap it in a list
-        if (body is Map && body['success'] == true && body['data'] is Map) {
-          return [(Map<String, dynamic>.from(body['data'] as Map))];
-        }
-
-        // If body is a Map with data list
-        if (body is Map && body['success'] == true && body['data'] is List) {
-          return (body['data'] as List)
-              .map((e) => Map<String, dynamic>.from(e))
-              .toList();
-        }
-
-        // If the body itself is a Map that looks like a service doc, return it
-        if (body is Map) return [Map<String, dynamic>.from(body)];
-        if (body is List)
+      // Fetch the artisan profile which includes services
+      final artisanProfile = await getByUserId(artisanUserId);
+      if (artisanProfile != null && artisanProfile.containsKey('services')) {
+        final services = artisanProfile['services'];
+        if (services is List) {
           return List<Map<String, dynamic>>.from(
-              body.map((e) => Map<String, dynamic>.from(e)));
-      }
-
-      // If path endpoint failed (404 or other), try legacy query-param endpoint as a fallback
-      final respQuery =
-          await ApiClient.get(queryUri.toString(), headers: headers);
-      if (respQuery['status'] is int &&
-          respQuery['status'] >= 200 &&
-          respQuery['status'] < 300) {
-        dynamic body = respQuery['json'] ??
-            (respQuery['body'] != null ? jsonDecode(respQuery['body']) : null);
-        if (body == null) return [];
-        if (body is Map && body['success'] == true && body['data'] is List) {
-          return (body['data'] as List)
-              .map((e) => Map<String, dynamic>.from(e))
-              .toList();
+              services.map((e) => Map<String, dynamic>.from(e)));
         }
-        if (body is List)
-          return List<Map<String, dynamic>>.from(
-              body.map((e) => Map<String, dynamic>.from(e)));
       }
     } catch (e) {
       debugPrint('Failed to fetch artisan services: $e');
     }
 
-    // Fallback: if no public endpoint, return empty list
+    // Fallback: return empty list if profile not found or no services
     return [];
   }
 

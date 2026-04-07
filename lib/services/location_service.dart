@@ -126,4 +126,82 @@ class LocationService {
     if (state.trim() != allowedState) return false;
     return _abujaLgas.map((e) => e.toLowerCase()).contains(lga.trim().toLowerCase());
   }
+
+  /// Reverse geocode coordinates (lat, lon) to a human-readable address.
+  /// Returns the display name (address) or null on failure.
+  static Future<String?> reverseGeocode(double latitude, double longitude) async {
+    final url = 'https://nominatim.openstreetmap.org/reverse?format=json&lat=$latitude&lon=$longitude&zoom=18&addressdetails=1';
+    try {
+      final resp = await http.get(Uri.parse(url), headers: {
+        'User-Agent': 'rijhub-app/1.0 (+https://example.com)',
+        'Accept-Language': 'en'
+      }).timeout(Duration(seconds: 10));
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final body = resp.body;
+        if (body.isEmpty) return null;
+        final json = jsonDecode(body);
+        if (json is Map) {
+          final displayName = json['display_name']?.toString();
+          return displayName;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Detects if a string contains coordinates (lat,lon or lat lon format) and attempts
+  /// to reverse geocode them. If successful, returns the human-readable address.
+  /// If it's not a coordinate string or geocoding fails, returns the original string.
+  static Future<String> getHumanReadableLocation(String? locationStr) async {
+    if (locationStr == null || locationStr.trim().isEmpty) return 'Unknown location';
+
+    final trimmed = locationStr.trim();
+
+    // Pattern 1: "lat,lon" (e.g., "6.5244,-7.4895")
+    // Pattern 2: "lat lon" (e.g., "6.5244 -7.4895")
+    // Pattern 3: "{lat: x, lon: y}" JSON format
+    double? lat, lon;
+
+    // Try comma-separated format first
+    if (trimmed.contains(',') && !trimmed.contains('{')) {
+      final parts = trimmed.split(',');
+      if (parts.length == 2) {
+        lat = double.tryParse(parts[0].trim());
+        lon = double.tryParse(parts[1].trim());
+      }
+    }
+
+    // Try space-separated format
+    if (lat == null && lon == null && !trimmed.contains('{')) {
+      final parts = trimmed.split(' ');
+      if (parts.length >= 2) {
+        lat = double.tryParse(parts[0].trim());
+        lon = double.tryParse(parts[1].trim());
+      }
+    }
+
+    // Try JSON-like format {lat: x, lon: y}
+    if (lat == null && lon == null && trimmed.contains('{')) {
+      try {
+        final jsonMatch = RegExp(r'"?lat"?\s*:\s*([\d.-]+).*?"?lon"?\s*:\s*([\d.-]+)', dotAll: true).firstMatch(trimmed);
+        if (jsonMatch != null) {
+          lat = double.tryParse(jsonMatch.group(1)!);
+          lon = double.tryParse(jsonMatch.group(2)!);
+        }
+      } catch (_) {}
+    }
+
+    // If we extracted coordinates, attempt to reverse geocode
+    if (lat != null && lon != null && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+      try {
+        final address = await reverseGeocode(lat, lon);
+        if (address != null && address.isNotEmpty) {
+          return address;
+        }
+      } catch (_) {}
+    }
+
+    // Return original string if not coordinates or geocoding failed
+    return trimmed;
+  }
 }

@@ -15,6 +15,7 @@ import '/main.dart';
 import '../../state/auth_notifier.dart';
 import '../../services/navigation_service.dart';
 import 'my_service_page.dart';
+import 'profile_special_requests_widget.dart';
 import '../../services/my_service_service.dart';
 export 'profile_model.dart';
 
@@ -1082,6 +1083,27 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                           //   try { NavigationUtils.safePush(context, const VerificationPage()); return; } catch (e) { try { Navigator.of(context).push(MaterialPageRoute(builder: (_) => const VerificationPage())); return; } catch (_) {} }
                           // },
                           onVerification: () {},
+                          onSpecialRequests: () {
+                            ensureSignedInForAction(context).then((ok) async {
+                              if (!ok) return;
+                              try {
+                                GoRouter.of(context)
+                                    .pushNamed(ProfileSpecialRequestsWidget.routeName);
+                                return;
+                              } catch (e) {
+                                try {
+                                  NavigationUtils.safePush(
+                                      context, const ProfileSpecialRequestsWidget());
+                                  return;
+                                } catch (_) {
+                                  try {
+                                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfileSpecialRequestsWidget()));
+                                    return;
+                                  } catch (_) {}
+                                }
+                              }
+                            });
+                          },
                           onMyService: _isArtisanUser
                               ? () async {
                                   // Resolve the artisan *user id* (not the artisan document id) so
@@ -1646,6 +1668,7 @@ class _ProfileMenuSection extends StatelessWidget {
   final VoidCallback onAboutUs;
   final VoidCallback onVerification;
   final VoidCallback? onMyService;
+  final VoidCallback? onSpecialRequests;
   final ThemeData theme;
   final ColorScheme colorScheme;
 
@@ -1657,6 +1680,7 @@ class _ProfileMenuSection extends StatelessWidget {
     required this.onAboutUs,
     required this.onVerification,
     this.onMyService,
+    this.onSpecialRequests,
     required this.theme,
     required this.colorScheme,
   });
@@ -1726,6 +1750,15 @@ class _ProfileMenuSection extends StatelessWidget {
                   title: 'My Jobs',
                   onTap: onMyJobs,
                 ),
+                const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Divider(height: 1)),
+                if (onSpecialRequests != null)
+                  _buildMenuItem(
+                    icon: Icons.request_page_outlined,
+                    title: 'Special Requests',
+                    onTap: onSpecialRequests!,
+                  ),
                 const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16.0),
                     child: Divider(height: 1)),

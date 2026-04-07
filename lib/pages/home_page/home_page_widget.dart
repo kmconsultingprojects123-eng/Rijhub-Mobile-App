@@ -2025,48 +2025,30 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
                   const SizedBox(width: 12),
 
                   // Name + rating
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Row(
-                          children: [
-                            // Name (left). Removed the inline rating that was previously shown on the right.
-                            Expanded(
-                              child: Text(
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
                                 name,
                                 style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        // Ratings: show stars and numeric count on a single responsive line
-                        if (ratingVal > 0) ...[
-                          LayoutBuilder(builder: (ctx2, cons) {
-                            final double starSize = (cons.maxWidth.isFinite && cons.maxWidth < 220) ? 12.0 : 14.0;
-                            final int filled = ratingVal.round().clamp(0, 5);
-                            return Row(
-                              children: [
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: List.generate(5, (i) => Icon(i < filled ? Icons.star : Icons.star_border, color: Colors.amber, size: starSize)),
+                              const SizedBox(height: 6),
+                              Text(
+                                _artisanServiceLabel(cachedServices),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.onSurface.withOpacity(0.65),
+                                  fontWeight: FontWeight.w500,
                                 ),
-                                const SizedBox(width: 8),
-                                Text(ratingVal.toStringAsFixed(1), style: theme.textTheme.bodySmall),
-                              ],
-                            );
-                          }),
-                          const SizedBox(height: 6),
-                        ] else ...[
-                          Text('No ratings', style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurface.withOpacity(0.6))),
-                        ],
-                      ],
-                    ),
-                  ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
 
                   // Book Now button
                   Column(
@@ -2092,5 +2074,16 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
         ),
       );
     });
+  }
+
+  String _artisanServiceLabel(List<Map<String, dynamic>>? services) {
+    final service = (services != null && services.isNotEmpty) ? services.first : null;
+    final label = service == null
+        ? null
+        : (service['subCategoryName'] ??
+            service['categoryName'] ??
+            service['name'] ??
+            service['label'])?.toString();
+    return label != null && label.trim().isNotEmpty ? label : 'Service info unavailable';
   }
 }

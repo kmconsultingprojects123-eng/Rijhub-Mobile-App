@@ -12,6 +12,7 @@ import '../../services/user_service.dart';
 import '../../services/artist_service.dart';
 import '../../services/my_service_service.dart';
 import '../../pages/payment_init/payment_init_page_widget.dart';
+import '../../pages/special_service_request_page/special_service_request_page_widget.dart';
 import '../../utils/app_notification.dart';
 import '../../utils/auth_guard.dart';
 
@@ -2438,6 +2439,40 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
     } catch (_) {}
   }
 
+  /// Navigate to Special Service Request page
+  Future<void> _navigateToSpecialServicePage(BuildContext ctx) async {
+    try {
+      // Get artisan data for the request
+      final artisanId = _resolvedArtisanId() ?? _artisanIdFromWidget();
+      final artisanName = _displayName();
+      final artisanEmail = widget.artisanEmail;
+      
+      if (artisanId == null || artisanId.isEmpty) {
+        AppNotification.showError(ctx, 'Unable to identify artisan');
+        return;
+      }
+
+      if (ctx.mounted) {
+        await ctx.pushNamed(
+          SpecialServiceRequestPageWidget.routeName,
+          queryParameters: {
+            'artisanId': artisanId,
+            'artisanName': artisanName,
+            if (artisanEmail?.isNotEmpty ?? false) 'artisanEmail': artisanEmail!,
+          },
+          extra: {
+            'artisanData': _artisan,
+          },
+        );
+      }
+    } catch (e, st) {
+      debugPrint('Error navigating to Special Service page: $e\n$st');
+      if (ctx.mounted) {
+        AppNotification.showError(ctx, 'Unable to open Special Service request');
+      }
+    }
+  }
+
   /// Fetch job subcategories for the artisan's primary category and merge any artisan-specific prices.
   Future<List<Map<String, dynamic>>> _fetchJobSubcategoriesForArtisan(
       Map<String, dynamic> artisan, BuildContext context,
@@ -3404,44 +3439,88 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
 
                     SizedBox(height: largeSpacing),
 
-                    // Book Now Button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryColor,
-                          foregroundColor: Colors.white,
-                          padding: EdgeInsets.symmetric(
-                              vertical: isSmallScreen ? 14 : 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(isSmallScreen ? 10 : 12),
-                          ),
-                          elevation: 0,
-                          shadowColor: Colors.transparent,
-                        ),
-                        onPressed: () async {
-                          if (!await ensureSignedInForAction(context)) return;
-                          _showHireSheet(context);
-                        },
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.calendar_today_outlined,
-                              size: isSmallScreen ? 18 : 20,
-                            ),
-                            SizedBox(width: isSmallScreen ? 8 : 10),
-                            Text(
-                              'Book Now',
-                              style: TextStyle(
-                                fontSize: bodyFontSize,
-                                fontWeight: FontWeight.w600,
+                    // Action Buttons Row - Book Now and Special Service
+                    Row(
+                      children: [
+                        // Book Now Button
+                        Expanded(
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: primaryColor,
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(
+                                  vertical: isSmallScreen ? 14 : 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.circular(isSmallScreen ? 10 : 12),
                               ),
+                              elevation: 0,
+                              shadowColor: Colors.transparent,
                             ),
-                          ],
+                            onPressed: () async {
+                              if (!await ensureSignedInForAction(context)) return;
+                              _showHireSheet(context);
+                            },
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.calendar_today_outlined,
+                                  size: isSmallScreen ? 18 : 20,
+                                ),
+                                SizedBox(width: isSmallScreen ? 8 : 10),
+                                Text(
+                                  'Instant Booking',
+                                  style: TextStyle(
+                                    fontSize: bodyFontSize,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
+                        SizedBox(width: 12),
+                        // Special Service Button
+                        Expanded(
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: primaryColor.withOpacity(0.15),
+                              foregroundColor: primaryColor,
+                              padding: EdgeInsets.symmetric(
+                                  vertical: isSmallScreen ? 14 : 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.circular(isSmallScreen ? 10 : 12),
+                                side: BorderSide(color: primaryColor, width: 1.5),
+                              ),
+                              elevation: 0,
+                              shadowColor: Colors.transparent,
+                            ),
+                            onPressed: () async {
+                              if (!await ensureSignedInForAction(context)) return;
+                              _navigateToSpecialServicePage(context);
+                            },
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.star_outline,
+                                  size: isSmallScreen ? 18 : 20,
+                                ),
+                                SizedBox(width: isSmallScreen ? 8 : 10),
+                                Text(
+                                  'Service Request',
+                                  style: TextStyle(
+                                    fontSize: bodyFontSize,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
 
                     SizedBox(height: largeSpacing),
