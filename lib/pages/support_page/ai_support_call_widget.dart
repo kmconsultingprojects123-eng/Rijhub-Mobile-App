@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:flutter_pcm_sound/flutter_pcm_sound.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -11,6 +12,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../flutter_flow/flutter_flow_theme.dart';
 import '../../services/gemini_live_service.dart';
 import '../../services/support_knowledge_base.dart';
+import '../../state/app_state_notifier.dart';
 import '../../utils/app_notification.dart';
 
 /// Full-screen in-app voice call with Gemini Live AI support.
@@ -38,22 +40,16 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
 
   // ---- Audio ----
   FlutterSoundRecorder? _recorder;
-  FlutterSoundPlayer? _player; // Created fresh each turn to avoid buffer rot.
   StreamController<Uint8List>? _recorderStreamCtrl;
   StreamSubscription<Uint8List>? _recorderSub;
   bool _audioInitialised = false;
   bool _recorderStarted = false;
 
-  // Hybrid streaming: accumulate ~1s of audio (jitter buffer), then start
-  // a FRESH player (new instance!) and feed the rest in real-time.
-  // The large jitter buffer absorbs WebSocket delivery bursts (chunks range
-  // from 2 bytes to 15 KB) and network micro-stalls that cause underrun.
-  final List<Uint8List> _startBuffer = [];
-  int _startBufferBytes = 0;
-  bool _playerStreamActive = false;
-  bool _playerRestarting = false;
-  // 24kHz × 2 bytes × 1.0s = 48000 bytes ≈ 1 second
-  static const _startBufferTarget = 48000;
+  // PCM playback via flutter_pcm_sound.
+  // Chunks are fed directly to the platform as they arrive — no queue needed.
+  bool _pcmPlayerReady = false;
+  bool _pcmPlaying = false;
+  bool _awaitingDrain = false; // true after turn complete, waiting for buffer to empty
 
   bool _reconnecting = false;
 
@@ -72,9 +68,10 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
   static const _silenceWarningAt = Duration(seconds: 45);
   DateTime _lastActivityTime = DateTime.now();
   bool _silenceWarningSent = false;
+  bool _endCallPending = false;
 
   // TODO: Replace with your real Gemini API key before testing, remove before pushing.
-  static const _geminiApiKey = '';
+  static const _geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
 
   // ---------------------------------------------------------------
   // Lifecycle
@@ -126,8 +123,9 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
   Future<void> _handleResume() async {
     debugPrint('[GeminiLive] probing connection after resume…');
 
-    // 1. Kill any lingering player state from before backgrounding.
-    _stopPlayerStream();
+    // 1. Kill any lingering player state from before backgrounding, then re-init.
+    _releasePcmPlayer();
+    await _initPcmPlayer();
 
     // 2. Restart the recorder to re-establish a healthy audio session.
     //    This reclaims audio focus and resets internal platform buffers.
@@ -171,7 +169,7 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
     _reconnecting = true;
 
     // Stop the old player state.
-    _stopPlayerStream();
+    _releasePcmPlayer();
 
     // Reconnect the WebSocket (will trigger onSetupComplete → UI updates).
     await _gemini.reconnect();
@@ -255,28 +253,26 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
       ..onTurnComplete = () {
         if (!mounted) return;
 
-        // If the player stream never started (short response), flush
-        // whatever we have via the one-shot fallback.
-        if (!_playerStreamActive && _startBuffer.isNotEmpty) {
-          _playBufferOneShot();
+        // If AI requested end_call during this turn, wait for audio to
+        // finish playing (via drain callback) then exit gracefully.
+        if (_gemini.endCallRequested && !_endCallPending) {
+          _endCallPending = true;
+          debugPrint('[CallLifecycle] end_call detected at turnComplete — '
+              'waiting for audio drain then exiting');
+          _awaitingDrain = true; // will be cleared by _onPcmFeed
+          // After audio drains (or max 5s), end the call.
+          Future.delayed(const Duration(seconds: 5), () {
+            if (mounted && _endCallPending) {
+              debugPrint('[CallLifecycle] grace period done — ending call');
+              _endCall();
+              if (mounted) Navigator.of(context).pop();
+            }
+          });
+          return; // don't re-enable mic, call is ending
         }
 
-        // Pad the stream with ~1s of silence so the player buffer drains
-        // cleanly on silence rather than underrunning (which causes crackling).
-        // 24000 Hz × 2 bytes × 1.0s = 48000 bytes
-        if (_playerStreamActive && _player != null) {
-          try {
-            _player!.uint8ListSink?.add(Uint8List(48000));
-            debugPrint('[GeminiLive] silence padding added');
-          } catch (_) {}
-        }
-
-        // Stop after 2.5s — enough for remaining audio + silence pad to drain.
-        Timer(const Duration(milliseconds: 2500), () {
-          _stopPlayerStream();
-          _gemini.micSuppressed = false;
-          debugPrint('[GeminiLive] player stopped — mic enabled');
-        });
+        // Normal turn end — re-enable mic when audio finishes playing.
+        _waitForQueueDrain();
 
         // Start the mic recorder after the AI's first greeting turn.
         if (!_recorderStarted) {
@@ -319,12 +315,14 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
 
   Future<bool> _initAudio() async {
     try {
-      // Player is created fresh for each turn — not opened here.
-
-      // --- Recorder (opened but NOT started until after first greeting) ---
+      // --- Recorder first (so flutter_sound sets its audio session) ---
       _recorder = FlutterSoundRecorder();
       await _recorder!.openRecorder();
       debugPrint('[GeminiLive] recorder opened');
+
+      // --- PCM player AFTER recorder (takes over audio session with
+      //     playAndRecord so both mic and speaker work simultaneously) ---
+      await _initPcmPlayer();
 
       _audioInitialised = true;
       return true;
@@ -366,138 +364,73 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
     }
   }
 
-  /// Called for every audio chunk from the model.  Accumulates a short
-  /// jitter buffer (~500ms), then starts a fresh player stream and feeds
-  /// the rest in real-time.
+  // --------------- PCM playback (flutter_pcm_sound) ---------------
+
+  /// Initialise the PCM player once per call session.
+  Future<void> _initPcmPlayer() async {
+    if (_pcmPlayerReady) return;
+    await FlutterPcmSound.setLogLevel(LogLevel.error);
+    await FlutterPcmSound.setup(
+      sampleRate: 24000,
+      channelCount: 1,
+      iosAudioCategory: IosAudioCategory.playAndRecord,
+    );
+    // Request a callback when fewer than 6000 frames (~250ms) remain.
+    await FlutterPcmSound.setFeedThreshold(6000);
+    FlutterPcmSound.setFeedCallback(_onPcmFeed);
+    _pcmPlayerReady = true;
+    debugPrint('[PCMPlayer] initialised (24kHz, mono, threshold=6000)');
+  }
+
+  int _pcmChunkCount = 0;
+
+  /// Called by the platform when its buffer runs low or empty.
+  /// With direct feeding this is mainly used to detect when all audio
+  /// has finished playing so we can re-enable the mic.
+  void _onPcmFeed(int remainingFrames) {
+    if (remainingFrames == 0 && _awaitingDrain) {
+      _awaitingDrain = false;
+      _pcmPlaying = false;
+      _gemini.micSuppressed = false;
+      debugPrint('[PCMPlayer] buffer fully drained — mic enabled');
+    }
+  }
+
+  /// Called for every audio chunk from the model.
+  /// Feeds directly to the platform — no intermediate queue.
   void _onAudioChunk(Uint8List bytes) {
-    // Always buffer while the player is restarting.
-    if (_playerRestarting) {
-      _startBuffer.add(bytes);
-      _startBufferBytes += bytes.length;
-      return;
+    _pcmChunkCount++;
+    if (_pcmChunkCount <= 3 || _pcmChunkCount % 50 == 0) {
+      debugPrint('[PCMPlayer] chunk #$_pcmChunkCount fed (${bytes.length} bytes)');
     }
 
-    if (_playerStreamActive && _player != null) {
-      // Stream is running — feed directly.
-      try {
-        _player!.uint8ListSink?.add(bytes);
-      } catch (e) {
-        debugPrint('[GeminiLive] stream feed error: $e');
-      }
-      return;
-    }
-
-    // Accumulate until we have ~500ms of audio.
-    _startBuffer.add(bytes);
-    _startBufferBytes += bytes.length;
-
-    if (_startBufferBytes >= _startBufferTarget) {
-      _startFreshPlayerStream();
-    }
+    // Feed directly to the platform.
+    final pcmBuffer = PcmArrayInt16(bytes: bytes.buffer.asByteData());
+    FlutterPcmSound.feed(pcmBuffer);
+    _pcmPlaying = true;
+    _awaitingDrain = false;
   }
 
-  /// Create a brand-new player instance, start streaming, flush the buffer.
-  /// A fresh instance avoids internal ring-buffer rot that causes crackling
-  /// after several stop/start cycles on the same player.
-  Future<void> _startFreshPlayerStream() async {
-    _playerRestarting = true;
-    try {
-      // Dispose the previous player entirely.
-      final old = _player;
-      _player = null;
-      if (old != null) {
-        try {
-          await old.stopPlayer();
-        } catch (_) {}
-        try {
-          await old.closePlayer();
-        } catch (_) {}
-      }
-
-      // Brand-new instance.
-      final fresh = FlutterSoundPlayer();
-      await fresh.openPlayer();
-      await fresh.startPlayerFromStream(
-        codec: Codec.pcm16,
-        numChannels: 1,
-        sampleRate: 24000,
-        bufferSize: 131072, // ~2.7s ring buffer to absorb network jitter
-        interleaved: true,
-      );
-      _player = fresh;
-
-      // Flush everything accumulated (including chunks that arrived during restart).
-      for (final chunk in _startBuffer) {
-        _player!.uint8ListSink?.add(chunk);
-      }
-      _startBuffer.clear();
-      _startBufferBytes = 0;
-      _playerStreamActive = true;
-      debugPrint('[GeminiLive] fresh player instance started');
-    } catch (e) {
-      debugPrint('[GeminiLive] player stream start error: $e');
-    } finally {
-      _playerRestarting = false;
-    }
+  /// After a turn completes, set the flag so the feed callback knows
+  /// to re-enable the mic when the platform buffer fully drains.
+  void _waitForQueueDrain() {
+    _awaitingDrain = true;
+    debugPrint('[PCMPlayer] awaiting buffer drain to re-enable mic');
   }
 
-  /// Fallback for very short responses that never reached the jitter target.
-  Future<void> _playBufferOneShot() async {
-    if (_startBuffer.isEmpty) return;
-
-    final combined = Uint8List(_startBufferBytes);
-    int offset = 0;
-    for (final chunk in _startBuffer) {
-      combined.setRange(offset, offset + chunk.length, chunk);
-      offset += chunk.length;
-    }
-    _startBuffer.clear();
-    _startBufferBytes = 0;
-
-    try {
-      // Dispose old player, create fresh one for this one-shot.
-      final old = _player;
-      _player = null;
-      if (old != null) {
-        try {
-          await old.stopPlayer();
-        } catch (_) {}
-        try {
-          await old.closePlayer();
-        } catch (_) {}
-      }
-
-      final fresh = FlutterSoundPlayer();
-      await fresh.openPlayer();
-      _player = fresh;
-
-      await _player!.startPlayer(
-        fromDataBuffer: combined,
-        codec: Codec.pcm16,
-        sampleRate: 24000,
-        numChannels: 1,
-      );
-    } catch (e) {
-      debugPrint('[GeminiLive] one-shot play error: $e');
-    }
-  }
-
-  void _stopPlayerStream() {
-    final p = _player;
-    _player = null;
-    _playerStreamActive = false;
-    _playerRestarting = false;
-    _startBuffer.clear();
-    _startBufferBytes = 0;
-    if (p != null) {
-      p.stopPlayer().catchError((_) => null).then((_) {
-        p.closePlayer().catchError((_) => null);
-      });
+  /// Release PCM player resources.
+  void _releasePcmPlayer() {
+    _pcmPlaying = false;
+    _awaitingDrain = false;
+    if (_pcmPlayerReady) {
+      FlutterPcmSound.release().catchError((_) => null);
+      _pcmPlayerReady = false;
+      debugPrint('[PCMPlayer] released');
     }
   }
 
   void _disposeAudio() {
-    _stopPlayerStream(); // Also closes/disposes the player instance.
+    _releasePcmPlayer();
     _recorderSub?.cancel();
     _recorderSub = null;
     _recorderStreamCtrl?.close();
@@ -556,10 +489,32 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
     // 3. Start foreground service to keep session alive when backgrounded.
     await _startForegroundTask();
 
-    // 4. Connect to Gemini.
-    debugPrint('[GeminiLive] connecting to Gemini…');
+    // 4. Connect to Gemini with user context.
+    final appState = AppStateNotifier.instance;
+    final profile = appState.profile;
+    final userName = profile?['name'] as String? ?? '';
+    final userRole = profile?['role'] as String? ?? 'guest';
+    final isGuest = profile?['isGuest'] == true;
+
+    final roleLabel = isGuest
+        ? 'a guest (not signed in)'
+        : userRole == 'artisan'
+            ? 'an Artisan (service provider)'
+            : 'a Customer (client)';
+
+    final userContext = '\n\n## CURRENT CALLER'
+        '\nThe person on this call is $roleLabel.'
+        '${userName.isNotEmpty ? ' Their name is $userName.' : ''}'
+        '\nTailor your answers to their role. For example:'
+        '\n- If they are a Customer, help with finding artisans, booking, payments, posting jobs, and leaving reviews.'
+        '\n- If they are an Artisan, help with managing services, KYC verification, receiving payments, withdrawals, applying for jobs, and their dashboard.'
+        '\n- If they are a guest, let them know they need to create an account for most features, and guide them through signing up if they want to.'
+        '${userName.isNotEmpty ? '\nAddress them by name when appropriate to make the conversation personal.' : ''}';
+
+    debugPrint(
+        '[GeminiLive] connecting to Gemini… (role=$userRole, name=$userName)');
     await _gemini.connect(
-      systemInstruction: SupportKnowledgeBase.systemPrompt,
+      systemInstruction: SupportKnowledgeBase.systemPrompt + userContext,
       voiceName: 'Charon',
     );
   }
@@ -612,15 +567,12 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
 
       if (_callState != _CallState.active) return;
 
-      // 1. AI requested end_call — gracefully exit.
-      if (_gemini.endCallRequested) {
-        _endCall();
-        if (mounted) Navigator.of(context).pop();
-        return;
-      }
+      // 1. end_call is now handled in onTurnComplete (not here) so the
+      //    grace period only starts after all audio has been delivered.
 
       // 2. AI requested escalation.
       if (_gemini.escalationRequested) {
+        debugPrint('[CallLifecycle] AI requested escalation — showing dialog');
         setState(() => _callState = _CallState.escalating);
         _showEscalationDialog();
         return;
@@ -628,6 +580,8 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
 
       // 3. Max call duration reached — warn at 14min, end at 15min.
       if (_elapsed >= _maxCallDuration) {
+        debugPrint(
+            '[CallLifecycle] Max duration reached ($_maxCallDuration) — forcing wrap-up');
         _gemini.sendText(
           '[System: The call has reached the maximum duration. '
           'Please wrap up and say goodbye to the user.]',
@@ -635,6 +589,8 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
         // Give AI 15 seconds to say goodbye, then force end.
         Future.delayed(const Duration(seconds: 15), () {
           if (mounted && _callState == _CallState.active) {
+            debugPrint(
+                '[CallLifecycle] Force-ending call after 15s grace period');
             _endCall();
             Navigator.of(context).pop();
           }
@@ -642,6 +598,8 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
         return;
       }
       if (_elapsed == _maxCallDuration - const Duration(minutes: 1)) {
+        debugPrint(
+            '[CallLifecycle] 1 minute remaining — sending wrap-up prompt');
         _gemini.sendText(
           '[System: One minute remaining on this call. '
           'Start wrapping up and ask if the user needs anything else.]',
@@ -651,12 +609,16 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
       // 4. Silence / inactivity timeout.
       final silenceDuration = DateTime.now().difference(_lastActivityTime);
       if (silenceDuration >= _silenceTimeout) {
+        debugPrint(
+            '[CallLifecycle] Silence timeout (${_silenceTimeout.inSeconds}s) — ending call');
         _endCall();
         if (mounted) Navigator.of(context).pop();
         return;
       }
       if (!_silenceWarningSent && silenceDuration >= _silenceWarningAt) {
         _silenceWarningSent = true;
+        debugPrint(
+            '[CallLifecycle] Silence warning at ${silenceDuration.inSeconds}s — prompting AI to check on user');
         _gemini.sendText(
           '[System: The user has been silent for a while. '
           'Ask if they are still there. If no response, the call will end soon.]',

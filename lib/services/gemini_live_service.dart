@@ -60,17 +60,20 @@ class GeminiLiveService {
 
   Timer? _sessionTimer;
 
-  // Safety timer: if the model hasn't responded N seconds after its last turn
-  // completed, send audioStreamEnd to force the server's VAD to process the
-  // input (covers noisy environments where VAD can't detect silence).
+  // Safety timer: if the model hasn't responded N seconds after its last
+  // turn completed, send audioStreamEnd to force the server's VAD to
+  // process the input (covers noisy environments where VAD can't detect
+  // silence). The mic streams continuously (even silence), so we can't
+  // distinguish "user is speaking" from "mic is idle" — we simply use a
+  // generous timeout so the user has plenty of time to speak.
   Timer? _responseTimer;
-  static const _responseTimeout = Duration(seconds: 5);
+  static const _responseTimeout = Duration(seconds: 8);
 
   void _startResponseTimer() {
     _responseTimer?.cancel();
     _responseTimer = Timer(_responseTimeout, () {
       if (_isConnected && _session != null && !_micSuppressed) {
-        debugPrint('[GeminiLive] response timeout — sending audioStreamEnd nudge');
+        debugPrint('[GeminiLive] response timeout (${_responseTimeout.inSeconds}s) — sending audioStreamEnd nudge');
         _micSuppressed = true;
         try {
           _session!.sendAudioStreamEnd();
@@ -145,19 +148,22 @@ class GeminiLiveService {
                 FunctionDeclaration(
                   name: 'end_call',
                   description:
-                      'Call this function to end the support call gracefully. '
-                      'Use it when: the user says goodbye or thanks and has no '
-                      'more questions, you have confirmed the issue is resolved '
-                      'and the user has nothing else, or the user explicitly '
-                      'asks to hang up or end the call.',
+                      'End the support call. ONLY call this when the user has '
+                      'EXPLICITLY said goodbye, said they are done, or asked '
+                      'to end the call. Examples: "bye", "goodbye", "that\'s '
+                      'all thanks", "I\'m done", "end the call", "hang up". '
+                      'Do NOT call this just because you answered a question. '
+                      'Do NOT call this proactively. ALWAYS ask "Is there '
+                      'anything else I can help with?" first and wait for the '
+                      'user to confirm they are done before calling this.',
                   parameters: {
                     'type': 'OBJECT',
                     'properties': {
                       'reason': {
                         'type': 'STRING',
                         'description':
-                            'Brief reason for ending (e.g. "issue_resolved", '
-                            '"user_said_goodbye", "user_requested_end")',
+                            'Brief reason for ending (e.g. "user_said_goodbye", '
+                            '"user_said_done", "user_requested_end")',
                       }
                     },
                     'required': ['reason'],
