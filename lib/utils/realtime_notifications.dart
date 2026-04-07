@@ -262,6 +262,21 @@ class RealtimeNotifications {
           } catch (_) {}
 
           await _showLocalNotification(payload);
+          try {
+            final out = <String, dynamic>{'event': 'notification'};
+            if (payload is Map) {
+              payload.forEach((k, v) {
+                try {
+                  out[k?.toString() ?? ''] = v;
+                } catch (_) {}
+              });
+            } else {
+              out['payload'] = payload;
+            }
+            _eventsController.add(out);
+          } catch (e) {
+            _log('failed to forward notification event: $e');
+          }
         } catch (e) {
           _log('failed to handle notification: $e');
         }

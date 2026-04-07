@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 
 /// Simple in-memory monitor used to detect whether a payment webview actually
 /// initialized. Callers should call `WebviewMonitor.start()` before pushing the
@@ -10,20 +9,18 @@ class WebviewMonitor {
   static Completer<void>? _c;
 
   static void start() {
-    debugPrint('WebviewMonitor.start()');
     _c = Completer<void>();
   }
 
   static void markOpened() {
     try {
-      debugPrint('WebviewMonitor.markOpened() — completer present=${_c != null}');
       if (_c != null && !_c!.isCompleted) _c!.complete();
     } catch (_) {}
   }
 
-  static Future<bool> waitOpened({Duration timeout = const Duration(seconds: 3)}) async {
+  static Future<bool> waitOpened(
+      {Duration timeout = const Duration(seconds: 3)}) async {
     final c = _c;
-    debugPrint('WebviewMonitor.waitOpened() — completer present=${c != null}, timeout=${timeout.inSeconds}s');
     if (c == null) return false;
     try {
       await c.future.timeout(timeout);

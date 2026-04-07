@@ -7,6 +7,7 @@ import '../../services/artist_service.dart';
 import '../../api_config.dart';
 import '../../services/notification_service.dart';
 import '../../utils/app_notification.dart';
+import '../../utils/realtime_notifications.dart';
 import '../../state/app_state_notifier.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '../message_client/message_client_widget.dart';
@@ -48,6 +49,8 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
   String _searchQuery = '';
   Timer? _searchDebounce;
   Timer? _autoRefreshTimer;
+  StreamSubscription<Map<String, dynamic>>? _realtimeSub;
+  bool _realtimeRefreshInFlight = false;
 
   String? _participantId;
   bool _isArtisan = false;
@@ -399,19 +402,7 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
       });
     });
 
-    // Start an automatic refresh timer to reload bookings every 5 seconds so
-    // the UI reflects new bookings or status changes without manual pull-to-refresh.
-    // We schedule it after a small delay to avoid hammering the API immediately on page open.
-    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 5), (t) async {
-      try {
-        if (!mounted) return;
-        // Only run a background refresh when not already loading to avoid concurrent requests
-        if (_loadingBookings || _loadingMore) return;
-        await _fetchBookingsInBackground();
-      } catch (e) {
-        if (kDebugMode) debugPrint('Auto-refresh error: $e');
-      }
-    });
+    _initRealtimeUpdates();
   }
 
   Future<void> _loadProfileAndBookings() async {
@@ -433,9 +424,109 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
   void dispose() {
     _searchDebounce?.cancel();
     _autoRefreshTimer?.cancel();
+    _realtimeSub?.cancel();
     _scrollController.dispose();
     _model.dispose();
     super.dispose();
+  }
+
+  Future<void> _initRealtimeUpdates() async {
+    try {
+      await RealtimeNotifications.instance.init(
+        appState: AppStateNotifier.instance,
+      );
+      _realtimeSub?.cancel();
+      _realtimeSub =
+          RealtimeNotifications.instance.events.listen(_handleRealtimeEvent);
+    } catch (e) {
+      if (kDebugMode) debugPrint('Realtime booking init error: $e');
+    }
+  }
+
+  bool _isBookingRealtimeEvent(Map<String, dynamic> event) {
+    final eventName = (event['event'] ?? '').toString().toLowerCase();
+    final type = (event['type'] ?? event['category'] ?? event['kind'] ?? '')
+        .toString()
+        .toLowerCase();
+    final title = (event['title'] ?? '').toString().toLowerCase();
+    final message = (event['message'] ?? event['body'] ?? event['text'] ?? '')
+        .toString()
+        .toLowerCase();
+    final hasBookingId = [
+      event['bookingId'],
+      event['booking_id'],
+      event['payload'] is Map ? event['payload']['bookingId'] : null,
+      event['data'] is Map ? event['data']['bookingId'] : null,
+    ].any((v) => v != null && v.toString().isNotEmpty);
+
+    if (hasBookingId) return true;
+    if (eventName.contains('booking') || eventName.contains('payment')) {
+      return true;
+    }
+    if (type.contains('booking') || type.contains('payment')) {
+      return true;
+    }
+    if (title.contains('booking') ||
+        title.contains('payment') ||
+        message.contains('booking') ||
+        message.contains('payment')) {
+      return true;
+    }
+    return false;
+  }
+
+  String? _extractRealtimeBookingId(Map<String, dynamic> event) {
+    final candidates = [
+      event['bookingId'],
+      event['booking_id'],
+      event['id'],
+      event['payload'] is Map ? event['payload']['bookingId'] : null,
+      event['payload'] is Map ? event['payload']['booking_id'] : null,
+      event['data'] is Map ? event['data']['bookingId'] : null,
+      event['data'] is Map ? event['data']['booking_id'] : null,
+    ];
+    for (final candidate in candidates) {
+      if (candidate != null && candidate.toString().isNotEmpty) {
+        return candidate.toString();
+      }
+    }
+    return null;
+  }
+
+  Future<void> _handleRealtimeEvent(Map<String, dynamic> event) async {
+    if (!mounted || _loadingBookings || _loadingMore) return;
+    if (!_isBookingRealtimeEvent(event)) return;
+    if (_realtimeRefreshInFlight) return;
+
+    _realtimeRefreshInFlight = true;
+    try {
+      final bookingId = _extractRealtimeBookingId(event);
+      if (kDebugMode) {
+        debugPrint('Realtime booking event: $event');
+      }
+      if (bookingId != null && bookingId.isNotEmpty) {
+        final fresh = await _fetchBookingById(bookingId);
+        if (fresh != null) {
+          final existingIndex = _bookings.indexWhere((b) =>
+              (_extractBookingId(b) ??
+                  b['_id']?.toString() ??
+                  b['booking']?['_id']?.toString() ??
+                  b['id']?.toString()) ==
+              bookingId);
+          if (existingIndex != -1) {
+            _updateBookingState(bookingId, fresh);
+          } else {
+            await _fetchBookings(reset: true);
+          }
+          return;
+        }
+      }
+      await _fetchBookings(reset: true);
+    } catch (e) {
+      if (kDebugMode) debugPrint('Realtime booking update error: $e');
+    } finally {
+      _realtimeRefreshInFlight = false;
+    }
   }
 
   Future<void> _fetchBookings({bool reset = false}) async {
@@ -2188,18 +2279,49 @@ class _BookingCard extends StatelessWidget {
     final jobTitle = _extractJobTitle(booking);
     final dateStr = _extractDate(booking);
     final priceStr = _extractPrice(booking);
+    // Payment / refund / review flags
+    final paymentCandidates = [
+      booking['paymentStatus'],
+      booking['payment_status'],
+      booking['paid'],
+      booking['isPaid'],
+      booking['payment'] is Map ? booking['payment']['status'] : booking['payment'],
+      booking['booking']?['paymentStatus'],
+      booking['booking']?['payment_status'],
+      booking['booking']?['paid'],
+      booking['booking']?['isPaid'],
+      booking['booking']?['payment'] is Map
+          ? booking['booking']['payment']['status']
+          : booking['booking']?['payment'],
+    ];
+    String paymentStatus = 'unpaid';
+    for (final candidate in paymentCandidates) {
+      final normalized = candidate?.toString().toLowerCase();
+      if (candidate == true ||
+          normalized == 'paid' ||
+          normalized == 'success' ||
+          normalized == 'successful' ||
+          normalized == 'true') {
+        paymentStatus = 'paid';
+        break;
+      }
+      if (normalized != null &&
+          normalized.isNotEmpty &&
+          paymentStatus == 'unpaid') {
+        paymentStatus = normalized;
+      }
+    }
+    final refundStatus = (booking['refundStatus'] ??
+                booking['booking']?['refundStatus'] ??
+                'none')
+            ?.toString()
+            .toLowerCase() ??
+        'none';
+
     final statusRaw =
         booking['booking']?['status'] ?? booking['status'] ?? 'pending';
-    final status = statusRaw?.toString().toLowerCase() ?? 'pending';
-    // Determine broader cancel eligibility (many APIs use different status labels)
-    final cancelEligible = (status.startsWith('await') ||
-        status == 'pending' ||
-        status.contains('awaiting') ||
-        status.contains('waiting') ||
-        status == 'created' ||
-        status == 'held');
-    // Debug: log booking id and cancel eligibility to help troubleshoot missing Cancel button
-    // Detect whether this booking originated from a quote so we can treat quote flows differently
+    final rawStatus = statusRaw?.toString().toLowerCase() ?? 'pending';
+    // Detect whether this booking originated from a quote so we can treat quote flows differently.
     bool isQuote = false;
     try {
       final qcand = booking['acceptedQuote'] ??
@@ -2213,28 +2335,29 @@ class _BookingCard extends StatelessWidget {
       final bs = booking['bookingSource'] ??
           booking['booking']?['bookingSource'] ??
           booking['payment']?['bookingSource'];
-      if (!isQuote && bs != null && bs.toString().toLowerCase() == 'quote')
+      if (!isQuote && bs != null && bs.toString().toLowerCase() == 'quote') {
         isQuote = true;
+      }
     } catch (_) {}
+
+    // Special-request bookings are created first, then payment verification updates
+    // the money state. If the server still returns raw `pending` while payment is
+    // already `paid`, don't keep treating the booking like unpaid pending work.
+    final status =
+        rawStatus == 'pending' && paymentStatus == 'paid' ? 'accepted' : rawStatus;
+
+    // Determine broader cancel eligibility from the effective status.
+    final cancelEligible = (status.startsWith('await') ||
+        status == 'pending' ||
+        status.contains('awaiting') ||
+        status.contains('waiting') ||
+        status == 'created' ||
+        status == 'held');
     try {
       debugPrint(
-          'BookingCard(build): id=${_extractBookingId(booking) ?? booking['_id'] ?? booking['id']}, status=$status, isArtisan=$isArtisan, cancelEligible=$cancelEligible, isQuote=$isQuote');
+          'BookingCard(build): id=${_extractBookingId(booking) ?? booking['_id'] ?? booking['id']}, rawStatus=$rawStatus, effectiveStatus=$status, paymentStatus=$paymentStatus, isArtisan=$isArtisan, cancelEligible=$cancelEligible, isQuote=$isQuote');
     } catch (_) {}
     final statusColor = _getStatusColor(status, theme);
-
-    // Payment / refund / review flags
-    final paymentStatus = (booking['paymentStatus'] ??
-                booking['booking']?['paymentStatus'] ??
-                'unpaid')
-            ?.toString()
-            .toLowerCase() ??
-        'unpaid';
-    final refundStatus = (booking['refundStatus'] ??
-                booking['booking']?['refundStatus'] ??
-                'none')
-            ?.toString()
-            .toLowerCase() ??
-        'none';
 
     // Define active statuses where messaging should be allowed
     final activeStatuses = <String>{

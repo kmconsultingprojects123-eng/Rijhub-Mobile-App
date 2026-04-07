@@ -59,7 +59,7 @@ class UserService {
             // └──────────────────────────────────────────────────────────────────────────────
             // ignore: avoid_print
             print(
-                '┌──────────────────────────────────────────────────────────────────────────────');
+                '┌─────────────────────────────��────────────────────────────────────────────────');
             // ignore: avoid_print
             print('│ [API Response] ${resp.statusCode} $url');
             // ignore: avoid_print
@@ -391,6 +391,100 @@ class UserService {
       throw Exception(
           'Failed to update profile: ${resp.statusCode} ${resp.body}');
     }
+  }
+
+  /// Fetch a user's profile by ID. Returns the user map or null on failure.
+  static Future<Map<String, dynamic>?> getUserById(String userId) async {
+    if (userId.isEmpty) return null;
+    final token = await TokenStorage.getToken();
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    if (token != null && token.isNotEmpty)
+      headers['Authorization'] = 'Bearer $token';
+
+    final url = '$API_BASE_URL/api/users/$userId';
+    int attempts = 0;
+    try {
+      http.Response resp;
+      // retry loop for transient network issues
+      while (true) {
+        try {
+          attempts++;
+          // ┌──────────────────────────────────────────────────────────────────────────────
+          // │ API Logger - Request (UserService)
+          // └──────────────────────────────────────────────────────────────────────────────
+          // ignore: avoid_print
+          print(
+              '┌──────────────────────────────────────────────────────────────────────────────');
+          // ignore: avoid_print
+          print('│ [API Request] GET $url');
+          if (headers.isNotEmpty) {
+            // ignore: avoid_print
+            print('│ Headers:');
+            // ignore: avoid_print
+            headers.forEach((k, v) => print('│   $k: $v'));
+          }
+          // ignore: avoid_print
+          print(
+              '└──────────────────────────────────────────────────────────────────────────────');
+
+          resp = await http
+              .get(Uri.parse(url), headers: headers)
+              .timeout(const Duration(seconds: 15));
+
+          // ┌──────────────────────────────────────────────────────────────────────────────
+          // │ API Logger - Response (UserService)
+          // └──────────────────────────────────────────────────────────────────────────────
+          // ignore: avoid_print
+          print(
+              '┌──────────────────────────────────────────────────────────────────────────────');
+          // ignore: avoid_print
+          print('│ [API Response] ${resp.statusCode} $url');
+          // ignore: avoid_print
+          print('│ Body: ${resp.body}');
+          // ignore: avoid_print
+          print(
+              '└──────────────────────────────────────────────────────────────────────────────');
+
+          break; // success
+        } on SocketException catch (se) {
+          // Connection reset by peer / network error — retry a couple times
+          if (attempts >= 3) rethrow;
+          await Future.delayed(Duration(milliseconds: 300 * attempts));
+          continue;
+        } on http.ClientException catch (ce) {
+          if (attempts >= 3) rethrow;
+          await Future.delayed(Duration(milliseconds: 300 * attempts));
+          continue;
+        }
+      }
+      // If we somehow made another call, check status
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        if (resp.body.isEmpty) return null;
+        final decoded = jsonDecode(resp.body);
+        if (decoded is Map) {
+          Map<String, dynamic>? candidate;
+          if (decoded['data'] is Map)
+            candidate = Map<String, dynamic>.from(decoded['data']);
+          else if (decoded['payload'] is Map)
+            candidate = Map<String, dynamic>.from(decoded['payload']);
+          else if (decoded['user'] is Map)
+            candidate = Map<String, dynamic>.from(decoded['user']);
+          else if (decoded['profile'] is Map)
+            candidate = Map<String, dynamic>.from(decoded['profile']);
+          else
+            candidate = Map<String, dynamic>.from(decoded);
+
+          return candidate;
+        }
+      } else if (resp.statusCode == 401 || resp.statusCode == 403) {
+        // authentication issue
+        return null;
+      }
+    } catch (e) {
+      // Network error
+    }
+
+    return null;
   }
 
   // --- Helpers & privilege API ---

@@ -10,6 +10,8 @@ String _redactToken(String? token) {
   return '${token.substring(0, 4)}...${token.substring(token.length - 4)}';
 }
 
+const bool _verboseApiLogging = false;
+
 class ApiClient {
   // Internal helper: perform HTTP request with retries and timeout.
   // method: 'GET', 'POST', 'PUT'
@@ -23,18 +25,20 @@ class ApiClient {
       // ┌──────────────────────────────────────────────────────────────────────────────
       // │ API Logger - Request
       // └──────────────────────────────────────────────────────────────────────────────
-      print(
-          '┌──────────────────────────────────────────────────────────────────────────────');
-      print('│ [API Request] $method $uri');
-      if (headers != null && headers.isNotEmpty) {
-        print('│ Headers:');
-        headers.forEach((k, v) => print('│   $k: $v'));
+      if (_verboseApiLogging) {
+        print(
+            '┌──────────────────────────────────────────────────────────────────────────────');
+        print('│ [API Request] $method $uri');
+        if (headers != null && headers.isNotEmpty) {
+          print('│ Headers:');
+          headers.forEach((k, v) => print('│   $k: $v'));
+        }
+        if (body != null) {
+          print('│ Body: $body');
+        }
+        print(
+            '└──────────────────────────────────────────────────────────────────────────────');
       }
-      if (body != null) {
-        print('│ Body: $body');
-      }
-      print(
-          '└──────────────────────────────────────────────────────────────────────────────');
 
       try {
         late http.Response resp;
@@ -57,19 +61,23 @@ class ApiClient {
         // ┌──────────────────────────────────────────────────────────────────────────────
         // │ API Logger - Response
         // └──────────────────────────────────────────────────────────────────────────────
-        print(
-            '┌──────────────────────────────────────────────────────────────────────────────');
-        print('│ [API Response] ${resp.statusCode} $uri');
-        print('│ Body: ${resp.body}');
-        print(
-            '└──────────────────────────────────────────────────────────────────────────────');
+        if (_verboseApiLogging) {
+          print(
+              '┌──────────────────────────────────────────────────────────────────────────────');
+          print('│ [API Response] ${resp.statusCode} $uri');
+          print('│ Body: ${resp.body}');
+          print(
+              '└──────────────────────────────────────────────────────────────────────────────');
+        }
 
         return resp;
       } on TimeoutException catch (_) {
         if (attempt == maxAttempts) {
-          print('│ [API Error] Request timed out for $uri');
-          print(
-              '└──────────────────────────────────────────────────────────────────────────────');
+          if (_verboseApiLogging) {
+            print('│ [API Error] Request timed out for $uri');
+            print(
+                '└──────────────────────────────────────────────────────────────────────────────');
+          }
           return http.Response(
               jsonEncode({'message': 'Request timed out'}), 408);
         }
@@ -77,17 +85,21 @@ class ApiClient {
         continue;
       } on SocketException catch (_) {
         if (attempt == maxAttempts) {
-          print('│ [API Error] Network error for $uri');
-          print(
-              '└──────────────────────────────────────────────────────────────────────────────');
+          if (_verboseApiLogging) {
+            print('│ [API Error] Network error for $uri');
+            print(
+                '└──────────────────────────────────────────────────────────────────────────────');
+          }
           return http.Response(jsonEncode({'message': 'Network error'}), 599);
         }
         await Future.delayed(retryDelay * attempt);
         continue;
       } catch (e) {
-        print('│ [API Error] Exception for $uri: $e');
-        print(
-            '└──────────────────────────────────────────────────────────────────────────────');
+        if (_verboseApiLogging) {
+          print('│ [API Error] Exception for $uri: $e');
+          print(
+              '└──────────────────────────────────────────────────────────────────────────────');
+        }
         return http.Response(jsonEncode({'message': e.toString()}), 500);
       }
     }
@@ -100,8 +112,10 @@ class ApiClient {
       if (resp.body.isNotEmpty) {
         final parsed = jsonDecode(resp.body);
         // If parsed is a Map, ensure it's a Map<String, dynamic>
-        if (parsed is Map) jsonBody = Map<String, dynamic>.from(parsed.cast<String, dynamic>());
-        else jsonBody = parsed;
+        if (parsed is Map)
+          jsonBody = Map<String, dynamic>.from(parsed.cast<String, dynamic>());
+        else
+          jsonBody = parsed;
       }
     } catch (_) {
       jsonBody = null;
@@ -120,8 +134,10 @@ class ApiClient {
     try {
       if (raw.isNotEmpty) {
         final parsed = jsonDecode(raw);
-        if (parsed is Map) jsonBody = Map<String, dynamic>.from(parsed.cast<String, dynamic>());
-        else jsonBody = parsed;
+        if (parsed is Map)
+          jsonBody = Map<String, dynamic>.from(parsed.cast<String, dynamic>());
+        else
+          jsonBody = parsed;
       }
     } catch (_) {
       jsonBody = null;
@@ -241,8 +257,6 @@ class ApiClient {
   static Future<Map<String, dynamic>> get(String url,
       {Map<String, String>? headers}) async {
     final token = await TokenStorage.getToken();
-    // Redacted token presence for debugging
-    try { print('ApiClient.get token: ${_redactToken(token)}'); } catch (_) {}
     final merged = {
       if (headers != null) ...headers,
       if (token != null) 'Authorization': 'Bearer $token',
@@ -258,7 +272,6 @@ class ApiClient {
   static Future<Map<String, dynamic>> post(String url,
       {Map<String, String>? headers, Object? body}) async {
     final token = await TokenStorage.getToken();
-    try { print('ApiClient.post token: ${_redactToken(token)}'); } catch (_) {}
     final merged = {
       if (headers != null) ...headers,
       if (token != null) 'Authorization': 'Bearer $token',
@@ -282,7 +295,6 @@ class ApiClient {
   static Future<Map<String, dynamic>> put(String url,
       {Map<String, String>? headers, Object? body}) async {
     final token = await TokenStorage.getToken();
-    try { print('ApiClient.put token: ${_redactToken(token)}'); } catch (_) {}
     final merged = {
       if (headers != null) ...headers,
       if (token != null) 'Authorization': 'Bearer $token',
@@ -313,7 +325,6 @@ class ApiClient {
       Map<String, List<String>>? fileMap,
       String method = 'POST'}) async {
     final token = await TokenStorage.getToken();
-    try { print('ApiClient.postMultipart token: ${_redactToken(token)}'); } catch (_) {}
     final merged = {
       if (headers != null) ...headers,
       if (token != null) 'Authorization': 'Bearer $token',

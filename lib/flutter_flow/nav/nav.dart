@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 export '../../state/app_state_notifier.dart';
 import '/index.dart';
+import '../../pages/special_service_request_page/special_service_request_page_widget.dart';
 import '/main.dart';
 export '/main.dart';
 import '../../pages/artisan_complete_profile/artisan_complete_profile_widget.dart';
@@ -498,6 +499,21 @@ GoRouter createRouter(AuthNotifier auth) {
             bookingDateTime:
                 params.getParam<String>('bookingDateTime', ParamType.String),
             success: params.getParam<bool>('success', ParamType.bool),
+          ),
+        ),
+        FFRoute(
+          name: SpecialServiceRequestPageWidget.routeName,
+          path: SpecialServiceRequestPageWidget.routePath,
+          requireAuth: true,
+          builder: (context, params) => SpecialServiceRequestPageWidget(
+            artisanId:
+                params.getParam<String>('artisanId', ParamType.String) ?? '',
+            artisanName:
+                params.getParam<String>('artisanName', ParamType.String) ?? '',
+            artisanEmail:
+                params.getParam<String>('artisanEmail', ParamType.String),
+            artisanData: params
+                .getParam<Map<String, dynamic>>('artisanData', ParamType.JSON),
           ),
         ),
       ];
