@@ -49,7 +49,8 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
   // Chunks are fed directly to the platform as they arrive — no queue needed.
   bool _pcmPlayerReady = false;
   bool _pcmPlaying = false;
-  bool _awaitingDrain = false; // true after turn complete, waiting for buffer to empty
+  bool _awaitingDrain =
+      false; // true after turn complete, waiting for buffer to empty
 
   bool _reconnecting = false;
 
@@ -70,7 +71,6 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
   bool _silenceWarningSent = false;
   bool _endCallPending = false;
 
-  // TODO: Replace with your real Gemini API key before testing, remove before pushing.
   static const _geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
 
   // ---------------------------------------------------------------
@@ -401,7 +401,8 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
   void _onAudioChunk(Uint8List bytes) {
     _pcmChunkCount++;
     if (_pcmChunkCount <= 3 || _pcmChunkCount % 50 == 0) {
-      debugPrint('[PCMPlayer] chunk #$_pcmChunkCount fed (${bytes.length} bytes)');
+      debugPrint(
+          '[PCMPlayer] chunk #$_pcmChunkCount fed (${bytes.length} bytes)');
     }
 
     // Feed directly to the platform.
