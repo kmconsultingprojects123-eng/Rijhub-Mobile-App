@@ -345,7 +345,9 @@ class SpecialServiceRequestService {
         final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
         if (body == null) return null;
         final data = _extractEnvelopeData(body);
-        if (data != null) return _normalizeLifecycleResponse(data);
+        if (data != null) {
+          return _normalizeLifecycleResponse(data);
+        }
         return null;
       }
       return null;
@@ -457,12 +459,13 @@ class SpecialServiceRequestService {
 
     final uri = Uri.parse(
         '$API_BASE_URL/api/special-service-requests/$requestId/response');
+    final body = <String, dynamic>{'status': 'responded', ...data};
 
-    debugLog('POST $uri', headers, data);
+    debugLog('PUT $uri', headers, body);
 
     try {
       final resp = await http
-          .post(uri, headers: headers, body: jsonEncode(data))
+          .put(uri, headers: headers, body: jsonEncode(body))
           .timeout(const Duration(seconds: 15));
 
       debugLogResponse(resp.statusCode, resp.body, uri);
@@ -474,6 +477,22 @@ class SpecialServiceRequestService {
         final data = _extractEnvelopeData(responseBody);
         if (data != null) return _normalizeLifecycleResponse(data);
         return null;
+      }
+
+      debugLog('POST $uri', headers, body);
+
+      final fallbackResp = await http
+          .post(uri, headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 15));
+
+      debugLogResponse(fallbackResp.statusCode, fallbackResp.body, uri);
+
+      if (fallbackResp.statusCode >= 200 && fallbackResp.statusCode < 300) {
+        final responseBody =
+            fallbackResp.body.isNotEmpty ? jsonDecode(fallbackResp.body) : null;
+        if (responseBody == null) return null;
+        final data = _extractEnvelopeData(responseBody);
+        if (data != null) return _normalizeLifecycleResponse(data);
       }
       return null;
     } catch (e) {

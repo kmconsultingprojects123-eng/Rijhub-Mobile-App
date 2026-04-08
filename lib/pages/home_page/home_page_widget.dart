@@ -116,7 +116,7 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
     super.initState();
     _model = createModel(context, () => HomePageModel());
     // Initialize artisans page controller early to avoid races when data loads quickly
-    _artisanPageController = PageController(initialPage: 0, viewportFraction: 0.94);
+    _artisanPageController = PageController(initialPage: 0, viewportFraction: 1.0);
     // load a small set of artisans to show on home page
     _loadHomeArtisans();
     _adPageController = PageController(initialPage: 0);
@@ -737,14 +737,21 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
         _artisanError = null;
       });
 
-      // Fetch services for each artisan
-      for (final artisan in _artisans) {
-        final artisanId = _extractArtisanId(artisan);
-        if (artisanId != null) {
-          final artisanKey = '${artisanId}_${artisan.hashCode}';
-          _fetchArtisanServices(artisanId, artisanKey);
-        }
-      }
+       // Fetch services for each artisan in parallel
+       final serviceFutures = <Future<void>>[];
+       for (final artisan in _artisans) {
+         final artisanId = _extractArtisanId(artisan);
+         if (artisanId != null) {
+           final artisanKey = '${artisanId}_${artisan.hashCode}';
+           serviceFutures.add(_fetchArtisanServices(artisanId, artisanKey));
+         }
+       }
+       // Wait for all services to be fetched before rendering
+       if (serviceFutures.isNotEmpty) {
+         await Future.wait(serviceFutures);
+         // Trigger UI rebuild after all services are cached
+         if (mounted) setState(() {});
+       }
 
       // Jump to a high start index to allow infinite swiping both directions.
       final int count = _artisans.length;
@@ -1686,10 +1693,7 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
                                         final int count = _artisans.length;
                                         if (count == 0) return const SizedBox.shrink();
                                         final int idx = index % count;
-                                        return Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                                          child: _buildArtisanCard(context, _artisans[idx]),
-                                        );
+                                        return _buildArtisanCard(context, _artisans[idx]);
                                       },
                                     ),
                                   ),
@@ -1954,7 +1958,7 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
     final cachedServices = artisanKey != null ? _artisanServicesCache[artisanKey] : null;
 
     return LayoutBuilder(builder: (ctx, constraints) {
-      final cardWidth = (MediaQuery.of(ctx).size.width - 40).clamp(280.0, 820.0);
+      final cardWidth = (MediaQuery.of(ctx).size.width - 40);
       return SizedBox(
         width: cardWidth,
         height: 140,
@@ -2024,7 +2028,7 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
                   ),
                   const SizedBox(width: 12),
 
-                  // Name + rating
+                   // Name + rating
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2037,14 +2041,47 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
                                 overflow: TextOverflow.ellipsis,
                               ),
                               const SizedBox(height: 6),
-                              Text(
-                                _artisanServiceLabel(cachedServices),
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: colorScheme.onSurface.withOpacity(0.65),
-                                  fontWeight: FontWeight.w500,
+                              // Service label - Badge/Pill style
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.primary.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: colorScheme.primary.withOpacity(0.2),
+                                  ),
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                                child: Text(
+                                  _artisanServiceLabel(cachedServices),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              // Rating with stars
+                              Row(
+                                children: [
+                                  ...List.generate(5, (index) {
+                                    final fullStars = ratingVal.floor();
+                                    return Icon(
+                                      index < fullStars ? Icons.star : Icons.star_border,
+                                      size: 14,
+                                      color: Colors.amber,
+                                    );
+                                  }),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    ratingVal > 0 ? ratingVal.toStringAsFixed(1) : 'No rating',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: colorScheme.onSurface.withOpacity(0.65),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
@@ -2084,6 +2121,6 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
             service['categoryName'] ??
             service['name'] ??
             service['label'])?.toString();
-    return label != null && label.trim().isNotEmpty ? label : 'Service info unavailable';
+    return label != null && label.trim().isNotEmpty ? label : 'No service yet';
   }
 }

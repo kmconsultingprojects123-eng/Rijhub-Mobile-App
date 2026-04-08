@@ -4,11 +4,11 @@ export 'search_page_model.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:async';
-import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../artisan_detail_page/artisan_detail_page_widget.dart';
 import '../../services/artist_service.dart';
 import '../../api_config.dart';
+import '../../services/my_service_service.dart';
 
 class SearchPageWidget extends StatefulWidget {
   const SearchPageWidget({super.key, this.initialQuery});
@@ -548,62 +548,22 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
     }
 
     try {
-      final uri = Uri.parse('$API_BASE_URL/api/artisan-services?artisanId=$artisanId&limit=100');
-      if (kDebugMode) debugPrint('SearchPage: Fetching services from: $uri');
+      final rawServices = await ArtistService.fetchArtisanServices(artisanId);
+      final flattenedServices =
+          MyServiceService.flattenArtisanServices(rawServices);
+      final uniqueServices = flattenedServices
+          .map(_serviceLabelFromMap)
+          .where((label) => label.isNotEmpty)
+          .toSet()
+          .toList();
 
-      final response = await http.get(uri).timeout(const Duration(seconds: 8));
-
-      if (response.statusCode == 200) {
-        final body = jsonDecode(response.body);
-        if (kDebugMode) debugPrint('SearchPage: Services API response for $artisanId: ${body.toString().substring(0, min(500, body.toString().length))}');
-
-        final List<String> services = [];
-
-        // Handle different response structures
-        if (body is Map<String, dynamic>) {
-          // Case 1: Response has a 'data' field that's an array
-          if (body['data'] is List) {
-            final items = body['data'] as List;
-            for (var item in items) {
-              if (item is Map<String, dynamic>) {
-                _extractServiceNames(item, services);
-              }
-            }
-          }
-          // Case 2: Response has a 'services' field that's an array
-          else if (body['services'] is List) {
-            final items = body['services'] as List;
-            for (var item in items) {
-              if (item is Map<String, dynamic>) {
-                _extractServiceNames(item, services);
-              }
-            }
-          }
-          // Case 3: Response is a single service object
-          else {
-            _extractServiceNames(body, services);
-          }
-        }
-        // Case 4: Response is directly an array
-        else if (body is List) {
-          for (var item in body) {
-            if (item is Map<String, dynamic>) {
-              _extractServiceNames(item, services);
-            }
-          }
-        }
-
-        // Remove duplicates
-        final uniqueServices = services.toSet().toList();
-
-        // Cache the result
-        _serviceCache[artisanId] = uniqueServices;
-        if (kDebugMode) debugPrint('SearchPage: Found ${uniqueServices.length} services for artisanId=$artisanId: $uniqueServices');
-
-        return uniqueServices;
-      } else {
-        if (kDebugMode) debugPrint('SearchPage: API returned status ${response.statusCode} for artisanId=$artisanId');
+      _serviceCache[artisanId] = uniqueServices;
+      if (kDebugMode) {
+        debugPrint(
+          'SearchPage: Found ${uniqueServices.length} normalized services for artisanId=$artisanId: $uniqueServices',
+        );
       }
+      return uniqueServices;
     } catch (e) {
       if (kDebugMode) debugPrint('Error fetching artisan services: $e');
     }
@@ -613,54 +573,41 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
     return <String>[];
   }
 
-  /// Helper method to extract service names from various possible structures
-  void _extractServiceNames(Map<String, dynamic> item, List<String> services) {
-    // Try direct name fields
-    final directName = item['name'] ??
+  String _serviceLabelFromMap(Map<String, dynamic> item) {
+    final directName = item['subCategoryName'] ??
+        item['categoryName'] ??
+        item['name'] ??
         item['serviceName'] ??
         item['title'] ??
         item['service'] ??
         item['service_type'] ??
         item['category'];
 
-    if (directName != null && directName.toString().isNotEmpty) {
-      services.add(directName.toString());
-      return;
+    if (directName != null && directName.toString().trim().isNotEmpty) {
+      return directName.toString().trim();
     }
 
-    // Try nested objects
-    final nestedFields = ['subCategoryId', 'subCategory', 'subcategory', 'categoryId', 'category'];
+    final nestedFields = [
+      'subCategoryId',
+      'subCategory',
+      'subcategory',
+      'categoryId',
+      'category',
+    ];
     for (final field in nestedFields) {
       if (item[field] is Map) {
-        final nested = item[field] as Map<String, dynamic>;
-        final nestedName = nested['name'] ??
-            nested['title'] ??
-            nested['label'] ??
-            nested['service'];
-        if (nestedName != null && nestedName.toString().isNotEmpty) {
-          services.add(nestedName.toString());
-          return;
+        final nested = Map<String, dynamic>.from(
+          (item[field] as Map).cast<String, dynamic>(),
+        );
+        final nestedName =
+            nested['name'] ?? nested['title'] ?? nested['label'] ?? nested['service'];
+        if (nestedName != null && nestedName.toString().trim().isNotEmpty) {
+          return nestedName.toString().trim();
         }
       }
     }
 
-    // Try array fields
-    final arrayFields = ['services', 'items', 'list'];
-    for (final field in arrayFields) {
-      if (item[field] is List) {
-        final array = item[field] as List;
-        for (var element in array) {
-          if (element is Map<String, dynamic>) {
-            final elementName = element['name'] ??
-                element['title'] ??
-                element['service'];
-            if (elementName != null && elementName.toString().isNotEmpty) {
-              services.add(elementName.toString());
-            }
-          }
-        }
-      }
-    }
+    return '';
   }
 
   // ENHANCED Filter Chip Widget
@@ -1143,53 +1090,90 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
                   ),
                   const SizedBox(width: 16),
 
-                  // Name and rating
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          name,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: textPrimaryColor,
-                            letterSpacing: -0.3,
-                            height: 1.3,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.star_rounded,
-                              size: 16,
-                              color: const Color(0xFFF59E0B),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              rating.toStringAsFixed(1),
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: textPrimaryColor,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '($reviewCount reviews)',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: textSecondaryColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
+                   // Name and rating
+                   Expanded(
+                     child: Column(
+                       crossAxisAlignment: CrossAxisAlignment.start,
+                       children: [
+                         Text(
+                           name,
+                           style: TextStyle(
+                             fontSize: 16,
+                             fontWeight: FontWeight.w600,
+                             color: textPrimaryColor,
+                             letterSpacing: -0.3,
+                             height: 1.3,
+                           ),
+                           maxLines: 1,
+                           overflow: TextOverflow.ellipsis,
+                         ),
+                         const SizedBox(height: 6),
+                         // Service badge - show only 1 service
+                         if (services.isNotEmpty)
+                           Container(
+                             padding: const EdgeInsets.symmetric(
+                               horizontal: 12,
+                               vertical: 6,
+                             ),
+                             decoration: BoxDecoration(
+                               color: tradeBadgeColor,
+                               borderRadius: BorderRadius.circular(16),
+                               border: Border.all(
+                                 color: _primaryColor.withAlpha((0.2 * 255).round()),
+                                 width: 1,
+                               ),
+                             ),
+                             child: Text(
+                               services.first,
+                               style: TextStyle(
+                                 fontSize: 13,
+                                 fontWeight: FontWeight.w600,
+                                 color: tradeTextColor,
+                               ),
+                               maxLines: 1,
+                               overflow: TextOverflow.ellipsis,
+                             ),
+                           )
+                         else
+                           Text(
+                             'No service yet',
+                             style: TextStyle(
+                               fontSize: 13,
+                               fontWeight: FontWeight.w500,
+                               color: textSecondaryColor,
+                               fontStyle: FontStyle.italic,
+                             ),
+                           ),
+                         const SizedBox(height: 6),
+                         Row(
+                           children: [
+                             Icon(
+                               Icons.star_rounded,
+                               size: 16,
+                               color: const Color(0xFFF59E0B),
+                             ),
+                             const SizedBox(width: 6),
+                             Text(
+                               rating.toStringAsFixed(1),
+                               style: TextStyle(
+                                 fontSize: 14,
+                                 fontWeight: FontWeight.w600,
+                                 color: textPrimaryColor,
+                               ),
+                             ),
+                             const SizedBox(width: 8),
+                             Text(
+                               '($reviewCount reviews)',
+                               style: TextStyle(
+                                 fontSize: 13,
+                                 color: textSecondaryColor,
+                               ),
+                             ),
+                           ],
+                         ),
+                       ],
+                     ),
+                   ),
 
                   // Book Button
                   Container(
@@ -1229,64 +1213,30 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
 
               const SizedBox(height: 20),
 
-              // Location
-              if (location.isNotEmpty)
-                Row(
-                  children: [
-                    Icon(
-                      Icons.location_on_outlined,
-                      size: 16,
-                      color: textSecondaryColor,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        location,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: textSecondaryColor,
-                          height: 1.4,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-
-              // Services - FIXED: Now showing from API
-              if (services.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: services.take(3).map((service) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: tradeBadgeColor,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: _primaryColor.withAlpha((0.2 * 255).round()),
-                          width: 1,
-                        ),
-                      ),
-                      child: Text(
-                        service,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: tradeTextColor,
-                          letterSpacing: -0.1,
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ],
+               // Location only - services now shown in badge above
+               if (location.isNotEmpty)
+                 Row(
+                   children: [
+                     Icon(
+                       Icons.location_on_outlined,
+                       size: 16,
+                       color: textSecondaryColor,
+                     ),
+                     const SizedBox(width: 8),
+                     Expanded(
+                       child: Text(
+                         location,
+                         style: TextStyle(
+                           fontSize: 14,
+                           color: textSecondaryColor,
+                           height: 1.4,
+                         ),
+                         maxLines: 1,
+                         overflow: TextOverflow.ellipsis,
+                       ),
+                     ),
+                   ],
+                 ),
             ],
           ),
         );
