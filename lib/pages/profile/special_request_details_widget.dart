@@ -25,6 +25,9 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
   Timer? _refreshTimer;
   bool _isRefreshingRequest = false;
   bool _isActivityDialogVisible = false;
+  String? _currentUserId;
+  final Map<String, Map<String, dynamic>> _userProfileCache = {};
+  final Map<String, String> _locationCache = {};
 
   Color get primaryColor => FlutterFlowTheme.of(context).primary;
 
@@ -110,6 +113,7 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
   void initState() {
     super.initState();
     _currentRequest = Map.from(widget.request);
+    _isLoading = false;
     WidgetsBinding.instance.addPostFrameCallback((_) => _initializePage());
   }
 
@@ -202,17 +206,24 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
 
   Future<void> _initializePage() async {
     final initialRequest = Map<String, dynamic>.from(widget.request);
+    final currentUserId = await _getCurrentUserId();
+    final initialIsClient = _resolveIsClientSync(initialRequest, currentUserId);
+    if (mounted) {
+      setState(() {
+        _currentRequest = initialRequest;
+        _isClient = initialIsClient;
+      });
+    }
     final hydratedRequest = await _buildHydratedRequest(
       initialRequest,
       fetchLatest: true,
     );
-    final isClient = await _resolveIsClient(hydratedRequest);
+    final hydratedIsClient = _resolveIsClientSync(hydratedRequest, currentUserId);
 
     if (!mounted) return;
     setState(() {
       _currentRequest = hydratedRequest;
-      _isClient = isClient;
-      _isLoading = false;
+      _isClient = hydratedIsClient;
     });
     _startAutoRefresh();
   }
@@ -220,7 +231,7 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
   /// Start automatic refresh of request status (live updates)
   void _startAutoRefresh() {
     _refreshTimer?.cancel();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 20), (_) async {
       if (!mounted) {
         _refreshTimer?.cancel();
         return;
@@ -246,7 +257,10 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
     try {
       final locationStr = updated['location']?.toString();
       if (locationStr != null && locationStr.isNotEmpty) {
-        final humanReadable = await LocationService.getHumanReadableLocation(locationStr);
+        final cached = _locationCache[locationStr];
+        final humanReadable = cached ??
+            await LocationService.getHumanReadableLocation(locationStr);
+        _locationCache[locationStr] = humanReadable;
         updated['location'] = humanReadable;
       }
     } catch (_) {}
@@ -266,35 +280,54 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
     final clientId = updated['clientId']?.toString() ?? updated['client']?['id']?.toString();
     final artisanId = updated['artisanId']?.toString() ?? updated['artisan']?['id']?.toString();
 
-    if (clientId != null && clientId.isNotEmpty) {
+    Future<Map<String, dynamic>?> fetchProfile(String id) async {
+      final cached = _userProfileCache[id];
+      if (cached != null) return cached;
       try {
-        final profile = await UserService.getUserById(clientId);
+        final profile = await UserService.getUserById(id);
         if (profile != null) {
-          updated['client'] = {
-            'id': clientId,
-            'name': profile['name']?.toString() ?? profile['firstName']?.toString() ?? 'Client',
-            'profileImage': _extractProfileImageUrl(profile['profileImage']),
-          };
+          final normalized = Map<String, dynamic>.from(profile);
+          _userProfileCache[id] = normalized;
+          return normalized;
         }
       } catch (_) {}
+      return null;
+    }
+
+    final futures = await Future.wait([
+      if (clientId != null && clientId.isNotEmpty) fetchProfile(clientId),
+      if (artisanId != null && artisanId.isNotEmpty) fetchProfile(artisanId),
+    ]);
+
+    int futureIndex = 0;
+    Map<String, dynamic>? clientProfile;
+    Map<String, dynamic>? artisanProfile;
+    if (clientId != null && clientId.isNotEmpty) {
+      clientProfile = futures[futureIndex++];
+    }
+    if (artisanId != null && artisanId.isNotEmpty) {
+      artisanProfile = futures[futureIndex];
+    }
+
+    if (clientProfile != null) {
+      updated['client'] = {
+        'id': clientId,
+        'name': clientProfile['name']?.toString() ?? clientProfile['firstName']?.toString() ?? 'Client',
+        'profileImage': _extractProfileImageUrl(clientProfile['profileImage']),
+      };
     } else if (updated['client'] == null) {
       updated['client'] = {'name': 'Client', 'profileImage': null};
     }
 
-    if (artisanId != null && artisanId.isNotEmpty) {
-      try {
-        final profile = await UserService.getUserById(artisanId);
-        if (profile != null) {
-          updated['artisan'] = {
-            'id': artisanId,
-            'name': profile['name']?.toString() ?? profile['firstName']?.toString() ?? 'Artisan',
-            'profileImage': _extractProfileImageUrl(profile['profileImage']),
-            'rating': profile['rating'],
-            'artisanRating': profile['artisanRating'],
-            'avgRating': profile['avgRating'],
-          };
-        }
-      } catch (_) {}
+    if (artisanProfile != null) {
+      updated['artisan'] = {
+        'id': artisanId,
+        'name': artisanProfile['name']?.toString() ?? artisanProfile['firstName']?.toString() ?? 'Artisan',
+        'profileImage': _extractProfileImageUrl(artisanProfile['profileImage']),
+        'rating': artisanProfile['rating'],
+        'artisanRating': artisanProfile['artisanRating'],
+        'avgRating': artisanProfile['avgRating'],
+      };
     } else if (updated['artisan'] == null) {
       updated['artisan'] = {'name': 'Artisan', 'profileImage': null};
     }
@@ -535,9 +568,23 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
     }
   }
 
-  Future<bool> _resolveIsClient(Map<String, dynamic>? request) async {
+  Future<String?> _getCurrentUserId() async {
+    if (_currentUserId != null && _currentUserId!.isNotEmpty) {
+      return _currentUserId;
+    }
     try {
-      final uid = await TokenStorage.getUserId();
+      _currentUserId = await TokenStorage.getUserId();
+    } catch (_) {
+      _currentUserId = null;
+    }
+    return _currentUserId;
+  }
+
+  bool _resolveIsClientSync(
+    Map<String, dynamic>? request,
+    String? uid,
+  ) {
+    try {
       if (uid == null || uid.isEmpty || request == null) return false;
 
       String? clientId;
@@ -581,15 +628,38 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
       }
     }
 
-    updated = await _withUserProfiles(updated);
-    updated = await _withHumanReadableLocation(updated);
+    final hydrated = await Future.wait([
+      _withUserProfiles(updated),
+      _withHumanReadableLocation(updated),
+    ]);
+    updated = Map<String, dynamic>.from(updated)
+      ..addAll(hydrated[0])
+      ..addAll(hydrated[1]);
     return updated;
   }
 
   bool _requestChanged(Map<String, dynamic> next) {
     final current = _currentRequest;
     if (current == null) return true;
-    return jsonEncode(current) != jsonEncode(next);
+    for (final key in [
+      '_id',
+      'id',
+      'status',
+      'updatedAt',
+      'bookingId',
+      'paymentStatus',
+      'payment_status',
+      'location',
+      'note',
+      'artisanReply',
+      'title',
+      'serviceTitle',
+    ]) {
+      if (jsonEncode(current[key]) != jsonEncode(next[key])) {
+        return true;
+      }
+    }
+    return false;
   }
 
   void _showImageViewer(String imageUrl) {
@@ -615,7 +685,10 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
           currentRequest,
           fetchLatest: true,
         );
-        final isClient = await _resolveIsClient(refreshed);
+        final isClient = _resolveIsClientSync(
+          refreshed,
+          await _getCurrentUserId(),
+        );
         if (!mounted) {
           _currentRequest = refreshed;
           _isClient = isClient;
@@ -718,42 +791,86 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
     }
   }
 
-  void _showArtisanResponseSheet() async {
-    _showActivityDialog(
-      title: 'Loading Response',
-      message: 'Fetching the artisan response for this request.',
-      icon: Icons.visibility_outlined,
-    );
-
+  Future<void> _showArtisanResponseSheet() async {
     try {
       final requestId = _safe(_currentRequest?['_id'] ?? _currentRequest?['id']);
       if (requestId == '-') {
-        _hideActivityDialog();
         AppNotification.showError(context, 'Invalid request ID');
         return;
       }
 
       final fetchedResponse = await SpecialServiceRequestService.fetchArtisanResponse(requestId);
       if (!mounted) return;
-      _hideActivityDialog();
 
       if (fetchedResponse == null) {
         AppNotification.showError(context, 'Failed to fetch artisan response');
         return;
       }
 
-      // Handle both nested (artisanReply, note) and direct response structures
-      Map<String, dynamic> artisanReply = {};
-
-      // Try to get note field first (most likely structure)
-      if (fetchedResponse['note'] is Map) {
-        artisanReply = Map<String, dynamic>.from(fetchedResponse['note']);
-      } else if (fetchedResponse['artisanReply'] is Map) {
-        artisanReply = Map<String, dynamic>.from(fetchedResponse['artisanReply']);
-      } else {
-        // Use the entire response as fallback
-        artisanReply = fetchedResponse;
+      Map<String, dynamic>? asMap(dynamic value) {
+        if (value is Map) {
+          return Map<String, dynamic>.from(value);
+        }
+        if (value is String) {
+          final trimmed = value.trim();
+          if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+            try {
+              final decoded = jsonDecode(trimmed);
+              if (decoded is Map) {
+                return Map<String, dynamic>.from(decoded);
+              }
+            } catch (_) {}
+          }
+        }
+        return null;
       }
+
+      // Log the fetched response for debugging
+      print('Fetched artisan response: $fetchedResponse');
+
+      // Merge nested reply fields with top-level quote fields so we don't lose
+      // pricing when the backend returns `message` in `note` but quote metadata
+      // (`quote`, `quoteType`, `minQuote`, `maxQuote`, `options`) at root level.
+      Map<String, dynamic> artisanReply = {};
+      final responseArtisanReply = asMap(fetchedResponse['artisanReply']);
+      final responseNote = asMap(fetchedResponse['note']);
+      final currentArtisanReply = asMap(_currentRequest?['artisanReply']);
+      final currentNote = asMap(_currentRequest?['note']);
+
+      if (currentArtisanReply != null) artisanReply.addAll(currentArtisanReply);
+      if (currentNote != null) artisanReply.addAll(currentNote);
+      if (responseArtisanReply != null) artisanReply.addAll(responseArtisanReply);
+      if (responseNote != null) artisanReply.addAll(responseNote);
+
+      if (artisanReply.isEmpty) {
+        artisanReply = Map<String, dynamic>.from(fetchedResponse);
+      } else {
+        for (final key in [
+          'quote',
+          'quoteType',
+          'min',
+          'max',
+          'minQuote',
+          'maxQuote',
+          'options',
+          'selectedPrice',
+          'budget',
+          'minBudget',
+          'maxBudget',
+          'price',
+          'amount',
+        ]) {
+          final topLevelValue = fetchedResponse[key] ?? _currentRequest?[key];
+          if (topLevelValue != null &&
+              topLevelValue.toString().trim().isNotEmpty &&
+              artisanReply[key] == null) {
+            artisanReply[key] = topLevelValue;
+          }
+        }
+      }
+
+      // Log the extracted artisanReply
+      print('Extracted artisanReply: $artisanReply');
 
       if (artisanReply.isEmpty) {
         AppNotification.showError(context, 'No artisan response found');
@@ -766,8 +883,33 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
           : 'No additional message provided';
 
       // Determine quote type based on available fields
-      final hasFixed = artisanReply['quote'] != null;
-      final hasRange = (artisanReply['min'] != null && artisanReply['max'] != null) || artisanReply['options'] != null;
+      final fixedValue =
+          artisanReply['quote'] ??
+          artisanReply['selectedPrice'] ??
+          artisanReply['price'] ??
+          artisanReply['amount'] ??
+          (((num.tryParse((artisanReply['budget'] ?? '').toString()) ?? 0) > 0)
+              ? artisanReply['budget']
+              : null);
+      final minQuote = artisanReply['min'] ??
+          artisanReply['minQuote'] ??
+          artisanReply['minBudget'];
+      final maxQuote = artisanReply['max'] ??
+          artisanReply['maxQuote'] ??
+          artisanReply['maxBudget'];
+      final normalizedOptions = artisanReply['options'] is List
+          ? (artisanReply['options'] as List)
+          : artisanReply['priceOptions'] is List
+              ? (artisanReply['priceOptions'] as List)
+              : artisanReply['priceRange'] is List
+                  ? (artisanReply['priceRange'] as List)
+                  : null;
+      final hasFixed = fixedValue != null &&
+          (num.tryParse(fixedValue.toString()) == null ||
+              (num.tryParse(fixedValue.toString()) ?? 0) > 0);
+      final hasRange =
+          (minQuote != null && maxQuote != null) ||
+          normalizedOptions != null;
       final quoteType = artisanReply['quoteType']?.toString();
 
       final isFixed = quoteType == 'fixed' || (hasFixed && !hasRange);
@@ -778,15 +920,13 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
       int? min;
       int? max;
 
-      if (isFixed && artisanReply['quote'] != null) {
-        fixedQuote = artisanReply['quote']?.toString();
+      if (isFixed && fixedValue != null) {
+        fixedQuote = fixedValue.toString();
       } else if (isRange) {
-        final options = artisanReply['options'] as List?;
+        final options = normalizedOptions;
         if (options != null && options.isNotEmpty) {
           priceRanges = List<String>.from(options.map((o) => o.toString()));
         } else {
-          final minQuote = artisanReply['min'] ?? artisanReply['minQuote'];
-          final maxQuote = artisanReply['max'] ?? artisanReply['maxQuote'];
           if (minQuote != null && maxQuote != null) {
             min = int.tryParse(minQuote.toString());
             max = int.tryParse(maxQuote.toString());
@@ -803,21 +943,26 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
         }
       }
 
+      // Log the parsed quote information
+      print('isFixed: $isFixed, isRange: $isRange, fixedQuote: $fixedQuote, priceRanges: $priceRanges, min: $min, max: $max');
+
       await showModalBottomSheet(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
         builder: (ctx) => _ArtisanResponseSheet(
           artisanName: artisanName,
           message: message,
           isFixed: isFixed,
+          isRange: isRange,
           fixedQuote: fixedQuote,
           priceRanges: priceRanges,
           min: min,
           max: max,
           onAgreeAndPay: (int? selectedPrice) async {
-            Navigator.of(ctx).pop();
             final agree = await showDialog<bool>(
               context: context,
               builder: (c) => AlertDialog(
@@ -1036,7 +1181,6 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
             }
           },
           onCancel: () async {
-            Navigator.of(ctx).pop();
             final confirm = await showDialog<bool>(
               context: context,
               builder: (c) => AlertDialog(
@@ -1067,26 +1211,27 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
       );
     } catch (e) {
       if (mounted) {
-        _hideActivityDialog();
         AppNotification.showError(context, 'Error fetching artisan response');
       }
     }
   }
 
-  void _showArtisanResponseForm() {
-    showModalBottomSheet(
+  Future<void> _showArtisanResponseForm() async {
+    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) => _ArtisanResponseForm(
-        requestId: _safe(_currentRequest?['_id'] ?? _currentRequest?['id']),
-        primaryColor: primaryColor,
-        onSuccess: (updatedRequest) {
-          setState(() => _currentRequest = updatedRequest);
-        },
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-    );
+      builder: (ctx) => _ArtisanResponseForm(
+          requestId: _safe(_currentRequest?['_id'] ?? _currentRequest?['id']),
+          primaryColor: primaryColor,
+          onSuccess: (updatedRequest) {
+            setState(() => _currentRequest = updatedRequest);
+          },
+        ),
+      );
   }
 
   @override
@@ -1734,6 +1879,7 @@ class _ArtisanResponseSheet extends StatefulWidget {
   final String artisanName;
   final String message;
   final bool isFixed;
+  final bool isRange;
   final String? fixedQuote;
   final List<String>? priceRanges;
   final int? min;
@@ -1745,6 +1891,7 @@ class _ArtisanResponseSheet extends StatefulWidget {
     required this.artisanName,
     required this.message,
     required this.isFixed,
+    required this.isRange,
     this.fixedQuote,
     this.priceRanges,
     this.min,
@@ -1785,6 +1932,7 @@ class _ArtisanResponseSheetState extends State<_ArtisanResponseSheet> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryColor = theme.primary ?? const Color(0xFFA20025);
     final rangeOptions = _rangeOptions();
+    final hasPricing = widget.isFixed || widget.isRange;
     final effectiveMin =
         widget.min ?? (rangeOptions.isNotEmpty ? rangeOptions.reduce((a, b) => a < b ? a : b) : null);
     final effectiveMax =
@@ -1799,7 +1947,6 @@ class _ArtisanResponseSheetState extends State<_ArtisanResponseSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle
             Center(
               child: Container(
                 width: 50,
@@ -1811,7 +1958,6 @@ class _ArtisanResponseSheetState extends State<_ArtisanResponseSheet> {
                 ),
               ),
             ),
-
             // Header
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -1911,7 +2057,7 @@ class _ArtisanResponseSheetState extends State<_ArtisanResponseSheet> {
                                 ],
                               ),
                             )
-                          else if (!widget.isFixed)
+                          else if (widget.isRange)
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -1986,6 +2132,23 @@ class _ArtisanResponseSheetState extends State<_ArtisanResponseSheet> {
                                 ],
                               ],
                             ),
+                          if (!hasPricing) ...[
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surface,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: _borderColor()),
+                              ),
+                              child: Text(
+                                'No price was included in this response.',
+                                style: theme.bodyMedium?.copyWith(
+                                  color: isDark ? Colors.grey[400] : Colors.grey[700],
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -2063,27 +2226,33 @@ class _ArtisanResponseSheetState extends State<_ArtisanResponseSheet> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () {
+                      onPressed: hasPricing ? () {
                         int? selectedPrice;
                         bool isValid = false;
 
                         if (widget.isFixed && widget.fixedQuote != null && widget.fixedQuote!.isNotEmpty) {
                           selectedPrice = int.tryParse(widget.fixedQuote!);
                           isValid = selectedPrice != null;
-                        } else if (!widget.isFixed) {
+                        } else if (widget.isRange) {
                           selectedPrice = _selectedRangePrice ?? effectiveMax;
-                          isValid = true;
+                          isValid = selectedPrice != null;
                         }
 
                         if (!isValid) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Please select a valid price')),
+                            SnackBar(
+                              content: Text(
+                                hasPricing
+                                    ? 'Please select a valid price'
+                                    : 'This response has no quote to pay for yet',
+                              ),
+                            ),
                           );
                           return;
                         }
 
                         widget.onAgreeAndPay(selectedPrice);
-                      },
+                      } : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: primaryColor,
                         foregroundColor: Colors.white,
@@ -2169,17 +2338,32 @@ class _ArtisanResponseFormState extends State<_ArtisanResponseForm> {
 
     try {
       final Map<String, dynamic> noteData = {'message': message};
+      final Map<String, dynamic> artisanReply = {'message': message};
 
       if (_selectedBudgetModel == 'fixed') {
-        noteData['quote'] = int.parse(_fixedPriceController.text.trim());
+        final quote = int.parse(_fixedPriceController.text.trim());
+        noteData['quote'] = quote;
+        noteData['quoteType'] = 'fixed';
+        artisanReply['quote'] = quote;
+        artisanReply['quoteType'] = 'fixed';
       } else if (_selectedBudgetModel == 'range') {
         final min = int.parse(_minPriceController.text.trim());
         final max = int.parse(_maxPriceController.text.trim());
         noteData['min'] = min;
         noteData['max'] = max;
+        noteData['quoteType'] = 'range';
+        artisanReply['min'] = min;
+        artisanReply['max'] = max;
+        artisanReply['minQuote'] = min;
+        artisanReply['maxQuote'] = max;
+        artisanReply['quoteType'] = 'range';
       }
 
-      final Map<String, dynamic> data = {'note': noteData};
+      final Map<String, dynamic> data = {
+        'status': 'responded',
+        'note': noteData,
+        'artisanReply': artisanReply,
+      };
 
       final response = await SpecialServiceRequestService.submitArtisanResponse(widget.requestId, data);
       if (response != null && mounted) {
@@ -2220,7 +2404,6 @@ class _ArtisanResponseFormState extends State<_ArtisanResponseForm> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Handle
               Center(
                 child: Container(
                   width: 50,
@@ -2232,7 +2415,6 @@ class _ArtisanResponseFormState extends State<_ArtisanResponseForm> {
                   ),
                 ),
               ),
-
               // Header
               Row(
                 children: [

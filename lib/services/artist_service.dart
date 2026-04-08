@@ -1670,25 +1670,43 @@ class ArtistService {
     return null;
   }
 
-  /// Fetch artisan services for a specific artisan by userId.
+  /// Fetch artisan services for a specific artisan.
+  /// Endpoint: GET /api/artisan-services/artisan/:artisanId
+  /// Accepts either Artisan._id or User._id
   static Future<List<Map<String, dynamic>>> fetchArtisanServices(
-      String artisanUserId,
+      String artisanId,
       {String? token}) async {
+    if (artisanId.isEmpty) return [];
+
     try {
-      // Fetch the artisan profile which includes services
-      final artisanProfile = await getByUserId(artisanUserId);
-      if (artisanProfile != null && artisanProfile.containsKey('services')) {
-        final services = artisanProfile['services'];
-        if (services is List) {
-          return List<Map<String, dynamic>>.from(
-              services.map((e) => Map<String, dynamic>.from(e)));
+      final headers = <String, String>{'Content-Type': 'application/json'};
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+
+      final uri = Uri.parse('$API_BASE_URL/api/artisan-services/artisan/$artisanId');
+
+      final resp = await ApiClient.get(uri.toString(), headers: headers);
+      if (resp['status'] is int &&
+          resp['status'] >= 200 &&
+          resp['status'] < 300) {
+        dynamic body = resp['json'] ??
+            (resp['body'] != null ? jsonDecode(resp['body']) : null);
+
+        // Handle different response shapes
+        if (body is Map && body['success'] == true && body['data'] is List) {
+          return (body['data'] as List)
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+        } else if (body is List) {
+          return body.map((e) => Map<String, dynamic>.from(e)).toList();
         }
       }
     } catch (e) {
-      debugPrint('Failed to fetch artisan services: $e');
+      debugPrint('Failed to fetch artisan services for $artisanId: $e');
     }
 
-    // Fallback: return empty list if profile not found or no services
+    // Fallback: return empty list if services not found
     return [];
   }
 
