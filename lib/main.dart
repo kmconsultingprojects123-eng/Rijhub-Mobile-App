@@ -626,14 +626,39 @@ class _NavBarPageState extends State<NavBarPage> {
     }
     final MediaQueryData queryData = MediaQuery.of(context);
 
-    // Icon mapping for the bottom nav. Keep keys in sync with `tabs` above.
+    // Responsive sizing calculations based on screen dimensions
+    final screenSize = queryData.size;
+    final screenHeight = screenSize.height;
+    final screenWidth = screenSize.width;
+
+    // Calculate responsive dimensions
+    final isSmallScreen = screenHeight < 600 || screenWidth < 360;
+    final isLargeScreen = screenHeight > 900 || screenWidth > 480;
+
+    // Responsive navbar height (48-72px range)
+    final navbarHeight = isSmallScreen ? 48.0 : (isLargeScreen ? 72.0 : 60.0);
+
+    // Responsive icon size (18-24px range)
+    final iconSize = isSmallScreen ? 18.0 : (isLargeScreen ? 24.0 : 20.0);
+
+    // Responsive text size (10-13px range)
+    final textSize = isSmallScreen ? 10.0 : (isLargeScreen ? 13.0 : 11.0);
+
+    // Responsive padding (6-12px range)
+    final verticalPadding = isSmallScreen ? 6.0 : (isLargeScreen ? 12.0 : 8.0);
+    final iconPadding = isSmallScreen ? 6.0 : (isLargeScreen ? 10.0 : 8.0);
+
+    // Responsive spacing between icon and text (4-8px range)
+    final iconTextSpacing = isSmallScreen ? 4.0 : (isLargeScreen ? 8.0 : 5.0);
+
+    // Icon mapping for the bottom nav - all solid/filled icons. Keep keys in sync with `tabs` above.
     final iconMap = <String, IconData>{
-      'homePage': FontAwesomeIcons.house,
-      'JobPostPage': FontAwesomeIcons.briefcase,
-      'BookingPage': Icons.book,
-      'profile': FontAwesomeIcons.solidCircleUser,
+      'homePage': FontAwesomeIcons.solidHouse,
+      'JobPostPage': FontAwesomeIcons.solidClipboard,
+      'BookingPage': FontAwesomeIcons.solidCalendarDays,
+      'profile': FontAwesomeIcons.solidUser,
     };
-    if (shouldShowDiscover) iconMap['DiscoverPage'] = Icons.pin_drop_rounded;
+    if (shouldShowDiscover) iconMap['DiscoverPage'] = FontAwesomeIcons.solidCompass;
 
     // Determine whether current cached profile represents a guest so we can dim restricted tabs visually
     final bool isGuestNow = (() {
@@ -683,19 +708,43 @@ class _NavBarPageState extends State<NavBarPage> {
 
       return FloatingNavbarItem(
         customWidget: Column(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              iconData ?? Icons.circle,
-              color: iconColor,
-              size: 20.0,
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: EdgeInsets.all(iconPadding),
+              decoration: BoxDecoration(
+                color: currentIndex == idx
+                    ? FlutterFlowTheme.of(context).primary.withValues(alpha: 0.2)
+                    : Colors.transparent,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                iconData ?? Icons.circle,
+                color: currentIndex == idx
+                    ? FlutterFlowTheme.of(context).primary
+                    : (disabledForGuest
+                        ? Color.lerp(FlutterFlowTheme.of(context).secondaryText,
+                                Colors.transparent, 0.55) ??
+                            FlutterFlowTheme.of(context).secondaryText
+                        : FlutterFlowTheme.of(context).secondaryText),
+                size: iconSize,
+              ),
             ),
+            SizedBox(height: iconTextSpacing),
             Text(
               label,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: labelColor,
-                fontSize: 11.0,
+                color: currentIndex == idx
+                    ? FlutterFlowTheme.of(context).primary
+                    : (disabledForGuest
+                        ? Color.lerp(FlutterFlowTheme.of(context).secondaryText,
+                                Colors.transparent, 0.55) ??
+                            FlutterFlowTheme.of(context).secondaryText
+                        : FlutterFlowTheme.of(context).secondaryText),
+                fontSize: textSize,
               ),
             ),
           ],
@@ -714,7 +763,6 @@ class _NavBarPageState extends State<NavBarPage> {
             .removeViewPadding(removeBottom: true),
         child: _currentPage ?? tabs[_currentPageName] ?? tabs.values.first,
       ),
-      extendBody: true,
       bottomNavigationBar: Visibility(
         // Hide nav on desktop or when we have fewer than 2 tabs (avoids assertion),
         // and also hide if this NavBarPage is nested inside another NavBarPage to
@@ -727,67 +775,90 @@ class _NavBarPageState extends State<NavBarPage> {
             !_isNestedNavBar,
         child: Container(
           color: FlutterFlowTheme.of(context).secondaryBackground,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              FloatingNavbar(
-                currentIndex: currentIndex,
-                onTap: (i) async {
-                  // Handle taps asynchronously because we may need to check guest session and prompt sign-in
-                  final key = tabs.keys.toList()[i];
-                  final restrictedKeysForGuests = [
-                    'JobPostPage',
-                    'BookingPage',
-                    'profile'
-                  ];
-                  final guest = await isGuestSession();
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: FlutterFlowTheme.of(context).secondaryBackground,
+                    border: Border(
+                      top: BorderSide(
+                        color: FlutterFlowTheme.of(context).primaryBackground.withValues(alpha: 0.1),
+                        width: 1.0,
+                      ),
+                    ),
+                  ),
+                  padding: EdgeInsets.symmetric(vertical: verticalPadding),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: navItems.asMap().entries.map((entry) {
+                      final idx = entry.key;
+                      final item = entry.value;
+                      final isActive = currentIndex == idx;
 
-                  if (guest && restrictedKeysForGuests.contains(key)) {
-                    // For guests: show the themed guest prompt (immediately on tap) and respect choice
-                    final res = await _showGuestPrompt();
-                    if (res == true) {
-                      try {
-                        NavigationUtils.safePush(
-                            context, const LoginAccountWidget());
-                      } catch (_) {}
-                    }
-                    return;
-                  }
+                      return Expanded(
+                        child: InkWell(
+                          onTap: () async {
+                            // Handle taps asynchronously because we may need to check guest session and prompt sign-in
+                            final key = tabs.keys.toList()[idx];
+                            final restrictedKeysForGuests = [
+                              'JobPostPage',
+                              'BookingPage',
+                              'profile'
+                            ];
+                            final guest = await isGuestSession();
 
-                  // Not a guest or allowed: proceed to change tab
-                  safeSetState(() {
-                    _currentPage = null;
-                    // If user taps Home and is an artisan, ensure we show the artisan dashboard
-                    if (key == 'homePage' && isArtisan) {
-                      _currentPageName = 'homePage';
-                      _currentPage = ArtisanDashboardPageWidget();
-                    } else {
-                      // Final guard: ensure the tapped key exists in the computed tabs.
-                      if (tabs.containsKey(key)) {
-                        _currentPageName = key;
-                      } else {
-                        // Fallback to first allowed tab.
-                        _currentPageName = tabs.keys.first;
-                      }
-                    }
-                  });
-                },
-                backgroundColor:
-                    FlutterFlowTheme.of(context).secondaryBackground,
-                selectedItemColor: FlutterFlowTheme.of(context).primary,
-                unselectedItemColor: FlutterFlowTheme.of(context).secondaryText,
-                selectedBackgroundColor: const Color(0x00000000),
-                borderRadius: 0.0,
-                itemBorderRadius: 0.0,
-                margin: const EdgeInsets.all(0.0),
-                padding:
-                    const EdgeInsetsDirectional.fromSTEB(0.0, 10.0, 0.0, 0.0),
-                width: double.infinity,
-                elevation: 0.0,
-                items: navItems,
-              ),
-              SizedBox(height: math.max(12.0, queryData.padding.bottom)),
-            ],
+                            if (guest && restrictedKeysForGuests.contains(key)) {
+                              // For guests: show the themed guest prompt (immediately on tap) and respect choice
+                              final res = await _showGuestPrompt();
+                              if (res == true) {
+                                try {
+                                  NavigationUtils.safePush(
+                                      context, const LoginAccountWidget());
+                                } catch (_) {}
+                              }
+                              return;
+                            }
+
+                            // Not a guest or allowed: proceed to change tab
+                            safeSetState(() {
+                              _currentPage = null;
+                              // If user taps Home and is an artisan, ensure we show the artisan dashboard
+                              if (key == 'homePage' && isArtisan) {
+                                _currentPageName = 'homePage';
+                                _currentPage = ArtisanDashboardPageWidget();
+                              } else {
+                                // Final guard: ensure the tapped key exists in the computed tabs.
+                                if (tabs.containsKey(key)) {
+                                  _currentPageName = key;
+                                } else {
+                                  // Fallback to first allowed tab.
+                                  _currentPageName = tabs.keys.first;
+                                }
+                              }
+                            });
+                          },
+                          child: SizedBox(
+                            height: navbarHeight,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Center(
+                                  child: item.customWidget ?? const SizedBox.shrink(),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -3,12 +3,10 @@ import '/flutter_flow/flutter_flow_util.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'notification_page_model.dart';
+import 'notification_detail_page.dart';
+import '../../models/notification_model.dart';
 import '../../services/notification_service.dart' as ServiceNotif;
 import '../../state/app_state_notifier.dart';
-import '../job_details_page/job_details_page_widget.dart';
-import '../message_client/message_client_widget.dart';
-import '../profile/special_request_details_widget.dart';
-import '../../services/special_service_request_service.dart';
 import '../../utils/navigation_utils.dart';
 import '../../utils/app_notification.dart';
 export 'notification_page_model.dart';
@@ -29,48 +27,41 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
   bool _loadingNotifications = true;
-  List<dynamic> _notifications = [];
+  List<NotificationItem> _notifications = [];
   int _page = 1;
   final int _perPage = 20;
   bool _hasMore = true;
   bool _loadingMore = false;
   final ScrollController _scrollController = ScrollController();
+  String _selectedFilter = 'all';
+  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
+  bool _hasLoadError = false;
 
   Future<void> _loadNotifications() async {
-    setState(() => _loadingNotifications = true);
+    setState(() {
+      _loadingNotifications = true;
+      _hasLoadError = false;
+      _page = 1;
+    });
     try {
       final resp = await ServiceNotif.NotificationService.fetchNotifications(
           page: 1, perPage: 50);
-      List<dynamic> items = [];
-      if (resp == null) {
-        items = [];
-      } else if (resp is Map) {
-        if (resp.containsKey('data') && resp['data'] is List)
-          items = resp['data'];
-        else if (resp.containsKey('notifications') &&
-            resp['notifications'] is List)
-          items = resp['notifications'];
-        else if (resp.containsKey('items') && resp['items'] is List)
-          items = resp['items'];
-        else {
-          final listVal =
-              resp.values.firstWhere((v) => v is List, orElse: () => null);
-          if (listVal is List) items = listVal;
-        }
-      } else if (resp is List) {
-        items = resp;
-      }
+
+      final notificationResponse = NotificationResponse.fromJson(resp, 1, 50);
 
       if (!mounted) return;
       setState(() {
-        _notifications = items;
+        _notifications = notificationResponse.notifications;
         _loadingNotifications = false;
+        _hasLoadError = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _notifications = [];
         _loadingNotifications = false;
+        _hasLoadError = true;
       });
     }
   }
@@ -104,6 +95,7 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _searchController.dispose();
     _model.dispose();
     super.dispose();
   }
@@ -115,122 +107,50 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
       final nextPage = _page + 1;
       final resp = await ServiceNotif.NotificationService.fetchNotifications(
           page: nextPage, perPage: _perPage);
-      List<dynamic> items = [];
-      if (resp == null)
-        items = [];
-      else if (resp is Map) {
-        if (resp.containsKey('data') && resp['data'] is List)
-          items = resp['data'];
-        else if (resp.containsKey('notifications') &&
-            resp['notifications'] is List)
-          items = resp['notifications'];
-        else if (resp.containsKey('items') && resp['items'] is List)
-          items = resp['items'];
-        else {
-          final listVal =
-              resp.values.firstWhere((v) => v is List, orElse: () => null);
-          if (listVal is List) items = listVal;
-        }
-      } else if (resp is List) items = resp;
+
+      final notificationResponse = NotificationResponse.fromJson(resp, nextPage, _perPage);
 
       if (!mounted) return;
       setState(() {
-        _notifications.addAll(items);
+        _notifications.addAll(notificationResponse.notifications);
         _page = nextPage;
-        _hasMore = items.length >= _perPage;
+        _hasMore = notificationResponse.hasMore;
         _loadingMore = false;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() => _loadingMore = false);
     }
   }
 
-  Future<void> _handleNotificationTap(dynamic n) async {
-    try {
-      final payload = n['payload'] is Map
-          ? Map<String, dynamic>.from(n['payload'])
-          : (n['data'] is Map
-              ? Map<String, dynamic>.from(n['data'])
-              : <String, dynamic>{});
-      final type = n['type']?.toString() ?? payload['type']?.toString();
-      final requestId = n['requestId']?.toString() ??
-          payload['requestId']?.toString() ??
-          payload['specialServiceRequestId']?.toString();
-      final jobId = n['jobId'] ?? n['job'] ?? n['data']?['jobId'];
-      final bookingId = n['bookingId'] ?? n['data']?['bookingId'];
-      // Extract possible thread/chat id from the notification payload
-      String? threadId = n['threadId'] ?? n['data']?['threadId'];
-      try {
-        threadId ??= n['data']?['thread']?.toString();
-      } catch (_) {}
-      try {
-        threadId ??= n['data']?['chat']?['_id']?.toString() ??
-            n['data']?['chat']?['id']?.toString();
-      } catch (_) {}
-      final url = n['url'] ?? n['link'] ?? n['data']?['url'];
+  /// Get filtered and searched notifications
+  List<NotificationItem> _getFilteredNotifications() {
+    List<NotificationItem> filtered = _notifications;
 
-      if (type == 'special_request' &&
-          requestId != null &&
-          requestId.isNotEmpty) {
-        final request = await SpecialServiceRequestService.fetchById(requestId);
-        if (request != null && mounted) {
-          await Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => SpecialRequestDetailsWidget(request: request),
-            ),
-          );
-          return;
-        }
-      }
+    // Apply filter
+    if (_selectedFilter != 'all') {
+      filtered = filtered.where((n) => n.type == _selectedFilter).toList();
+    }
 
-      if (jobId != null) {
-        final job = await ServiceNotif.NotificationService.fetchJobById(
-            jobId.toString());
-        if (job != null) {
-          try {
-            await NavigationUtils.safePushRoute(
-                context, JobDetailsPageWidget.routePath,
-                extra: {'job': job});
-            return;
-          } catch (_) {}
-        }
-      }
+    // Apply search
+    if (_searchQuery.isNotEmpty) {
+      filtered = filtered
+          .where((n) =>
+              n.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+              n.message.toLowerCase().contains(_searchQuery.toLowerCase()))
+          .toList();
+    }
 
-      if (bookingId != null || threadId != null) {
-        final bId = bookingId?.toString() ?? n['data']?['booking']?.toString();
-        try {
-          await NavigationUtils.safePush(
-              context,
-              MessageClientWidget(
-                bookingId: bId,
-                threadId: threadId?.toString(),
-                jobTitle: n['title']?.toString(),
-                bookingPrice: n['amount']?.toString(),
-                bookingDateTime: n['createdAt']?.toString(),
-              ));
-          return;
-        } catch (_) {}
-      }
-
-      if (url != null && url.toString().isNotEmpty) {
-        await launchURL(url.toString());
-        return;
-      }
-
-      AppNotification.showInfo(
-          context, n['message']?.toString() ?? 'Opened notification');
-    } catch (e) {}
+    return filtered;
   }
 
-  String dateTimeAgo(DateTime dt) {
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-    if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    if (diff.inDays < 7) return '${diff.inDays}d ago';
-    return '${dt.day}/${dt.month}/${dt.year}';
+  /// Get available filter types from current notifications
+  List<String> _getAvailableFilters() {
+    final types = <String>{};
+    for (final notification in _notifications) {
+      types.add(notification.type);
+    }
+    return ['all', ...types.toList()..sort()];
   }
 
   IconData _getNotificationIcon(String type) {
@@ -272,7 +192,6 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
       case 'order':
         return Colors.green;
       case 'message':
-        // Use app primary instead of default blue
         return theme.colorScheme.primary;
       case 'booking':
         return Colors.purple;
@@ -292,6 +211,7 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
+    final filteredNotifications = _getFilteredNotifications();
 
     return Scaffold(
       key: scaffoldKey,
@@ -324,7 +244,7 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
                   Text(
                     'Notifications',
                     style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w600,
                       fontSize: 18,
                     ),
                   ),
@@ -342,6 +262,11 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
                           AppStateNotifier.instance.setUnreadNotifications(0);
                           AppNotification.showSuccess(
                               context, 'All notifications marked as read');
+                          setState(() {
+                            _notifications = _notifications
+                                .map((n) => n.copyWith(isRead: true))
+                                .toList();
+                          });
                         }
                       } catch (_) {}
                     },
@@ -350,11 +275,106 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
               ),
             ),
 
+            // Search Bar
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              child: TextField(
+                controller: _searchController,
+                onChanged: (value) {
+                  setState(() => _searchQuery = value);
+                },
+                decoration: InputDecoration(
+                  hintText: 'Search notifications...',
+                  hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface.withOpacity(0.5),
+                  ),
+                  prefixIcon: Icon(
+                    Icons.search_rounded,
+                    color: colorScheme.onSurface.withOpacity(0.5),
+                  ),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(
+                            Icons.close_rounded,
+                            color: colorScheme.onSurface.withOpacity(0.5),
+                          ),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _searchQuery = '');
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: colorScheme.surface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: colorScheme.onSurface.withOpacity(0.1),
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: colorScheme.onSurface.withOpacity(0.1),
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+
+            // Filter Chips
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: _getAvailableFilters()
+                    .map((filter) {
+                      final isSelected = _selectedFilter == filter;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: FilterChip(
+                          label: Text(
+                            filter == 'all'
+                                ? 'All'
+                                : filter.replaceAll('_', ' '),
+                          ),
+                          selected: isSelected,
+                          onSelected: (selected) {
+                            setState(() => _selectedFilter = filter);
+                          },
+                          backgroundColor: colorScheme.surface,
+                          selectedColor: colorScheme.primary.withOpacity(0.2),
+                          side: BorderSide(
+                            color: isSelected
+                                ? colorScheme.primary
+                                : colorScheme.onSurface.withOpacity(0.2),
+                          ),
+                          labelStyle: theme.textTheme.labelSmall?.copyWith(
+                            color: isSelected
+                                ? colorScheme.primary
+                                : colorScheme.onSurface.withOpacity(0.7),
+                            fontWeight:
+                                isSelected ? FontWeight.w600 : FontWeight.w500,
+                          ),
+                        ),
+                      );
+                    })
+                    .toList(),
+              ),
+            ),
+            const SizedBox(height: 12),
+
             // Notifications List
             Expanded(
               child: _loadingNotifications && _notifications.isEmpty
                   ? ListView.builder(
-                      // Add top padding so first card sits below the header
                       padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
                       itemCount: 6,
                       itemBuilder: (context, index) {
@@ -364,29 +384,30 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
                         );
                       },
                     )
-                  : _notifications.isEmpty
+                  : _hasLoadError
                       ? Center(
                           child: Padding(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 24.0),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24.0,
+                            ),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  Icons.notifications_none_rounded,
+                                  Icons.error_outline_rounded,
                                   size: 64,
-                                  color: colorScheme.onSurface.withOpacity(0.3),
+                                  color: colorScheme.error.withOpacity(0.5),
                                 ),
                                 const SizedBox(height: 16),
                                 Text(
-                                  'No notifications',
+                                  'Failed to load notifications',
                                   style: theme.textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w500,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  'Your notifications will appear here',
+                                  'Please check your connection and try again',
                                   textAlign: TextAlign.center,
                                   style: theme.textTheme.bodyMedium?.copyWith(
                                     color:
@@ -407,8 +428,8 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                   ),
-                                  child: Text(
-                                    'Refresh',
+                                  child: const Text(
+                                    'Retry',
                                     style: TextStyle(
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -418,36 +439,109 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
                             ),
                           ),
                         )
-                      : RefreshIndicator(
-                          onRefresh: _loadNotifications,
-                          color: colorScheme.primary,
-                          child: ListView.builder(
-                            controller: _scrollController,
-                            // Add top padding so first card sits below the header
-                            padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-                            itemCount:
-                                _notifications.length + (_hasMore ? 1 : 0),
-                            itemBuilder: (context, index) {
-                              if (index >= _notifications.length) {
-                                return _loadingMore
-                                    ? Padding(
-                                        padding: const EdgeInsets.all(16.0),
-                                        child: Center(
-                                          child: CircularProgressIndicator(
-                                            color: colorScheme.primary,
+                      : filteredNotifications.isEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24.0,
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.notifications_none_rounded,
+                                      size: 64,
+                                      color: colorScheme.onSurface
+                                          .withOpacity(0.3),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      _searchQuery.isNotEmpty
+                                          ? 'No matching notifications'
+                                          : 'No notifications',
+                                      style:
+                                          theme.textTheme.titleMedium?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      _searchQuery.isNotEmpty
+                                          ? 'Try a different search term'
+                                          : 'Your notifications will appear here',
+                                      textAlign: TextAlign.center,
+                                      style:
+                                          theme.textTheme.bodyMedium?.copyWith(
+                                        color: colorScheme.onSurface
+                                            .withOpacity(0.6),
+                                      ),
+                                    ),
+                                    if (_searchQuery.isNotEmpty) ...[
+                                      const SizedBox(height: 24),
+                                      ElevatedButton(
+                                        onPressed: () {
+                                          _searchController.clear();
+                                          setState(() => _searchQuery = '');
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              colorScheme.primary,
+                                          foregroundColor:
+                                              colorScheme.onPrimary,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 32,
+                                            vertical: 12,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
                                           ),
                                         ),
-                                      )
-                                    : const SizedBox();
-                              }
-                              final notification = _notifications[index];
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 12.0),
-                                child: _buildNotificationCard(notification),
-                              );
-                            },
-                          ),
-                        ),
+                                        child: const Text(
+                                          'Clear Search',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            )
+                          : RefreshIndicator(
+                              onRefresh: _loadNotifications,
+                              color: colorScheme.primary,
+                              child: ListView.builder(
+                                controller: _scrollController,
+                                padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                                itemCount: filteredNotifications.length +
+                                    (_hasMore ? 1 : 0),
+                                itemBuilder: (context, index) {
+                                  if (index >= filteredNotifications.length) {
+                                    return _loadingMore
+                                        ? Padding(
+                                            padding:
+                                                const EdgeInsets.all(16.0),
+                                            child: Center(
+                                              child:
+                                                  CircularProgressIndicator(
+                                                color: colorScheme.primary,
+                                              ),
+                                            ),
+                                          )
+                                        : const SizedBox();
+                                  }
+                                  final notification =
+                                      filteredNotifications[index];
+                                  return Padding(
+                                    padding:
+                                        const EdgeInsets.only(bottom: 12.0),
+                                    child: _buildNotificationCard(notification),
+                                  );
+                                },
+                              ),
+                            ),
             ),
           ],
         ),
@@ -529,38 +623,83 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
     );
   }
 
-  Widget _buildNotificationCard(dynamic notification) {
+  Widget _buildNotificationCard(NotificationItem notification) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    final title = notification['title'] ?? 'Notification';
-    final payload = notification['payload'] is Map
-        ? Map<String, dynamic>.from(notification['payload'])
-        : (notification['data'] is Map
-            ? Map<String, dynamic>.from(notification['data'])
-            : <String, dynamic>{});
-    final message = notification['message'] ?? notification['body'] ?? '';
-    final type = notification['type'] ?? payload['type'] ?? 'default';
-    final createdAt = notification['createdAt'] != null
-        ? DateTime.tryParse(notification['createdAt']) ?? DateTime.now()
-        : DateTime.now();
-    final isRead = notification['read'] ?? false;
-
-    final icon = _getNotificationIcon(type);
-    final iconColor = _getNotificationColor(type, context);
+    final icon = _getNotificationIcon(notification.type);
+    final iconColor = _getNotificationColor(notification.type, context);
 
     return InkWell(
-      onTap: () => _handleNotificationTap(notification),
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => NotificationDetailPage(
+              notification: notification,
+            ),
+          ),
+        );
+      },
+      onLongPress: () {
+        // Show swipe-to-delete option via context menu
+        showModalBottomSheet(
+          context: context,
+          builder: (context) => Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: Icon(Icons.check_rounded, color: Colors.green),
+                  title: Text('Mark as Read'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    setState(() {
+                      final index = _notifications.indexOf(notification);
+                      if (index != -1) {
+                        _notifications[index] =
+                            notification.copyWith(isRead: true);
+                      }
+                    });
+                  },
+                ),
+                ListTile(
+                  leading:
+                      Icon(Icons.delete_outline_rounded, color: Colors.red),
+                  title: Text('Delete'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    setState(() {
+                      _notifications.removeWhere((n) => n.id == notification.id);
+                    });
+                    AppNotification.showSuccess(
+                      context,
+                      'Notification deleted',
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
       borderRadius: BorderRadius.circular(16),
       child: Container(
         width: double.infinity,
         decoration: BoxDecoration(
-          color: isRead
+          color: notification.isRead
               ? colorScheme.surface
               : colorScheme.primary.withOpacity(0.05),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isRead
+            color: notification.isRead
                 ? colorScheme.onSurface.withOpacity(0.1)
                 : colorScheme.primary.withOpacity(0.2),
             width: 1,
@@ -595,10 +734,10 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
                       children: [
                         Expanded(
                           child: Text(
-                            title,
+                            notification.title,
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w600,
-                              color: isRead
+                              color: notification.isRead
                                   ? colorScheme.onSurface.withOpacity(0.9)
                                   : colorScheme.onSurface,
                             ),
@@ -608,7 +747,7 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          dateTimeAgo(createdAt),
+                          _dateTimeAgo(notification.createdAt),
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: colorScheme.onSurface.withOpacity(0.5),
                           ),
@@ -617,14 +756,14 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      message,
+                      notification.message,
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: colorScheme.onSurface.withOpacity(0.7),
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    if (!isRead) ...[
+                    if (!notification.isRead) ...[
                       const SizedBox(height: 8),
                       Container(
                         width: 8,
@@ -643,5 +782,15 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
         ),
       ),
     );
+  }
+
+  String _dateTimeAgo(DateTime dt) {
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${dt.day}/${dt.month}/${dt.year}';
   }
 }

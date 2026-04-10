@@ -240,9 +240,9 @@ class _SpecialServiceRequestPageWidgetState
                       child: Text(
                         'Select Service',
                         style:
-                            Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
+                        Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                     IconButton(
@@ -276,77 +276,77 @@ class _SpecialServiceRequestPageWidgetState
                 child: _isLoadingCategories
                     ? const Center(child: CircularProgressIndicator())
                     : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: _artisanServices.length,
-                        itemBuilder: (context, index) {
-                          final category = _artisanServices[index];
-                          final isSelected = _selectedCategory == category;
-                          return GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _selectedCategory = category;
-                              });
-                              Navigator.pop(context);
-                            },
-                            child: Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: _artisanServices.length,
+                  itemBuilder: (context, index) {
+                    final category = _artisanServices[index];
+                    final isSelected = _selectedCategory == category;
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _selectedCategory = category;
+                        });
+                        Navigator.pop(context);
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? primaryColor.withOpacity(0.1)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isSelected
+                                ? primaryColor
+                                : Colors.grey.withOpacity(0.2),
+                            width: isSelected ? 1.5 : 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
                               decoration: BoxDecoration(
-                                color: isSelected
-                                    ? primaryColor.withOpacity(0.1)
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: isSelected
-                                      ? primaryColor
-                                      : Colors.grey.withOpacity(0.2),
-                                  width: isSelected ? 1.5 : 1,
-                                ),
+                                color: primaryColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(10),
                               ),
-                              child: Row(
+                              child: Icon(
+                                Icons.category_outlined,
+                                color: primaryColor,
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment:
+                                CrossAxisAlignment.start,
                                 children: [
-                                  Container(
-                                    width: 40,
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                      color: primaryColor.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Icon(
-                                      Icons.category_outlined,
-                                      color: primaryColor,
-                                      size: 20,
+                                  Text(
+                                    '${category['subCategoryName'] ?? 'Unknown'}',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                      fontWeight: isSelected
+                                          ? FontWeight.w600
+                                          : FontWeight.normal,
                                     ),
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          '${category['subCategoryName'] ?? 'Unknown'}',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodyMedium
-                                              ?.copyWith(
-                                                fontWeight: isSelected
-                                                    ? FontWeight.w600
-                                                    : FontWeight.normal,
-                                              ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (isSelected)
-                                    Icon(Icons.check_circle,
-                                        color: primaryColor, size: 20),
                                 ],
                               ),
                             ),
-                          );
-                        },
+                            if (isSelected)
+                              Icon(Icons.check_circle,
+                                  color: primaryColor, size: 20),
+                          ],
+                        ),
                       ),
+                    );
+                  },
+                ),
               ),
             ],
           ),
@@ -413,7 +413,7 @@ class _SpecialServiceRequestPageWidgetState
     setState(() => _isGettingLocation = true);
 
     final hasPermission =
-        await LocationPermissionService.ensureLocationPermissions(context);
+    await LocationPermissionService.ensureLocationPermissions(context);
     if (!hasPermission) {
       setState(() => _isGettingLocation = false);
       return;
@@ -434,7 +434,7 @@ class _SpecialServiceRequestPageWidgetState
           final url = Uri.parse(
               'https://maps.googleapis.com/maps/api/geocode/json?latlng=${position.latitude},${position.longitude}&key=$key');
           final response =
-              await http.get(url).timeout(const Duration(seconds: 10));
+          await http.get(url).timeout(const Duration(seconds: 10));
 
           if (response.statusCode == 200 && response.body.isNotEmpty) {
             final body = jsonDecode(response.body);
@@ -640,7 +640,7 @@ class _SpecialServiceRequestPageWidgetState
       }
       if (_selectedTime != null) {
         payload['time'] =
-            '${_selectedTime!.hour.toString().padLeft(2, '0')}:${_selectedTime!.minute.toString().padLeft(2, '0')}';
+        '${_selectedTime!.hour.toString().padLeft(2, '0')}:${_selectedTime!.minute.toString().padLeft(2, '0')}';
       }
 
       // Log the complete payload with images for debugging
@@ -664,20 +664,20 @@ class _SpecialServiceRequestPageWidgetState
 
       // Use multipart when images are present so the backend stores them as attachments.
       final created = await (_selectedImages.isNotEmpty
-              ? SpecialServiceRequestService.createWithFiles(
-                  payload, _selectedImages)
-              : SpecialServiceRequestService.create(payload))
+          ? SpecialServiceRequestService.createWithFiles(
+          payload, _selectedImages)
+          : SpecialServiceRequestService.create(payload))
           .timeout(
         const Duration(seconds: 30),
         onTimeout: () =>
-            throw TimeoutException('Request took too long to complete'),
+        throw TimeoutException('Request took too long to complete'),
       );
 
       // Best-effort: create a server-side notification record for the artisan.
       try {
         final clientName = await TokenStorage.getUserName();
         final createdMap =
-            created != null ? Map<String, dynamic>.from(created) : null;
+        created != null ? Map<String, dynamic>.from(created) : null;
         final requestId = createdMap?['_id']?.toString() ??
             createdMap?['id']?.toString() ??
             '';
@@ -1096,13 +1096,13 @@ class _SpecialServiceRequestPageWidgetState
                                     child: ClipOval(
                                       child: imageUrl != null
                                           ? Image.network(imageUrl,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (c, e, s) => Icon(
-                                                  Icons.person_outline,
-                                                  color: primaryColor,
-                                                  size: 36))
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (c, e, s) => Icon(
+                                              Icons.person_outline,
+                                              color: primaryColor,
+                                              size: 36))
                                           : Icon(Icons.person_outline,
-                                              color: primaryColor, size: 36),
+                                          color: primaryColor, size: 36),
                                     ),
                                   ),
                                   if (_isVerifiedArtisan(eff))
@@ -1142,7 +1142,7 @@ class _SpecialServiceRequestPageWidgetState
                                               .textTheme
                                               .titleMedium
                                               ?.copyWith(
-                                                  fontWeight: FontWeight.w700),
+                                              fontWeight: FontWeight.w700),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                         ),
@@ -1188,15 +1188,15 @@ class _SpecialServiceRequestPageWidgetState
                                               color: primaryColor
                                                   .withOpacity(0.12),
                                               borderRadius:
-                                                  BorderRadius.circular(12)),
+                                              BorderRadius.circular(12)),
                                           child: Text(s,
                                               style: Theme.of(context)
                                                   .textTheme
                                                   .bodySmall
                                                   ?.copyWith(
-                                                      color: primaryColor,
-                                                      fontWeight:
-                                                          FontWeight.w600)),
+                                                  color: primaryColor,
+                                                  fontWeight:
+                                                  FontWeight.w600)),
                                         ),
                                       if (services.length > 3)
                                         Container(
@@ -1204,9 +1204,9 @@ class _SpecialServiceRequestPageWidgetState
                                               horizontal: 8, vertical: 4),
                                           decoration: BoxDecoration(
                                               color:
-                                                  primaryColor.withOpacity(0.2),
+                                              primaryColor.withOpacity(0.2),
                                               borderRadius:
-                                                  BorderRadius.circular(12),
+                                              BorderRadius.circular(12),
                                               border: Border.all(
                                                   color: primaryColor
                                                       .withOpacity(0.3),
@@ -1217,9 +1217,9 @@ class _SpecialServiceRequestPageWidgetState
                                                   .textTheme
                                                   .bodySmall
                                                   ?.copyWith(
-                                                      color: primaryColor,
-                                                      fontWeight:
-                                                          FontWeight.w600)),
+                                                  color: primaryColor,
+                                                  fontWeight:
+                                                  FontWeight.w600)),
                                         ),
                                     ],
                                   ),
@@ -1266,8 +1266,8 @@ class _SpecialServiceRequestPageWidgetState
                       label: 'Service Description',
                       controller: _descriptionController,
                       hintText:
-                          'Brief description (what, where, any constraints)',
-                      maxLines: 4,
+                      'Brief description (what, where, any constraints)',
+                      maxLines: 5,
                       isRequired: true,
                       isDark: isDark,
                       primaryColor: primaryColor,
@@ -1415,44 +1415,45 @@ class _SpecialServiceRequestPageWidgetState
                     // Submit Button
                     SizedBox(
                       width: double.infinity,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryColor,
-                          foregroundColor: Colors.white,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: Colors.grey.withOpacity(0.2),
+                          foregroundColor: Colors.black,
+                          side: BorderSide(color: Colors.black, width: 1),
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          disabledBackgroundColor:
-                              primaryColor.withOpacity(0.5),
+                          disabledBackgroundColor: Colors.grey.withOpacity(0.1),
+                          disabledForegroundColor: Colors.grey[600],
                         ),
                         onPressed: _submitting || !_isFormValid
                             ? null
                             : _submitRequest,
                         child: _submitting
                             ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white),
-                                ),
-                              )
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.black),
+                          ),
+                        )
                             : Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.send_rounded, size: 20),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Send Request',
-                                    style: TextStyle(
-                                      fontSize: bodyFontSize + 1,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.send_rounded, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Send Request',
+                              style: TextStyle(
+                                fontSize: bodyFontSize + 1,
+                                fontWeight: FontWeight.w600,
                               ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -1513,14 +1514,15 @@ class _SpecialServiceRequestPageWidgetState
                       Text(
                         label,
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: Colors.grey[600],
-                          fontSize: isSmall ? 11 : 12,
+                          color: Colors.black,
+                          fontSize: isSmall ? 14 : 15,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                       if (isRequired)
                         Text(' *',
                             style:
-                                TextStyle(color: primaryColor, fontSize: 12)),
+                            TextStyle(color: primaryColor, fontSize: 12)),
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -1534,7 +1536,7 @@ class _SpecialServiceRequestPageWidgetState
                       value ?? placeholder ?? 'Not set',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         fontWeight:
-                            value != null ? FontWeight.w600 : FontWeight.normal,
+                        value != null ? FontWeight.w600 : FontWeight.normal,
                         color: value != null
                             ? theme.colorScheme.onSurface
                             : Colors.grey[500],
@@ -1598,8 +1600,9 @@ class _SpecialServiceRequestPageWidgetState
                     Text(
                       label,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.grey[600],
-                        fontSize: isSmall ? 11 : 12,
+                        color: Colors.black,
+                        fontSize: isSmall ? 14 : 15,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                     if (isRequired)
@@ -1610,13 +1613,16 @@ class _SpecialServiceRequestPageWidgetState
                 const SizedBox(height: 8),
                 TextField(
                   controller: controller,
-                  maxLines: maxLines,
+                  maxLines: 5,
                   decoration: InputDecoration(
                     hintText: hintText,
                     hintStyle: TextStyle(
                         color: Colors.grey[400], fontSize: isSmall ? 12 : 13),
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.zero,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Colors.grey[300]!),
+                    ),
+                    contentPadding: const EdgeInsets.all(12),
                   ),
                   style: theme.textTheme.bodyMedium?.copyWith(
                     fontSize: isSmall ? 13 : 14,
@@ -1667,7 +1673,8 @@ class _SpecialServiceRequestPageWidgetState
               'Urgency',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: Colors.grey[600],
-                fontSize: isSmall ? 11 : 12,
+                fontSize: isSmall ? 12 : 13,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -1766,7 +1773,8 @@ class _SpecialServiceRequestPageWidgetState
                   'Attach Photos (Optional)',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: Colors.grey[600],
-                    fontSize: isSmall ? 11 : 12,
+                    fontSize: isSmall ? 12 : 13,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
