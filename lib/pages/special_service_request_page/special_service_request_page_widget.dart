@@ -1415,7 +1415,45 @@ class _SpecialServiceRequestPageWidgetState
                     // Submit Button
                     SizedBox(
                       width: double.infinity,
-                      child: OutlinedButton(
+                      child: _isFormValid
+                          ? ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Color(0xFFA20025),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          disabledBackgroundColor: Colors.grey.withOpacity(0.1),
+                          disabledForegroundColor: Colors.grey[600],
+                        ),
+                        onPressed: _submitting ? null : _submitRequest,
+                        child: _submitting
+                            ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white),
+                          ),
+                        )
+                            : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.send_rounded, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Send Request',
+                              style: TextStyle(
+                                fontSize: bodyFontSize + 1,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                          : OutlinedButton(
                         style: OutlinedButton.styleFrom(
                           backgroundColor: Colors.grey.withOpacity(0.2),
                           foregroundColor: Colors.black,
@@ -1427,20 +1465,8 @@ class _SpecialServiceRequestPageWidgetState
                           disabledBackgroundColor: Colors.grey.withOpacity(0.1),
                           disabledForegroundColor: Colors.grey[600],
                         ),
-                        onPressed: _submitting || !_isFormValid
-                            ? null
-                            : _submitRequest,
-                        child: _submitting
-                            ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.black),
-                          ),
-                        )
-                            : Row(
+                        onPressed: null,
+                        child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(Icons.send_rounded, size: 20),
@@ -1514,7 +1540,7 @@ class _SpecialServiceRequestPageWidgetState
                       Text(
                         label,
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: Colors.black,
+                          color: theme.colorScheme.onSurface,
                           fontSize: isSmall ? 14 : 15,
                           fontWeight: FontWeight.bold,
                         ),
@@ -1600,7 +1626,7 @@ class _SpecialServiceRequestPageWidgetState
                     Text(
                       label,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.black,
+                        color: theme.colorScheme.onSurface,
                         fontSize: isSmall ? 14 : 15,
                         fontWeight: FontWeight.bold,
                       ),

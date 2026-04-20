@@ -12,6 +12,7 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 import '/services/notification_controller.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
@@ -36,6 +37,9 @@ void main() async {
   // Ensure Flutter binding is initialized before calling any platform
   // channels (including SharedPreferences) or running async startup logic.
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Load environment variables
+  await dotenv.load();
 
   print('');
   print('═══════════════════════════════════════════════════════════');

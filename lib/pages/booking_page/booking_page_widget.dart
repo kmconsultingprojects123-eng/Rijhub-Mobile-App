@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import '../../services/token_storage.dart';
 import '../../services/user_service.dart';
@@ -443,6 +444,27 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
     }
   }
 
+  Map<String, dynamic> _normalizeFetchedBooking(Map<String, dynamic> item) {
+    final normalized = Map<String, dynamic>.from(item);
+    final nested = normalized['booking'] is Map
+        ? Map<String, dynamic>.from(normalized['booking'])
+        : <String, dynamic>{};
+
+    final globalPaymentMode = dotenv.env['PAYMENT_MODE'] ?? 'upfront';
+    final resolvedPaymentMode = (normalized['paymentMode'] ??
+            nested['paymentMode'] ??
+            globalPaymentMode)
+        .toString();
+
+    normalized['paymentMode'] = resolvedPaymentMode;
+    if (nested.isNotEmpty) {
+      nested['paymentMode'] = nested['paymentMode'] ?? resolvedPaymentMode;
+      normalized['booking'] = nested;
+    }
+
+    return normalized;
+  }
+
   bool _isBookingRealtimeEvent(Map<String, dynamic> event) {
     final eventName = (event['event'] ?? '').toString().toLowerCase();
     final type = (event['type'] ?? event['category'] ?? event['kind'] ?? '')
@@ -591,8 +613,22 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
 
         final processed = items
             .whereType<Map>()
-            .map((m) => Map<String, dynamic>.from(m))
+            .map((m) => _normalizeFetchedBooking(Map<String, dynamic>.from(m)))
             .toList();
+
+        // Debug: Log paymentMode from first booking to diagnose missing field
+        if (kDebugMode && processed.isNotEmpty) {
+          try {
+            final firstBooking = processed[0];
+            final bookingNested = firstBooking['booking'] is Map
+                ? firstBooking['booking']
+                : firstBooking;
+            final paymentMode = firstBooking['paymentMode'] ??
+                bookingNested['paymentMode'] ??
+                '<MISSING>';
+            debugPrint('🔍 DEBUG: First booking paymentMode=$paymentMode');
+          } catch (_) {}
+        }
 
         // If there's a search query, filter bookings by various fields locally.
         List<Map<String, dynamic>> filtered = processed;
@@ -727,7 +763,7 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
 
         final processed = items
             .whereType<Map>()
-            .map((m) => Map<String, dynamic>.from(m))
+            .map((m) => _normalizeFetchedBooking(Map<String, dynamic>.from(m)))
             .toList();
 
         // If there's a search query, filter bookings by various fields locally.
@@ -1007,13 +1043,27 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
         (booking['booking']?['paymentStatus'] ?? booking['paymentStatus'] ?? '')
             .toString()
             .toLowerCase();
+
+    // Extract paymentMode from booking, with fallback to global PAYMENT_MODE from .env
+    final globalPaymentMode = dotenv.env['PAYMENT_MODE'] ?? 'upfront';
+    final paymentMode = (booking['booking']?['paymentMode'] ??
+            booking['paymentMode'] ??
+            globalPaymentMode)
+        .toString()
+        .toLowerCase();
+
     if (!st.contains('awaiting')) {
       if (mounted)
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Cannot accept booking: status is "$st"')));
       return;
     }
-    if (paymentStatus.isNotEmpty && paymentStatus != 'paid') {
+    // Allow acceptance if:
+    // 1. paymentMode is 'afterCompletion' (payment is deferred, unpaid status is expected), OR
+    // 2. paymentStatus is 'paid' (upfront payment is complete)
+    if (paymentStatus.isNotEmpty &&
+        paymentStatus != 'paid' &&
+        paymentMode != 'aftercompletion') {
       if (mounted)
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(
@@ -1034,7 +1084,7 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
       if (token != null && token.isNotEmpty)
         headers['Authorization'] = 'Bearer $token';
       debugPrint(
-          'Accept booking -> id=$id status=$st paymentStatus=$paymentStatus url=$API_BASE_URL/api/bookings/$id/accept');
+          'Accept booking -> id=$id status=$st paymentStatus=$paymentStatus paymentMode=$paymentMode url=$API_BASE_URL/api/bookings/$id/accept');
       final url = '$API_BASE_URL/api/bookings/$id/accept';
       final res = await http
           .post(Uri.parse(url), headers: headers, body: jsonEncode({}))
@@ -1066,10 +1116,12 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
         } else {
           setState(() {
             if (index != -1) {
-              _bookings[index]['booking'] = {
-                ...?_bookings[index]['booking'],
-                'status': 'accepted'
-              };
+              final b = _bookings[index];
+              if (b['booking'] is Map) {
+                b['booking'] = {...b['booking'], 'status': 'accepted'};
+              } else {
+                b['status'] = 'accepted';
+              }
             }
           });
         }
@@ -1183,11 +1235,17 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
         } else {
           setState(() {
             if (index != -1) {
-              _bookings[index]['booking'] = {
-                ...?_bookings[index]['booking'],
-                'status': 'cancelled',
-                'refundStatus': 'refunded'
-              };
+              final b = _bookings[index];
+              if (b['booking'] is Map) {
+                b['booking'] = {
+                  ...b['booking'],
+                  'status': 'cancelled',
+                  'refundStatus': 'refunded'
+                };
+              } else {
+                b['status'] = 'cancelled';
+                b['refundStatus'] = 'refunded';
+              }
             }
           });
         }
@@ -2248,7 +2306,7 @@ class _BookingCard extends StatelessWidget {
   final String? initialThreadId;
 
   // New parameters for message handling
-  final void Function(BuildContext, String? , String? , String, String, String)
+  final void Function(BuildContext, String?, String?, String, String, String)
       onMessage;
   final bool isFetchingThread;
 
@@ -2272,8 +2330,14 @@ class _BookingCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final data = booking['booking'] is Map ? booking['booking'] : booking;
     final counterpart = (isArtisan
-        ? (data['customer'] ?? data['customerUser'] ?? booking['customer'] ?? booking['customerUser'])
-        : (data['artisan'] ?? data['artisanUser'] ?? booking['artisan'] ?? booking['artisanUser']));
+        ? (data['customer'] ??
+            data['customerUser'] ??
+            booking['customer'] ??
+            booking['customerUser'])
+        : (data['artisan'] ??
+            data['artisanUser'] ??
+            booking['artisan'] ??
+            booking['artisanUser']));
     final name = _extractName(counterpart);
     final profileUrl = _extractProfileUrl(counterpart);
     final jobTitle = _extractJobTitle(booking);
@@ -2285,7 +2349,9 @@ class _BookingCard extends StatelessWidget {
       booking['payment_status'],
       booking['paid'],
       booking['isPaid'],
-      booking['payment'] is Map ? booking['payment']['status'] : booking['payment'],
+      booking['payment'] is Map
+          ? booking['payment']['status']
+          : booking['payment'],
       booking['booking']?['paymentStatus'],
       booking['booking']?['payment_status'],
       booking['booking']?['paid'],
@@ -2343,8 +2409,9 @@ class _BookingCard extends StatelessWidget {
     // Special-request bookings are created first, then payment verification updates
     // the money state. If the server still returns raw `pending` while payment is
     // already `paid`, don't keep treating the booking like unpaid pending work.
-    final status =
-        rawStatus == 'pending' && paymentStatus == 'paid' ? 'accepted' : rawStatus;
+    final status = rawStatus == 'pending' && paymentStatus == 'paid'
+        ? 'accepted'
+        : rawStatus;
 
     // Determine broader cancel eligibility from the effective status.
     final cancelEligible = (status.startsWith('await') ||

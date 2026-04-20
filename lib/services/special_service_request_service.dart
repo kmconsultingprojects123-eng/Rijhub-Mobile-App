@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../api_config.dart';
 import 'token_storage.dart';
+import 'user_service.dart';
 
 class SpecialServiceRequestService {
   static const bool _verboseApiLogging = false;
@@ -12,6 +14,7 @@ class SpecialServiceRequestService {
     String requestId, {
     String? requestTitle,
     dynamic selectedPrice,
+    String? paymentMode,
   }) {
     return <String, dynamic>{
       'specialRequestId': requestId,
@@ -21,6 +24,8 @@ class SpecialServiceRequestService {
       if (requestTitle != null && requestTitle.trim().isNotEmpty)
         'requestTitle': requestTitle.trim(),
       if (selectedPrice != null) 'selectedPrice': selectedPrice,
+      if (paymentMode != null && paymentMode.isNotEmpty)
+        'paymentMode': paymentMode,
       'custom_fields': [
         {
           'display_name': 'Special Request ID',
@@ -43,7 +48,37 @@ class SpecialServiceRequestService {
 
   static Map<String, dynamic>? _extractMap(dynamic value) {
     if (value is Map) return Map<String, dynamic>.from(value);
+    if (value is String) {
+      final trimmed = value.trim();
+      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        try {
+          final decoded = jsonDecode(trimmed);
+          if (decoded is Map) return Map<String, dynamic>.from(decoded);
+        } catch (_) {}
+      }
+    }
     return null;
+  }
+
+  static int? _extractInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    final text = value.toString().trim();
+    if (text.isEmpty) return null;
+    return int.tryParse(text);
+  }
+
+  static List<int>? _buildRangeOptions(int? min, int? max) {
+    if (min == null || max == null || min >= max) return null;
+    final range = max - min;
+    final values = <int>{};
+    for (int i = 0; i < 5; i++) {
+      values.add(min + (range * i ~/ 4));
+    }
+    values.add(max);
+    final sorted = values.toList()..sort();
+    return sorted;
   }
 
   static Map<String, dynamic>? _extractPaymentMap(dynamic value) {
@@ -106,7 +141,10 @@ class SpecialServiceRequestService {
   static Map<String, dynamic> _normalizeLifecycleResponse(
     Map<String, dynamic> input,
   ) {
-    final requestData = _extractMap(input['request']) ?? <String, dynamic>{};
+    final requestData = _extractMap(input['request']) ??
+        _extractMap(input['specialRequest']) ??
+        _extractMap(input['special_service_request']) ??
+        <String, dynamic>{};
     final bookingData = _extractMap(input['booking']);
     final paymentData = _extractPaymentMap(input['payment']) ??
         _extractPaymentMap(input['paymentData']) ??
@@ -118,6 +156,7 @@ class SpecialServiceRequestService {
     if (requestData.isNotEmpty) {
       normalized.addAll(requestData);
       normalized['request'] = requestData;
+      normalized['specialRequest'] ??= requestData;
     }
 
     if (bookingData != null && bookingData.isNotEmpty) {
@@ -148,6 +187,62 @@ class SpecialServiceRequestService {
 
   static Map<String, dynamic> _normalizeRequest(Map<String, dynamic> input) {
     final normalized = Map<String, dynamic>.from(input);
+    final note = _extractMap(normalized['note']);
+    final artisanReply = _extractMap(normalized['artisanReply']);
+    final mergedReply = <String, dynamic>{};
+
+    if (note != null) mergedReply.addAll(note);
+    if (artisanReply != null) mergedReply.addAll(artisanReply);
+
+    for (final key in [
+      'quote',
+      'quoteType',
+      'min',
+      'max',
+      'minQuote',
+      'maxQuote',
+      'options',
+      'selectedPrice',
+      'budget',
+      'minBudget',
+      'maxBudget',
+      'price',
+      'amount',
+      'message',
+    ]) {
+      final value = normalized[key];
+      if (value != null && mergedReply[key] == null) {
+        mergedReply[key] = value;
+      }
+    }
+
+    if (mergedReply.isNotEmpty) {
+      final min = _extractInt(mergedReply['min'] ?? mergedReply['minQuote']);
+      final max = _extractInt(mergedReply['max'] ?? mergedReply['maxQuote']);
+      if (min != null && mergedReply['min'] == null) mergedReply['min'] = min;
+      if (max != null && mergedReply['max'] == null) mergedReply['max'] = max;
+      if (min != null && mergedReply['minQuote'] == null) {
+        mergedReply['minQuote'] = min;
+      }
+      if (max != null && mergedReply['maxQuote'] == null) {
+        mergedReply['maxQuote'] = max;
+      }
+      if (min != null &&
+          max != null &&
+          (mergedReply['quoteType'] == null ||
+              mergedReply['quoteType'].toString().trim().isEmpty)) {
+        mergedReply['quoteType'] = 'range';
+      }
+      if (mergedReply['options'] == null) {
+        final generatedOptions = _buildRangeOptions(min, max);
+        if (generatedOptions != null && generatedOptions.isNotEmpty) {
+          mergedReply['options'] = generatedOptions;
+        }
+      }
+      normalized['artisanReply'] = mergedReply;
+      normalized['note'] = note ?? mergedReply;
+    }
+
     final imageUrls = <String>{};
 
     void collectImage(dynamic source) {
@@ -363,7 +458,9 @@ class SpecialServiceRequestService {
   /// The server may return `{ request, booking, payment }`, so flatten that
   /// into a single map the UI can work with consistently.
   static Future<Map<String, dynamic>?> acceptResponse(String requestId,
-      {dynamic selectedPrice, String? requestTitle}) async {
+      {dynamic selectedPrice,
+      String? requestTitle,
+      String? paymentMode}) async {
     final token = await TokenStorage.getToken();
     final headers = <String, String>{'Content-Type': 'application/json'};
     if (token != null) headers['Authorization'] = 'Bearer $token';
@@ -375,6 +472,9 @@ class SpecialServiceRequestService {
     if (selectedPrice != null) {
       body['selectedPrice'] = selectedPrice;
     }
+    final effectivePaymentMode =
+        paymentMode ?? dotenv.env['PAYMENT_MODE'] ?? 'upfront';
+    body['paymentMode'] = effectivePaymentMode;
 
     debugLog('PUT $uri', headers, body);
 
@@ -461,11 +561,14 @@ class SpecialServiceRequestService {
         '$API_BASE_URL/api/special-service-requests/$requestId/response');
     final body = <String, dynamic>{'status': 'responded', ...data};
 
-    debugLog('PUT $uri', headers, body);
+    // Prefer POST first because the newer convenience endpoint supports
+    // range quotes. Some backends still accept PUT, but that older path can
+    // flatten or drop min/max quote fields.
+    debugLog('POST $uri', headers, body);
 
     try {
       final resp = await http
-          .put(uri, headers: headers, body: jsonEncode(body))
+          .post(uri, headers: headers, body: jsonEncode(body))
           .timeout(const Duration(seconds: 15));
 
       debugLogResponse(resp.statusCode, resp.body, uri);
@@ -479,10 +582,10 @@ class SpecialServiceRequestService {
         return null;
       }
 
-      debugLog('POST $uri', headers, body);
+      debugLog('PUT $uri', headers, body);
 
       final fallbackResp = await http
-          .post(uri, headers: headers, body: jsonEncode(body))
+          .put(uri, headers: headers, body: jsonEncode(body))
           .timeout(const Duration(seconds: 15));
 
       debugLogResponse(fallbackResp.statusCode, fallbackResp.body, uri);
@@ -611,8 +714,9 @@ class SpecialServiceRequestService {
 
     final uri =
         Uri.parse('$API_BASE_URL/api/special-service-requests/$requestId/pay');
-    final body =
-        email != null && email.isNotEmpty ? <String, dynamic>{'email': email} : <String, dynamic>{};
+    final body = email != null && email.isNotEmpty
+        ? <String, dynamic>{'email': email}
+        : <String, dynamic>{};
 
     debugLog('POST $uri', headers, body);
 
@@ -655,7 +759,7 @@ class SpecialServiceRequestService {
   /// Initialize payment for a special request without creating booking
   static Future<Map<String, dynamic>?> initializePaymentGeneric(
       String requestId, int amount,
-      {String? email, String? requestTitle}) async {
+      {String? email, String? requestTitle, String? paymentMode}) async {
     final token = await TokenStorage.getToken();
     final headers = <String, String>{'Content-Type': 'application/json'};
     if (token != null) headers['Authorization'] = 'Bearer $token';
@@ -672,6 +776,7 @@ class SpecialServiceRequestService {
         requestId,
         requestTitle: requestTitle,
         selectedPrice: amount,
+        paymentMode: paymentMode ?? dotenv.env['PAYMENT_MODE'] ?? 'upfront',
       ),
     };
     if (email != null && email.isNotEmpty) body['email'] = email;
@@ -700,6 +805,158 @@ class SpecialServiceRequestService {
       }
       return null;
     }
+  }
+
+  /// Create a booking directly for an accepted special request when payment is
+  /// deferred until completion.
+  static Future<Map<String, dynamic>?> createDeferredBooking({
+    required String requestId,
+    required String artisanId,
+    required int price,
+    String? schedule,
+    String? email,
+    String? requestTitle,
+    String? description,
+    String? location,
+  }) async {
+    final token = await TokenStorage.getToken();
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    if (token != null) headers['Authorization'] = 'Bearer $token';
+
+    String? resolvedEmail = email?.trim();
+    if (resolvedEmail == null || resolvedEmail.isEmpty) {
+      try {
+        final profile = await UserService.getProfile();
+        final candidate = profile?['email']?.toString().trim();
+        if (candidate != null && candidate.isNotEmpty) {
+          resolvedEmail = candidate;
+        }
+      } catch (_) {}
+    }
+    if (resolvedEmail == null || resolvedEmail.isEmpty) {
+      try {
+        final remembered = await TokenStorage.getRememberedEmail();
+        if (remembered != null && remembered.trim().isNotEmpty) {
+          resolvedEmail = remembered.trim();
+        }
+      } catch (_) {}
+    }
+
+    final normalizedSchedule = (schedule != null && schedule.trim().isNotEmpty)
+        ? schedule.trim()
+        : DateTime.now().toUtc().toIso8601String();
+
+    final body = <String, dynamic>{
+      'artisanId': artisanId,
+      'price': price,
+      'schedule': normalizedSchedule,
+      'status': 'pending',
+      'paymentMode': 'afterCompletion',
+      'bookingSource': 'special_request',
+      'specialRequestId': requestId,
+      'specialServiceRequestId': requestId,
+      'metadata': _specialRequestGatewayMetadata(
+        requestId,
+        requestTitle: requestTitle,
+        selectedPrice: price,
+        paymentMode: 'afterCompletion',
+      ),
+    };
+
+    if (resolvedEmail != null && resolvedEmail.isNotEmpty) {
+      body['email'] = resolvedEmail;
+    }
+    if (requestTitle != null && requestTitle.trim().isNotEmpty) {
+      body['service'] = requestTitle.trim();
+      body['serviceTitle'] = requestTitle.trim();
+    }
+    if (description != null && description.trim().isNotEmpty) {
+      body['notes'] = description.trim();
+      body['description'] = description.trim();
+      body['serviceDetail'] = description.trim();
+    }
+    if (location != null && location.trim().isNotEmpty) {
+      body['location'] = location.trim();
+      body['address'] = location.trim();
+    }
+
+    final uri = Uri.parse('$API_BASE_URL/api/bookings/hire');
+    debugLog('POST $uri', headers, body);
+
+    try {
+      final resp = await http
+          .post(uri, headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 15));
+
+      debugLogResponse(resp.statusCode, resp.body, uri);
+
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final responseBody =
+            resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
+        if (responseBody == null) return null;
+        final data = _extractEnvelopeData(responseBody);
+        if (data == null) return null;
+        final normalized = _normalizeLifecycleResponse(data);
+        final bookingId = normalized['bookingId']?.toString();
+        if (bookingId != null && bookingId.isNotEmpty) {
+          final threadId = await fetchThreadIdForBooking(bookingId);
+          if (threadId != null && threadId.isNotEmpty) {
+            normalized['threadId'] = threadId;
+          }
+        }
+        return normalized;
+      }
+      return {
+        '_error': true,
+        'statusCode': resp.statusCode,
+        'message': _extractErrorMessage(resp.body) ??
+            'Failed to create deferred booking',
+      };
+    } catch (e) {
+      if (_verboseApiLogging && kDebugMode) {
+        debugPrint('Error creating deferred special-request booking: $e');
+      }
+      return {
+        '_error': true,
+        'message': 'Error creating deferred booking: $e',
+      };
+    }
+  }
+
+  static Future<String?> fetchThreadIdForBooking(String bookingId) async {
+    final token = await TokenStorage.getToken();
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    if (token != null) headers['Authorization'] = 'Bearer $token';
+
+    final uri = Uri.parse('$API_BASE_URL/api/chat/booking/$bookingId');
+    debugLog('GET $uri', headers);
+
+    try {
+      final resp = await http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 15));
+
+      debugLogResponse(resp.statusCode, resp.body, uri);
+
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final responseBody =
+            resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
+        if (responseBody is Map) {
+          final data = responseBody['data'] ?? responseBody;
+          if (data is Map) {
+            return (data['threadId']?.toString() ??
+                data['_id']?.toString() ??
+                data['id']?.toString());
+          }
+        }
+      }
+    } catch (e) {
+      if (_verboseApiLogging && kDebugMode) {
+        debugPrint('Error fetching thread for booking: $e');
+      }
+    }
+
+    return null;
   }
 
   /// Verify payment by reference

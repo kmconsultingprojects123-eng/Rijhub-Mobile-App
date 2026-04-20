@@ -1174,6 +1174,7 @@ class _ProfileSpecialRequestsWidgetState
     required double smallFontSize,
   }) {
     return Container(
+      constraints: const BoxConstraints(maxWidth: 278),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
@@ -1184,15 +1185,17 @@ class _ProfileSpecialRequestsWidgetState
         children: [
           Icon(icon, size: 12, color: color),
           const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: smallFontSize - 1,
-              color: color,
-              fontWeight: FontWeight.w500,
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: smallFontSize - 1,
+                color: color,
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
