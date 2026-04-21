@@ -1341,6 +1341,7 @@ class _SpecialRequestDetailsWidgetState
                           selectedPrice != null ? '₦$selectedPrice' : null,
                           _currentRequest?['schedule']?.toString());
                     }
+                    Navigator.of(context).pop(); // Close the ArtisanResponseSheet after showing the booking confirmation
                     return;
                   }
 
