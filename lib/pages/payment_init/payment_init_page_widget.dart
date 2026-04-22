@@ -90,6 +90,21 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
   _PaymentState _state = _PaymentState.checkout;
   bool _blocking = false;
   bool _loading = false;
+
+  bool get _isAfterCompletionMode =>
+      (dotenv.env['PAYMENT_MODE'] ?? 'upfront') == 'afterCompletion';
+
+  String get _blockingTitle {
+    if (_isAfterCompletionMode) return 'Creating booking...';
+    return 'Verifying payment...';
+  }
+
+  String get _blockingSubtitle {
+    if (_isAfterCompletionMode) {
+      return 'Please wait while we confirm your booking details.';
+    }
+    return 'Please wait while we confirm your transaction.';
+  }
   String? _lastVerifyResponse;
   String? _authUrl;
   String? _reference;
@@ -787,7 +802,7 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
                 child: Row(children: const [
                   CircularProgressIndicator(),
                   SizedBox(width: 16),
-                  Expanded(child: Text('Verifying payment...'))
+                  Expanded(child: Text(_blockingTitle))
                 ]),
               ),
             ),
@@ -2991,12 +3006,12 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Verifying payment...',
+                              Text(_blockingTitle,
                                   style:
                                       FlutterFlowTheme.of(context).titleMedium),
                               const SizedBox(height: 6),
                               Text(
-                                  'Please wait while we confirm your transaction.',
+                                  _blockingSubtitle,
                                   style:
                                       FlutterFlowTheme.of(context).bodySmall),
                             ]),
