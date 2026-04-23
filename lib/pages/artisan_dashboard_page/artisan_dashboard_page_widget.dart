@@ -61,6 +61,8 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
 
   // Cache for reviewer user records fetched by id (id -> user map with name/profileImage)
   final Map<String, Map<String, dynamic>> _reviewUserCache = {};
+  Map<String, dynamic>? _currentUserProfile;
+  String? _currentUserId;
 
   @override
   void initState() {
@@ -88,27 +90,50 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Run in a microtask to avoid blocking the frame callback itself.
       Future.microtask(() async {
+        _startNotificationPolling();
         try {
           await _loadInitialData();
         } catch (_) {}
-
-        // Start notification animation and polling after initial data load
-        try {
-          _notifAnimController = AnimationController(
-              vsync: this, duration: const Duration(milliseconds: 800));
-          _notifPulse = Tween<double>(begin: 1.0, end: 1.06).animate(
-              CurvedAnimation(
-                  parent: _notifAnimController!, curve: Curves.easeInOut));
-          // initial fetch and periodic refresh every 30s (don't block UI)
-          try {
-            _fetchUnreadNotifications();
-          } catch (_) {}
-          _notifTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-            if (mounted) _fetchUnreadNotifications();
-          });
-        } catch (_) {}
       });
     });
+  }
+
+  void _startNotificationPolling() {
+    if (_notifAnimController != null) return;
+    try {
+      _notifAnimController = AnimationController(
+          vsync: this, duration: const Duration(milliseconds: 800));
+      _notifPulse = Tween<double>(begin: 1.0, end: 1.06).animate(
+          CurvedAnimation(
+              parent: _notifAnimController!, curve: Curves.easeInOut));
+      _notifTimer?.cancel();
+      _notifTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+        if (mounted) _fetchUnreadNotifications();
+      });
+    } catch (_) {}
+  }
+
+  String? _extractUserId(Map<String, dynamic>? profile) {
+    if (profile == null) return null;
+    try {
+      const candidates = ['_id', 'id', 'userId', 'user_id', 'uid'];
+      for (final key in candidates) {
+        final value = profile[key];
+        if (value != null && value.toString().trim().isNotEmpty) {
+          return value.toString().trim();
+        }
+      }
+      if (profile['user'] is Map) {
+        final nested = Map<String, dynamic>.from(profile['user']);
+        for (final key in candidates) {
+          final value = nested[key];
+          if (value != null && value.toString().trim().isNotEmpty) {
+            return value.toString().trim();
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   Future<void> _fetchUnreadNotifications() async {
@@ -130,7 +155,8 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
     } catch (_) {}
   }
 
-  Future<void> _loadCachedDashboard() async {
+  Future<void> _loadCachedDashboard(
+      {Map<String, dynamic>? currentProfile}) async {
     try {
       // Attempt to read cached dashboard data (now namespaced per user). To be
       // extra safe, also compare cached profile user id with the currently
@@ -138,11 +164,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
       final cachedProfile = await TokenStorage.getDashboardProfile();
       final cached = await TokenStorage.getDashboardData();
       try {
-        final currentUser = await UserService.getProfile();
-        final currentId = (currentUser?['id'] ??
-                currentUser?['_id'] ??
-                currentUser?['userId'])
-            ?.toString();
+        final currentId = _extractUserId(currentProfile ?? _currentUserProfile);
         if (cachedProfile != null &&
             currentId != null &&
             currentId.isNotEmpty) {
@@ -289,12 +311,12 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
     // dashboard/profile data scoped to that profile, then fetch live dashboard
     // data. This prevents cached data from a different user being applied to
     // a newly-created account.
-    await _loadProfile();
+    final profile = await _loadProfile();
     // Apply cached dashboard/profile only after we have the current profile
     // (so we can verify the cached payload belongs to the same user).
-    await _loadCachedDashboard();
-    await _loadDashboardData();
-    _fetchAuthoritativeKycStatus();
+    await _loadCachedDashboard(currentProfile: profile);
+    unawaited(_loadDashboardData(profile: profile));
+    unawaited(_fetchAuthoritativeKycStatus());
 
     // Schedule a gentle reminder a short while after the page has initialised
     // so new artisans who've not completed key setup steps get prompted.
@@ -504,8 +526,10 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                     const SizedBox(height: 12),
                   ],
 
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
+                  Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 8,
+                    runSpacing: 4,
                     children: [
                       TextButton(
                         onPressed: () {
@@ -515,7 +539,6 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                             style: theme.textTheme.labelLarge?.copyWith(
                                 color: colorScheme.onSurface.withOpacity(0.8))),
                       ),
-                      const SizedBox(width: 8),
                       TextButton(
                         onPressed: () async {
                           await TokenStorage.saveOnboardReminderShown(true);
@@ -547,12 +570,34 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
     // refresh complete
   }
 
-  Future<void> _loadProfile() async {
-    if (!mounted) return;
+  Future<Map<String, dynamic>?> _loadProfile() async {
+    if (!mounted) return null;
 
     try {
       final profile = await UserService.getProfile();
-      if (profile == null) return;
+      if (profile == null) return null;
+      _currentUserProfile = Map<String, dynamic>.from(profile);
+      _currentUserId = _extractUserId(_currentUserProfile);
+
+      String? resolvedLocation;
+      try {
+        final loc = await UserService.getCanonicalLocation();
+        final addr =
+            (loc?['address'] ?? loc?['name'] ?? loc?['label'])?.toString();
+        if (addr != null && addr.isNotEmpty) {
+          resolvedLocation = addr;
+        }
+      } catch (_) {}
+      resolvedLocation ??= profile['location']?.toString();
+      if ((resolvedLocation == null || resolvedLocation.isEmpty) &&
+          profile['address'] is Map &&
+          profile['address']['city'] != null) {
+        resolvedLocation = profile['address']['city'].toString();
+      }
+      if ((resolvedLocation == null || resolvedLocation.isEmpty) &&
+          profile['city'] != null) {
+        resolvedLocation = profile['city'].toString();
+      }
 
       // Primary user fields
       if (mounted) {
@@ -565,41 +610,10 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
               ? profile['profileImage']['url']
               : (profile['profileImage'] ?? profile['photo'] ?? '');
           _model.profileData = Map<String, dynamic>.from(profile);
-        });
-      }
-
-      // Prefer canonical cached location for display (non-blocking)
-      try {
-        final loc = await UserService.getCanonicalLocation();
-        if (loc != null && mounted) {
-          final addr =
-              (loc['address'] ?? loc['name'] ?? loc['label'])?.toString();
-          if (addr != null && addr.isNotEmpty) {
-            setState(() => _model.userLocation = addr);
+          if (resolvedLocation != null && resolvedLocation.isNotEmpty) {
+            _model.userLocation = resolvedLocation;
           }
-        } else {
-          // fallback to profile fields
-          if (profile['location'] != null && mounted)
-            setState(
-                () => _model.userLocation = profile['location'].toString());
-          else if (profile['address'] is Map &&
-              profile['address']['city'] != null &&
-              mounted)
-            setState(() =>
-                _model.userLocation = profile['address']['city'].toString());
-          else if (profile['city'] != null && mounted)
-            setState(() => _model.userLocation = profile['city'].toString());
-        }
-      } catch (_) {
-        if (profile['location'] != null && mounted)
-          setState(() => _model.userLocation = profile['location'].toString());
-        else if (profile['address'] is Map &&
-            profile['address']['city'] != null &&
-            mounted)
-          setState(() =>
-              _model.userLocation = profile['address']['city'].toString());
-        else if (profile['city'] != null && mounted)
-          setState(() => _model.userLocation = profile['city'].toString());
+        });
       }
 
       // Extract verification status and save locally
@@ -656,7 +670,12 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
           return false;
         }
 
-        final artisan = await ArtistService.getMyProfile();
+        Map<String, dynamic>? artisan;
+        if (_currentUserId != null && _currentUserId!.isNotEmpty) {
+          artisan = await ArtistService.getByUserId(_currentUserId!);
+        } else {
+          artisan = await ArtistService.getMyProfile();
+        }
         // print(artisan);
         if (artisan != null && _isArtisanDocument(artisan)) {
           if (mounted)
@@ -667,13 +686,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
         } else {
           // If getMyProfile returned null or looked like a user object, attempt to resolve via user id
           try {
-            String? userId;
-            try {
-              userId = _model.profileData?['_id']?.toString() ??
-                  _model.profileData?['id']?.toString();
-            } catch (_) {
-              userId = null;
-            }
+            String? userId = _currentUserId;
             if (userId == null || userId.isEmpty) {
               try {
                 userId = await TokenStorage.getUserId();
@@ -778,6 +791,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
     } finally {
       if (mounted) setState(() => _loadingProfile = false);
     }
+    return _currentUserProfile;
   }
 
   // Fetch authoritative KYC status from server without blocking profile load
@@ -918,7 +932,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
     }
   }
 
-  Future<void> _loadDashboardData() async {
+  Future<void> _loadDashboardData({Map<String, dynamic>? profile}) async {
     try {
       // Try role-aware central dashboard endpoint first (returns artisan-specific 'mine' data)
       try {
@@ -1029,18 +1043,18 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
       final artisanId = await _resolveArtisanId();
       if (artisanId == null) return;
 
-      if (_model.profileData == null || _model.profileData!['_id'] == null) {
-        final profile = await UserService.getProfile();
-        if (profile != null && mounted) {
-          setState(
-              () => _model.profileData = Map<String, dynamic>.from(profile));
-        }
+      if ((_model.profileData == null || _model.profileData!['_id'] == null) &&
+          profile != null &&
+          mounted) {
+        setState(() => _model.profileData = Map<String, dynamic>.from(profile));
       }
 
-      final bookings = await ArtistService.fetchArtisanBookings(artisanId,
-          page: 1, limit: 5);
-      final reviews = await ArtistService.fetchReviewsForArtisan(artisanId,
-          page: 1, limit: 5);
+      final dashboardResults = await Future.wait([
+        ArtistService.fetchArtisanBookings(artisanId, page: 1, limit: 5),
+        ArtistService.fetchReviewsForArtisan(artisanId, page: 1, limit: 5),
+      ]);
+      final bookings = dashboardResults[0];
+      final reviews = dashboardResults[1];
 
       // Calculate analytics
       int computedPending = 0;
@@ -1146,7 +1160,34 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
         } catch (_) {}
       }
 
-      // 2) Try ArtistService.getMyProfile() which prefers /api/artisans/me or getByUserId internally
+      // 2) Try to resolve by current user id first to avoid another profile fetch
+      String? userId = _currentUserId;
+      userId ??= _extractUserId(_model.profileData);
+      if (userId == null || userId.isEmpty) {
+        try {
+          userId = await TokenStorage.getUserId();
+        } catch (_) {
+          userId = null;
+        }
+      }
+      if (userId != null && userId.isNotEmpty) {
+        try {
+          final byUser = await ArtistService.getByUserId(userId);
+          if (byUser != null) {
+            if (mounted) setState(() => _artisanProfile = byUser);
+            final aid = byUser['_id'] ?? byUser['id'] ?? byUser['userId'];
+            if (aid != null) {
+              if (mounted) {
+                setState(() => _hasArtisanProfile = true);
+                _computeProfileCompletion();
+              }
+              return aid.toString();
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 3) Fallback to service helper
       try {
         final ap = await ArtistService.getMyProfile();
         if (ap != null) {
@@ -1162,19 +1203,11 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
         }
       } catch (_) {}
 
-      // 3) Try to derive user id from _model.profileData or TokenStorage and lookup artisan via getByUserId
-      String? userId;
+      // 4) Final fallback to a fresh token-storage user id lookup
+      userId = null;
       try {
-        userId = _model.profileData?['_id']?.toString() ??
-            _model.profileData?['id']?.toString();
+        userId = await TokenStorage.getUserId();
       } catch (_) {}
-      if (userId == null || userId.isEmpty) {
-        try {
-          userId = await TokenStorage.getUserId();
-        } catch (_) {
-          userId = null;
-        }
-      }
       if (userId != null && userId.isNotEmpty) {
         try {
           final byUser = await ArtistService.getByUserId(userId);

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../api_config.dart';
@@ -6,7 +7,41 @@ import 'token_storage.dart';
 import 'user_service.dart';
 import 'api_client.dart';
 
+class _JobListCacheEntry {
+  final List<Map<String, dynamic>> data;
+  final DateTime cachedAt;
+
+  const _JobListCacheEntry({required this.data, required this.cachedAt});
+
+  bool get isFresh =>
+      DateTime.now().difference(cachedAt) < const Duration(seconds: 45);
+}
+
 class JobService {
+  static final Map<String, _JobListCacheEntry> _jobsCache = {};
+  static _JobListCacheEntry? _allJobsCache;
+
+  static void _logRequest(Uri uri, Map<String, String> headers) {
+    if (!kDebugMode) return;
+    debugPrint('[JobService] GET $uri');
+    if (headers.isNotEmpty) {
+      debugPrint('[JobService] Headers: $headers');
+    }
+  }
+
+  static void _logResponse(Uri uri, http.Response resp) {
+    if (!kDebugMode) return;
+    final body =
+        resp.body.length > 600 ? '${resp.body.substring(0, 600)}…' : resp.body;
+    debugPrint('[JobService] ${resp.statusCode} $uri');
+    debugPrint('[JobService] Body: $body');
+  }
+
+  static void invalidateJobsCache() {
+    _jobsCache.clear();
+    _allJobsCache = null;
+  }
+
   static Map<String, dynamic>? _extractMap(dynamic value) {
     if (value is Map) return Map<String, dynamic>.from(value);
     return null;
@@ -149,61 +184,42 @@ class JobService {
   }
 
   /// as query parameters. This returns decoded JSON as a List if possible.
-  static Future<List<Map<String, dynamic>>> getAllJobs() async {
+  static Future<List<Map<String, dynamic>>> getAllJobs(
+      {bool forceRefresh = false}) async {
+    if (!forceRefresh && _allJobsCache != null && _allJobsCache!.isFresh) {
+      return List<Map<String, dynamic>>.from(_allJobsCache!.data);
+    }
+
     final token = await TokenStorage.getToken();
     final headers = <String, String>{'Content-Type': 'application/json'};
     if (token != null) headers['Authorization'] = 'Bearer $token';
     var uri = Uri.parse('$API_BASE_URL/api/jobs');
-    // if (params != null && params.isNotEmpty) uri = uri.replace(queryeryParameters: params);
 
-    // ┌──────────────────────────────────────────────────────────────────────────────
-    // │ API Logger - Request (JobService)
-    // └──────────────────────────────────────────────────────────────────────────────
-    // ignore: avoid_print
-    print(
-        '┌──────────────────────────────────────────────────────────────────────────────');
-    // ignore: avoid_print
-    print('│ [API Request] GET $uri');
-    if (headers.isNotEmpty) {
-      // ignore: avoid_print
-      print('│ Headers:');
-      // ignore: avoid_print
-      headers.forEach((k, v) => print('│   $k: $v'));
-    }
-    // ignore: avoid_print
-    print(
-        '└──────────────────────────────────────────────────────────────────────────────');
+    _logRequest(uri, headers);
 
     final resp =
         await http.get(uri, headers: headers).timeout(Duration(seconds: 15));
-
-    // ┌──────────────────────────────────────────────────────────────────────────────
-    // │ API Logger - Response (JobService)
-    // └──────────────────────────────────────────────────────────────────────────────
-    // ignore: avoid_print
-    print(
-        '┌──────────────────────────────────────────────────────────────────────────────');
-    // ignore: avoid_print
-    print('│ [API Response] ${resp.statusCode} $uri');
-    // ignore: avoid_print
-    print('│ Body: ${resp.body}');
-    // ignore: avoid_print
-    print(
-        '└──────────────────────────────────────────────────────────────────────────────');
+    _logResponse(uri, resp);
     if (resp.statusCode >= 200 && resp.statusCode < 300) {
       final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
       if (body == null) return [];
-      if (body is List)
-        return List<Map<String, dynamic>>.from(
+      List<Map<String, dynamic>> jobs = [];
+      if (body is List) {
+        jobs = List<Map<String, dynamic>>.from(
             body.map((e) => Map<String, dynamic>.from(e)));
-      if (body is Map && body['data'] is List)
-        return List<Map<String, dynamic>>.from(
+      } else if (body is Map && body['data'] is List) {
+        jobs = List<Map<String, dynamic>>.from(
             body['data'].map((e) => Map<String, dynamic>.from(e)));
+      }
       // Some APIs return { items: [...] }
-      if (body is Map && body['items'] is List)
-        return List<Map<String, dynamic>>.from(
+      if (jobs.isEmpty && body is Map && body['items'] is List) {
+        jobs = List<Map<String, dynamic>>.from(
             body['items'].map((e) => Map<String, dynamic>.from(e)));
-      return [];
+      }
+      _allJobsCache = _JobListCacheEntry(
+          data: List<Map<String, dynamic>>.from(jobs),
+          cachedAt: DateTime.now());
+      return jobs;
     }
     throw Exception('Failed to fetch jobs: ${resp.statusCode} ${resp.body}');
   }
@@ -211,7 +227,16 @@ class JobService {
   /// New: Fetch jobs using server-side pagination. Attempts to use `page`, `limit` and an optional `q` query parameter.
   /// Falls back to the same parsing logic as other methods.
   static Future<List<Map<String, dynamic>>> getJobs(
-      {int page = 1, int limit = 12, String? query}) async {
+      {int page = 1,
+      int limit = 12,
+      String? query,
+      bool forceRefresh = false}) async {
+    final cacheKey = '$page:$limit:${query?.trim().toLowerCase() ?? ''}';
+    final cached = _jobsCache[cacheKey];
+    if (!forceRefresh && cached != null && cached.isFresh) {
+      return List<Map<String, dynamic>>.from(cached.data);
+    }
+
     final token = await TokenStorage.getToken();
     final headers = <String, String>{'Content-Type': 'application/json'};
     if (token != null) headers['Authorization'] = 'Bearer $token';
@@ -226,62 +251,40 @@ class JobService {
     }
     uri = uri.replace(queryParameters: q);
 
-    // ┌──────────────────────────────────────────────────────────────────────────────
-    // │ API Logger - Request (JobService)
-    // └──────────────────────────────────────────────────────────────────────────────
-    // ignore: avoid_print
-    print(
-        '┌──────────────────────────────────────────────────────────────────────────────');
-    // ignore: avoid_print
-    print('│ [API Request] GET $uri');
-    if (headers.isNotEmpty) {
-      // ignore: avoid_print
-      print('│ Headers:');
-      // ignore: avoid_print
-      headers.forEach((k, v) => print('│   $k: $v'));
-    }
-    // ignore: avoid_print
-    print(
-        '└──────────────────────────────────────────────────────────────────────────────');
+    _logRequest(uri, headers);
 
     final resp =
         await http.get(uri, headers: headers).timeout(Duration(seconds: 15));
-
-    // ┌──────────────────────────────────────────────────────────────────────────────
-    // │ API Logger - Response (JobService)
-    // └──────────────────────────────────────────────────────────────────────────────
-    // ignore: avoid_print
-    print(
-        '┌──────────────────────────────────────────────────────────────────────────────');
-    // ignore: avoid_print
-    print('│ [API Response] ${resp.statusCode} $uri');
-    // ignore: avoid_print
-    print('│ Body: ${resp.body}');
-    // ignore: avoid_print
-    print(
-        '└──────────────────────────────────────────────────────────────────────────────');
+    _logResponse(uri, resp);
     if (resp.statusCode >= 200 && resp.statusCode < 300) {
       final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
       if (body == null) return [];
-      if (body is List)
-        return List<Map<String, dynamic>>.from(
+      List<Map<String, dynamic>> jobs = [];
+      if (body is List) {
+        jobs = List<Map<String, dynamic>>.from(
             body.map((e) => Map<String, dynamic>.from(e)));
-      if (body is Map && body['data'] is List)
-        return List<Map<String, dynamic>>.from(
+      } else if (body is Map && body['data'] is List) {
+        jobs = List<Map<String, dynamic>>.from(
             body['data'].map((e) => Map<String, dynamic>.from(e)));
-      if (body is Map && body['items'] is List)
-        return List<Map<String, dynamic>>.from(
+      } else if (body is Map && body['items'] is List) {
+        jobs = List<Map<String, dynamic>>.from(
             body['items'].map((e) => Map<String, dynamic>.from(e)));
+      }
       // Some servers respond with { success: true, results: [...], total: 123 }
-      if (body is Map) {
+      if (jobs.isEmpty && body is Map) {
         final possibleLists = <String>['results', 'data', 'items'];
         for (final k in possibleLists) {
-          if (body[k] is List)
-            return List<Map<String, dynamic>>.from(
+          if (body[k] is List) {
+            jobs = List<Map<String, dynamic>>.from(
                 body[k].map((e) => Map<String, dynamic>.from(e)));
+            break;
+          }
         }
       }
-      return [];
+      _jobsCache[cacheKey] = _JobListCacheEntry(
+          data: List<Map<String, dynamic>>.from(jobs),
+          cachedAt: DateTime.now());
+      return jobs;
     }
     throw Exception(
         'Failed to fetch paginated jobs: ${resp.statusCode} ${resp.body}');

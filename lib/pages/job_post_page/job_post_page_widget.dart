@@ -68,7 +68,10 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
     try {
       final cached = AppStateNotifier.instance.profile;
       if (cached != null) {
-        final role = (cached['role'] ?? cached['type'] ?? '')?.toString().toLowerCase() ?? '';
+        final role = (cached['role'] ?? cached['type'] ?? '')
+                ?.toString()
+                .toLowerCase() ??
+            '';
         _isArtisan = role.contains('artisan');
         _roleLoaded = true;
       }
@@ -100,17 +103,18 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
             GoRouter.of(context).go(SplashScreenPage2Widget.routePath);
           } catch (_) {
             try {
-              await NavigationService.instance.go(context, SplashScreenPage2Widget.routePath);
+              await NavigationService.instance
+                  .go(context, SplashScreenPage2Widget.routePath);
             } catch (_) {
               if (appNavigatorKey.currentState != null) {
                 appNavigatorKey.currentState!.pushAndRemoveUntil(
                   MaterialPageRoute(builder: (_) => SplashScreenPage2Widget()),
-                      (Route<dynamic> route) => false,
+                  (Route<dynamic> route) => false,
                 );
               } else {
                 Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
                   MaterialPageRoute(builder: (_) => SplashScreenPage2Widget()),
-                      (Route<dynamic> route) => false,
+                  (Route<dynamic> route) => false,
                 );
               }
             }
@@ -120,25 +124,36 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
 
         try {
           final profile = await UserService.getProfile();
-          final role = (profile?['role'] ?? profile?['type'] ?? '')?.toString().toLowerCase() ?? '';
-          if (mounted) setState(() { _isArtisan = role.contains('artisan'); _roleLoaded = true; });
+          final role = (profile?['role'] ?? profile?['type'] ?? '')
+                  ?.toString()
+                  .toLowerCase() ??
+              '';
+          if (mounted)
+            setState(() {
+              _isArtisan = role.contains('artisan');
+              _roleLoaded = true;
+            });
         } catch (_) {
-          if (mounted) setState(() { _roleLoaded = true; });
+          if (mounted)
+            setState(() {
+              _roleLoaded = true;
+            });
         }
       } catch (_) {
         if (!mounted) return;
         try {
-          await NavigationService.instance.go(context, SplashScreenPage2Widget.routePath);
+          await NavigationService.instance
+              .go(context, SplashScreenPage2Widget.routePath);
         } catch (_) {
           if (appNavigatorKey.currentState != null) {
             appNavigatorKey.currentState!.pushAndRemoveUntil(
               MaterialPageRoute(builder: (_) => SplashScreenPage2Widget()),
-                  (Route<dynamic> route) => false,
+              (Route<dynamic> route) => false,
             );
           } else {
             Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
               MaterialPageRoute(builder: (_) => SplashScreenPage2Widget()),
-                  (Route<dynamic> route) => false,
+              (Route<dynamic> route) => false,
             );
           }
         }
@@ -148,7 +163,11 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
 
     // Infinite scroll listener: load more when near bottom
     _scrollController.addListener(() {
-      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200 && !_loadingMore && _hasMore && !_loading) {
+      if (_scrollController.position.pixels >=
+              _scrollController.position.maxScrollExtent - 200 &&
+          !_loadingMore &&
+          _hasMore &&
+          !_loading) {
         _fetchMore();
       }
     });
@@ -158,9 +177,14 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
       _jobEventsSub = JobEvents.jobUpdatedStream.listen((updated) {
         if (!mounted) return;
         try {
-          final updatedId = (updated['id'] ?? updated['_id'] ?? updated['jobId'])?.toString() ?? '';
+          final updatedId =
+              (updated['id'] ?? updated['_id'] ?? updated['jobId'])
+                      ?.toString() ??
+                  '';
           if (updatedId.isEmpty) return;
-          final idx = _jobs.indexWhere((j) => ((j['_id'] ?? j['id'] ?? j['jobId'])?.toString() ?? '') == updatedId);
+          final idx = _jobs.indexWhere((j) =>
+              ((j['_id'] ?? j['id'] ?? j['jobId'])?.toString() ?? '') ==
+              updatedId);
           setState(() {
             if (idx >= 0) {
               _jobs[idx] = Map<String, dynamic>.from(updated);
@@ -179,20 +203,29 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
   void dispose() {
     _debounce?.cancel();
     // remove controller listener to avoid leaks
-    try { if (_textListener != null) _model.textController?.removeListener(_textListener!); } catch (_) {}
+    try {
+      if (_textListener != null)
+        _model.textController?.removeListener(_textListener!);
+    } catch (_) {}
     _model.dispose();
-    try { _scrollController.dispose(); } catch (_) {}
-    try { _jobEventsSub?.cancel(); } catch (_) {}
+    try {
+      _scrollController.dispose();
+    } catch (_) {}
+    try {
+      _jobEventsSub?.cancel();
+    } catch (_) {}
 
     super.dispose();
   }
 
-  Future<void> _fetchJobs({String? query}) async {
+  Future<void> _fetchJobs({String? query, bool forceRefresh = false}) async {
     // Use server-side pagination: reset page and dedupe tracking
-    if (mounted) setState(() {
-      _loading = true;
-      _lastFetchFailed = false;
-    });
+    if (mounted) {
+      setState(() {
+        _loading = _jobs.isEmpty;
+        _lastFetchFailed = false;
+      });
+    }
 
     try {
       _currentQuery = (query ?? '').trim();
@@ -201,7 +234,12 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
       _seenJobIds.clear();
 
       // Attempt paginated fetch
-      final res = await JobService.getJobs(page: _page, limit: _limit, query: _currentQuery.isEmpty ? null : _currentQuery);
+      final res = await JobService.getJobs(
+        page: _page,
+        limit: _limit,
+        query: _currentQuery.isEmpty ? null : _currentQuery,
+        forceRefresh: forceRefresh,
+      );
 
       // Deduplicate and append
       final newItems = <Map<String, dynamic>>[];
@@ -213,26 +251,32 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
         }
       }
 
-      if (mounted) setState(() {
-        _jobs = newItems;
-        _hasMore = res.length == _limit;
-      });
+      if (mounted)
+        setState(() {
+          _jobs = newItems;
+          _hasMore = res.length == _limit;
+        });
       return;
     } catch (e) {
       // Fallback: try old getAllJobs method and paginate client-side
       if (kDebugMode) debugPrint('Paginated fetch failed, falling back: $e');
       try {
-        final resAll = await JobService.getAllJobs();
-        if (mounted) setState(() {
-          _allJobs = resAll;
-          _page = 1;
-          _hasMore = _allJobs.length > _limit;
-          _jobs = _allJobs.take(_limit).toList();
-        });
+        final resAll = await JobService.getAllJobs(forceRefresh: forceRefresh);
+        if (mounted)
+          setState(() {
+            _allJobs = resAll;
+            _page = 1;
+            _hasMore = _allJobs.length > _limit;
+            _jobs = _allJobs.take(_limit).toList();
+          });
         return;
       } catch (e2) {
         if (kDebugMode) debugPrint('Fallback getAllJobs failed: $e2');
-        if (mounted) setState(() { _jobs = []; _lastFetchFailed = true; });
+        if (mounted)
+          setState(() {
+            _jobs = [];
+            _lastFetchFailed = true;
+          });
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -246,7 +290,10 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
       // Try server-side next page
       final nextPage = _page + 1;
       try {
-        final res = await JobService.getJobs(page: nextPage, limit: _limit, query: _currentQuery.isEmpty ? null : _currentQuery);
+        final res = await JobService.getJobs(
+            page: nextPage,
+            limit: _limit,
+            query: _currentQuery.isEmpty ? null : _currentQuery);
         final newItems = <Map<String, dynamic>>[];
         for (final item in res) {
           final id = (item['id'] ?? item['_id'] ?? '').toString();
@@ -257,7 +304,6 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
         }
 
         if (newItems.isNotEmpty) {
-          await Future.delayed(const Duration(milliseconds: 120)); // small delay for UX
           setState(() {
             _jobs.addAll(newItems);
             _page = nextPage;
@@ -265,16 +311,18 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
           });
         } else {
           // server returned empty page; no more
-          setState(() { _hasMore = false; });
+          setState(() {
+            _hasMore = false;
+          });
         }
         return;
       } catch (e) {
         // server pagination failed -> fallback to client-side pagination if we have _allJobs
-        if (kDebugMode) debugPrint('Server pagination failed in _fetchMore: $e');
+        if (kDebugMode)
+          debugPrint('Server pagination failed in _fetchMore: $e');
         final start = _page * _limit;
         final next = _allJobs.skip(start).take(_limit).toList();
         if (next.isNotEmpty) {
-          await Future.delayed(const Duration(milliseconds: 250));
           setState(() {
             _jobs.addAll(next.where((item) {
               final id = (item['id'] ?? item['_id'] ?? '').toString();
@@ -288,7 +336,9 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
           });
           return;
         }
-        setState(() { _hasMore = false; });
+        setState(() {
+          _hasMore = false;
+        });
       }
     } catch (e) {
       if (kDebugMode) debugPrint('fetchMore jobs error: $e');
@@ -368,7 +418,8 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                     height: 14,
                     width: 80,
                     decoration: BoxDecoration(
-                      color: colorScheme.onSurface.withAlpha((0.08 * 255).toInt()),
+                      color:
+                          colorScheme.onSurface.withAlpha((0.08 * 255).toInt()),
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
@@ -377,7 +428,8 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                     height: 12,
                     width: 120,
                     decoration: BoxDecoration(
-                      color: colorScheme.onSurface.withAlpha((0.06 * 255).toInt()),
+                      color:
+                          colorScheme.onSurface.withAlpha((0.06 * 255).toInt()),
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
@@ -401,13 +453,18 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
   @override
   Widget build(BuildContext context) {
     // If this page isn't inside NavBarPage, redirect so the bottom nav is visible
-    final bool _isNestedNavBar = context.findAncestorWidgetOfExactType<NavBarPage>() != null;
+    final bool _isNestedNavBar =
+        context.findAncestorWidgetOfExactType<NavBarPage>() != null;
     if (!_isNestedNavBar) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         try {
-          NavigationUtils.safePushReplacement(context, NavBarPage(initialPage: 'JobPostPage'));
+          NavigationUtils.safePushReplacement(
+              context, NavBarPage(initialPage: 'JobPostPage'));
         } catch (_) {
-          try { Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => NavBarPage(initialPage: 'JobPostPage'))); } catch (_) {}
+          try {
+            Navigator.of(context).pushReplacement(MaterialPageRoute(
+                builder: (_) => NavBarPage(initialPage: 'JobPostPage')));
+          } catch (_) {}
         }
       });
     }
@@ -429,11 +486,13 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
             children: [
               // Header
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 decoration: BoxDecoration(
                   border: Border(
                     bottom: BorderSide(
-                      color: colorScheme.onSurface.withAlpha((0.1 * 255).toInt()),
+                      color:
+                          colorScheme.onSurface.withAlpha((0.1 * 255).toInt()),
                       width: 1,
                     ),
                   ),
@@ -462,186 +521,266 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                     // Reset query and refresh
                     _model.textController?.clear();
                     _currentQuery = '';
-                    await _fetchJobs();
+                    await _fetchJobs(forceRefresh: true);
                   },
                   color: colorScheme.primary,
                   child: ListView.builder(
                     controller: _scrollController,
-                    padding: EdgeInsets.only(left: 20, right: 20, bottom: MediaQuery.of(context).padding.bottom + kBottomNavigationBarHeight + 24.0),
+                    padding: EdgeInsets.only(
+                        left: 20,
+                        right: 20,
+                        bottom: MediaQuery.of(context).padding.bottom +
+                            kBottomNavigationBarHeight +
+                            24.0),
                     physics: const BouncingScrollPhysics(),
-                    itemCount: 1 + (_loading ? 3 : (_jobs.isEmpty && !_loading && !_lastFetchFailed ? 1 : _jobs.length + (_hasMore ? 1 : 0))),
+                    itemCount: 1 +
+                        (_loading
+                            ? 3
+                            : (_jobs.isEmpty && !_loading && !_lastFetchFailed
+                                ? 1
+                                : _jobs.length + (_hasMore ? 1 : 0))),
                     itemBuilder: (context, index) {
                       // index 0 => static top section (search + header + actions)
                       if (index == 0) {
-                        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          const SizedBox(height: 20.0),
+                        return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 20.0),
 
-                          // Search bar
-                          TextFormField(
-                            controller: _model.textController,
-                            focusNode: _model.textFieldFocusNode,
-                            autofocus: false,
-                            obscureText: false,
-                            decoration: InputDecoration(
-                              hintText: 'Search jobs...',
-                              hintStyle: TextStyle(
-                                color: colorScheme.onSurface.withAlpha((0.4 * 255).toInt()),
-                              ),
-                              filled: true,
-                              fillColor: colorScheme.surface,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12.0),
-                                borderSide: BorderSide.none,
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12.0),
-                                borderSide: BorderSide(
-                                  color: colorScheme.primary,
-                                  width: 1.5,
+                              // Search bar
+                              TextFormField(
+                                controller: _model.textController,
+                                focusNode: _model.textFieldFocusNode,
+                                autofocus: false,
+                                obscureText: false,
+                                decoration: InputDecoration(
+                                  hintText: 'Search jobs...',
+                                  hintStyle: TextStyle(
+                                    color: colorScheme.onSurface
+                                        .withAlpha((0.4 * 255).toInt()),
+                                  ),
+                                  filled: true,
+                                  fillColor: colorScheme.surface,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12.0),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12.0),
+                                    borderSide: BorderSide(
+                                      color: colorScheme.primary,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16.0,
+                                    vertical: 14.0,
+                                  ),
+                                  prefixIcon: Icon(
+                                    Icons.search_rounded,
+                                    color: colorScheme.onSurface
+                                        .withAlpha((0.4 * 255).toInt()),
+                                    size: 20.0,
+                                  ),
+                                  suffixIcon: _model
+                                          .textController!.text.isNotEmpty
+                                      ? IconButton(
+                                          icon: Icon(
+                                            Icons.clear_rounded,
+                                            color: colorScheme.onSurface
+                                                .withAlpha((0.4 * 255).toInt()),
+                                            size: 20.0,
+                                          ),
+                                          onPressed: () {
+                                            try {
+                                              if (_debounce?.isActive ?? false)
+                                                _debounce?.cancel();
+                                            } catch (_) {}
+                                            _model.textController!.clear();
+                                            FocusScope.of(context).unfocus();
+                                            if (_allJobs.isNotEmpty) {
+                                              setState(() {
+                                                _jobs = List<
+                                                        Map<String,
+                                                            dynamic>>.from(
+                                                    _allJobs.take(_limit));
+                                                _page = 1;
+                                                _hasMore =
+                                                    _allJobs.length > _limit;
+                                              });
+                                            } else {
+                                              _fetchJobs();
+                                            }
+                                          },
+                                        )
+                                      : null,
                                 ),
+                                style: TextStyle(
+                                  color: colorScheme.onSurface,
+                                  fontSize: 16,
+                                ),
+                                validator: _model.textControllerValidator
+                                    .asValidator(context),
+                                onFieldSubmitted: (value) {
+                                  try {
+                                    if (_debounce?.isActive ?? false)
+                                      _debounce?.cancel();
+                                  } catch (_) {}
+                                  FocusScope.of(context).unfocus();
+                                  _fetchJobs(query: value);
+                                },
                               ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16.0,
-                                vertical: 14.0,
-                              ),
-                              prefixIcon: Icon(
-                                Icons.search_rounded,
-                                color: colorScheme.onSurface.withAlpha((0.4 * 255).toInt()),
-                                size: 20.0,
-                              ),
-                              suffixIcon: _model.textController!.text.isNotEmpty
-                                  ? IconButton(
-                                      icon: Icon(
-                                        Icons.clear_rounded,
-                                        color: colorScheme.onSurface.withAlpha((0.4 * 255).toInt()),
-                                        size: 20.0,
-                                      ),
-                                      onPressed: () {
-                                        try { if (_debounce?.isActive ?? false) _debounce?.cancel(); } catch (_) {}
-                                        _model.textController!.clear();
-                                        FocusScope.of(context).unfocus();
-                                        if (_allJobs.isNotEmpty) {
-                                          setState(() { _jobs = List<Map<String, dynamic>>.from(_allJobs.take(_limit)); _page = 1; _hasMore = _allJobs.length > _limit; });
-                                        } else {
-                                          _fetchJobs();
+
+                              const SizedBox(height: 24),
+
+                              // Header with actions
+                              Row(
+                                children: [
+                                  Expanded(
+                                      child: Text('Available Jobs',
+                                          style: theme.textTheme.titleLarge
+                                              ?.copyWith(
+                                                  fontWeight:
+                                                      FontWeight.w600))),
+                                  Row(children: [
+                                    OutlinedButton(
+                                      onPressed: () async {
+                                        try {
+                                          if (_isArtisan) {
+                                            await NavigationUtils.safePush(
+                                                context,
+                                                ArtisanJobsHistoryWidget());
+                                          } else {
+                                            await NavigationUtils.safePush(
+                                                context,
+                                                JobHistoryPageWidget());
+                                          }
+                                        } catch (_) {
+                                          // final fallback: try GoRouter directly
+                                          try {
+                                            if (_isArtisan) {
+                                              GoRouter.of(context).pushNamed(
+                                                  ArtisanJobsHistoryWidget
+                                                      .routeName);
+                                            } else {
+                                              GoRouter.of(context).pushNamed(
+                                                  JobHistoryPageWidget
+                                                      .routeName);
+                                            }
+                                          } catch (_) {}
                                         }
                                       },
-                                    )
-                                  : null,
-                            ),
-                            style: TextStyle(
-                              color: colorScheme.onSurface,
-                              fontSize: 16,
-                            ),
-                            validator: _model.textControllerValidator.asValidator(context),
-                            onFieldSubmitted: (value) {
-                              try { if (_debounce?.isActive ?? false) _debounce?.cancel(); } catch (_) {}
-                              FocusScope.of(context).unfocus();
-                              _fetchJobs(query: value);
-                            },
-                          ),
-
-                          const SizedBox(height: 24),
-
-                          // Header with actions
-                          Row(
-                            children: [
-                              Expanded(child: Text('Available Jobs', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600))),
-                              Row(children: [
-                                OutlinedButton(
-                                  onPressed: () async {
-                                    try {
-                                      if (_isArtisan) {
-                                        await NavigationUtils.safePush(context, ArtisanJobsHistoryWidget());
-                                      } else {
-                                        await NavigationUtils.safePush(context, JobHistoryPageWidget());
-                                      }
-                                    } catch (_) {
-                                      // final fallback: try GoRouter directly
-                                      try {
-                                        if (_isArtisan) {
-                                          GoRouter.of(context).pushNamed(ArtisanJobsHistoryWidget.routeName);
-                                        } else {
-                                          GoRouter.of(context).pushNamed(JobHistoryPageWidget.routeName);
-                                        }
-                                      } catch (_) {}
-                                    }
-                                  },
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: colorScheme.primary,
-                                    side: BorderSide(color: colorScheme.primary, width: 1),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                  ),
-                                  child: Text(_isArtisan ? 'Jobs Done' : 'My Jobs', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                                ),
-                                const SizedBox(width: 12),
-                                // Show Create Job button only after role is resolved and user is not an artisan
-                                if (_roleLoaded && !_isArtisan)
-                                  ElevatedButton(
-                                    onPressed: () async {
-                                      if (!await ensureSignedInForAction(context)) return;
-                                      try {
-                                        // Open the Create Job page and wait for its result. The page pops(true) on successful job creation.
-                                        final res = await NavigationUtils.safePush(context, CreateJobPage1Widget());
-                                        // Some navigation fallbacks (GoRouter/page-based) return null even when
-                                        // the pushed page performed a pop(true). The Create page now
-                                        // returns the created job object (Map) on success — if we
-                                        // receive that Map, insert it locally so the UI updates
-                                        // immediately. Otherwise refresh the list.
-                                        if (res != false) {
-                                          if (mounted) {
-                                            try {
-                                              if (res is Map<String, dynamic>) {
-                                                // Insert new job at top if not already present
-                                                final createdJob = Map<String, dynamic>.from(res);
-                                                final id = (createdJob['id'] ?? createdJob['_id'] ?? '').toString();
-                                                if (id.isNotEmpty && !_seenJobIds.contains(id)) {
-                                                  setState(() {
-                                                    _jobs.insert(0, createdJob);
-                                                    _seenJobIds.add(id);
-                                                  });
-                                                } else {
-                                                  // If no id or already present, do a full refresh
-                                                  await _fetchJobs();
-                                                }
-                                              } else {
-                                                // Unknown truthy result or null from GoRouter fallback — refresh
-                                                await _fetchJobs();
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: colorScheme.primary,
+                                        side: BorderSide(
+                                            color: colorScheme.primary,
+                                            width: 1),
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(10)),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 16, vertical: 8),
+                                      ),
+                                      child: Text(
+                                          _isArtisan ? 'Jobs Done' : 'My Jobs',
+                                          style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w500)),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    // Show Create Job button only after role is resolved and user is not an artisan
+                                    if (_roleLoaded && !_isArtisan)
+                                      ElevatedButton(
+                                        onPressed: () async {
+                                          if (!await ensureSignedInForAction(
+                                              context)) return;
+                                          try {
+                                            // Open the Create Job page and wait for its result. The page pops(true) on successful job creation.
+                                            final res =
+                                                await NavigationUtils.safePush(
+                                                    context,
+                                                    CreateJobPage1Widget());
+                                            // Some navigation fallbacks (GoRouter/page-based) return null even when
+                                            // the pushed page performed a pop(true). The Create page now
+                                            // returns the created job object (Map) on success — if we
+                                            // receive that Map, insert it locally so the UI updates
+                                            // immediately. Otherwise refresh the list.
+                                            if (res != false) {
+                                              if (mounted) {
+                                                try {
+                                                  if (res
+                                                      is Map<String, dynamic>) {
+                                                    JobService
+                                                        .invalidateJobsCache();
+                                                    // Insert new job at top if not already present
+                                                    final createdJob = Map<
+                                                        String,
+                                                        dynamic>.from(res);
+                                                    final id = (createdJob[
+                                                                'id'] ??
+                                                            createdJob['_id'] ??
+                                                            '')
+                                                        .toString();
+                                                    if (id.isNotEmpty &&
+                                                        !_seenJobIds
+                                                            .contains(id)) {
+                                                      setState(() {
+                                                        _jobs.insert(
+                                                            0, createdJob);
+                                                        _seenJobIds.add(id);
+                                                      });
+                                                    } else {
+                                                      // If no id or already present, do a full refresh
+                                                      await _fetchJobs();
+                                                    }
+                                                  } else {
+                                                    // Unknown truthy result or null from GoRouter fallback — refresh
+                                                    await _fetchJobs(
+                                                        forceRefresh: true);
+                                                  }
+                                                } catch (_) {}
                                               }
-                                            } catch (_) {}
-                                          }
-                                        }
-                                      } catch (_) {}
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: colorScheme.primary,
-                                      foregroundColor: colorScheme.onPrimary,
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                                      elevation: 0,
-                                    ),
-                                    child: Row(
-                                      children: const [
-                                        Icon(Icons.add, size: 18),
-                                        SizedBox(width: 6),
-                                        Text('Create', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                                      ],
-                                    ),
-                                  ),
-                              ])
-                            ],
-                          ),
+                                            }
+                                          } catch (_) {}
+                                        },
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: colorScheme.primary,
+                                          foregroundColor:
+                                              colorScheme.onPrimary,
+                                          shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(10)),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 20, vertical: 10),
+                                          elevation: 0,
+                                        ),
+                                        child: Row(
+                                          children: const [
+                                            Icon(Icons.add, size: 18),
+                                            SizedBox(width: 6),
+                                            Text('Create',
+                                                style: TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight:
+                                                        FontWeight.w600)),
+                                          ],
+                                        ),
+                                      ),
+                                  ])
+                                ],
+                              ),
 
-                          const SizedBox(height: 24),
-                        ]);
+                              const SizedBox(height: 24),
+                            ]);
                       }
 
                       // Jobs or loaders
                       final dataIndex = index - 1;
                       if (_loading) {
                         // Initial skeleton loaders
-                        return Padding(padding: const EdgeInsets.only(bottom: 16.0), child: _buildSkeletonCard());
+                        return Padding(
+                            padding: const EdgeInsets.only(bottom: 16.0),
+                            child: _buildSkeletonCard());
                       }
 
                       // Empty state
@@ -651,14 +790,24 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                           child: Center(
                             child: Column(
                               children: [
-                                Icon(Icons.work_outline, size: 56, color: colorScheme.onSurface.withAlpha((0.4 * 255).toInt())),
+                                Icon(Icons.work_outline,
+                                    size: 56,
+                                    color: colorScheme.onSurface
+                                        .withAlpha((0.4 * 255).toInt())),
                                 const SizedBox(height: 12),
-                                Text('No jobs found', style: theme.textTheme.titleMedium),
+                                Text('No jobs found',
+                                    style: theme.textTheme.titleMedium),
                                 const SizedBox(height: 8),
-                                Text('Try a different search or pull to refresh', style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurface.withAlpha((0.6 * 255).toInt()))),
+                                Text(
+                                    'Try a different search or pull to refresh',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                        color: colorScheme.onSurface
+                                            .withAlpha((0.6 * 255).toInt()))),
                                 const SizedBox(height: 20),
                                 if (_hasMore)
-                                  ElevatedButton(onPressed: _fetchMore, child: const Text('Load more'))
+                                  ElevatedButton(
+                                      onPressed: _fetchMore,
+                                      child: const Text('Load more'))
                               ],
                             ),
                           ),
@@ -672,11 +821,19 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                           child: Center(
                             child: Column(
                               children: [
-                                Icon(Icons.error_outline, size: 56, color: colorScheme.error),
+                                Icon(Icons.error_outline,
+                                    size: 56, color: colorScheme.error),
                                 const SizedBox(height: 12),
-                                Text('Failed to load jobs', style: theme.textTheme.titleMedium),
+                                Text('Failed to load jobs',
+                                    style: theme.textTheme.titleMedium),
                                 const SizedBox(height: 8),
-                                ElevatedButton(onPressed: () { _fetchJobs(query: _currentQuery); }, child: const Text('Retry')),
+                                ElevatedButton(
+                                    onPressed: () {
+                                      _fetchJobs(
+                                          query: _currentQuery,
+                                          forceRefresh: true);
+                                    },
+                                    child: const Text('Retry')),
                               ],
                             ),
                           ),
@@ -685,16 +842,28 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
 
                       // Bottom loader slot or load more button
                       if (dataIndex >= _jobs.length) {
-                        if (_loadingMore) return Padding(padding: const EdgeInsets.only(bottom: 16.0), child: _buildSkeletonCard());
+                        if (_loadingMore)
+                          return Padding(
+                              padding: const EdgeInsets.only(bottom: 16.0),
+                              child: _buildSkeletonCard());
                         // show explicit load more button when available to avoid accidental auto-loads
-                        if (_hasMore) return Padding(padding: const EdgeInsets.only(bottom: 16.0), child: Center(child: ElevatedButton(onPressed: _fetchMore, child: const Text('Load more'))));
+                        if (_hasMore)
+                          return Padding(
+                              padding: const EdgeInsets.only(bottom: 16.0),
+                              child: Center(
+                                  child: ElevatedButton(
+                                      onPressed: _fetchMore,
+                                      child: const Text('Load more'))));
                         return const SizedBox();
                       }
 
                       final job = _jobs[dataIndex];
-                      final title = (job['title'] ?? job['jobTitle'] ?? '').toString();
-                      final desc = (job['description'] ?? job['details'] ?? '').toString();
-                      final posted = job['createdAt'] ?? job['postedAt'] ?? job['created'];
+                      final title =
+                          (job['title'] ?? job['jobTitle'] ?? '').toString();
+                      final desc = (job['description'] ?? job['details'] ?? '')
+                          .toString();
+                      final posted =
+                          job['createdAt'] ?? job['postedAt'] ?? job['created'];
                       String postedText = 'Posted';
                       try {
                         if (posted != null) {
@@ -712,17 +881,15 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                         try {
                           if (b is num) {
                             return '₦' +
-                                NumberFormat('#,##0', 'en_US')
-                                    .format(b);
+                                NumberFormat('#,##0', 'en_US').format(b);
                           }
                           final s = b.toString();
                           if (s.contains('₦')) return s;
-                          final numVal = num.tryParse(s.replaceAll(
-                              RegExp(r'[^0-9.-]'), ''));
+                          final numVal = num.tryParse(
+                              s.replaceAll(RegExp(r'[^0-9.-]'), ''));
                           if (numVal != null) {
                             return '₦' +
-                                NumberFormat('#,##0', 'en_US')
-                                    .format(numVal);
+                                NumberFormat('#,##0', 'en_US').format(numVal);
                           }
                           return s;
                         } catch (_) {
@@ -733,8 +900,8 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                       final rawStatus =
                           (job['status'] ?? '')?.toString().toLowerCase() ?? '';
                       final statusLabel = (rawStatus == 'closed' ||
-                          rawStatus == 'done' ||
-                          rawStatus == 'inactive')
+                              rawStatus == 'done' ||
+                              rawStatus == 'inactive')
                           ? 'Closed'
                           : 'Open';
                       final isOpen = statusLabel == 'Open';
@@ -743,7 +910,9 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                         padding: const EdgeInsets.only(bottom: 16.0),
                         child: InkWell(
                           onTap: () async {
-                            await NavigationUtils.safePushRoute(context, JobDetailsPageWidget.routePath, extra: {'job': job});
+                            await NavigationUtils.safePushRoute(
+                                context, JobDetailsPageWidget.routePath,
+                                extra: {'job': job});
                           },
                           borderRadius: BorderRadius.circular(16),
                           child: Container(
@@ -752,7 +921,8 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                               color: colorScheme.surface,
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
-                                color: colorScheme.onSurface.withAlpha((0.1 * 255).toInt()),
+                                color: colorScheme.onSurface
+                                    .withAlpha((0.1 * 255).toInt()),
                                 width: 1,
                               ),
                             ),
@@ -763,37 +933,58 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                                 children: [
                                   // Top row with title and status
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              title.isNotEmpty ? title : 'Untitled Job',
-                                              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                                              title.isNotEmpty
+                                                  ? title
+                                                  : 'Untitled Job',
+                                              style: theme.textTheme.titleMedium
+                                                  ?.copyWith(
+                                                      fontWeight:
+                                                          FontWeight.w600),
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                             ),
                                             const SizedBox(height: 4),
                                             Text(
                                               postedText,
-                                              style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurface.withAlpha((0.6 * 255).toInt())),
+                                              style: theme.textTheme.bodySmall
+                                                  ?.copyWith(
+                                                      color: colorScheme
+                                                          .onSurface
+                                                          .withAlpha((0.6 * 255)
+                                                              .toInt())),
                                             ),
                                           ],
                                         ),
                                       ),
                                       const SizedBox(width: 12),
                                       Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 6),
                                         decoration: BoxDecoration(
-                                          color: isOpen ? colorScheme.primary.withAlpha((0.1 * 255).toInt()) : colorScheme.error.withAlpha((0.1 * 255).toInt()),
-                                          borderRadius: BorderRadius.circular(20),
+                                          color: isOpen
+                                              ? colorScheme.primary.withAlpha(
+                                                  (0.1 * 255).toInt())
+                                              : colorScheme.error.withAlpha(
+                                                  (0.1 * 255).toInt()),
+                                          borderRadius:
+                                              BorderRadius.circular(20),
                                         ),
                                         child: Text(
                                           statusLabel,
-                                          style: theme.textTheme.bodySmall?.copyWith(
-                                            color: isOpen ? colorScheme.primary : colorScheme.error,
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                            color: isOpen
+                                                ? colorScheme.primary
+                                                : colorScheme.error,
                                             fontWeight: FontWeight.w600,
                                           ),
                                         ),
@@ -808,22 +999,31 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                                     desc,
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSurface.withAlpha((0.8 * 255).toInt())),
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                        color: colorScheme.onSurface
+                                            .withAlpha((0.8 * 255).toInt())),
                                   ),
 
                                   const SizedBox(height: 20),
 
                                   // Bottom row: budget, location, and action
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Text(
                                               _displayBudget(budget),
-                                              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700, color: colorScheme.primary),
+                                              style: theme.textTheme.titleMedium
+                                                  ?.copyWith(
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      color:
+                                                          colorScheme.primary),
                                             ),
                                             const SizedBox(height: 4),
                                             // Constrain location text to at most 2 lines and ellipsize to avoid pushing the action button
@@ -831,23 +1031,38 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                                               'Location: ${location.toString()}',
                                               maxLines: 2,
                                               overflow: TextOverflow.ellipsis,
-                                              style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurface.withAlpha((0.6 * 255).toInt())),
+                                              style: theme.textTheme.bodySmall
+                                                  ?.copyWith(
+                                                      color: colorScheme
+                                                          .onSurface
+                                                          .withAlpha((0.6 * 255)
+                                                              .toInt())),
                                             ),
                                           ],
                                         ),
                                       ),
                                       ElevatedButton(
                                         onPressed: () async {
-                                          await NavigationUtils.safePushRoute(context, JobDetailsPageWidget.routePath, extra: {'job': job});
+                                          await NavigationUtils.safePushRoute(
+                                              context,
+                                              JobDetailsPageWidget.routePath,
+                                              extra: {'job': job});
                                         },
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: colorScheme.primary,
-                                          foregroundColor: colorScheme.onPrimary,
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                          foregroundColor:
+                                              colorScheme.onPrimary,
+                                          shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(8)),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 20, vertical: 10),
                                           elevation: 0,
                                         ),
-                                        child: Text('View Job', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                                        child: Text('View Job',
+                                            style: const TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w600)),
                                       ),
                                     ],
                                   ),
@@ -856,15 +1071,15 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                             ),
                           ),
                         ),
-                        );
-                      },
-                  ),
+                      );
+                    },
                   ),
                 ),
-              ],
-          ),
+              ),
+            ],
           ),
         ),
+      ),
     );
   }
 }

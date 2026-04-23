@@ -9,6 +9,28 @@ class NotificationService {
     return text;
   }
 
+  static String _utf8SafeString(String value) {
+    try {
+      return utf8.decode(utf8.encode(value));
+    } catch (_) {
+      return value;
+    }
+  }
+
+  static dynamic _utf8SafeValue(dynamic value) {
+    if (value == null) return null;
+    if (value is String) return _utf8SafeString(value);
+    if (value is Map) {
+      return value.map(
+        (key, val) => MapEntry(key, _utf8SafeValue(val)),
+      );
+    }
+    if (value is List) {
+      return value.map(_utf8SafeValue).toList();
+    }
+    return value;
+  }
+
   // Try to fetch unread count; returns -1 on failure
   static Future<int> fetchUnreadCount() async {
     final candidates = [
@@ -105,6 +127,11 @@ class NotificationService {
       String? toUserId, String title, String body,
       {Map<String, dynamic>? payload}) async {
     if (toUserId == null || toUserId.isEmpty) return false;
+    final safeTitle = _utf8SafeString(title);
+    final safeBody = _utf8SafeString(body);
+    final safePayload = payload == null
+        ? null
+        : Map<String, dynamic>.from(_utf8SafeValue(payload) as Map);
     final endpoints = [
       '$API_BASE_URL/api/notifications',
       '$API_BASE_URL/api/notifications/send',
@@ -112,17 +139,20 @@ class NotificationService {
     ];
     final bodyMap = <String, dynamic>{
       'toUserId': toUserId,
-      'title': title,
-      'body': body,
-      'message': body,
-      if (payload?['type'] != null) 'type': payload!['type'],
-      if (payload != null) 'payload': payload,
+      'title': safeTitle,
+      'body': safeBody,
+      'message': safeBody,
+      if (safePayload?['type'] != null) 'type': safePayload!['type'],
+      if (safePayload != null) 'payload': safePayload,
     };
 
     for (final url in endpoints) {
       try {
         final resp = await ApiClient.post(url,
-            headers: {'Content-Type': 'application/json'},
+            headers: {
+              'Content-Type': 'application/json; charset=utf-8',
+              'Accept-Charset': 'utf-8',
+            },
             body: jsonEncode(bodyMap));
         final status = resp['status'] as int? ?? 0;
         if (status >= 200 && status < 300) return true;
