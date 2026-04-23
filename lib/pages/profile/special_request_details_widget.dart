@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../../utils/app_notification.dart';
 import '../../services/special_service_request_service.dart';
 import '../../services/token_storage.dart';
 import '../../services/location_service.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '../payment_webview/payment_webview_page_widget.dart';
+import '../booking_page/booking_page_widget.dart';
+import '../../main.dart';
 import '../../services/user_service.dart';
+import '../../services/notification_service.dart';
+import '../../state/app_state_notifier.dart' as app_state_notifier;
 
 class SpecialRequestDetailsWidget extends StatefulWidget {
   final Map<String, dynamic> request;
@@ -15,16 +20,19 @@ class SpecialRequestDetailsWidget extends StatefulWidget {
   const SpecialRequestDetailsWidget({super.key, required this.request});
 
   @override
-  State<SpecialRequestDetailsWidget> createState() => _SpecialRequestDetailsWidgetState();
+  State<SpecialRequestDetailsWidget> createState() =>
+      _SpecialRequestDetailsWidgetState();
 }
 
-class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidget> {
+class _SpecialRequestDetailsWidgetState
+    extends State<SpecialRequestDetailsWidget> {
   Map<String, dynamic>? _currentRequest;
   bool _isClient = false;
   bool _isLoading = true;
   Timer? _refreshTimer;
   bool _isRefreshingRequest = false;
   bool _isActivityDialogVisible = false;
+  BuildContext? _activityDialogContext;
   String? _currentUserId;
   final Map<String, Map<String, dynamic>> _userProfileCache = {};
   final Map<String, String> _locationCache = {};
@@ -67,6 +75,7 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
 
     return false;
   }
+
   bool get _hasSuccessfulPayment {
     String? normalize(dynamic value) {
       final text = value?.toString().trim().toLowerCase();
@@ -131,7 +140,7 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
   }) {
     if (!mounted) return;
     if (_isActivityDialogVisible) {
-      Navigator.of(context, rootNavigator: true).pop();
+      Navigator.of(context).pop();
       _isActivityDialogVisible = false;
     }
 
@@ -139,69 +148,77 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => PopScope(
-        canPop: false,
-        child: Dialog(
-          elevation: 0,
-          backgroundColor: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: primaryColor.withOpacity(0.10),
-                    shape: BoxShape.circle,
+      builder: (ctx) {
+        _activityDialogContext = ctx;
+        return PopScope(
+          canPop: false,
+          child: Dialog(
+            elevation: 0,
+            backgroundColor: Colors.transparent,
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: primaryColor.withOpacity(0.10),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, color: primaryColor, size: 24),
                   ),
-                  child: Icon(icon, color: primaryColor, size: 24),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: FlutterFlowTheme.of(context).titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: FlutterFlowTheme.of(context).bodyMedium?.copyWith(
-                        color: Theme.of(context).hintColor,
-                        height: 1.4,
-                      ),
-                ),
-                const SizedBox(height: 16),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(999),
-                  child: LinearProgressIndicator(
-                    minHeight: 6,
-                    valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
-                    backgroundColor: primaryColor.withOpacity(0.14),
+                  const SizedBox(height: 16),
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: FlutterFlowTheme.of(context).titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 8),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: FlutterFlowTheme.of(context).bodyMedium?.copyWith(
+                          color: Theme.of(context).hintColor,
+                          height: 1.4,
+                        ),
+                  ),
+                  const SizedBox(height: 16),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(999),
+                    child: LinearProgressIndicator(
+                      minHeight: 6,
+                      valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                      backgroundColor: primaryColor.withOpacity(0.14),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     ).then((_) {
       _isActivityDialogVisible = false;
+      _activityDialogContext = null;
     });
   }
 
   void _hideActivityDialog() {
     if (!mounted || !_isActivityDialogVisible) return;
-    Navigator.of(context, rootNavigator: true).pop();
+    final dialogContext = _activityDialogContext;
+    if (dialogContext != null) {
+      Navigator.of(dialogContext).pop();
+    }
     _isActivityDialogVisible = false;
+    _activityDialogContext = null;
   }
 
   Future<void> _initializePage() async {
@@ -218,7 +235,8 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
       initialRequest,
       fetchLatest: true,
     );
-    final hydratedIsClient = _resolveIsClientSync(hydratedRequest, currentUserId);
+    final hydratedIsClient =
+        _resolveIsClientSync(hydratedRequest, currentUserId);
 
     if (!mounted) return;
     setState(() {
@@ -242,7 +260,8 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
       }
       // Only refresh if not in a final state
       final status = _normalizedStatus();
-      if (!['completed', 'cancelled', 'rejected', 'declined'].contains(status)) {
+      if (!['completed', 'cancelled', 'rejected', 'declined']
+          .contains(status)) {
         await _refreshRequestData();
       } else {
         // Cancel refresh if request is in final state
@@ -277,8 +296,10 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
   Future<Map<String, dynamic>> _withUserProfiles(
       Map<String, dynamic> request) async {
     final updated = Map<String, dynamic>.from(request);
-    final clientId = updated['clientId']?.toString() ?? updated['client']?['id']?.toString();
-    final artisanId = updated['artisanId']?.toString() ?? updated['artisan']?['id']?.toString();
+    final clientId =
+        updated['clientId']?.toString() ?? updated['client']?['id']?.toString();
+    final artisanId = updated['artisanId']?.toString() ??
+        updated['artisan']?['id']?.toString();
 
     Future<Map<String, dynamic>?> fetchProfile(String id) async {
       final cached = _userProfileCache[id];
@@ -312,7 +333,9 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
     if (clientProfile != null) {
       updated['client'] = {
         'id': clientId,
-        'name': clientProfile['name']?.toString() ?? clientProfile['firstName']?.toString() ?? 'Client',
+        'name': clientProfile['name']?.toString() ??
+            clientProfile['firstName']?.toString() ??
+            'Client',
         'profileImage': _extractProfileImageUrl(clientProfile['profileImage']),
       };
     } else if (updated['client'] == null) {
@@ -322,7 +345,9 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
     if (artisanProfile != null) {
       updated['artisan'] = {
         'id': artisanId,
-        'name': artisanProfile['name']?.toString() ?? artisanProfile['firstName']?.toString() ?? 'Artisan',
+        'name': artisanProfile['name']?.toString() ??
+            artisanProfile['firstName']?.toString() ??
+            'Artisan',
         'profileImage': _extractProfileImageUrl(artisanProfile['profileImage']),
         'rating': artisanProfile['rating'],
         'artisanRating': artisanProfile['artisanRating'],
@@ -352,7 +377,9 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
           } catch (_) {}
         }
 
-        if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:')) {
+        if (trimmed.startsWith('http://') ||
+            trimmed.startsWith('https://') ||
+            trimmed.startsWith('data:')) {
           images.add(trimmed);
         }
         return;
@@ -366,7 +393,14 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
       }
 
       if (source is Map) {
-        for (final key in ['url', 'path', 'imageUrl', 'image_url', 'secure_url', 'secureUrl']) {
+        for (final key in [
+          'url',
+          'path',
+          'imageUrl',
+          'image_url',
+          'secure_url',
+          'secureUrl'
+        ]) {
           final value = source[key];
           if (value != null) {
             collect(value);
@@ -391,7 +425,15 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
 
   String? _extractNameFromMap(Map<String, dynamic>? data) {
     if (data == null) return null;
-    for (final field in ['name', 'fullName', 'full_name', 'firstName', 'first_name', 'displayName', 'display_name']) {
+    for (final field in [
+      'name',
+      'fullName',
+      'full_name',
+      'firstName',
+      'first_name',
+      'displayName',
+      'display_name'
+    ]) {
       final value = data[field]?.toString();
       if (value != null && value.isNotEmpty) {
         return value;
@@ -421,11 +463,19 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
       final imageData = data[field];
       if (imageData is Map) {
         final url = imageData['url']?.toString();
-        if (url != null && url.isNotEmpty && (url.startsWith('http') || url.startsWith('https') || url.startsWith('data:'))) {
+        if (url != null &&
+            url.isNotEmpty &&
+            (url.startsWith('http') ||
+                url.startsWith('https') ||
+                url.startsWith('data:'))) {
           return url;
         }
       }
-      if (imageData is String && imageData.isNotEmpty && (imageData.startsWith('http') || imageData.startsWith('https') || imageData.startsWith('data:'))) {
+      if (imageData is String &&
+          imageData.isNotEmpty &&
+          (imageData.startsWith('http') ||
+              imageData.startsWith('https') ||
+              imageData.startsWith('data:'))) {
         return imageData;
       }
     }
@@ -499,7 +549,14 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
   }
 
   String _extractKYCStatus() {
-    final kycFields = ['kycStatus', 'kyc_status', 'kycVerification', 'kyc_verification', 'verificationStatus', 'verification_status'];
+    final kycFields = [
+      'kycStatus',
+      'kyc_status',
+      'kycVerification',
+      'kyc_verification',
+      'verificationStatus',
+      'verification_status'
+    ];
     for (final field in kycFields) {
       final status = _currentRequest?[field]?.toString();
       if (status != null && status.isNotEmpty) {
@@ -519,7 +576,12 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
   String _extractDisplayName() {
     if (_isClient) {
       // Client sees artisan's name
-      final artisanNameFields = ['artisanName', 'artisan_name', 'serviceProviderName', 'service_provider_name'];
+      final artisanNameFields = [
+        'artisanName',
+        'artisan_name',
+        'serviceProviderName',
+        'service_provider_name'
+      ];
       for (final field in artisanNameFields) {
         final name = _currentRequest?[field]?.toString();
         if (name != null && name.isNotEmpty) {
@@ -535,7 +597,14 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
       return 'Artisan';
     } else {
       // Artisan sees client's name
-      final clientNameFields = ['clientName', 'client_name', 'customerName', 'customer_name', 'userName', 'user_name'];
+      final clientNameFields = [
+        'clientName',
+        'client_name',
+        'customerName',
+        'customer_name',
+        'userName',
+        'user_name'
+      ];
       for (final field in clientNameFields) {
         final name = _currentRequest?[field]?.toString();
         if (name != null && name.isNotEmpty) {
@@ -588,7 +657,15 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
       if (uid == null || uid.isEmpty || request == null) return false;
 
       String? clientId;
-      final cands = ['clientId', 'client_id', 'client', 'userId', 'user_id', 'user', 'createdBy'];
+      final cands = [
+        'clientId',
+        'client_id',
+        'client',
+        'userId',
+        'user_id',
+        'user',
+        'createdBy'
+      ];
       for (final k in cands) {
         final v = request[k];
         if (v == null) continue;
@@ -701,8 +778,8 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
           });
         }
       }
-    } catch (_) {}
-    finally {
+    } catch (_) {
+    } finally {
       _isRefreshingRequest = false;
     }
   }
@@ -730,6 +807,41 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
 
   String _safe(dynamic s) => s?.toString() ?? '-';
 
+  String _resolveSpecialRequestSchedule(Map<String, dynamic>? request) {
+    final rawSchedule = request?['schedule'];
+    if (rawSchedule != null && rawSchedule.toString().trim().isNotEmpty) {
+      return rawSchedule.toString().trim();
+    }
+
+    final rawDate = request?['date'] ?? request?['requestedDate'];
+    final rawTime = request?['time'] ?? request?['requestedTime'];
+    if (rawDate != null) {
+      try {
+        final parsedDate = DateTime.parse(rawDate.toString()).toLocal();
+        if (rawTime != null && rawTime.toString().trim().isNotEmpty) {
+          final match = RegExp(r'^(\d{1,2}):(\d{2})')
+              .firstMatch(rawTime.toString().trim());
+          if (match != null) {
+            final hour = int.tryParse(match.group(1)!);
+            final minute = int.tryParse(match.group(2)!);
+            if (hour != null && minute != null) {
+              return DateTime(
+                parsedDate.year,
+                parsedDate.month,
+                parsedDate.day,
+                hour,
+                minute,
+              ).toUtc().toIso8601String();
+            }
+          }
+        }
+        return parsedDate.toUtc().toIso8601String();
+      } catch (_) {}
+    }
+
+    return DateTime.now().toUtc().toIso8601String();
+  }
+
   String _formatDate(String? dateStr) {
     if (dateStr == null) return '-';
     try {
@@ -737,8 +849,10 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
       final now = DateTime.now();
       final diff = now.difference(date);
 
-      if (diff.inDays == 0) return 'Today at ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-      if (diff.inDays == 1) return 'Yesterday at ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+      if (diff.inDays == 0)
+        return 'Today at ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+      if (diff.inDays == 1)
+        return 'Yesterday at ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
       if (diff.inDays < 7) return '${diff.inDays} days ago';
       return '${date.day}/${date.month}/${date.year}';
     } catch (_) {
@@ -748,58 +862,90 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
 
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
-      case 'pending': return Colors.amber;
-      case 'responded': return Colors.blue;
-      case 'accepted': return Colors.orange;
-      case 'confirmed': return Colors.green;
-      case 'in_progress': return Colors.indigo;
-      case 'completed': return Colors.teal;
-      case 'rejected': return Colors.red;
-      case 'declined': return Colors.red;
-      case 'cancelled': return Colors.grey;
-      default: return primaryColor;
+      case 'pending':
+        return Colors.amber;
+      case 'responded':
+        return Colors.blue;
+      case 'accepted':
+        return Colors.orange;
+      case 'confirmed':
+        return Colors.green;
+      case 'in_progress':
+        return Colors.indigo;
+      case 'completed':
+        return Colors.teal;
+      case 'rejected':
+        return Colors.red;
+      case 'declined':
+        return Colors.red;
+      case 'cancelled':
+        return Colors.grey;
+      default:
+        return primaryColor;
     }
   }
 
   String _getStatusText(String status) {
     switch (status.toLowerCase()) {
-      case 'pending': return 'Pending';
-      case 'responded': return 'Responded';
-      case 'accepted': return 'Accepted';
-      case 'confirmed': return 'Confirmed';
-      case 'in_progress': return 'In Progress';
-      case 'completed': return 'Completed';
-      case 'rejected': return 'Rejected';
-      case 'declined': return 'Declined';
-      case 'cancelled': return 'Cancelled';
-      default: return status.replaceAll('_', ' ');
+      case 'pending':
+        return 'Pending';
+      case 'responded':
+        return 'Responded';
+      case 'accepted':
+        return 'Accepted';
+      case 'confirmed':
+        return 'Confirmed';
+      case 'in_progress':
+        return 'In Progress';
+      case 'completed':
+        return 'Completed';
+      case 'rejected':
+        return 'Rejected';
+      case 'declined':
+        return 'Declined';
+      case 'cancelled':
+        return 'Cancelled';
+      default:
+        return status.replaceAll('_', ' ');
     }
   }
 
   IconData _getStatusIcon(String status) {
     switch (status.toLowerCase()) {
-      case 'pending': return Icons.pending_outlined;
-      case 'responded': return Icons.mark_email_read_outlined;
-      case 'accepted': return Icons.payments_outlined;
-      case 'confirmed': return Icons.verified_outlined;
-      case 'in_progress': return Icons.handyman_outlined;
-      case 'completed': return Icons.done_all_outlined;
-      case 'rejected': return Icons.cancel_outlined;
-      case 'declined': return Icons.do_not_disturb_on_outlined;
-      case 'cancelled': return Icons.remove_circle_outline;
-      default: return Icons.info_outline;
+      case 'pending':
+        return Icons.pending_outlined;
+      case 'responded':
+        return Icons.mark_email_read_outlined;
+      case 'accepted':
+        return Icons.payments_outlined;
+      case 'confirmed':
+        return Icons.verified_outlined;
+      case 'in_progress':
+        return Icons.handyman_outlined;
+      case 'completed':
+        return Icons.done_all_outlined;
+      case 'rejected':
+        return Icons.cancel_outlined;
+      case 'declined':
+        return Icons.do_not_disturb_on_outlined;
+      case 'cancelled':
+        return Icons.remove_circle_outline;
+      default:
+        return Icons.info_outline;
     }
   }
 
   Future<void> _showArtisanResponseSheet() async {
     try {
-      final requestId = _safe(_currentRequest?['_id'] ?? _currentRequest?['id']);
+      final requestId =
+          _safe(_currentRequest?['_id'] ?? _currentRequest?['id']);
       if (requestId == '-') {
         AppNotification.showError(context, 'Invalid request ID');
         return;
       }
 
-      final fetchedResponse = await SpecialServiceRequestService.fetchArtisanResponse(requestId);
+      final fetchedResponse =
+          await SpecialServiceRequestService.fetchArtisanResponse(requestId);
       if (!mounted) return;
 
       if (fetchedResponse == null) {
@@ -839,7 +985,8 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
 
       if (currentArtisanReply != null) artisanReply.addAll(currentArtisanReply);
       if (currentNote != null) artisanReply.addAll(currentNote);
-      if (responseArtisanReply != null) artisanReply.addAll(responseArtisanReply);
+      if (responseArtisanReply != null)
+        artisanReply.addAll(responseArtisanReply);
       if (responseNote != null) artisanReply.addAll(responseNote);
 
       if (artisanReply.isEmpty) {
@@ -877,14 +1024,14 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
         return;
       }
 
-      final artisanName = _currentRequest?['artisanName']?.toString() ?? 'Artisan';
+      final artisanName =
+          _currentRequest?['artisanName']?.toString() ?? 'Artisan';
       final message = (artisanReply['message']?.toString() ?? '').isNotEmpty
           ? artisanReply['message'].toString()
           : 'No additional message provided';
 
       // Determine quote type based on available fields
-      final fixedValue =
-          artisanReply['quote'] ??
+      final fixedValue = artisanReply['quote'] ??
           artisanReply['selectedPrice'] ??
           artisanReply['price'] ??
           artisanReply['amount'] ??
@@ -908,8 +1055,7 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
           (num.tryParse(fixedValue.toString()) == null ||
               (num.tryParse(fixedValue.toString()) ?? 0) > 0);
       final hasRange =
-          (minQuote != null && maxQuote != null) ||
-          normalizedOptions != null;
+          (minQuote != null && maxQuote != null) || normalizedOptions != null;
       final quoteType = artisanReply['quoteType']?.toString();
 
       final isFixed = quoteType == 'fixed' || (hasFixed && !hasRange);
@@ -944,7 +1090,8 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
       }
 
       // Log the parsed quote information
-      print('isFixed: $isFixed, isRange: $isRange, fixedQuote: $fixedQuote, priceRanges: $priceRanges, min: $min, max: $max');
+      print(
+          'isFixed: $isFixed, isRange: $isRange, fixedQuote: $fixedQuote, priceRanges: $priceRanges, min: $min, max: $max');
 
       await showModalBottomSheet(
         context: context,
@@ -963,123 +1110,272 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
           min: min,
           max: max,
           onAgreeAndPay: (int? selectedPrice) async {
+            final paymentMode = dotenv.env['PAYMENT_MODE'] ?? 'upfront';
+            final isDeferredBooking = paymentMode == 'afterCompletion';
             final agree = await showDialog<bool>(
               context: context,
               builder: (c) => AlertDialog(
-                title: const Text('Confirm Payment'),
-                content: Text('Proceed to payment for ₦${selectedPrice ?? 'this service'}?'),
+                title: Text(
+                    isDeferredBooking ? 'Confirm Booking' : 'Confirm Payment'),
+                content: Text(isDeferredBooking
+                    ? 'Create this booking for ₦${selectedPrice ?? 'this service'} now? Payment will be requested after completion.'
+                    : 'Proceed to payment for ₦${selectedPrice ?? 'this service'}?'),
                 actions: [
-                  TextButton(onPressed: () => Navigator.of(c).pop(false), child: const Text('No')),
-                  ElevatedButton(onPressed: () => Navigator.of(c).pop(true), child: const Text('Yes')),
+                  TextButton(
+                      onPressed: () => Navigator.of(c).pop(false),
+                      child: const Text('No')),
+                  ElevatedButton(
+                      onPressed: () => Navigator.of(c).pop(true),
+                      child:
+                          Text(isDeferredBooking ? 'Create Booking' : 'Yes')),
                 ],
               ),
             );
             if (agree == true) {
+              Navigator.of(ctx).pop();
               _showActivityDialog(
-                title: 'Preparing Payment',
-                message: 'Saving your selection and preparing secure checkout.',
-                icon: Icons.payments_outlined,
+                title: isDeferredBooking
+                    ? 'Preparing Booking'
+                    : 'Preparing Payment',
+                message: isDeferredBooking
+                    ? 'Saving your selection and getting the booking ready.'
+                    : 'Saving your selection and preparing secure checkout.',
+                icon: isDeferredBooking
+                    ? Icons.assignment_outlined
+                    : Icons.payments_outlined,
               );
 
               try {
-                final id = _safe(_currentRequest?['_id'] ?? _currentRequest?['id']);
+                final id =
+                    _safe(_currentRequest?['_id'] ?? _currentRequest?['id']);
                 if (id == '-') {
                   _hideActivityDialog();
                   AppNotification.showError(context, 'Invalid request ID');
                   return;
                 }
 
-                // Call acceptResponse which will initialize payment on the backend
-                final updated = await SpecialServiceRequestService.acceptResponse(
+                // Call acceptResponse first. Some backends create the deferred
+                // booking here, while older ones only change the request status.
+                var updated = await SpecialServiceRequestService.acceptResponse(
                   id,
                   selectedPrice: selectedPrice,
                   requestTitle: _currentRequest?['serviceTitle']?.toString() ??
                       _currentRequest?['title']?.toString(),
+                  paymentMode: paymentMode,
                 );
 
                 if (!mounted) return;
-                _hideActivityDialog();
+
+                if (isDeferredBooking && updated == null) {
+                  updated = await SpecialServiceRequestService.fetchById(id) ??
+                      <String, dynamic>{};
+                }
 
                 if (updated != null) {
+                  var updatedResponse = Map<String, dynamic>.from(updated);
+                  String? threadId = updatedResponse['threadId']?.toString();
+
                   // Check for nested data structure
-                  if (updated['data'] is Map) {
+                  if (updatedResponse['data'] is Map) {
                     // Nested data found
                   }
 
-                  // Merge the updated response with existing request data to preserve all fields
-                  final mergedRequest = _currentRequest != null
-                      ? {..._currentRequest!, ...updated}
-                      : updated;
-                  setState(() => _currentRequest = mergedRequest);
+                  final bookingData = updatedResponse['booking'];
+                  String? bookingId =
+                      updatedResponse['bookingId']?.toString() ??
+                          (bookingData is Map
+                              ? (bookingData['_id'] ?? bookingData['id'])
+                                  ?.toString()
+                              : null);
 
-                  final bookingData = updated['booking'];
-                  final bookingId = updated['bookingId']?.toString() ??
-                      (bookingData is Map
-                          ? (bookingData['_id'] ?? bookingData['id'])
-                              ?.toString()
-                          : null);
+                  if (paymentMode == 'afterCompletion' &&
+                      (bookingId == null || bookingId.isEmpty)) {
+                    final artisanId =
+                        _currentRequest?['artisanId']?.toString() ??
+                            _currentRequest?['artisan']?['id']?.toString();
 
-                  // Check if payment was initialized (payment data or authorization URL present)
-                  final paymentData = updated['payment'] ?? updated['paymentData'] ?? updated['authorization'] ?? updated['data']?['payment'];
+                    if (artisanId != null &&
+                        artisanId.isNotEmpty &&
+                        selectedPrice != null) {
+                      _showActivityDialog(
+                        title: 'Creating Booking',
+                        message:
+                            'Finalizing the booking now. Payment will be requested after completion.',
+                        icon: Icons.assignment_turned_in_outlined,
+                      );
 
-                  final authUrl = paymentData is Map ? paymentData['authorization_url'] ?? paymentData['authorizationUrl'] : null;
+                      final deferredBooking = await SpecialServiceRequestService
+                          .createDeferredBooking(
+                        requestId: id,
+                        artisanId: artisanId,
+                        price: selectedPrice,
+                        schedule:
+                            _resolveSpecialRequestSchedule(_currentRequest),
+                        requestTitle:
+                            _currentRequest?['serviceTitle']?.toString() ??
+                                _currentRequest?['title']?.toString(),
+                        description:
+                            _currentRequest?['description']?.toString(),
+                        location: _currentRequest?['location']?.toString(),
+                      );
 
-                  Map<String, dynamic>? paymentResponse;
-                  if (paymentData != null && authUrl != null && authUrl.toString().isNotEmpty) {
-                    paymentResponse = Map<String, dynamic>.from(paymentData);
-                  } else {
-                    // Try the documented /:id/pay endpoint when accept returns booking without payment.
-                    String? email;
-                    try {
-                      final profile = await UserService.getProfile();
-                      email = profile?['email']?.toString();
-                      if (email == null || email.trim().isEmpty) {
-                        final recent = await TokenStorage.getRecentRegistration();
-                        email = recent?['email']?.toString();
+                      if (!mounted) return;
+
+                      if (deferredBooking != null &&
+                          deferredBooking['_error'] != true) {
+                        updatedResponse = {
+                          ...updatedResponse,
+                          ...deferredBooking,
+                          'booking': deferredBooking['booking'] ??
+                              updatedResponse['booking'],
+                        };
+                        threadId =
+                            deferredBooking['threadId']?.toString() ?? threadId;
+                        bookingId = deferredBooking['bookingId']?.toString() ??
+                            bookingId;
+
+                        if (bookingId != null && bookingId.isNotEmpty) {
+                          try {
+                            final synced = await SpecialServiceRequestService
+                                .updateRequest(
+                              id,
+                              {
+                                'status': 'confirmed',
+                                'bookingId': bookingId,
+                              },
+                            );
+                            if (synced != null) {
+                              updatedResponse = {
+                                ...updatedResponse,
+                                ...synced,
+                                'threadId':
+                                    threadId ?? synced['threadId']?.toString(),
+                                'bookingId': bookingId,
+                              };
+                            }
+                          } catch (_) {}
+                        }
+                      } else {
+                        _hideActivityDialog();
+                        AppNotification.showError(
+                          context,
+                          deferredBooking?['message']?.toString() ??
+                              'Booking could not be created.',
+                        );
+                        return;
                       }
-                      if (email == null || email.trim().isEmpty) {
-                        email = await TokenStorage.getRememberedEmail();
-                      }
-                    } catch (_) {
-                      email = null;
                     }
-                    final payResult =
-                        await SpecialServiceRequestService.initializePayment(
-                      id,
-                      email: email,
-                      requestTitle: _currentRequest?['serviceTitle']
-                              ?.toString() ??
-                          _currentRequest?['title']?.toString(),
-                      selectedPrice: selectedPrice,
-                    );
-                    final payData =
-                        payResult?['payment'] is Map ? payResult!['payment'] : payResult;
-                    if (payData != null && (payData['authorization_url'] != null || payData['authorizationUrl'] != null)) {
-                      final payAuthUrl = payData['authorization_url'] ?? payData['authorizationUrl'];
-                      if (payAuthUrl != null && payAuthUrl.toString().isNotEmpty) {
-                        paymentResponse = Map<String, dynamic>.from(payData);
+
+                    if ((bookingId == null || bookingId.isEmpty)) {
+                      final refreshed =
+                          await SpecialServiceRequestService.fetchById(id);
+                      if (!mounted) return;
+                      if (refreshed != null) {
+                        updatedResponse = {
+                          ...updatedResponse,
+                          ...refreshed,
+                        };
+                        final refreshedBooking = refreshed['booking'];
+                        bookingId = refreshed['bookingId']?.toString() ??
+                            (refreshedBooking is Map
+                                ? (refreshedBooking['_id'] ??
+                                        refreshedBooking['id'])
+                                    ?.toString()
+                                : null);
+                        threadId =
+                            refreshed['threadId']?.toString() ?? threadId;
                       }
                     }
                   }
 
-                  if (paymentResponse != null && (paymentResponse['authorization_url'] != null || paymentResponse['authorizationUrl'] != null)) {
-                    final finalAuthUrl = paymentResponse['authorization_url'] ?? paymentResponse['authorizationUrl'];
-                    if (finalAuthUrl != null && finalAuthUrl.toString().isNotEmpty) {
+                  _hideActivityDialog();
+
+                  // Merge the updated response with existing request data to preserve all fields
+                  final mergedRequest = _currentRequest != null
+                      ? {..._currentRequest!, ...updatedResponse}
+                      : updatedResponse;
+                  setState(() => _currentRequest = mergedRequest);
+
+                  // Check if payment was initialized (payment data or authorization URL present)
+                  final paymentData = updatedResponse['payment'] ??
+                      updatedResponse['paymentData'] ??
+                      updatedResponse['authorization'] ??
+                      updatedResponse['data']?['payment'];
+
+                  final authUrl = paymentData is Map
+                      ? paymentData['authorization_url'] ??
+                          paymentData['authorizationUrl']
+                      : null;
+
+                  Map<String, dynamic>? paymentResponse;
+                  if (paymentData != null &&
+                      authUrl != null &&
+                      authUrl.toString().isNotEmpty) {
+                    paymentResponse = Map<String, dynamic>.from(paymentData);
+                  }
+
+                  // For afterCompletion, if booking was created directly, show success message
+                  if (paymentMode == 'afterCompletion' &&
+                      bookingId != null &&
+                      bookingId.isNotEmpty) {
+                    _hideActivityDialog();
+                    AppNotification.showSuccess(
+                        context, 'Booking created successfully.');
+                    AppNotification.showInfo(context,
+                        'Your booking has been created. Payment will be collected after service completion.');
+                    try {
+                      final cnt = await NotificationService.fetchUnreadCount();
+                      try {
+                        app_state_notifier.AppStateNotifier.instance
+                            .setUnreadNotifications(cnt);
+                      } catch (_) {}
+                    } catch (_) {}
+                    // Navigate to booking details
+                    if (mounted) {
+                      await _showBookingCreatedBottomSheet(
+                          bookingId,
+                          threadId,
+                          _currentRequest?['serviceTitle']?.toString() ??
+                              _currentRequest?['title']?.toString() ??
+                              'Service',
+                          selectedPrice != null ? '₦$selectedPrice' : null,
+                          _currentRequest?['schedule']?.toString());
+                    }
+                    Navigator.of(context).pop(); // Close the ArtisanResponseSheet after showing the booking confirmation
+                    return;
+                  }
+
+                  if (paymentMode == 'afterCompletion') {
+                    AppNotification.showError(context,
+                        'Booking could not be created. Please try again.');
+                    return;
+                  }
+
+                  if (paymentResponse != null &&
+                      (paymentResponse['authorization_url'] != null ||
+                          paymentResponse['authorizationUrl'] != null)) {
+                    final finalAuthUrl = paymentResponse['authorization_url'] ??
+                        paymentResponse['authorizationUrl'];
+                    if (finalAuthUrl != null &&
+                        finalAuthUrl.toString().isNotEmpty) {
                       // For special service requests, payment is already initialized by the server
                       // Use in-app webview for payment instead of external browser
                       if (mounted) {
                         _showActivityDialog(
                           title: 'Opening Checkout',
-                          message: 'Taking you to Paystack to complete payment securely.',
+                          message:
+                              'Taking you to Paystack to complete payment securely.',
                           icon: Icons.open_in_new_rounded,
                         );
                         await Future.delayed(const Duration(milliseconds: 350));
                         _hideActivityDialog();
-                        final result = await Navigator.of(context).push<Map<String, dynamic>>(
+                        final result = await Navigator.of(context)
+                            .push<Map<String, dynamic>>(
                           MaterialPageRoute(
                             builder: (context) => PaymentWebviewPageWidget(
                               url: finalAuthUrl.toString(),
-                              successUrlContains: null, // Rely on automatic detection
+                              successUrlContains:
+                                  null, // Rely on automatic detection
                             ),
                           ),
                         );
@@ -1089,24 +1385,30 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
                           final resultUrl = result['url'] as String?;
                           final reference = result['reference'] as String?;
 
-                          if (success == true && reference != null && reference.isNotEmpty) {
+                          if (success == true &&
+                              reference != null &&
+                              reference.isNotEmpty) {
                             _showActivityDialog(
                               title: 'Verifying Payment',
-                              message: 'Confirming your payment with the server.',
+                              message:
+                                  'Confirming your payment with the server.',
                               icon: Icons.verified_outlined,
                             );
 
                             // Verify the payment with the backend
                             try {
                               final verifyResult =
-                                  await SpecialServiceRequestService.verifyPayment(
+                                  await SpecialServiceRequestService
+                                      .verifyPayment(
                                 reference,
                               );
                               _hideActivityDialog();
 
-                              if (verifyResult != null && verifyResult['status'] != null) {
+                              if (verifyResult != null &&
+                                  verifyResult['status'] != null) {
                                 final statusValue = verifyResult['status'];
-                                final paymentStatus = statusValue.toString().toLowerCase();
+                                final paymentStatus =
+                                    statusValue.toString().toLowerCase();
                                 // Handle both string and boolean status values
                                 final isSuccess = paymentStatus == 'success' ||
                                     paymentStatus == 'completed' ||
@@ -1115,7 +1417,8 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
                                 if (isSuccess) {
                                   _showActivityDialog(
                                     title: 'Finalizing Request',
-                                    message: 'Updating this request and checking for confirmation.',
+                                    message:
+                                        'Updating this request and checking for confirmation.',
                                     icon: Icons.assignment_turned_in_outlined,
                                   );
                                   final bookingCreated =
@@ -1133,49 +1436,72 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
                                     Navigator.of(context).pop();
                                   }
                                 } else {
-                                  AppNotification.showError(context, 'Payment verification failed. Status: $paymentStatus');
+                                  AppNotification.showError(context,
+                                      'Payment verification failed. Status: $paymentStatus');
                                 }
                               } else {
-                                AppNotification.showError(context, 'Payment verification failed');
+                                AppNotification.showError(
+                                    context, 'Payment verification failed');
                               }
                             } catch (e) {
                               _hideActivityDialog();
-                              AppNotification.showError(context, 'Error verifying payment: $e');
+                              AppNotification.showError(
+                                  context, 'Error verifying payment: $e');
                             }
                           } else if (success == true) {
                             _showActivityDialog(
                               title: 'Refreshing Request',
-                              message: 'Payment completed. Updating this request now.',
+                              message:
+                                  'Payment completed. Updating this request now.',
                               icon: Icons.refresh_rounded,
                             );
-                            AppNotification.showSuccess(context, 'Payment completed successfully!');
+                            AppNotification.showSuccess(
+                                context, 'Payment completed successfully!');
                             await _refreshRequestData();
                             _hideActivityDialog();
                           } else {
-                            AppNotification.showError(context, 'Payment was cancelled or failed');
+                            AppNotification.showError(
+                                context, 'Payment was cancelled or failed');
                           }
                         }
                       }
                     } else {
-                      AppNotification.showError(context, 'Payment could not be initialized. Please try again.');
+                      _hideActivityDialog();
+                      AppNotification.showError(context,
+                          'Payment could not be initialized. Please try again.');
                     }
                   } else {
+                    _hideActivityDialog();
                     if (bookingId != null && bookingId.isNotEmpty) {
                       AppNotification.showInfo(
                         context,
                         'Payment initialization is still pending. Please try again shortly.',
                       );
                     } else {
-                      AppNotification.showError(context, 'Payment could not be initialized. Please try again.');
+                      AppNotification.showError(context,
+                          'Payment could not be initialized. Please try again.');
                     }
                   }
                 } else {
-                  AppNotification.showError(context, 'Failed to process payment');
+                  _hideActivityDialog();
+                  AppNotification.showError(
+                      context,
+                      isDeferredBooking
+                          ? 'Booking could not be created. Please try again.'
+                          : 'Failed to process payment');
                 }
               } catch (e) {
                 if (mounted) {
                   _hideActivityDialog();
-                  AppNotification.showError(context, 'Error processing payment: $e');
+                  AppNotification.showError(
+                      context,
+                      isDeferredBooking
+                          ? 'Error creating booking: $e'
+                          : 'Error processing payment: $e');
+                }
+              } finally {
+                if (mounted) {
+                  _hideActivityDialog();
                 }
               }
             }
@@ -1185,18 +1511,26 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
               context: context,
               builder: (c) => AlertDialog(
                 title: const Text('Cancel Request'),
-                content: const Text('Are you sure you want to cancel this request?'),
+                content:
+                    const Text('Are you sure you want to cancel this request?'),
                 actions: [
-                  TextButton(onPressed: () => Navigator.of(c).pop(false), child: const Text('No')),
-                  ElevatedButton(onPressed: () => Navigator.of(c).pop(true), child: const Text('Yes')),
+                  TextButton(
+                      onPressed: () => Navigator.of(c).pop(false),
+                      child: const Text('No')),
+                  ElevatedButton(
+                      onPressed: () => Navigator.of(c).pop(true),
+                      child: const Text('Yes')),
                 ],
               ),
             );
             if (confirm == true) {
               try {
-                final id = _safe(_currentRequest?['_id'] ?? _currentRequest?['id']);
+                final id =
+                    _safe(_currentRequest?['_id'] ?? _currentRequest?['id']);
                 if (id != '-') {
-                  final updated = await SpecialServiceRequestService.updateStatus(id, 'cancelled');
+                  final updated =
+                      await SpecialServiceRequestService.updateStatus(
+                          id, 'cancelled');
                   if (updated != null) {
                     setState(() => _currentRequest = updated);
                     AppNotification.showSuccess(context, 'Request cancelled');
@@ -1225,13 +1559,13 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) => _ArtisanResponseForm(
-          requestId: _safe(_currentRequest?['_id'] ?? _currentRequest?['id']),
-          primaryColor: primaryColor,
-          onSuccess: (updatedRequest) {
-            setState(() => _currentRequest = updatedRequest);
-          },
-        ),
-      );
+        requestId: _safe(_currentRequest?['_id'] ?? _currentRequest?['id']),
+        primaryColor: primaryColor,
+        onSuccess: (updatedRequest) {
+          setState(() => _currentRequest = updatedRequest);
+        },
+      ),
+    );
   }
 
   @override
@@ -1274,11 +1608,14 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
     final status = _normalizedStatus();
     final statusColor = _getStatusColor(status);
     final statusText = _getStatusText(status);
-    final title = _safe(_currentRequest?['serviceTitle'] ?? _currentRequest?['title']);
+    final title =
+        _safe(_currentRequest?['serviceTitle'] ?? _currentRequest?['title']);
     final description = _safe(_currentRequest?['description']);
     final location = _safe(_currentRequest?['location']);
     final createdAt = _formatDate(_currentRequest?['createdAt']?.toString());
-    final updatedAt = _currentRequest?['updatedAt'] != null ? _formatDate(_currentRequest?['updatedAt']?.toString()) : null;
+    final updatedAt = _currentRequest?['updatedAt'] != null
+        ? _formatDate(_currentRequest?['updatedAt']?.toString())
+        : null;
     final urgency = _safe(_currentRequest?['urgency']);
     final profileImage = _extractDisplayProfileImage();
     final displayName = _extractDisplayName();
@@ -1289,9 +1626,11 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
           children: [
             // Header
             Container(
-              padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 12),
+              padding: EdgeInsets.symmetric(
+                  horizontal: horizontalPadding, vertical: 12),
               decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: _borderColor(), width: 1)),
+                border:
+                    Border(bottom: BorderSide(color: _borderColor(), width: 1)),
               ),
               child: Row(
                 children: [
@@ -1302,7 +1641,8 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
                     child: IconButton(
                       icon: Icon(
                         Icons.arrow_back_rounded,
-                        color: Theme.of(context).iconTheme.color ?? (isDark ? Colors.white : Colors.black),
+                        color: Theme.of(context).iconTheme.color ??
+                            (isDark ? Colors.white : Colors.black),
                         size: isSmallScreen ? 22 : 24,
                       ),
                       onPressed: () => Navigator.of(context).pop(),
@@ -1327,8 +1667,7 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
               height: (_isLoading || _isRefreshingRequest) ? 2 : 0,
               child: (_isLoading || _isRefreshingRequest)
                   ? LinearProgressIndicator(
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(primaryColor),
+                      valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
                       backgroundColor: Colors.transparent,
                     )
                   : null,
@@ -1338,7 +1677,8 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
             Expanded(
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
-                padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 20),
+                padding: EdgeInsets.symmetric(
+                    horizontal: horizontalPadding, vertical: 20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1364,43 +1704,58 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
                                         shape: BoxShape.circle,
                                         color: _surfaceColor(),
                                         border: Border.all(
-                                          color: isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                                          color: isDark
+                                              ? Colors.grey[800]!
+                                              : Colors.grey[300]!,
                                           width: 2,
                                         ),
                                       ),
                                       child: ClipOval(
-                                        child: profileImage != null && profileImage!.isNotEmpty
+                                        child: profileImage != null &&
+                                                profileImage!.isNotEmpty
                                             ? Image.network(
-                                          profileImage!,
-                                          fit: BoxFit.cover,
-                                          loadingBuilder: (context, child, loadingProgress) {
-                                            if (loadingProgress == null) return child;
-                                            return Center(
-                                              child: CircularProgressIndicator(
-                                                value: loadingProgress.expectedTotalBytes != null
-                                                    ? loadingProgress.cumulativeBytesLoaded /
-                                                    loadingProgress.expectedTotalBytes!
-                                                    : null,
-                                                strokeWidth: 2,
-                                                color: primaryColor,
-                                              ),
-                                            );
-                                          },
-                                          errorBuilder: (context, error, stackTrace) {
-                                            return Icon(
-                                              Icons.person_outline,
-                                              size: 32,
-                                              color: isDark ? Colors.grey[600] : Colors.grey[400],
-                                            );
-                                          },
-                                          cacheWidth: 200,
-                                          cacheHeight: 200,
-                                        )
+                                                profileImage!,
+                                                fit: BoxFit.cover,
+                                                loadingBuilder: (context, child,
+                                                    loadingProgress) {
+                                                  if (loadingProgress == null)
+                                                    return child;
+                                                  return Center(
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                      value: loadingProgress
+                                                                  .expectedTotalBytes !=
+                                                              null
+                                                          ? loadingProgress
+                                                                  .cumulativeBytesLoaded /
+                                                              loadingProgress
+                                                                  .expectedTotalBytes!
+                                                          : null,
+                                                      strokeWidth: 2,
+                                                      color: primaryColor,
+                                                    ),
+                                                  );
+                                                },
+                                                errorBuilder: (context, error,
+                                                    stackTrace) {
+                                                  return Icon(
+                                                    Icons.person_outline,
+                                                    size: 32,
+                                                    color: isDark
+                                                        ? Colors.grey[600]
+                                                        : Colors.grey[400],
+                                                  );
+                                                },
+                                                cacheWidth: 200,
+                                                cacheHeight: 200,
+                                              )
                                             : Icon(
-                                          Icons.person_outline,
-                                          size: 32,
-                                          color: isDark ? Colors.grey[600] : Colors.grey[400],
-                                        ),
+                                                Icons.person_outline,
+                                                size: 32,
+                                                color: isDark
+                                                    ? Colors.grey[600]
+                                                    : Colors.grey[400],
+                                              ),
                                       ),
                                     ),
                                     // Verified Badge
@@ -1430,7 +1785,8 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
                                 const SizedBox(width: 16),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Text(
@@ -1451,11 +1807,14 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
                           const SizedBox(width: 12),
                           // Status Badge Pill (Right side, smaller)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 5),
                             decoration: BoxDecoration(
                               color: statusColor.withOpacity(0.15),
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: statusColor.withOpacity(0.3), width: 1),
+                              border: Border.all(
+                                  color: statusColor.withOpacity(0.3),
+                                  width: 1),
                             ),
                             child: Text(
                               statusText,
@@ -1495,7 +1854,11 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
                         decoration: BoxDecoration(
                           color: _surfaceColor(),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: isDark ? Colors.grey[800]! : Colors.grey[200]!, width: 1),
+                          border: Border.all(
+                              color: isDark
+                                  ? Colors.grey[800]!
+                                  : Colors.grey[200]!,
+                              width: 1),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1508,7 +1871,9 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
                                     color: primaryColor.withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
-                                  child: Icon(Icons.description_outlined, color: primaryColor, size: isSmallScreen ? 18 : 20),
+                                  child: Icon(Icons.description_outlined,
+                                      color: primaryColor,
+                                      size: isSmallScreen ? 18 : 20),
                                 ),
                                 const SizedBox(width: 12),
                                 Text(
@@ -1524,7 +1889,9 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
                             Text(
                               description,
                               style: theme.bodyMedium?.copyWith(
-                                color: isDark ? Colors.grey[400] : Colors.grey[700],
+                                color: isDark
+                                    ? Colors.grey[400]
+                                    : Colors.grey[700],
                                 fontSize: bodyFontSize - 1,
                                 height: 1.5,
                               ),
@@ -1536,15 +1903,44 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
                     const SizedBox(height: 16),
 
                     // Info Grid
-                    _buildInfoItem(context: context, icon: Icons.location_on_outlined, label: 'Location', value: location, theme: theme, primaryColor: primaryColor, isDark: isDark, bodyFontSize: bodyFontSize, smallFontSize: smallFontSize),
+                    _buildInfoItem(
+                        context: context,
+                        icon: Icons.location_on_outlined,
+                        label: 'Location',
+                        value: location,
+                        theme: theme,
+                        primaryColor: primaryColor,
+                        isDark: isDark,
+                        bodyFontSize: bodyFontSize,
+                        smallFontSize: smallFontSize),
 
                     const SizedBox(height: 12),
 
                     Row(
                       children: [
-                        Expanded(child: _buildInfoItem(context: context, icon: Icons.calendar_today_outlined, label: 'Created', value: createdAt, theme: theme, primaryColor: primaryColor, isDark: isDark, bodyFontSize: bodyFontSize, smallFontSize: smallFontSize)),
+                        Expanded(
+                            child: _buildInfoItem(
+                                context: context,
+                                icon: Icons.calendar_today_outlined,
+                                label: 'Created',
+                                value: createdAt,
+                                theme: theme,
+                                primaryColor: primaryColor,
+                                isDark: isDark,
+                                bodyFontSize: bodyFontSize,
+                                smallFontSize: smallFontSize)),
                         const SizedBox(width: 12),
-                        Expanded(child: _buildInfoItem(context: context, icon: Icons.speed_outlined, label: 'Urgency', value: urgency, theme: theme, primaryColor: primaryColor, isDark: isDark, bodyFontSize: bodyFontSize, smallFontSize: smallFontSize)),
+                        Expanded(
+                            child: _buildInfoItem(
+                                context: context,
+                                icon: Icons.speed_outlined,
+                                label: 'Urgency',
+                                value: urgency,
+                                theme: theme,
+                                primaryColor: primaryColor,
+                                isDark: isDark,
+                                bodyFontSize: bodyFontSize,
+                                smallFontSize: smallFontSize)),
                       ],
                     ),
 
@@ -1558,12 +1954,18 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.update_rounded, size: 14, color: isDark ? Colors.grey[500] : Colors.grey[600]),
+                            Icon(Icons.update_rounded,
+                                size: 14,
+                                color: isDark
+                                    ? Colors.grey[500]
+                                    : Colors.grey[600]),
                             const SizedBox(width: 8),
                             Text(
                               'Last updated: $updatedAt',
                               style: theme.bodySmall?.copyWith(
-                                color: isDark ? Colors.grey[500] : Colors.grey[600],
+                                color: isDark
+                                    ? Colors.grey[500]
+                                    : Colors.grey[600],
                                 fontSize: smallFontSize - 1,
                               ),
                             ),
@@ -1575,7 +1977,11 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
                     // Image Gallery
                     if (images.isNotEmpty) ...[
                       const SizedBox(height: 20),
-                      _buildImageGallery(images: images, theme: theme, primaryColor: primaryColor, isSmallScreen: isSmallScreen),
+                      _buildImageGallery(
+                          images: images,
+                          theme: theme,
+                          primaryColor: primaryColor,
+                          isSmallScreen: isSmallScreen),
                     ],
 
                     const SizedBox(height: 24),
@@ -1587,18 +1993,40 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton.icon(
-                              onPressed: _hasSuccessfulPayment ? null : (_canViewArtisanResponse ? _showArtisanResponseSheet : null),
+                              onPressed: (_hasSuccessfulPayment || _hasBookingCreated)
+                                  ? null
+                                  : (_canViewArtisanResponse
+                                      ? _showArtisanResponseSheet
+                                      : null),
                               icon: const Icon(Icons.visibility_outlined),
                               label: const Text('View Artisan Response'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: _hasSuccessfulPayment ? Colors.grey[400] : (_canViewArtisanResponse ? primaryColor : Colors.grey[400]),
+                                backgroundColor: (_hasSuccessfulPayment || _hasBookingCreated)
+                                    ? Colors.grey[400]
+                                    : (_canViewArtisanResponse
+                                        ? primaryColor
+                                        : Colors.grey[400]),
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
                               ),
                             ),
                           ),
-                          if (_hasSuccessfulPayment)
+                          if (_hasBookingCreated)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                'Client has booked this artisan',
+                                style: theme.bodySmall?.copyWith(
+                                  color: Colors.grey[600],
+                                  fontStyle: FontStyle.italic,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            )
+                          else if (_hasSuccessfulPayment)
                             Padding(
                               padding: const EdgeInsets.only(top: 8),
                               child: Text(
@@ -1630,14 +2058,24 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton.icon(
-                              onPressed: _hasSuccessfulPayment ? null : (_isPending ? _showArtisanResponseForm : null),
+                              onPressed: _hasSuccessfulPayment
+                                  ? null
+                                  : (_isPending
+                                      ? _showArtisanResponseForm
+                                      : null),
                               icon: const Icon(Icons.rate_review_outlined),
                               label: const Text('Submit Response'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: _hasSuccessfulPayment ? Colors.grey[400] : (_isPending ? primaryColor : Colors.grey[400]),
+                                backgroundColor: _hasSuccessfulPayment
+                                    ? Colors.grey[400]
+                                    : (_isPending
+                                        ? primaryColor
+                                        : Colors.grey[400]),
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
                               ),
                             ),
                           ),
@@ -1740,7 +2178,8 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isDark ? Colors.grey[800]! : Colors.grey[200]!, width: 1),
+        border: Border.all(
+            color: isDark ? Colors.grey[800]! : Colors.grey[200]!, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1797,7 +2236,8 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
             itemCount: images.length,
             itemBuilder: (context, index) {
               return Padding(
-                padding: EdgeInsets.only(right: index == images.length - 1 ? 0 : 12),
+                padding:
+                    EdgeInsets.only(right: index == images.length - 1 ? 0 : 12),
                 child: GestureDetector(
                   onTap: () => _showImageViewer(images[index]),
                   child: Container(
@@ -1819,14 +2259,17 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(Icons.broken_image, color: Colors.grey, size: 32),
+                                    Icon(Icons.broken_image,
+                                        color: Colors.grey, size: 32),
                                     const SizedBox(height: 4),
                                     Padding(
                                       padding: const EdgeInsets.all(8.0),
                                       child: Text(
                                         'Image failed\nto load',
                                         textAlign: TextAlign.center,
-                                        style: Theme.of(context).textTheme.bodySmall,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall,
                                       ),
                                     ),
                                   ],
@@ -1840,7 +2283,8 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
                               return Center(
                                 child: CircularProgressIndicator(
                                   value: progress.expectedTotalBytes != null
-                                      ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes!
+                                      ? progress.cumulativeBytesLoaded /
+                                          progress.expectedTotalBytes!
                                       : null,
                                   strokeWidth: 2,
                                   color: primaryColor,
@@ -1857,7 +2301,8 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
                                 color: Colors.black.withOpacity(0.6),
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(Icons.zoom_in, color: Colors.white, size: 14),
+                              child: const Icon(Icons.zoom_in,
+                                  color: Colors.white, size: 14),
                             ),
                           ),
                         ],
@@ -1872,6 +2317,47 @@ class _SpecialRequestDetailsWidgetState extends State<SpecialRequestDetailsWidge
       ],
     );
   }
+
+  Future<void> _showBookingCreatedBottomSheet(
+    String bookingId,
+    String? threadId,
+    String serviceTitle,
+    String? price,
+    String? schedule,
+  ) async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => _BookingCreatedBottomSheet(
+        serviceTitle: serviceTitle,
+        price: price,
+        primaryColor: primaryColor,
+        onViewBooking: () async {
+          Navigator.of(ctx).pop();
+          if (!mounted) return;
+          await Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => NavBarPage(
+                initialPage: 'BookingPage',
+                page: BookingPageWidget(bookingId: bookingId, threadId: threadId),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  bool get _hasBookingCreated {
+    final bookingId = _currentRequest?['bookingId']?.toString() ??
+        _currentRequest?['booking']?['_id']?.toString() ??
+        _currentRequest?['booking']?['id']?.toString();
+    return bookingId != null && bookingId.isNotEmpty && bookingId != '-';
+  }
 }
 
 // Artisan Response Sheet Component
@@ -1884,7 +2370,7 @@ class _ArtisanResponseSheet extends StatefulWidget {
   final List<String>? priceRanges;
   final int? min;
   final int? max;
-  final Function(int?) onAgreeAndPay;
+  final Future<void> Function(int?) onAgreeAndPay;
   final VoidCallback onCancel;
 
   const _ArtisanResponseSheet({
@@ -1933,10 +2419,14 @@ class _ArtisanResponseSheetState extends State<_ArtisanResponseSheet> {
     final primaryColor = theme.primary ?? const Color(0xFFA20025);
     final rangeOptions = _rangeOptions();
     final hasPricing = widget.isFixed || widget.isRange;
-    final effectiveMin =
-        widget.min ?? (rangeOptions.isNotEmpty ? rangeOptions.reduce((a, b) => a < b ? a : b) : null);
-    final effectiveMax =
-        widget.max ?? (rangeOptions.isNotEmpty ? rangeOptions.reduce((a, b) => a > b ? a : b) : null);
+    final effectiveMin = widget.min ??
+        (rangeOptions.isNotEmpty
+            ? rangeOptions.reduce((a, b) => a < b ? a : b)
+            : null);
+    final effectiveMax = widget.max ??
+        (rangeOptions.isNotEmpty
+            ? rangeOptions.reduce((a, b) => a > b ? a : b)
+            : null);
 
     return Container(
       decoration: BoxDecoration(
@@ -1969,7 +2459,8 @@ class _ArtisanResponseSheetState extends State<_ArtisanResponseSheet> {
                       color: primaryColor.withOpacity(0.1),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.handshake_outlined, color: primaryColor, size: 24),
+                    child: Icon(Icons.handshake_outlined,
+                        color: primaryColor, size: 24),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -2017,7 +2508,8 @@ class _ArtisanResponseSheetState extends State<_ArtisanResponseSheet> {
                         children: [
                           Row(
                             children: [
-                              Icon(Icons.price_check, color: primaryColor, size: 20),
+                              Icon(Icons.price_check,
+                                  color: primaryColor, size: 20),
                               const SizedBox(width: 8),
                               Text(
                                 'Quotation',
@@ -2040,16 +2532,21 @@ class _ArtisanResponseSheetState extends State<_ArtisanResponseSheet> {
                               ),
                               child: Row(
                                 children: [
-                                  Icon(Icons.currency_rupee, color: primaryColor, size: 20),
+                                  Icon(Icons.currency_rupee,
+                                      color: primaryColor, size: 20),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Text(
-                                      widget.fixedQuote != null && widget.fixedQuote!.isNotEmpty
+                                      widget.fixedQuote != null &&
+                                              widget.fixedQuote!.isNotEmpty
                                           ? '₦${widget.fixedQuote}'
                                           : 'Amount not specified',
                                       style: theme.titleMedium?.copyWith(
                                         fontWeight: FontWeight.w700,
-                                        color: widget.fixedQuote != null && widget.fixedQuote!.isNotEmpty ? primaryColor : Colors.grey,
+                                        color: widget.fixedQuote != null &&
+                                                widget.fixedQuote!.isNotEmpty
+                                            ? primaryColor
+                                            : Colors.grey,
                                         fontSize: isSmallScreen ? 18.0 : 20.0,
                                       ),
                                     ),
@@ -2061,49 +2558,55 @@ class _ArtisanResponseSheetState extends State<_ArtisanResponseSheet> {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                  Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      color: Theme.of(context).colorScheme.surface,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: _borderColor()),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Text(
-                                          '₦',
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        Theme.of(context).colorScheme.surface,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: _borderColor()),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        '₦',
+                                        style: theme.titleMedium?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                          color: primaryColor,
+                                          fontSize: isSmallScreen ? 18.0 : 20.0,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          effectiveMin != null &&
+                                                  effectiveMax != null
+                                              ? '$effectiveMin - $effectiveMax'
+                                              : 'Price range available',
                                           style: theme.titleMedium?.copyWith(
                                             fontWeight: FontWeight.w700,
-                                            color: primaryColor,
-                                            fontSize: isSmallScreen ? 18.0 : 20.0,
+                                            color: effectiveMin != null &&
+                                                    effectiveMax != null
+                                                ? primaryColor
+                                                : Colors.grey,
+                                            fontSize:
+                                                isSmallScreen ? 18.0 : 20.0,
                                           ),
                                         ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Text(
-                                            effectiveMin != null && effectiveMax != null
-                                                ? '$effectiveMin - $effectiveMax'
-                                                : 'Price range available',
-                                            style: theme.titleMedium?.copyWith(
-                                              fontWeight: FontWeight.w700,
-                                              color: effectiveMin != null && effectiveMax != null
-                                                  ? primaryColor
-                                                  : Colors.grey,
-                                              fontSize: isSmallScreen ? 18.0 : 20.0,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                      ),
+                                    ],
                                   ),
+                                ),
                                 if (rangeOptions.isNotEmpty) ...[
                                   const SizedBox(height: 12),
                                   Text(
                                     'Available prices',
                                     style: theme.bodySmall?.copyWith(
                                       fontWeight: FontWeight.w600,
-                                      color: isDark ? Colors.grey[400] : Colors.grey[700],
+                                      color: isDark
+                                          ? Colors.grey[400]
+                                          : Colors.grey[700],
                                     ),
                                   ),
                                   const SizedBox(height: 8),
@@ -2111,20 +2614,28 @@ class _ArtisanResponseSheetState extends State<_ArtisanResponseSheet> {
                                     spacing: 8,
                                     runSpacing: 8,
                                     children: rangeOptions.map((option) {
-                                      final isSelected = _selectedRangePrice == option;
+                                      final isSelected =
+                                          _selectedRangePrice == option;
                                       return ChoiceChip(
                                         label: Text('₦$option'),
                                         selected: isSelected,
                                         onSelected: (_) {
-                                          setState(() => _selectedRangePrice = option);
+                                          setState(() =>
+                                              _selectedRangePrice = option);
                                         },
-                                        selectedColor: primaryColor.withOpacity(0.15),
+                                        selectedColor:
+                                            primaryColor.withOpacity(0.15),
                                         labelStyle: TextStyle(
-                                          color: isSelected ? primaryColor : null,
-                                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                                          color:
+                                              isSelected ? primaryColor : null,
+                                          fontWeight: isSelected
+                                              ? FontWeight.w600
+                                              : FontWeight.w500,
                                         ),
                                         side: BorderSide(
-                                          color: isSelected ? primaryColor : _borderColor(),
+                                          color: isSelected
+                                              ? primaryColor
+                                              : _borderColor(),
                                         ),
                                       );
                                     }).toList(),
@@ -2144,7 +2655,9 @@ class _ArtisanResponseSheetState extends State<_ArtisanResponseSheet> {
                               child: Text(
                                 'No price was included in this response.',
                                 style: theme.bodyMedium?.copyWith(
-                                  color: isDark ? Colors.grey[400] : Colors.grey[700],
+                                  color: isDark
+                                      ? Colors.grey[400]
+                                      : Colors.grey[700],
                                 ),
                               ),
                             ),
@@ -2167,7 +2680,8 @@ class _ArtisanResponseSheetState extends State<_ArtisanResponseSheet> {
                         children: [
                           Row(
                             children: [
-                              Icon(Icons.message_outlined, color: primaryColor, size: 20),
+                              Icon(Icons.message_outlined,
+                                  color: primaryColor, size: 20),
                               const SizedBox(width: 8),
                               Text(
                                 'Message',
@@ -2197,72 +2711,89 @@ class _ArtisanResponseSheetState extends State<_ArtisanResponseSheet> {
                     ),
 
                     const SizedBox(height: 24),
-                  ],
-                ),
-              ),
-            ),
 
-            // Action Buttons
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Theme.of(context).scaffoldBackgroundColor,
-                border: Border(top: BorderSide(color: _borderColor(), width: 1)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: widget.onCancel,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red,
-                        side: const BorderSide(color: Colors.red, width: 1.5),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    // Action Buttons
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).scaffoldBackgroundColor,
+                        border:
+                            Border(top: BorderSide(color: _borderColor(), width: 1)),
                       ),
-                      child: const Text('Cancel Request'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: hasPricing ? () {
-                        int? selectedPrice;
-                        bool isValid = false;
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: widget.onCancel,
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.red,
+                                side: const BorderSide(color: Colors.red, width: 1.5),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: const Text('Cancel Request'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: hasPricing
+                                  ? () async {
+                                      int? selectedPrice;
+                                      bool isValid = false;
 
-                        if (widget.isFixed && widget.fixedQuote != null && widget.fixedQuote!.isNotEmpty) {
-                          selectedPrice = int.tryParse(widget.fixedQuote!);
-                          isValid = selectedPrice != null;
-                        } else if (widget.isRange) {
-                          selectedPrice = _selectedRangePrice ?? effectiveMax;
-                          isValid = selectedPrice != null;
-                        }
+                                      if (widget.isFixed &&
+                                          widget.fixedQuote != null &&
+                                          widget.fixedQuote!.isNotEmpty) {
+                                        selectedPrice =
+                                            int.tryParse(widget.fixedQuote!);
+                                        isValid = selectedPrice != null;
+                                      } else if (widget.isRange) {
+                                        selectedPrice =
+                                            _selectedRangePrice ?? effectiveMax;
+                                        isValid = selectedPrice != null;
+                                      }
 
-                        if (!isValid) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                hasPricing
-                                    ? 'Please select a valid price'
-                                    : 'This response has no quote to pay for yet',
+                                      if (!isValid) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              hasPricing
+                                                  ? 'Please select a valid price'
+                                                  : 'This response has no quote to pay for yet',
+                                            ),
+                                          ),
+                                        );
+                                        return;
+                                      }
+
+                                      await widget.onAgreeAndPay(selectedPrice);
+                                    }
+                                  : null,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: primaryColor,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: Text(
+                                (() {
+                                  final paymentMode =
+                                      dotenv.env['PAYMENT_MODE'] ?? 'upfront';
+                                  return paymentMode == 'afterCompletion'
+                                      ? 'Create Booking'
+                                      : 'Agree & Pay';
+                                })(),
                               ),
                             ),
-                          );
-                          return;
-                        }
-
-                        widget.onAgreeAndPay(selectedPrice);
-                      } : null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: primaryColor,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ],
                       ),
-                      child: const Text('Agree & Pay'),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],
@@ -2349,13 +2880,25 @@ class _ArtisanResponseFormState extends State<_ArtisanResponseForm> {
       } else if (_selectedBudgetModel == 'range') {
         final min = int.parse(_minPriceController.text.trim());
         final max = int.parse(_maxPriceController.text.trim());
+        final options = <int>[];
+        final range = max - min;
+        for (int i = 0; i < 5; i++) {
+          options.add(min + (range * i ~/ 4));
+        }
+        if (!options.contains(max)) {
+          options.add(max);
+        }
         noteData['min'] = min;
         noteData['max'] = max;
+        noteData['minQuote'] = min;
+        noteData['maxQuote'] = max;
+        noteData['options'] = options;
         noteData['quoteType'] = 'range';
         artisanReply['min'] = min;
         artisanReply['max'] = max;
         artisanReply['minQuote'] = min;
         artisanReply['maxQuote'] = max;
+        artisanReply['options'] = options;
         artisanReply['quoteType'] = 'range';
       }
 
@@ -2365,9 +2908,14 @@ class _ArtisanResponseFormState extends State<_ArtisanResponseForm> {
         'artisanReply': artisanReply,
       };
 
-      final response = await SpecialServiceRequestService.submitArtisanResponse(widget.requestId, data);
+      final response = await SpecialServiceRequestService.submitArtisanResponse(
+          widget.requestId, data);
       if (response != null && mounted) {
-        widget.onSuccess(response);
+        widget.onSuccess({
+          ...response,
+          'note': response['note'] ?? noteData,
+          'artisanReply': response['artisanReply'] ?? artisanReply,
+        });
         Navigator.of(context).pop();
         AppNotification.showSuccess(context, 'Response submitted successfully');
       } else {
@@ -2424,7 +2972,8 @@ class _ArtisanResponseFormState extends State<_ArtisanResponseForm> {
                       color: widget.primaryColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(Icons.rate_review_outlined, color: widget.primaryColor, size: 24),
+                    child: Icon(Icons.rate_review_outlined,
+                        color: widget.primaryColor, size: 24),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -2463,7 +3012,8 @@ class _ArtisanResponseFormState extends State<_ArtisanResponseForm> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.attach_money, color: widget.primaryColor, size: 20),
+                        Icon(Icons.attach_money,
+                            color: widget.primaryColor, size: 20),
                         const SizedBox(width: 8),
                         Text(
                           'Budget Model',
@@ -2478,16 +3028,21 @@ class _ArtisanResponseFormState extends State<_ArtisanResponseForm> {
                     DropdownButtonFormField<String>(
                       value: _selectedBudgetModel,
                       decoration: InputDecoration(
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 14),
                         filled: true,
                         fillColor: Theme.of(context).scaffoldBackgroundColor,
                       ),
                       items: const [
-                        DropdownMenuItem(value: 'fixed', child: Text('Fixed Price')),
-                        DropdownMenuItem(value: 'range', child: Text('Price Range')),
+                        DropdownMenuItem(
+                            value: 'fixed', child: Text('Fixed Price')),
+                        DropdownMenuItem(
+                            value: 'range', child: Text('Price Range')),
                       ],
-                      onChanged: (value) => setState(() => _selectedBudgetModel = value),
+                      onChanged: (value) =>
+                          setState(() => _selectedBudgetModel = value),
                       hint: const Text('Select budget model'),
                     ),
                   ],
@@ -2508,9 +3063,12 @@ class _ArtisanResponseFormState extends State<_ArtisanResponseForm> {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.price_check, color: widget.primaryColor, size: 20),
+                          Icon(Icons.price_check,
+                              color: widget.primaryColor, size: 20),
                           const SizedBox(width: 8),
-                          Text('Fixed Price', style: theme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                          Text('Fixed Price',
+                              style: theme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w600)),
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -2520,8 +3078,10 @@ class _ArtisanResponseFormState extends State<_ArtisanResponseForm> {
                         decoration: InputDecoration(
                           hintText: 'e.g., 50000',
                           prefixText: '₦ ',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 14),
                           filled: true,
                           fillColor: Theme.of(context).scaffoldBackgroundColor,
                         ),
@@ -2541,9 +3101,12 @@ class _ArtisanResponseFormState extends State<_ArtisanResponseForm> {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.price_check, color: widget.primaryColor, size: 20),
+                          Icon(Icons.price_check,
+                              color: widget.primaryColor, size: 20),
                           const SizedBox(width: 8),
-                          Text('Price Range', style: theme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                          Text('Price Range',
+                              style: theme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w600)),
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -2556,10 +3119,13 @@ class _ArtisanResponseFormState extends State<_ArtisanResponseForm> {
                               decoration: InputDecoration(
                                 hintText: 'Min',
                                 prefixText: '₦ ',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                                border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 14),
                                 filled: true,
-                                fillColor: Theme.of(context).scaffoldBackgroundColor,
+                                fillColor:
+                                    Theme.of(context).scaffoldBackgroundColor,
                               ),
                             ),
                           ),
@@ -2571,10 +3137,13 @@ class _ArtisanResponseFormState extends State<_ArtisanResponseForm> {
                               decoration: InputDecoration(
                                 hintText: 'Max',
                                 prefixText: '₦ ',
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                                border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 14),
                                 filled: true,
-                                fillColor: Theme.of(context).scaffoldBackgroundColor,
+                                fillColor:
+                                    Theme.of(context).scaffoldBackgroundColor,
                               ),
                             ),
                           ),
@@ -2586,16 +3155,19 @@ class _ArtisanResponseFormState extends State<_ArtisanResponseForm> {
                         decoration: BoxDecoration(
                           color: widget.primaryColor.withOpacity(0.08),
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: widget.primaryColor.withOpacity(0.2)),
+                          border: Border.all(
+                              color: widget.primaryColor.withOpacity(0.2)),
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.info_outline, color: widget.primaryColor, size: 18),
+                            Icon(Icons.info_outline,
+                                color: widget.primaryColor, size: 18),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 'Client will select a price within this range',
-                                style: theme.bodySmall?.copyWith(color: widget.primaryColor, fontSize: 12.0),
+                                style: theme.bodySmall?.copyWith(
+                                    color: widget.primaryColor, fontSize: 12.0),
                               ),
                             ),
                           ],
@@ -2619,11 +3191,18 @@ class _ArtisanResponseFormState extends State<_ArtisanResponseForm> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.message_outlined, color: widget.primaryColor, size: 20),
+                        Icon(Icons.message_outlined,
+                            color: widget.primaryColor, size: 20),
                         const SizedBox(width: 8),
-                        Text('Message / Notes', style: theme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                        Text('Message / Notes',
+                            style: theme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w600)),
                         const Spacer(),
-                        Text('Required', style: theme.bodySmall?.copyWith(color: Colors.red, fontWeight: FontWeight.w600, fontSize: 11.0)),
+                        Text('Required',
+                            style: theme.bodySmall?.copyWith(
+                                color: Colors.red,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 11.0)),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -2632,9 +3211,12 @@ class _ArtisanResponseFormState extends State<_ArtisanResponseForm> {
                       maxLines: 4,
                       minLines: 3,
                       decoration: InputDecoration(
-                        hintText: 'Describe your approach, timeline, and any additional information...',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        hintText:
+                            'Describe your approach, timeline, and any additional information...',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 14),
                         filled: true,
                         fillColor: Theme.of(context).scaffoldBackgroundColor,
                       ),
@@ -2649,13 +3231,21 @@ class _ArtisanResponseFormState extends State<_ArtisanResponseForm> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
+                      onPressed: _isSubmitting
+                          ? null
+                          : () => Navigator.of(context).pop(),
                       style: OutlinedButton.styleFrom(
-                        padding: EdgeInsets.symmetric(vertical: isSmallScreen ? 12 : 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        side: BorderSide(color: widget.primaryColor, width: 1.5),
+                        padding: EdgeInsets.symmetric(
+                            vertical: isSmallScreen ? 12 : 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        side:
+                            BorderSide(color: widget.primaryColor, width: 1.5),
                       ),
-                      child: Text('Cancel', style: TextStyle(color: widget.primaryColor, fontWeight: FontWeight.w600)),
+                      child: Text('Cancel',
+                          style: TextStyle(
+                              color: widget.primaryColor,
+                              fontWeight: FontWeight.w600)),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -2664,11 +3254,17 @@ class _ArtisanResponseFormState extends State<_ArtisanResponseForm> {
                       onPressed: _isSubmitting ? null : _submitResponse,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: widget.primaryColor,
-                        padding: EdgeInsets.symmetric(vertical: isSmallScreen ? 12 : 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: EdgeInsets.symmetric(
+                            vertical: isSmallScreen ? 12 : 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
                       child: _isSubmitting
-                          ? SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          ? SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
                           : const Text('Submit Response'),
                     ),
                   ),
@@ -2701,7 +3297,8 @@ class _ImageViewerModal extends StatelessWidget {
               imageUrl,
               fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => Center(
-                child: Icon(Icons.broken_image, color: Colors.grey[800], size: 48),
+                child:
+                    Icon(Icons.broken_image, color: Colors.grey[800], size: 48),
               ),
             ),
             Positioned(
@@ -2713,6 +3310,165 @@ class _ImageViewerModal extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// Booking Created Bottom Sheet Component
+class _BookingCreatedBottomSheet extends StatelessWidget {
+  final String serviceTitle;
+  final String? price;
+  final Color primaryColor;
+  final Future<void> Function() onViewBooking;
+
+  const _BookingCreatedBottomSheet({
+    required this.serviceTitle,
+    this.price,
+    required this.primaryColor,
+    required this.onViewBooking,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FlutterFlowTheme.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? Colors.grey[900] : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: primaryColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(Icons.check_circle_outline,
+                        color: primaryColor, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Booking Confirmed',
+                      style: theme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 16),
+              Text(
+                'Your booking has been created successfully.',
+                textAlign: TextAlign.center,
+                style: theme.bodyMedium?.copyWith(
+                  color: isDark ? Colors.grey[300] : Colors.grey[700],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Booking Details
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.grey[800] : Colors.grey[100],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: isDark ? Colors.grey[700]! : Colors.grey[300]!,
+                      width: 1),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Service Title',
+                      style: theme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: isDark ? Colors.grey[400] : Colors.grey[600],
+                      ),
+                    ),
+                    Text(
+                      serviceTitle,
+                      style: theme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : Colors.black,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Price',
+                      style: theme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: isDark ? Colors.grey[400] : Colors.grey[600],
+                      ),
+                    ),
+                    Text(
+                      price != null ? '₦$price' : 'Not specified',
+                      style: theme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : Colors.black,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // Action Buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: onViewBooking,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        side: BorderSide(color: primaryColor, width: 1.5),
+                      ),
+                      child: Text('View Booking',
+                          style: TextStyle(
+                              color: primaryColor,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        // Optionally, navigate to home or another page
+                        // Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => HomePage()));
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('Done'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

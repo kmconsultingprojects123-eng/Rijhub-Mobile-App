@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:math' as math;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 
@@ -12,6 +11,7 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 import '/services/notification_controller.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
@@ -29,13 +29,240 @@ import 'state/app_state_notifier.dart';
 import 'package:app_links/app_links.dart';
 
 import 'dart:io';
-import 'package:flutter/services.dart' show PlatformAssetBundle;
 import 'dart:convert';
+
+const Color _crimsonPrimary = Color(0xFFA20025);
+const Color _crimsonOnPrimary = Color(0xFFFFFFFF);
+const Color _lightBgMain = Color(0xFFFFFFFF);
+const Color _lightBgSurface = Color(0xFFF8F9FA);
+const Color _lightTextPrimary = Color(0xFF1A1A1B);
+const Color _lightTextSecondary = Color(0xFF64748B);
+const Color _lightStrokeDefault = Color(0xFFE2E8F0);
+const Color _darkBgMain = Color(0xFF121212);
+const Color _darkBgSurface = Color(0xFF1E1E1E);
+const Color _darkTextPrimary = Color(0xFFE4E4E7);
+const Color _darkTextSecondary = Color(0xFFA1A1AA);
+const Color _darkStrokeDefault = Color(0xFF2D2D30);
+
+ThemeData _buildAppTheme({required Brightness brightness}) {
+  final bool isDark = brightness == Brightness.dark;
+  final Color bgMain = isDark ? _darkBgMain : _lightBgMain;
+  final Color bgSurface = isDark ? _darkBgSurface : _lightBgSurface;
+  final Color textPrimary = isDark ? _darkTextPrimary : _lightTextPrimary;
+  final Color textSecondary = isDark ? _darkTextSecondary : _lightTextSecondary;
+  final Color outline = isDark ? _darkStrokeDefault : _lightStrokeDefault;
+
+  final colorScheme = isDark
+      ? const ColorScheme.dark(
+          primary: _crimsonPrimary,
+          onPrimary: _crimsonOnPrimary,
+          secondary: _crimsonPrimary,
+          onSecondary: _crimsonOnPrimary,
+          surface: _darkBgSurface,
+          onSurface: _darkTextPrimary,
+          error: Color(0xFFFF5963),
+          outline: _darkStrokeDefault,
+        )
+      : const ColorScheme.light(
+          primary: _crimsonPrimary,
+          onPrimary: _crimsonOnPrimary,
+          secondary: _crimsonPrimary,
+          onSecondary: _crimsonOnPrimary,
+          surface: _lightBgSurface,
+          onSurface: _lightTextPrimary,
+          error: Color(0xFFFF5963),
+          outline: _lightStrokeDefault,
+        );
+
+  final base = ThemeData(
+    brightness: brightness,
+    useMaterial3: false,
+    colorScheme: colorScheme,
+    scaffoldBackgroundColor: bgMain,
+    canvasColor: bgMain,
+    cardColor: bgSurface,
+    shadowColor: Colors.transparent,
+    dividerColor: outline,
+    disabledColor: textSecondary.withValues(alpha: 0.5),
+    splashColor: _crimsonPrimary.withValues(alpha: 0.08),
+    highlightColor: _crimsonPrimary.withValues(alpha: 0.06),
+    textSelectionTheme: const TextSelectionThemeData(
+      cursorColor: _crimsonPrimary,
+      selectionColor: Color(0x33A20025),
+      selectionHandleColor: _crimsonPrimary,
+    ),
+    appBarTheme: AppBarTheme(
+      backgroundColor: bgMain,
+      foregroundColor: textPrimary,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      shadowColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      centerTitle: false,
+      titleTextStyle: TextStyle(
+        fontFamily: 'Inter Tight',
+        fontSize: 18.0,
+        fontWeight: FontWeight.w600,
+        color: textPrimary,
+      ),
+      iconTheme: IconThemeData(color: textPrimary),
+      actionsIconTheme: IconThemeData(color: textPrimary),
+      shape: Border(
+        bottom: BorderSide(color: outline, width: 1.0),
+      ),
+    ),
+    cardTheme: CardThemeData(
+      color: bgSurface,
+      elevation: 0,
+      shadowColor: Colors.transparent,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: outline, width: 1),
+      ),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: bgSurface,
+      elevation: 0,
+      shadowColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: outline, width: 1),
+      ),
+      titleTextStyle: TextStyle(
+        fontFamily: 'Inter Tight',
+        fontSize: 20,
+        fontWeight: FontWeight.w600,
+        color: textPrimary,
+      ),
+      contentTextStyle: TextStyle(
+        fontFamily: 'Inter',
+        fontSize: 14,
+        color: textPrimary,
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: bgSurface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      labelStyle: TextStyle(
+        fontFamily: 'Inter',
+        color: textSecondary,
+      ),
+      floatingLabelStyle: const TextStyle(
+        fontFamily: 'Inter',
+        color: _crimsonPrimary,
+      ),
+      hintStyle: TextStyle(
+        fontFamily: 'Inter',
+        color: textSecondary.withValues(alpha: 0.85),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: outline, width: 1),
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: outline, width: 1),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: _crimsonPrimary, width: 2),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFFFF5963), width: 1),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFFFF5963), width: 2),
+      ),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: _crimsonPrimary,
+        foregroundColor: _crimsonOnPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        minimumSize: const Size(44, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        backgroundColor: Colors.transparent,
+        foregroundColor: _crimsonPrimary,
+        minimumSize: const Size(44, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        side: const BorderSide(color: _crimsonPrimary, width: 1.5),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: _crimsonPrimary,
+        minimumSize: const Size(44, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    ),
+    bottomNavigationBarTheme: BottomNavigationBarThemeData(
+      backgroundColor: bgMain,
+      selectedItemColor: _crimsonPrimary,
+      unselectedItemColor: textSecondary,
+      type: BottomNavigationBarType.fixed,
+      elevation: 0,
+      selectedLabelStyle: const TextStyle(
+        fontFamily: 'Inter',
+        fontWeight: FontWeight.w600,
+      ),
+      unselectedLabelStyle: const TextStyle(
+        fontFamily: 'Inter',
+        fontWeight: FontWeight.w500,
+      ),
+    ),
+    tabBarTheme: TabBarThemeData(
+      labelColor: _crimsonPrimary,
+      unselectedLabelColor: textSecondary,
+      indicatorColor: _crimsonPrimary,
+      dividerColor: outline,
+      labelStyle: const TextStyle(
+        fontFamily: 'Inter',
+        fontWeight: FontWeight.w600,
+      ),
+      unselectedLabelStyle: const TextStyle(
+        fontFamily: 'Inter',
+        fontWeight: FontWeight.w500,
+      ),
+    ),
+  );
+
+  return base.copyWith(
+    textTheme: base.textTheme.apply(
+      bodyColor: textPrimary,
+      displayColor: textPrimary,
+    ),
+    primaryTextTheme: base.primaryTextTheme.apply(
+      bodyColor: textPrimary,
+      displayColor: textPrimary,
+    ),
+  );
+}
 
 void main() async {
   // Ensure Flutter binding is initialized before calling any platform
   // channels (including SharedPreferences) or running async startup logic.
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Load environment variables
+  await dotenv.load();
 
   print('');
   print('═══════════════════════════════════════════════════════════');
@@ -336,81 +563,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: const [Locale('en', '')],
-      theme: ThemeData(
-        brightness: Brightness.light,
-        useMaterial3: false,
-        // Ensure the app-wide ColorScheme uses the brand primary color
-        colorScheme: ColorScheme.light(
-          primary: const Color(0xFFA20025),
-          onPrimary: Colors.white,
-        ),
-        // Use pure white scaffold background for light mode per design request
-        scaffoldBackgroundColor: Colors.white,
-        // Keep canvas consistent for widgets that inherit colors from the Material theme
-        canvasColor: Colors.white,
-        // Default card color (used by Cards, Containers that use Theme.cardColor)
-        cardColor: const Color(0xFFFFFFFF),
-        // Unified AppBar theme across the app: no elevation, consistent typography and colors
-        appBarTheme: AppBarTheme(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-          elevation: 0,
-          centerTitle: false,
-          titleTextStyle: const TextStyle(
-              fontFamily: 'Inter Tight',
-              fontSize: 18.0,
-              fontWeight: FontWeight.w600,
-              color: Colors.black),
-          iconTheme: const IconThemeData(color: Colors.black),
-          actionsIconTheme: const IconThemeData(color: Colors.black),
-        ),
-        // Input highlight and cursor theme — use app primary color and stronger highlight
-        inputDecorationTheme: InputDecorationTheme(
-          focusedBorder: OutlineInputBorder(
-              borderSide:
-                  BorderSide(color: const Color(0xFFA20025), width: 2.0),
-              borderRadius: BorderRadius.circular(12)),
-        ),
-        textSelectionTheme: TextSelectionThemeData(
-            cursorColor: const Color(0xFFA20025),
-            selectionColor: const Color(0x33A20025),
-            selectionHandleColor: const Color(0xFFA20025)),
-      ),
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
-        useMaterial3: false,
-        colorScheme: ColorScheme.dark(
-          primary: const Color(0xFFA20025),
-          onPrimary: Colors.white,
-        ),
-        // Match dark mode scaffold background to the theme's dark primaryBackground (keeps consistency).
-        scaffoldBackgroundColor: const Color(0xFF1D2428),
-        canvasColor: const Color(0xFF1D2428),
-        cardColor: const Color(0xFF14181B),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF000000),
-          foregroundColor: Colors.white,
-          elevation: 0,
-          centerTitle: false,
-          titleTextStyle: TextStyle(
-              fontFamily: 'Inter Tight',
-              fontSize: 18.0,
-              fontWeight: FontWeight.w600,
-              color: Colors.white),
-          iconTheme: IconThemeData(color: Colors.white),
-          actionsIconTheme: IconThemeData(color: Colors.white),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          focusedBorder: OutlineInputBorder(
-              borderSide:
-                  BorderSide(color: const Color(0xFFA20025), width: 2.0),
-              borderRadius: BorderRadius.circular(12)),
-        ),
-        textSelectionTheme: TextSelectionThemeData(
-            cursorColor: const Color(0xFFA20025),
-            selectionColor: const Color(0x33A20025),
-            selectionHandleColor: const Color(0xFFA20025)),
-      ),
+      theme: _buildAppTheme(brightness: Brightness.light),
+      darkTheme: _buildAppTheme(brightness: Brightness.dark),
       themeMode: _themeMode,
       routerConfig: _router,
     );
@@ -626,14 +780,40 @@ class _NavBarPageState extends State<NavBarPage> {
     }
     final MediaQueryData queryData = MediaQuery.of(context);
 
-    // Icon mapping for the bottom nav. Keep keys in sync with `tabs` above.
+    // Responsive sizing calculations based on screen dimensions
+    final screenSize = queryData.size;
+    final screenHeight = screenSize.height;
+    final screenWidth = screenSize.width;
+
+    // Calculate responsive dimensions
+    final isSmallScreen = screenHeight < 600 || screenWidth < 360;
+    final isLargeScreen = screenHeight > 900 || screenWidth > 480;
+
+    // Responsive navbar height (48-72px range)
+    final navbarHeight = isSmallScreen ? 48.0 : (isLargeScreen ? 72.0 : 60.0);
+
+    // Responsive icon size (18-24px range)
+    final iconSize = isSmallScreen ? 18.0 : (isLargeScreen ? 24.0 : 20.0);
+
+    // Responsive text size (10-13px range)
+    final textSize = isSmallScreen ? 10.0 : (isLargeScreen ? 13.0 : 11.0);
+
+    // Responsive padding (6-12px range)
+    final verticalPadding = isSmallScreen ? 6.0 : (isLargeScreen ? 12.0 : 8.0);
+    final iconPadding = isSmallScreen ? 6.0 : (isLargeScreen ? 10.0 : 8.0);
+
+    // Responsive spacing between icon and text (4-8px range)
+    final iconTextSpacing = isSmallScreen ? 4.0 : (isLargeScreen ? 8.0 : 5.0);
+
+    // Icon mapping for the bottom nav - all solid/filled icons. Keep keys in sync with `tabs` above.
     final iconMap = <String, IconData>{
-      'homePage': FontAwesomeIcons.house,
-      'JobPostPage': FontAwesomeIcons.briefcase,
-      'BookingPage': Icons.book,
-      'profile': FontAwesomeIcons.solidCircleUser,
+      'homePage': FontAwesomeIcons.solidHouse,
+      'JobPostPage': FontAwesomeIcons.solidClipboard,
+      'BookingPage': FontAwesomeIcons.solidCalendarDays,
+      'profile': FontAwesomeIcons.solidUser,
     };
-    if (shouldShowDiscover) iconMap['DiscoverPage'] = Icons.pin_drop_rounded;
+    if (shouldShowDiscover)
+      iconMap['DiscoverPage'] = FontAwesomeIcons.solidCompass;
 
     // Determine whether current cached profile represents a guest so we can dim restricted tabs visually
     final bool isGuestNow = (() {
@@ -683,19 +863,45 @@ class _NavBarPageState extends State<NavBarPage> {
 
       return FloatingNavbarItem(
         customWidget: Column(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              iconData ?? Icons.circle,
-              color: iconColor,
-              size: 20.0,
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: EdgeInsets.all(iconPadding),
+              decoration: BoxDecoration(
+                color: currentIndex == idx
+                    ? FlutterFlowTheme.of(context)
+                        .primary
+                        .withValues(alpha: 0.12)
+                    : Colors.transparent,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                iconData ?? Icons.circle,
+                color: currentIndex == idx
+                    ? FlutterFlowTheme.of(context).primary
+                    : (disabledForGuest
+                        ? Color.lerp(FlutterFlowTheme.of(context).secondaryText,
+                                Colors.transparent, 0.55) ??
+                            FlutterFlowTheme.of(context).secondaryText
+                        : FlutterFlowTheme.of(context).secondaryText),
+                size: iconSize,
+              ),
             ),
+            SizedBox(height: iconTextSpacing),
             Text(
               label,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: labelColor,
-                fontSize: 11.0,
+                color: currentIndex == idx
+                    ? FlutterFlowTheme.of(context).primary
+                    : (disabledForGuest
+                        ? Color.lerp(FlutterFlowTheme.of(context).secondaryText,
+                                Colors.transparent, 0.55) ??
+                            FlutterFlowTheme.of(context).secondaryText
+                        : FlutterFlowTheme.of(context).secondaryText),
+                fontSize: textSize,
               ),
             ),
           ],
@@ -714,7 +920,6 @@ class _NavBarPageState extends State<NavBarPage> {
             .removeViewPadding(removeBottom: true),
         child: _currentPage ?? tabs[_currentPageName] ?? tabs.values.first,
       ),
-      extendBody: true,
       bottomNavigationBar: Visibility(
         // Hide nav on desktop or when we have fewer than 2 tabs (avoids assertion),
         // and also hide if this NavBarPage is nested inside another NavBarPage to
@@ -727,67 +932,92 @@ class _NavBarPageState extends State<NavBarPage> {
             !_isNestedNavBar,
         child: Container(
           color: FlutterFlowTheme.of(context).secondaryBackground,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              FloatingNavbar(
-                currentIndex: currentIndex,
-                onTap: (i) async {
-                  // Handle taps asynchronously because we may need to check guest session and prompt sign-in
-                  final key = tabs.keys.toList()[i];
-                  final restrictedKeysForGuests = [
-                    'JobPostPage',
-                    'BookingPage',
-                    'profile'
-                  ];
-                  final guest = await isGuestSession();
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: FlutterFlowTheme.of(context).secondaryBackground,
+                    border: Border(
+                      top: BorderSide(
+                        color: FlutterFlowTheme.of(context).alternate,
+                        width: 1.0,
+                      ),
+                    ),
+                  ),
+                  padding: EdgeInsets.symmetric(vertical: verticalPadding),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: navItems.asMap().entries.map((entry) {
+                      final idx = entry.key;
+                      final item = entry.value;
+                      final isActive = currentIndex == idx;
 
-                  if (guest && restrictedKeysForGuests.contains(key)) {
-                    // For guests: show the themed guest prompt (immediately on tap) and respect choice
-                    final res = await _showGuestPrompt();
-                    if (res == true) {
-                      try {
-                        NavigationUtils.safePush(
-                            context, const LoginAccountWidget());
-                      } catch (_) {}
-                    }
-                    return;
-                  }
+                      return Expanded(
+                        child: InkWell(
+                          onTap: () async {
+                            // Handle taps asynchronously because we may need to check guest session and prompt sign-in
+                            final key = tabs.keys.toList()[idx];
+                            final restrictedKeysForGuests = [
+                              'JobPostPage',
+                              'BookingPage',
+                              'profile'
+                            ];
+                            final guest = await isGuestSession();
 
-                  // Not a guest or allowed: proceed to change tab
-                  safeSetState(() {
-                    _currentPage = null;
-                    // If user taps Home and is an artisan, ensure we show the artisan dashboard
-                    if (key == 'homePage' && isArtisan) {
-                      _currentPageName = 'homePage';
-                      _currentPage = ArtisanDashboardPageWidget();
-                    } else {
-                      // Final guard: ensure the tapped key exists in the computed tabs.
-                      if (tabs.containsKey(key)) {
-                        _currentPageName = key;
-                      } else {
-                        // Fallback to first allowed tab.
-                        _currentPageName = tabs.keys.first;
-                      }
-                    }
-                  });
-                },
-                backgroundColor:
-                    FlutterFlowTheme.of(context).secondaryBackground,
-                selectedItemColor: FlutterFlowTheme.of(context).primary,
-                unselectedItemColor: FlutterFlowTheme.of(context).secondaryText,
-                selectedBackgroundColor: const Color(0x00000000),
-                borderRadius: 0.0,
-                itemBorderRadius: 0.0,
-                margin: const EdgeInsets.all(0.0),
-                padding:
-                    const EdgeInsetsDirectional.fromSTEB(0.0, 10.0, 0.0, 0.0),
-                width: double.infinity,
-                elevation: 0.0,
-                items: navItems,
-              ),
-              SizedBox(height: math.max(12.0, queryData.padding.bottom)),
-            ],
+                            if (guest &&
+                                restrictedKeysForGuests.contains(key)) {
+                              // For guests: show the themed guest prompt (immediately on tap) and respect choice
+                              final res = await _showGuestPrompt();
+                              if (res == true) {
+                                try {
+                                  NavigationUtils.safePush(
+                                      context, const LoginAccountWidget());
+                                } catch (_) {}
+                              }
+                              return;
+                            }
+
+                            // Not a guest or allowed: proceed to change tab
+                            safeSetState(() {
+                              _currentPage = null;
+                              // If user taps Home and is an artisan, ensure we show the artisan dashboard
+                              if (key == 'homePage' && isArtisan) {
+                                _currentPageName = 'homePage';
+                                _currentPage = ArtisanDashboardPageWidget();
+                              } else {
+                                // Final guard: ensure the tapped key exists in the computed tabs.
+                                if (tabs.containsKey(key)) {
+                                  _currentPageName = key;
+                                } else {
+                                  // Fallback to first allowed tab.
+                                  _currentPageName = tabs.keys.first;
+                                }
+                              }
+                            });
+                          },
+                          child: SizedBox(
+                            height: navbarHeight,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Center(
+                                  child: item.customWidget ??
+                                      const SizedBox.shrink(),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

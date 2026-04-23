@@ -18,9 +18,11 @@ import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '/index.dart';
 import '../../services/flow_guard.dart';
+import '../../services/job_service.dart';
 import '../../services/notification_service.dart';
 import '../../state/app_state_notifier.dart' as app_state_notifier;
 import '/main.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 // Lightweight, safe payment init widget. This file is intentionally
 // simplified compared to the original to remove parser-sensitivity
@@ -88,6 +90,21 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
   _PaymentState _state = _PaymentState.checkout;
   bool _blocking = false;
   bool _loading = false;
+
+  bool get _isAfterCompletionMode =>
+      (dotenv.env['PAYMENT_MODE'] ?? 'upfront') == 'afterCompletion';
+
+  String get _blockingTitle {
+    if (_isAfterCompletionMode) return 'Creating booking...';
+    return 'Verifying payment...';
+  }
+
+  String get _blockingSubtitle {
+    if (_isAfterCompletionMode) {
+      return 'Please wait while we confirm your booking details.';
+    }
+    return 'Please wait while we confirm your transaction.';
+  }
   String? _lastVerifyResponse;
   String? _authUrl;
   String? _reference;
@@ -95,6 +112,7 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
   String? _email;
   String? _bookingId;
   String? _quoteId;
+  String? _quoteThreadId;
   // Keep the original payment initialization payload so we can reuse fields
   // (like artisanId) later when creating the booking after payment verification.
   Map<String, dynamic>? _initRequestPayload;
@@ -781,10 +799,10 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
               insetPadding: const EdgeInsets.symmetric(horizontal: 40),
               child: Padding(
                 padding: const EdgeInsets.all(20.0),
-                child: Row(children: const [
-                  CircularProgressIndicator(),
-                  SizedBox(width: 16),
-                  Expanded(child: Text('Verifying payment...'))
+                child: Row(children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(width: 16),
+                  Expanded(child: Text(_blockingTitle))
                 ]),
               ),
             ),
@@ -1683,6 +1701,9 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
         if (kDebugMode) debugPrint('Error extracting services for booking: $e');
       }
 
+      // Set payment mode from environment variable
+      body['paymentMode'] = dotenv.env['PAYMENT_MODE'] ?? 'upfront';
+
       if (kDebugMode) debugPrint('Create booking payload: ' + jsonEncode(body));
 
       final uri =
@@ -2018,7 +2039,7 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
   }
 
   // Accept a quote using the job-scoped accept endpoint as required by spec.
-  // POST /api/jobs/:jobId/quotes/:quoteId/accept with { email }
+  // POST /api/jobs/:jobId/quotes/:quoteId/accept with { email, paymentMode }
   Future<bool> _acceptQuoteIfNeeded() async {
     try {
       final qid = widget.quote?['_id']?.toString() ??
@@ -2041,56 +2062,46 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
       }
       if (jobId == null || jobId.isEmpty) return false;
 
-      final token = await TokenStorage.getToken();
-      final headers = <String, String>{'Content-Type': 'application/json'};
-      if (token != null && token.isNotEmpty)
-        headers['Authorization'] = 'Bearer $token';
+      // Use JobService.acceptJobQuote with paymentMode support
+      final paymentMode = dotenv.env['PAYMENT_MODE'] ?? 'upfront';
+      final response = await JobService.acceptJobQuote(
+        jobId,
+        qid,
+        email: _email,
+        paymentMode: paymentMode,
+      );
 
-      final uri = Uri.parse(
-          '${_normalizeBaseUrl(API_BASE_URL)}/api/jobs/$jobId/quotes/$qid/accept');
-      final body = <String, dynamic>{};
-      if (_email != null && _email!.isNotEmpty) body['email'] = _email;
-      if (kDebugMode) debugPrint('Accepting quote -> POST $uri body=$body');
-
-      final resp = await http
-          .post(uri, headers: headers, body: jsonEncode(body))
-          .timeout(_paymentRequestTimeout);
-      if (kDebugMode)
-        debugPrint('Accept quote response -> ${resp.statusCode} ${resp.body}');
-      if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        final parsed = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
-        final data = parsed is Map ? (parsed['data'] ?? parsed) : parsed;
-        try {
-          if (data is Map) {
-            // set server-provided payment node if present
-            if (data['payment'] != null) {
-              final p = data['payment'];
-              if (p is Map) {
-                _authUrl = _authUrl ??
-                    (p['authorization_url'] ??
-                            p['authorizationUrl'] ??
-                            p['auth_url'])
-                        ?.toString();
-                _reference = _reference ??
-                    (p['reference'] ?? p['ref'] ?? p['tx_ref'])?.toString();
-              }
-            }
-            // try to capture returned quote id/booking id
-            final bid = (data['booking'] is Map
-                    ? (data['booking']['_id'] ?? data['booking']['id'])
-                    : (data['bookingId'] ??
-                        data['booking']?['_id'] ??
-                        data['booking']?['id']))
-                ?.toString();
-            if (bid != null && bid.isNotEmpty) _bookingId = bid;
-            _quoteId = qid;
+      // Extract booking info from response
+      try {
+        if (response['payment'] != null) {
+          final p = response['payment'];
+          if (p is Map) {
+            _authUrl = _authUrl ??
+                (p['authorization_url'] ??
+                        p['authorizationUrl'] ??
+                        p['auth_url'])
+                    ?.toString();
+            _reference = _reference ??
+                (p['reference'] ?? p['ref'] ?? p['tx_ref'])?.toString();
           }
-        } catch (_) {}
-        return true;
-      }
-      // unauthorized or not found
-      if (resp.statusCode == 401) return false;
-      return false;
+        }
+        // try to capture returned quote id/booking id
+        final bid = (response['booking'] is Map
+                ? (response['booking']['_id'] ?? response['booking']['id'])
+                : (response['bookingId'] ??
+                    response['booking']?['_id'] ??
+                    response['booking']?['id']))
+            ?.toString();
+        if (bid != null && bid.isNotEmpty) _bookingId = bid;
+        _quoteThreadId = response['threadId']?.toString() ??
+            (response['chat'] is Map
+                ? (response['chat']['_id'] ?? response['chat']['id'])
+                    ?.toString()
+                : null);
+        _quoteId = qid;
+      } catch (_) {}
+
+      return true;
     } catch (e) {
       if (kDebugMode) debugPrint('Accept quote error: $e');
     }
@@ -2364,6 +2375,387 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
     return null;
   }
 
+  Future<void> _createBookingWithoutPayment() async {
+    if (_blocking) return;
+    if (needsSignInForAction()) {
+      await showGuestAuthRequiredDialog(context,
+          message:
+              'You need to sign in or create an account to create bookings.');
+      return;
+    }
+    setState(() {
+      _state = _PaymentState.verifying;
+      _loading = true;
+      _blocking = true;
+    });
+
+    // Ensure email present
+    if ((_email == null || _email!.trim().isEmpty)) {
+      await _populateEmail();
+    }
+
+    if (_email == null || _email!.trim().isEmpty) {
+      AppNotification.showError(context,
+          'An email address is required to create bookings. Please update your profile.');
+      setState(() {
+        _state = _PaymentState.checkout;
+        _loading = false;
+        _blocking = false;
+      });
+      return;
+    }
+
+    // If this is a quote-based booking, try to accept the quote first
+    if (_isQuotePayment()) {
+      bool accepted = false;
+      try {
+        accepted = await _acceptQuoteIfNeeded();
+      } catch (e) {
+        if (kDebugMode) debugPrint('Quote accept attempt threw: $e');
+        accepted = false;
+      }
+
+      if (!accepted) {
+        // If acceptance failed due to missing auth, offer the user to sign in and retry.
+        final choice = await showDialog<String?>(
+          context: context,
+          barrierDismissible: true,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Accept quote required'),
+            content: const Text(
+                'We could not accept the quote automatically. You may need to sign in or try again. Would you like to sign in now?'),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.of(ctx).pop('cancel'),
+                  child: const Text('Cancel')),
+              ElevatedButton(
+                  onPressed: () => Navigator.of(ctx).pop('signin'),
+                  child: const Text('Sign in')),
+            ],
+          ),
+        );
+
+        if (choice == 'signin') {
+          try {
+            await NavigationUtils.safePushNoAuth(context, LoginAccountWidget());
+          } catch (_) {
+            try {
+              await NavigationUtils.safePush(context, LoginAccountWidget());
+            } catch (_) {}
+          }
+
+          // After sign in, try accepting quote again once
+          bool accepted2 = false;
+          try {
+            accepted2 = await _acceptQuoteIfNeeded();
+          } catch (_) {
+            accepted2 = false;
+          }
+
+          if (!accepted2) {
+            AppNotification.showError(context,
+                'Could not accept quote after sign in. Booking creation aborted.');
+            setState(() {
+              _state = _PaymentState.checkout;
+              _loading = false;
+              _blocking = false;
+            });
+            return;
+          }
+        } else {
+          // User cancelled — abort flow
+          AppNotification.showInfo(
+              context, 'Booking creation aborted — quote acceptance required');
+          setState(() {
+            _state = _PaymentState.checkout;
+            _loading = false;
+            _blocking = false;
+          });
+          return;
+        }
+      }
+
+      final paymentMode = dotenv.env['PAYMENT_MODE'] ?? 'upfront';
+      if (paymentMode == 'afterCompletion' &&
+          _bookingId != null &&
+          _bookingId!.isNotEmpty) {
+        if (mounted) {
+          AppNotification.showSuccess(context,
+              'Booking created successfully. Payment will be collected after service completion.');
+          try {
+            final cnt = await NotificationService.fetchUnreadCount();
+            try {
+              app_state_notifier.AppStateNotifier.instance
+                  .setUnreadNotifications(cnt);
+            } catch (_) {}
+          } catch (_) {}
+        }
+
+        if (mounted) {
+          await _showBookingCreatedBottomSheet(
+            _bookingId!,
+            _quoteThreadId,
+            widget.booking?['service'] ?? widget.quote?['title'] ?? 'Service',
+            _displayAmount(_amount),
+            widget.booking?['schedule'] ??
+                widget.quote?['schedule'] ??
+                DateTime.now().toUtc().toIso8601String(),
+          );
+        }
+
+        setState(() {
+          _state = _PaymentState.checkout;
+          _loading = false;
+          _blocking = false;
+        });
+        return;
+      }
+    }
+
+    // Show loading dialog
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => WillPopScope(
+        onWillPop: () async => false,
+        child: Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 40),
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Row(children: const [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Expanded(child: Text('Creating booking...'))
+            ]),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      // Create booking with afterCompletion payment mode
+      final created = await _createBookingAfterCompletion();
+      if (created != null) {
+        _bookingId = created['bookingId'];
+        final threadId = created['threadId'];
+
+        // Close loading dialog
+        try {
+          if (mounted) Navigator.of(context, rootNavigator: true).pop();
+        } catch (_) {}
+
+        // Show success message
+        if (mounted) {
+          AppNotification.showSuccess(context,
+              'Booking created successfully. Payment will be collected after service completion.');
+          try {
+            final cnt = await NotificationService.fetchUnreadCount();
+            try {
+              app_state_notifier.AppStateNotifier.instance
+                  .setUnreadNotifications(cnt);
+            } catch (_) {}
+          } catch (_) {}
+        }
+
+        // Navigate to booking details
+        if (mounted && _bookingId != null && _bookingId!.isNotEmpty) {
+          await _showBookingCreatedBottomSheet(
+              _bookingId!,
+              threadId,
+              widget.booking?['service'] ?? widget.quote?['title'] ?? 'Service',
+              _displayAmount(_amount),
+              widget.booking?['schedule'] ??
+                  widget.quote?['schedule'] ??
+                  DateTime.now().toUtc().toIso8601String());
+        }
+      } else {
+        // Close loading dialog
+        try {
+          if (mounted) Navigator.of(context, rootNavigator: true).pop();
+        } catch (_) {}
+
+        if (mounted) {
+          AppNotification.showError(
+              context, 'Failed to create booking. Please try again.');
+          setState(() {
+            _state = _PaymentState.checkout;
+            _loading = false;
+            _blocking = false;
+          });
+        }
+      }
+    } catch (e) {
+      // Close loading dialog
+      try {
+        if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      } catch (_) {}
+
+      if (kDebugMode) debugPrint('Error creating booking without payment: $e');
+      if (mounted) {
+        AppNotification.showError(
+            context, 'Failed to create booking. Please try again.');
+        setState(() {
+          _state = _PaymentState.checkout;
+          _loading = false;
+          _blocking = false;
+        });
+      }
+    }
+  }
+
+  Future<Map<String, String?>?> _createBookingAfterCompletion() async {
+    try {
+      final token = await TokenStorage.getToken();
+      final headers = <String, String>{'Content-Type': 'application/json'};
+      if (token != null && token.isNotEmpty)
+        headers['Authorization'] = 'Bearer $token';
+
+      final body = <String, dynamic>{};
+      // For afterCompletion, set status to pending (artisan needs to accept first)
+      body['status'] = 'pending';
+
+      String? artisanId;
+      try {
+        artisanId = widget.booking?['artisanId']?.toString();
+      } catch (_) {}
+      if (artisanId == null || artisanId.isEmpty) {
+        try {
+          artisanId = widget.quote?['artisanId']?.toString() ??
+              widget.quote?['userId']?.toString() ??
+              widget.quote?['artisan']?['_id']?.toString() ??
+              widget.quote?['artisanUser']?['_id']?.toString();
+        } catch (_) {}
+      }
+      if (artisanId == null || artisanId.isEmpty) {
+        try {
+          final meta = widget.payment['metadata'];
+          if (meta is Map) {
+            artisanId =
+                (meta['artisanId'] ?? meta['artisan'] ?? meta['artisan_id'])
+                    ?.toString();
+          } else if (meta is String && meta.isNotEmpty) {
+            try {
+              final parsed = jsonDecode(meta);
+              if (parsed is Map)
+                artisanId = (parsed['artisanId'] ??
+                        parsed['artisan'] ??
+                        parsed['artisan_id'])
+                    ?.toString();
+            } catch (_) {}
+          }
+        } catch (_) {}
+      }
+      if (artisanId == null || artisanId.isEmpty) {
+        try {
+          artisanId = widget.payment['artisanId']?.toString() ??
+              widget.payment['artisan']?['_id']?.toString();
+        } catch (_) {}
+      }
+      // Final attempt: use helper that checks many nested locations
+      if (artisanId == null || artisanId.isEmpty) {
+        try {
+          artisanId = _resolveArtisanUserId();
+        } catch (_) {}
+      }
+      if (artisanId != null && artisanId.isNotEmpty)
+        body['artisanId'] = artisanId;
+
+      try {
+        if (_amount != null)
+          body['price'] = _amount;
+        else if (widget.booking?['price'] != null)
+          body['price'] = widget.booking?['price'];
+        else if (widget.payment['amount'] != null)
+          body['price'] = widget.payment['amount'];
+        else if (widget.payment['authorization']?['amount'] != null)
+          body['price'] = widget.payment['authorization']?['amount'];
+      } catch (_) {}
+
+      try {
+        var schedule = widget.booking?['schedule'] ??
+            widget.quote?['schedule'] ??
+            widget.payment['schedule'];
+        if (schedule == null || (schedule is String && schedule.isEmpty))
+          schedule = DateTime.now().toUtc().toIso8601String();
+        body['schedule'] = schedule;
+      } catch (_) {
+        body['schedule'] = DateTime.now().toUtc().toIso8601String();
+      }
+
+      try {
+        if (_email != null && _email!.isNotEmpty)
+          body['email'] = _email;
+        else if (widget.payment['customerEmail'] != null)
+          body['email'] = widget.payment['customerEmail'];
+      } catch (_) {}
+
+      try {
+        final qid = widget.quote?['_id'] ??
+            widget.payment['quoteId'] ??
+            widget.payment['quote']?['_id'];
+        if (qid != null) body['acceptedQuote'] = qid;
+      } catch (_) {}
+
+      // Extract services from payload
+      try {
+        final services = _extractPayloadServices();
+        if (services != null && services.isNotEmpty)
+          body['services'] = services;
+      } catch (e) {
+        if (kDebugMode) debugPrint('Error extracting services for booking: $e');
+      }
+
+      // Set payment mode to afterCompletion
+      body['paymentMode'] = 'afterCompletion';
+
+      if (kDebugMode)
+        debugPrint(
+            'Create booking afterCompletion payload: ' + jsonEncode(body));
+
+      final uri =
+          Uri.parse('${_normalizeBaseUrl(API_BASE_URL)}/api/bookings/hire');
+      final resp = await http
+          .post(uri, headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 12));
+      if (kDebugMode)
+        debugPrint(
+            'Create booking afterCompletion -> status=${resp.statusCode}');
+      if (resp.statusCode >= 200 &&
+          resp.statusCode < 300 &&
+          resp.body.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(resp.body);
+          final data = decoded is Map ? (decoded['data'] ?? decoded) : decoded;
+          if (data is Map) {
+            final id =
+                data['_id']?.toString() ?? data['booking']?['_id']?.toString();
+            final threadId = data['threadId']?.toString() ??
+                data['chat']?['_id']?.toString();
+            if (id != null) {
+              // Debug: log server response booking/thread ids to help trace null threadId issues
+              try {
+                if (kDebugMode)
+                  debugPrint(
+                      'createBookingAfterCompletion -> server returned bookingId=$id threadId=${threadId ?? '<null>'}');
+              } catch (_) {}
+              return {'bookingId': id, 'threadId': threadId};
+            }
+          }
+        } catch (e) {
+          if (kDebugMode)
+            debugPrint('Create booking afterCompletion parse error: $e');
+        }
+      } else {
+        if (kDebugMode)
+          debugPrint(
+              'Create booking afterCompletion failed: ${resp.statusCode}');
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('Create booking afterCompletion error: $e');
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     // Extract selected services list from payment metadata or booking (set upstream by caller)
@@ -2545,10 +2937,17 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
                       child: ElevatedButton(
                         onPressed: (!_blocking)
                             ? () async {
-                                if (_authUrl != null && _authUrl!.isNotEmpty) {
-                                  await _startInAppPayment();
+                                final paymentMode =
+                                    dotenv.env['PAYMENT_MODE'] ?? 'upfront';
+                                if (paymentMode == 'afterCompletion') {
+                                  await _createBookingWithoutPayment();
                                 } else {
-                                  await _initPaymentThenStart();
+                                  if (_authUrl != null &&
+                                      _authUrl!.isNotEmpty) {
+                                    await _startInAppPayment();
+                                  } else {
+                                    await _initPaymentThenStart();
+                                  }
                                 }
                               }
                             : null,
@@ -2559,12 +2958,19 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
                             elevation: 0,
                             shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10))),
-                        child: Text(
-                            (_authUrl != null && _authUrl!.isNotEmpty)
+                        child: Text((() {
+                          final paymentMode =
+                              dotenv.env['PAYMENT_MODE'] ?? 'upfront';
+                          if (paymentMode == 'afterCompletion') {
+                            return 'Create Booking';
+                          } else {
+                            return (_authUrl != null && _authUrl!.isNotEmpty)
                                 ? 'Pay ${_displayAmount(_amount)}'
                                 : (_amount != null
                                     ? 'Initialize payment • ${_displayAmount(_amount)}'
-                                    : 'No payment link'),
+                                    : 'No payment link');
+                          }
+                        })(),
                             style: FlutterFlowTheme.of(context)
                                 .titleSmall
                                 .copyWith(
@@ -2596,19 +3002,31 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
                         const SizedBox(width: 6),
                         const CircularProgressIndicator(),
                         const SizedBox(width: 16),
-                        Column(
+                        // Allow the text column to flex and wrap within the available
+                        // space so the Row does not overflow on small screens.
+                        Flexible(
+                          child: Column(
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Verifying payment...',
-                                  style:
-                                      FlutterFlowTheme.of(context).titleMedium),
+                              Text(
+                                _blockingTitle,
+                                style: FlutterFlowTheme.of(context).titleMedium,
+                                softWrap: true,
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 2,
+                              ),
                               const SizedBox(height: 6),
                               Text(
-                                  'Please wait while we confirm your transaction.',
-                                  style:
-                                      FlutterFlowTheme.of(context).bodySmall),
-                            ]),
+                                _blockingSubtitle,
+                                style: FlutterFlowTheme.of(context).bodySmall,
+                                softWrap: true,
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 3,
+                              ),
+                            ],
+                          ),
+                        ),
                         const SizedBox(width: 6),
                       ]),
                     ),

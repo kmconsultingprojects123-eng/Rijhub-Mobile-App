@@ -13,6 +13,7 @@ import '../../api_config.dart';
 import 'message_client_model.dart';
 import '../../utils/app_notification.dart';
 import '../../utils/realtime_notifications.dart';
+import '../payment_webview/payment_webview_page_widget.dart';
 export 'message_client_model.dart';
 
 // Avoid importing package:flutter/foundation.dart because some analyzers
@@ -62,10 +63,20 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
   bool _waitingForThread = false;
   String? _bookingStatusFromThread;
   String? _bookingPriceFromThread;
+   String? _bookingPaymentMode; // 'upfront' or 'afterCompletion'
   bool _sendingMessage = false;
   bool _bookingCompleted = false;
   bool _completing = false;
   bool _submittingReview = false;
+  bool _initializingPayment = false;
+
+  // Payment confirmation state (for afterCompletion flow)
+  bool _waitingForPaymentConfirmation = false;
+  bool _paymentConfirmedBySocket = false;
+  Timer? _paymentConfirmationTimeout;
+  String? _lastPaymentReference; // Track payment reference from WebView
+  bool _paymentWebViewOpen = false;
+  bool _paymentConfirmationDialogOpen = false;
 
   // Review conflict state: when server returns 409 (already reviewed)
   String? _reviewConflictMessage;
@@ -182,12 +193,20 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
             return;
           }
 
-          if (eventName == 'booking_closed' || eventName == 'chat_closed') {
-            _handleBookingClosed();
-            return;
-          }
-        } catch (e) {
-          if (_kDebugMode) debugPrint('Error handling socket event: $e');
+           if (eventName == 'booking_closed' || eventName == 'chat_closed') {
+             _handleBookingClosed();
+             return;
+           }
+
+           // Handle payment confirmation events for afterCompletion bookings
+           if (eventName == 'booking_paid' ||
+               eventName == 'payment_confirmed' ||
+               eventName == 'payment_success') {
+             _handlePaymentConfirmed(ev);
+             return;
+           }
+         } catch (e) {
+           if (_kDebugMode) debugPrint('Error handling socket event: $e');
         }
       });
     } catch (e) {
@@ -304,6 +323,83 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
     if (mounted) setState(() {});
   }
 
+   /// Handle payment confirmation from socket event (booking_paid, payment_confirmed, etc.)
+   void _handlePaymentConfirmed(Map<String, dynamic> ev) {
+     if (!_waitingForPaymentConfirmation) {
+       if (_kDebugMode) debugPrint('Received payment confirmation but not waiting for one');
+       return;
+     }
+
+     try {
+       final payload = ev['payload'] ?? ev;
+       final payloadMap = payload is Map ? Map<String, dynamic>.from(payload) : <String, dynamic>{};
+       final incomingBookingId =
+           payloadMap['bookingId']?.toString() ??
+           (payloadMap['booking'] is Map
+               ? (payloadMap['booking']['_id'] ?? payloadMap['booking']['id'])?.toString()
+               : null);
+       final reference = payload is Map ? payload['reference']?.toString() : null;
+
+       if (widget.bookingId != null &&
+           widget.bookingId!.isNotEmpty &&
+           incomingBookingId != null &&
+           incomingBookingId.isNotEmpty &&
+           incomingBookingId != widget.bookingId) {
+         if (_kDebugMode) {
+           debugPrint('Ignoring payment confirmation for different booking: $incomingBookingId');
+         }
+         return;
+       }
+
+       if (_lastPaymentReference != null &&
+           _lastPaymentReference!.isNotEmpty &&
+           reference != null &&
+           reference.isNotEmpty &&
+           reference != _lastPaymentReference) {
+         if (_kDebugMode) {
+           debugPrint('Ignoring payment confirmation for different reference: $reference');
+         }
+         return;
+       }
+
+       if (_kDebugMode) {
+         debugPrint('MessageClient: Payment confirmed via socket. Reference: $reference');
+       }
+
+       // Cancel any pending timeout
+       _paymentConfirmationTimeout?.cancel();
+       _paymentConfirmationTimeout = null;
+
+       // Mark as confirmed and update state
+       if (mounted) {
+         setState(() {
+           _paymentConfirmedBySocket = true;
+           _waitingForPaymentConfirmation = false;
+           if (reference != null) _lastPaymentReference = reference;
+         });
+       }
+
+       if (_paymentWebViewOpen) return;
+
+       if (mounted) {
+         _closePaymentConfirmationDialogIfOpen();
+         Future.delayed(const Duration(milliseconds: 200), () async {
+           if (mounted && !_submittingReview) {
+             // Mark booking as complete after payment confirmed via socket
+             final token = await TokenStorage.getToken();
+             if (token != null && token.isNotEmpty) {
+               await _completeBookingAndShowRating(token);
+             } else {
+               await _showRatingBottomSheet();
+             }
+           }
+         });
+       }
+     } catch (e) {
+       if (_kDebugMode) debugPrint('Error handling payment confirmation: $e');
+     }
+   }
+
   @override
   void dispose() {
     // announce offline presence
@@ -317,6 +413,7 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
     _backgroundRefreshTimer?.cancel();
     _sendDebounceTimer?.cancel();
     _typingStoppedTimer?.cancel();
+    _paymentConfirmationTimeout?.cancel();
     _model.textController?.removeListener(_handleTextChanged);
 
     try {
@@ -633,6 +730,7 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       final bookingMeta = data['booking'] ?? data['bookingInfo'] ?? data['bookingMeta'];
       if (bookingMeta is Map) {
         _bookingStatusFromThread = bookingMeta['status']?.toString() ?? _bookingStatusFromThread;
+        _bookingPaymentMode = bookingMeta['paymentMode']?.toString() ?? _bookingPaymentMode;
         final priceVal = bookingMeta['price'] ?? bookingMeta['amount'] ?? bookingMeta['total'];
         if (priceVal != null) {
           if (priceVal is num) {
@@ -649,6 +747,389 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
         }
       }
     } catch (_) {}
+  }
+
+  bool _isAfterCompletionMode(String? mode) {
+    return (mode ?? '').trim().toLowerCase() == 'aftercompletion';
+  }
+
+  bool _isCompletedBookingStatus(String? status) {
+    return (status ?? '').trim().toLowerCase() == 'completed';
+  }
+
+  bool _serverRequiresPaymentInitializationBeforeCompletion(String? message) {
+    final normalized = (message ?? '').trim().toLowerCase();
+    return normalized.contains('payment must be initialize before marking work completed') ||
+        normalized.contains('payment must be initialized before marking work completed') ||
+        normalized.contains('initialize payment before marking work completed');
+  }
+
+  int? _parseAmountValue(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.round();
+    final cleaned = value.toString().replaceAll(RegExp(r'[^0-9.-]'), '');
+    if (cleaned.isEmpty) return null;
+    return num.tryParse(cleaned)?.round();
+  }
+
+  Future<String?> _refreshBookingPaymentMode({String? token}) async {
+    if (widget.bookingId == null || widget.bookingId!.isEmpty) return _bookingPaymentMode;
+
+    try {
+      final authToken = token ?? await TokenStorage.getToken();
+      if (authToken == null || authToken.isEmpty) return _bookingPaymentMode;
+
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $authToken'
+      };
+
+      final uri = Uri.parse('$API_BASE_URL/api/bookings/${widget.bookingId}');
+      final response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode >= 200 &&
+          response.statusCode < 300 &&
+          response.body.isNotEmpty) {
+        final parsed = jsonDecode(response.body);
+        final data = parsed is Map ? (parsed['data'] ?? parsed) : parsed;
+        final booking = data is Map ? (data['booking'] ?? data) : null;
+
+        if (booking is Map) {
+          final paymentMode = booking['paymentMode']?.toString();
+          final bookingStatus = booking['status']?.toString();
+          if (mounted) {
+            setState(() {
+              _bookingPaymentMode = paymentMode ?? _bookingPaymentMode;
+              _bookingStatusFromThread = bookingStatus ?? _bookingStatusFromThread;
+            });
+          } else {
+            _bookingPaymentMode = paymentMode ?? _bookingPaymentMode;
+            _bookingStatusFromThread = bookingStatus ?? _bookingStatusFromThread;
+          }
+          return paymentMode ?? _bookingPaymentMode;
+        }
+      }
+    } catch (e) {
+      if (_kDebugMode) debugPrint('MessageClient: failed to refresh booking payment mode: $e');
+    }
+
+    return _bookingPaymentMode;
+  }
+
+  Future<bool> _waitForBookingCompletedStatus(
+    String token, {
+    int maxAttempts = 8,
+    Duration delay = const Duration(milliseconds: 500),
+  }) async {
+    if (widget.bookingId == null || widget.bookingId!.isEmpty) return false;
+
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token'
+    };
+
+    final uri = Uri.parse('$API_BASE_URL/api/bookings/${widget.bookingId}');
+
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        final response = await http
+            .get(uri, headers: headers)
+            .timeout(const Duration(seconds: 10));
+
+        if (response.statusCode >= 200 &&
+            response.statusCode < 300 &&
+            response.body.isNotEmpty) {
+          final parsed = jsonDecode(response.body);
+          final data = parsed is Map ? (parsed['data'] ?? parsed) : parsed;
+          final booking = data is Map ? (data['booking'] ?? data) : null;
+          final status = booking is Map ? booking['status']?.toString() : null;
+
+          if (_kDebugMode) {
+            debugPrint(
+              'MessageClient: booking completion poll attempt ${attempt + 1}/$maxAttempts status=$status',
+            );
+          }
+
+          if (_isCompletedBookingStatus(status)) {
+            if (mounted) {
+              setState(() {
+                _bookingCompleted = true;
+                _bookingStatusFromThread = status;
+              });
+            } else {
+              _bookingCompleted = true;
+              _bookingStatusFromThread = status;
+            }
+            return true;
+          }
+        }
+      } catch (e) {
+        if (_kDebugMode) {
+          debugPrint(
+            'MessageClient: booking completion poll attempt ${attempt + 1} failed: $e',
+          );
+        }
+      }
+
+      if (attempt < maxAttempts - 1) {
+        await Future.delayed(delay);
+      }
+    }
+
+    return _isCompletedBookingStatus(_bookingStatusFromThread) || _bookingCompleted;
+  }
+
+  Future<int?> _resolveBookingAmountForDeferredPayment(String token) async {
+    final localCandidates = <dynamic>[
+      _bookingPriceFromThread,
+      widget.bookingPrice,
+    ];
+    for (final candidate in localCandidates) {
+      final amount = _parseAmountValue(candidate);
+      if (amount != null && amount > 0) return amount;
+    }
+
+    if (widget.bookingId == null || widget.bookingId!.isEmpty) return null;
+
+    try {
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token'
+      };
+      final uri = Uri.parse('$API_BASE_URL/api/bookings/${widget.bookingId}');
+      final response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode >= 200 &&
+          response.statusCode < 300 &&
+          response.body.isNotEmpty) {
+        final parsed = jsonDecode(response.body);
+        final data = parsed is Map ? (parsed['data'] ?? parsed) : parsed;
+        final booking = data is Map ? (data['booking'] ?? data) : null;
+
+        if (booking is Map) {
+          final amount = _parseAmountValue(
+            booking['clientTotal'] ??
+                booking['price'] ??
+                booking['amount'] ??
+                booking['total'],
+          );
+          final status = booking['status']?.toString();
+
+          if (status != null) {
+            if (mounted) {
+              setState(() {
+                _bookingStatusFromThread = status;
+              });
+            } else {
+              _bookingStatusFromThread = status;
+            }
+          }
+
+          if (amount != null && amount > 0) return amount;
+        }
+      }
+    } catch (e) {
+      if (_kDebugMode) {
+        debugPrint('MessageClient: failed to resolve booking amount for deferred payment: $e');
+      }
+    }
+
+    return null;
+  }
+
+  Future<void> _initializeDeferredPaymentBeforeCompletion(String token) async {
+    try {
+      if (mounted) setState(() => _initializingPayment = true);
+
+      if (widget.bookingId == null || widget.bookingId!.isEmpty) {
+        AppNotification.showError(context, 'No booking selected');
+        return;
+      }
+
+      final amount = await _resolveBookingAmountForDeferredPayment(token);
+      if (amount == null || amount <= 0) {
+        AppNotification.showError(context, 'Unable to determine the booking amount for payment.');
+        return;
+      }
+
+      String? customerEmail;
+      try {
+        final profile = await UserService.getProfile();
+        customerEmail = profile?['email']?.toString();
+      } catch (_) {}
+
+      if (customerEmail == null || customerEmail.isEmpty) {
+        AppNotification.showError(context, 'Unable to retrieve your email for payment');
+        return;
+      }
+
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token'
+      };
+
+      final uri = Uri.parse('$API_BASE_URL/api/payments/initialize');
+      final payload = <String, dynamic>{
+        'amount': amount,
+        'currency': 'NGN',
+        'email': customerEmail,
+        'type': 'booking',
+        'bookingSource': 'booking',
+        'bookingId': widget.bookingId,
+        'metadata': {
+          'bookingId': widget.bookingId,
+          'paymentMode': 'afterCompletion',
+          if (widget.jobTitle != null && widget.jobTitle!.trim().isNotEmpty)
+            'service': widget.jobTitle!.trim(),
+        },
+      };
+
+      if (_kDebugMode) {
+        debugPrint('MessageClient: Initializing generic deferred payment before completion POST $uri');
+      }
+
+      final response = await http
+          .post(uri, headers: headers, body: jsonEncode(payload))
+          .timeout(const Duration(seconds: 15));
+
+      if (_kDebugMode) {
+        debugPrint(
+          'MessageClient: generic deferred payment init response ${response.statusCode} ${response.body}',
+        );
+      }
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final parsed = jsonDecode(response.body);
+        final data = parsed is Map ? (parsed['data'] ?? parsed) : parsed;
+        final authUrl = data is Map ? data['authorization_url']?.toString() : null;
+        final paymentReference = data is Map ? data['reference']?.toString() : null;
+
+        if (authUrl != null && authUrl.isNotEmpty) {
+          if (mounted) {
+            setState(() {
+              _waitingForPaymentConfirmation = true;
+              _paymentConfirmedBySocket = false;
+              _lastPaymentReference = paymentReference;
+            });
+          }
+          await _handlePaymentWebView(authUrl, paymentReference);
+          return;
+        }
+
+        AppNotification.showError(
+          context,
+          'Payment initialization succeeded but no checkout URL was returned.',
+        );
+        return;
+      }
+
+      String serverMsg = 'Failed to initialize payment';
+      try {
+        final parsed = response.body.isNotEmpty ? jsonDecode(response.body) : null;
+        if (parsed is Map && (parsed['message'] != null || parsed['error'] != null)) {
+          serverMsg = (parsed['message'] ?? parsed['error']).toString();
+        } else if (response.body.isNotEmpty) {
+          serverMsg = response.body;
+        }
+      } catch (_) {}
+      AppNotification.showError(context, serverMsg);
+    } catch (e) {
+      if (_kDebugMode) debugPrint('Error initializing payment before completion: $e');
+      AppNotification.showError(context, 'Error initializing payment: $e');
+    } finally {
+      if (mounted) setState(() => _initializingPayment = false);
+    }
+  }
+
+  void _closePaymentConfirmationDialogIfOpen() {
+    if (!_paymentConfirmationDialogOpen || !mounted) return;
+    _paymentConfirmationDialogOpen = false;
+    Navigator.of(context, rootNavigator: true).pop();
+  }
+
+  Future<bool> _verifyPaymentReference(String reference) async {
+    if (reference.trim().isEmpty) return false;
+
+    try {
+      final token = await TokenStorage.getToken();
+      final headers = <String, String>{'Content-Type': 'application/json'};
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+
+      final uri = Uri.parse('$API_BASE_URL/api/payments/verify');
+      final payload = <String, dynamic>{'reference': reference};
+
+      if (_kDebugMode) {
+        debugPrint('MessageClient: verifying payment reference $reference via $uri');
+      }
+
+      final response = await http
+          .post(uri, headers: headers, body: jsonEncode(payload))
+          .timeout(const Duration(seconds: 20));
+
+      if (_kDebugMode) {
+        debugPrint('MessageClient: payment verify response ${response.statusCode} ${response.body}');
+      }
+
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300 ||
+          response.body.isEmpty) {
+        return false;
+      }
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map &&
+          (decoded['success'] == true || decoded['ok'] == true)) {
+        return true;
+      }
+
+      final data = decoded is Map ? (decoded['data'] ?? decoded) : decoded;
+      if (data is Map) {
+        final statusRaw = data['status'] ??
+            data['paymentStatus'] ??
+            data['paid'] ??
+            data['isPaid'] ??
+            data['state'] ??
+            data['statusText'];
+
+        if (statusRaw is bool) return statusRaw;
+        final statusText = statusRaw?.toString().toLowerCase() ?? '';
+        const okValues = <String>[
+          'paid',
+          'success',
+          'completed',
+          'held',
+          'holding',
+          'authorized',
+          'successful',
+          'ok',
+        ];
+        for (final value in okValues) {
+          if (statusText.contains(value)) return true;
+        }
+
+        final paymentNode = data['payment'] ??
+            data['paymentData'] ??
+            data['payment_response'] ??
+            data['authorization'];
+        if (paymentNode is Map) {
+          final paymentStatus = paymentNode['status'] ??
+              paymentNode['paid'] ??
+              paymentNode['isPaid'] ??
+              paymentNode['paymentStatus'];
+          if (paymentStatus is bool) return paymentStatus;
+          final paymentText = paymentStatus?.toString().toLowerCase() ?? '';
+          for (final value in okValues) {
+            if (paymentText.contains(value)) return true;
+          }
+        }
+      }
+    } catch (e) {
+      if (_kDebugMode) debugPrint('MessageClient: verify payment reference error: $e');
+    }
+
+    return false;
   }
 
   Future<void> _fetchChatByThreadId() async {
@@ -1975,7 +2456,7 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                     ),
                   ),
                 ),
-              ),
+               ),
             ],
           ),
         ),
@@ -2031,6 +2512,49 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
         return;
       }
 
+      final resolvedPaymentMode = await _refreshBookingPaymentMode(token: token);
+
+      // For after-completion payments: initialize payment first. The booking should only
+      // be marked complete after payment succeeds.
+      if (_isAfterCompletionMode(resolvedPaymentMode)) {
+        if (_kDebugMode) {
+          debugPrint('MessageClient: After-completion payment mode detected. Initializing generic payment before completion...');
+        }
+        try {
+          if (mounted) await Future.delayed(const Duration(milliseconds: 200));
+          await _initializeDeferredPaymentBeforeCompletion(token);
+        } catch (e) {
+          if (_kDebugMode) debugPrint('Error initializing generic payment before completion: $e');
+          AppNotification.showError(
+            context,
+            'Unable to initialize payment. Please try again.',
+          );
+        }
+      } else {
+        // For upfront payments: Mark complete immediately, then show rating
+        if (_kDebugMode) {
+          debugPrint('MessageClient: Upfront payment mode. Marking booking as complete...');
+        }
+        await _completeBookingAndShowRating(token);
+      }
+    } catch (e) {
+      if (_kDebugMode) debugPrint('Error in _markJobComplete: $e');
+      AppNotification.showError(context, 'Error: $e');
+    }
+  }
+
+  /// Complete booking and show rating sheet for upfront payments
+  Future<void> _completeBookingAndShowRating(String token) async {
+    try {
+      // If booking is already marked completed (e.g., UI completed it before payment),
+      // skip the API call and directly show the rating sheet.
+      if (_bookingCompleted) {
+        try {
+          if (mounted) await Future.delayed(const Duration(milliseconds: 200));
+          if (mounted) await _showRatingBottomSheet();
+        } catch (_) {}
+        return;
+      }
       final headers = <String, String>{
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token'
@@ -2048,9 +2572,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
           });
         }
 
-        // After marking complete, prompt the customer to rate/review the artisan
+        // Show rating immediately for upfront payments
         try {
-          // small delay to allow UI update before showing bottom sheet
           if (mounted) await Future.delayed(const Duration(milliseconds: 200));
           if (mounted) await _showRatingBottomSheet();
         } catch (_) {}
@@ -2068,10 +2591,452 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
         AppNotification.showError(context, serverMsg);
       }
     } catch (e) {
-      print(e);
+      if (_kDebugMode) debugPrint('Error completing booking: $e');
+      AppNotification.showError(context, 'Error marking booking complete: $e');
+    }
+  }
+
+  /// Complete booking on server and then initialize deferred payment flow.
+  /// This is used for backends that require the booking to be completed before
+  /// `pay-after-completion` is allowed.
+  Future<void> _completeBookingThenInitPayment(String token) async {
+    try {
+      if (_bookingCompleted || _isCompletedBookingStatus(_bookingStatusFromThread)) {
+        final completed = await _waitForBookingCompletedStatus(token, maxAttempts: 2);
+        if (!completed) {
+          AppNotification.showError(
+            context,
+            'Booking status is still syncing. Please try payment again in a moment.',
+          );
+          return;
+        }
+
+        if (mounted) await _initializeDeferredPayment();
+        return;
+      }
+
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token'
+      };
+
+      final uri = Uri.parse('$API_BASE_URL/api/bookings/${widget.bookingId}/complete');
+      final payload = jsonEncode({ 'sendEmail': true });
+      final response = await http.post(uri, headers: headers, body: payload).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        AppNotification.showSuccess(context, 'Booking marked as completed');
+        if (mounted) {
+          setState(() {
+            _bookingCompleted = true;
+          });
+        }
+
+        final completed = await _waitForBookingCompletedStatus(token);
+        if (!completed) {
+          AppNotification.showError(
+            context,
+            'Booking completion is still syncing. Please try payment again in a moment.',
+          );
+          return;
+        }
+
+        // After the completed status is observable, initialize deferred payment.
+        try {
+          if (mounted) await _initializeDeferredPayment();
+        } catch (e) {
+          if (_kDebugMode) debugPrint('Error initializing deferred payment after completion: $e');
+          AppNotification.showError(context, 'Unable to initialize payment after completion.');
+        }
+      } else {
+        String serverMsg = 'Failed to mark booking as complete';
+        try {
+          final parsed = response.body.isNotEmpty ? jsonDecode(response.body) : null;
+          if (parsed is Map && (parsed['message'] != null || parsed['error'] != null)) {
+            serverMsg = (parsed['message'] ?? parsed['error']).toString();
+          } else if (response.body.isNotEmpty) {
+            serverMsg = response.body;
+          }
+        } catch (_) {}
+        if (_serverRequiresPaymentInitializationBeforeCompletion(serverMsg)) {
+          await _initializeDeferredPaymentBeforeCompletion(token);
+          return;
+        }
+        AppNotification.showError(context, serverMsg);
+      }
+    } catch (e) {
+      if (_kDebugMode) debugPrint('Error completing booking then initializing payment: $e');
       AppNotification.showError(context, 'Error: $e');
     }
   }
+
+   /// Initialize deferred payment for afterCompletion bookings
+   /// Calls POST /booking/:id/pay-after-completion
+   /// Navigates to WebView for secure payment and waits for confirmation
+   Future<void> _initializeDeferredPayment() async {
+     try {
+       setState(() => _initializingPayment = true);
+
+       final token = await TokenStorage.getToken();
+       if (token == null || token.isEmpty) {
+         AppNotification.showError(context, 'Please login to proceed with payment');
+         setState(() => _initializingPayment = false);
+         return;
+       }
+
+       if (widget.bookingId == null || widget.bookingId!.isEmpty) {
+         AppNotification.showError(context, 'No booking selected');
+         setState(() => _initializingPayment = false);
+         return;
+       }
+
+       final headers = <String, String>{
+         'Content-Type': 'application/json',
+         'Authorization': 'Bearer $token'
+       };
+
+       // Get user profile for email
+       String? customerEmail;
+       try {
+         final profile = await UserService.getProfile();
+         customerEmail = profile?['email']?.toString();
+       } catch (_) {}
+
+       if (customerEmail == null || customerEmail.isEmpty) {
+         AppNotification.showError(context, 'Unable to retrieve your email for payment');
+         setState(() => _initializingPayment = false);
+         return;
+       }
+
+       final uri = Uri.parse('$API_BASE_URL/api/bookings/${widget.bookingId}/pay-after-completion');
+       final payload = jsonEncode({
+         'email': customerEmail,
+         'customerCoords': {
+           'lat': 0.0,
+           'lon': 0.0
+         }
+       });
+
+       if (_kDebugMode) debugPrint('MessageClient: Initializing deferred payment POST $uri');
+
+       final response = await http.post(uri, headers: headers, body: payload)
+           .timeout(const Duration(seconds: 15));
+
+       if (_kDebugMode) debugPrint('MessageClient: deferred payment init response ${response.statusCode} ${response.body}');
+
+       if (response.statusCode >= 200 && response.statusCode < 300) {
+         try {
+           final parsed = jsonDecode(response.body);
+           final data = parsed is Map ? (parsed['data'] ?? parsed) : parsed;
+
+           if (data is Map) {
+             final payment = data['payment'];
+             final authUrl = payment is Map
+                 ? (payment['authorization_url'] ?? payment['authorizationUrl'])
+                 : null;
+             final paymentReference = payment is Map
+                 ? (payment['reference'] ?? payment['paymentReference'])?.toString()
+                 : null;
+
+             if (authUrl != null && authUrl.toString().isNotEmpty) {
+               if (mounted) {
+                 setState(() {
+                   _waitingForPaymentConfirmation = true;
+                   _paymentConfirmedBySocket = false;
+                   _lastPaymentReference = paymentReference;
+                 });
+               }
+
+               if (mounted) {
+                 await _handlePaymentWebView(authUrl.toString(), paymentReference);
+               }
+             } else {
+               AppNotification.showError(
+                 context,
+                 'Payment initialization succeeded but no checkout URL was returned.',
+               );
+             }
+           }
+         } catch (e) {
+           if (_kDebugMode) debugPrint('Error parsing payment response: $e');
+           AppNotification.showError(
+             context,
+             'Payment initialization response could not be processed.',
+           );
+         }
+       } else {
+         String serverMsg = 'Failed to initialize payment';
+         try {
+           final parsed = response.body.isNotEmpty ? jsonDecode(response.body) : null;
+           if (parsed is Map && (parsed['message'] != null || parsed['error'] != null)) {
+             serverMsg = (parsed['message'] ?? parsed['error']).toString();
+           } else if (response.body.isNotEmpty) {
+             serverMsg = response.body;
+           }
+         } catch (_) {}
+         AppNotification.showError(context, serverMsg);
+       }
+     } catch (e) {
+       if (_kDebugMode) debugPrint('Error initializing deferred payment: $e');
+       AppNotification.showError(context, 'Error initializing payment: $e');
+     } finally {
+       if (mounted) setState(() => _initializingPayment = false);
+     }
+   }
+
+   /// Handle payment via WebView and wait for confirmation
+   /// Navigates to PaymentWebviewPageWidget and handles the result
+   Future<void> _handlePaymentWebView(String authUrl, String? expectedReference) async {
+     try {
+       if (!mounted) return;
+
+       if (_kDebugMode) {
+         debugPrint('MessageClient: Navigating to payment WebView with URL: $authUrl');
+       }
+
+       _paymentWebViewOpen = true;
+
+       // Navigate to payment WebView and await result
+       final result = await Navigator.of(context).push<Map<String, dynamic>>(
+         MaterialPageRoute(
+           builder: (context) => PaymentWebviewPageWidget(
+             url: authUrl,
+             expectedReference: expectedReference,
+           ),
+           fullscreenDialog: true,
+         ),
+       );
+
+       _paymentWebViewOpen = false;
+
+       if (!mounted) return;
+
+       if (_kDebugMode) {
+         debugPrint('MessageClient: WebView returned result: $result');
+       }
+
+       // Check if payment was successful
+       final success = result?['success'] ?? false;
+
+        if (success) {
+          final returnedReference = result?['reference']?.toString();
+          if (returnedReference != null && returnedReference.isNotEmpty) {
+            _lastPaymentReference = returnedReference;
+          }
+
+          final referenceToVerify = _lastPaymentReference ?? expectedReference;
+          if (referenceToVerify != null && referenceToVerify.isNotEmpty) {
+            final verified = await _verifyPaymentReference(referenceToVerify);
+            if (verified) {
+              if (mounted) {
+                setState(() {
+                  _paymentConfirmedBySocket = true;
+                  _waitingForPaymentConfirmation = false;
+                });
+              }
+              AppNotification.showSuccess(context, 'Payment verified!');
+              await Future.delayed(const Duration(milliseconds: 200));
+              // Now mark the booking as complete after payment is verified
+              if (mounted) {
+                final token = await TokenStorage.getToken();
+                if (token != null && token.isNotEmpty) {
+                  await _completeBookingAndShowRating(token);
+                } else {
+                  if (mounted) await _showRatingBottomSheet();
+                }
+              }
+              return;
+            }
+          }
+
+          if (_paymentConfirmedBySocket) {
+            AppNotification.showSuccess(context, 'Payment confirmed');
+            await Future.delayed(const Duration(milliseconds: 200));
+            // Mark the booking as complete after socket confirmation
+            if (mounted) {
+              final token = await TokenStorage.getToken();
+              if (token != null && token.isNotEmpty) {
+                await _completeBookingAndShowRating(token);
+              } else {
+                if (mounted) await _showRatingBottomSheet();
+              }
+            }
+            return;
+          }
+
+          AppNotification.showSuccess(context, 'Payment processing...');
+          await _waitForPaymentConfirmation();
+       } else {
+         AppNotification.showError(context, 'Payment was cancelled or failed');
+         if (mounted) {
+           setState(() {
+             _waitingForPaymentConfirmation = false;
+           });
+         }
+       }
+     } catch (e) {
+       _paymentWebViewOpen = false;
+       if (_kDebugMode) debugPrint('Error handling payment WebView: $e');
+       AppNotification.showError(context, 'Error processing payment: $e');
+       if (mounted) {
+         setState(() {
+           _waitingForPaymentConfirmation = false;
+         });
+       }
+     }
+   }
+
+   /// Wait for payment confirmation from backend via socket
+   /// Shows a loading indicator while waiting (max 60 seconds)
+   /// Falls back to API verification if socket doesn't respond
+   Future<void> _waitForPaymentConfirmation() async {
+     try {
+       if (!mounted) return;
+
+        if (_paymentConfirmedBySocket) {
+          await Future.delayed(const Duration(milliseconds: 200));
+          if (mounted && !_submittingReview) {
+            // Mark booking as complete after socket confirmed payment
+            final token = await TokenStorage.getToken();
+            if (token != null && token.isNotEmpty) {
+              await _completeBookingAndShowRating(token);
+            } else {
+              await _showRatingBottomSheet();
+            }
+          }
+          return;
+        }
+
+       setState(() {
+         _waitingForPaymentConfirmation = true;
+       });
+
+       if (_kDebugMode) {
+         debugPrint('MessageClient: Waiting for payment confirmation from socket...');
+       }
+
+       // Show loading dialog while waiting
+       showDialog(
+         context: context,
+         barrierDismissible: false,
+         builder: (ctx) => WillPopScope(
+           onWillPop: () async => false,
+           child: Dialog(
+             backgroundColor: Colors.transparent,
+             elevation: 0,
+             child: Center(
+               child: Column(
+                 mainAxisSize: MainAxisSize.min,
+                 children: [
+                   CircularProgressIndicator(
+                     valueColor: AlwaysStoppedAnimation<Color>(
+                       FlutterFlowTheme.of(context).primary,
+                     ),
+                   ),
+                   const SizedBox(height: 16),
+                   Text(
+                     'Verifying payment...',
+                     style: FlutterFlowTheme.of(context).bodyMedium,
+                   ),
+                 ],
+               ),
+             ),
+           ),
+         ),
+       );
+       _paymentConfirmationDialogOpen = true;
+
+       // Set up timeout for socket confirmation (60 seconds max)
+       _paymentConfirmationTimeout = Timer(const Duration(seconds: 60), () {
+         if (!_paymentConfirmedBySocket && mounted) {
+           if (_kDebugMode) {
+             debugPrint('MessageClient: Payment confirmation timeout - falling back to API verification');
+           }
+           _verifyPaymentViaAPI();
+         }
+       });
+
+       // Wait for either:
+       // 1. Socket confirmation via _handlePaymentConfirmed()
+       // 2. Timeout after 60 seconds (triggers API verification)
+       // _paymentConfirmedBySocket will be set to true when socket event arrives
+     } catch (e) {
+       if (_kDebugMode) debugPrint('Error waiting for payment confirmation: $e');
+       if (mounted) {
+         _closePaymentConfirmationDialogIfOpen();
+         AppNotification.showError(context, 'Error verifying payment: $e');
+       }
+     }
+   }
+
+   /// Verify payment status via API call
+   /// Called if socket confirmation doesn't arrive within 60 seconds
+   Future<void> _verifyPaymentViaAPI() async {
+     try {
+       final token = await TokenStorage.getToken();
+       if (token == null || token.isEmpty) {
+         if (mounted) _closePaymentConfirmationDialogIfOpen();
+         AppNotification.showError(context, 'Session expired');
+         return;
+       }
+
+       final headers = <String, String>{
+         'Authorization': 'Bearer $token'
+       };
+
+       final uri = Uri.parse('$API_BASE_URL/api/bookings/${widget.bookingId}');
+       final response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 10));
+
+       if (response.statusCode >= 200 && response.statusCode < 300) {
+         try {
+           final parsed = jsonDecode(response.body);
+           final data = parsed is Map ? (parsed['data'] ?? parsed) : parsed;
+           final booking = data is Map ? data['booking'] ?? data : null;
+
+           final paymentStatus = booking is Map ? booking['paymentStatus']?.toString() : null;
+
+           if (_kDebugMode) {
+             debugPrint('MessageClient: API verification - payment status: $paymentStatus');
+           }
+
+            if (paymentStatus == 'paid') {
+              // Payment is confirmed via API
+              if (mounted) {
+                _closePaymentConfirmationDialogIfOpen();
+                setState(() {
+                  _paymentConfirmedBySocket = true;
+                  _waitingForPaymentConfirmation = false;
+                });
+                AppNotification.showSuccess(context, 'Payment verified!');
+                await Future.delayed(const Duration(milliseconds: 200));
+                // Mark the booking as complete after payment is verified via API
+                await _completeBookingAndShowRating(token);
+              }
+              return;
+            }
+         } catch (e) {
+           if (_kDebugMode) debugPrint('Error parsing booking data: $e');
+         }
+       }
+
+       // If we get here, payment status is still unclear
+       if (mounted) {
+         _closePaymentConfirmationDialogIfOpen();
+         AppNotification.showError(
+           context,
+           'Payment verification pending. Please check your account or try again in a moment.',
+         );
+         setState(() => _waitingForPaymentConfirmation = false);
+       }
+     } catch (e) {
+       if (_kDebugMode) debugPrint('Error verifying payment via API: $e');
+       if (mounted) {
+         _closePaymentConfirmationDialogIfOpen();
+         AppNotification.showError(context, 'Error verifying payment: $e');
+         setState(() => _waitingForPaymentConfirmation = false);
+       }
+     }
+   }
 
   // Show a bottom sheet allowing the user to rate (1-5) and leave a comment for the artisan.
   Future<void> _showRatingBottomSheet() async {
@@ -2582,10 +3547,9 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
           _reviewConflictMessage = null;
         });
         return true;
-      } else if (response.statusCode == 409) {
-        print('working dupl');
-        // Conflict — user already submitted a review for this target
-        String serverMsg = 'You have already reviewed this artisan.';
+       } else if (response.statusCode == 409) {
+         // Conflict — user already submitted a review for this target
+         String serverMsg = 'You have already reviewed this artisan.';
         try {
           final parsed = response.body.isNotEmpty ? jsonDecode(response.body) : null;
           if (parsed is Map && (parsed['message'] != null || parsed['error'] != null)) {
@@ -2643,5 +3607,3 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
     );
   }
 }
-
-

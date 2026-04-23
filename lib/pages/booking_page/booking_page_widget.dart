@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import '../../services/token_storage.dart';
 import '../../services/user_service.dart';
@@ -418,6 +419,7 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
     }
 
     await _fetchBookings(reset: true);
+    _startAutoRefresh();
   }
 
   @override
@@ -438,12 +440,81 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
       _realtimeSub?.cancel();
       _realtimeSub =
           RealtimeNotifications.instance.events.listen(_handleRealtimeEvent);
+      _startAutoRefresh();
     } catch (e) {
       if (kDebugMode) debugPrint('Realtime booking init error: $e');
     }
   }
 
+  Map<String, dynamic> _normalizeFetchedBooking(Map<String, dynamic> item) {
+    final normalized = Map<String, dynamic>.from(item);
+    final nested = normalized['booking'] is Map
+        ? Map<String, dynamic>.from(normalized['booking'])
+        : <String, dynamic>{};
+
+    final globalPaymentMode = dotenv.env['PAYMENT_MODE'] ?? 'upfront';
+    final resolvedPaymentMode = (normalized['paymentMode'] ??
+            nested['paymentMode'] ??
+            globalPaymentMode)
+        .toString();
+
+    normalized['paymentMode'] = resolvedPaymentMode;
+    if (nested.isNotEmpty) {
+      nested['paymentMode'] = nested['paymentMode'] ?? resolvedPaymentMode;
+      normalized['booking'] = nested;
+    }
+
+    return normalized;
+  }
+
+  String _resolvePaymentMode(Map<String, dynamic> booking) {
+    final nested = booking['booking'] is Map
+        ? Map<String, dynamic>.from(booking['booking'])
+        : <String, dynamic>{};
+    final globalPaymentMode = dotenv.env['PAYMENT_MODE'] ?? 'upfront';
+    return (booking['paymentMode'] ??
+            nested['paymentMode'] ??
+            globalPaymentMode)
+        .toString()
+        .toLowerCase();
+  }
+
+  bool _shouldRefundForBooking(Map<String, dynamic> booking) {
+    return _resolvePaymentMode(booking) != 'aftercompletion';
+  }
+
   bool _isBookingRealtimeEvent(Map<String, dynamic> event) {
+    bool hasKeyDeep(dynamic node, Set<String> keys, {int depth = 3}) {
+      if (node == null || depth < 0) return false;
+      if (node is Map) {
+        for (final entry in node.entries) {
+          final key = entry.key.toString().toLowerCase();
+          if (keys.contains(key)) return true;
+          if (hasKeyDeep(entry.value, keys, depth: depth - 1)) return true;
+        }
+      } else if (node is List) {
+        for (final value in node) {
+          if (hasKeyDeep(value, keys, depth: depth - 1)) return true;
+        }
+      }
+      return false;
+    }
+
+    bool hasValueDeep(dynamic node, Set<String> values, {int depth = 3}) {
+      if (node == null || depth < 0) return false;
+      if (node is String) return values.contains(node.toLowerCase());
+      if (node is Map) {
+        for (final value in node.values) {
+          if (hasValueDeep(value, values, depth: depth - 1)) return true;
+        }
+      } else if (node is List) {
+        for (final value in node) {
+          if (hasValueDeep(value, values, depth: depth - 1)) return true;
+        }
+      }
+      return false;
+    }
+
     final eventName = (event['event'] ?? '').toString().toLowerCase();
     final type = (event['type'] ?? event['category'] ?? event['kind'] ?? '')
         .toString()
@@ -458,8 +529,32 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
       event['payload'] is Map ? event['payload']['bookingId'] : null,
       event['data'] is Map ? event['data']['bookingId'] : null,
     ].any((v) => v != null && v.toString().isNotEmpty);
+    final hasBookingKeys = hasKeyDeep(event, {
+      'bookingid',
+      'booking_id',
+      'booking',
+      'bookingstatus',
+      'booking_status',
+      'status',
+      'paymentstatus',
+      'payment_status',
+    });
+    final hasBookingStatusValue = hasValueDeep(event, {
+      'accepted',
+      'rejected',
+      'cancelled',
+      'canceled',
+      'completed',
+      'in-progress',
+      'in_progress',
+      'awaiting-acceptance',
+      'awaiting_acceptance',
+      'paid',
+      'refunded',
+    });
 
     if (hasBookingId) return true;
+    if (hasBookingKeys && hasBookingStatusValue) return true;
     if (eventName.contains('booking') || eventName.contains('payment')) {
       return true;
     }
@@ -476,21 +571,43 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
   }
 
   String? _extractRealtimeBookingId(Map<String, dynamic> event) {
-    final candidates = [
-      event['bookingId'],
-      event['booking_id'],
-      event['id'],
-      event['payload'] is Map ? event['payload']['bookingId'] : null,
-      event['payload'] is Map ? event['payload']['booking_id'] : null,
-      event['data'] is Map ? event['data']['bookingId'] : null,
-      event['data'] is Map ? event['data']['booking_id'] : null,
-    ];
-    for (final candidate in candidates) {
-      if (candidate != null && candidate.toString().isNotEmpty) {
-        return candidate.toString();
+    String? findBookingIdDeep(dynamic node, {int depth = 4}) {
+      if (node == null || depth < 0) return null;
+      if (node is Map) {
+        const directKeys = ['bookingId', 'booking_id'];
+        for (final key in directKeys) {
+          final candidate = node[key];
+          if (candidate != null && candidate.toString().isNotEmpty) {
+            return candidate.toString();
+          }
+        }
+        for (final value in node.values) {
+          final nested = findBookingIdDeep(value, depth: depth - 1);
+          if (nested != null && nested.isNotEmpty) return nested;
+        }
+      } else if (node is List) {
+        for (final value in node) {
+          final nested = findBookingIdDeep(value, depth: depth - 1);
+          if (nested != null && nested.isNotEmpty) return nested;
+        }
       }
+      return null;
     }
-    return null;
+
+    return findBookingIdDeep(event);
+  }
+
+  void _startAutoRefresh() {
+    _autoRefreshTimer?.cancel();
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
+      if (!mounted ||
+          _loadingBookings ||
+          _loadingMore ||
+          _realtimeRefreshInFlight) {
+        return;
+      }
+      await _fetchBookingsInBackground();
+    });
   }
 
   Future<void> _handleRealtimeEvent(Map<String, dynamic> event) async {
@@ -591,8 +708,22 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
 
         final processed = items
             .whereType<Map>()
-            .map((m) => Map<String, dynamic>.from(m))
+            .map((m) => _normalizeFetchedBooking(Map<String, dynamic>.from(m)))
             .toList();
+
+        // Debug: Log paymentMode from first booking to diagnose missing field
+        if (kDebugMode && processed.isNotEmpty) {
+          try {
+            final firstBooking = processed[0];
+            final bookingNested = firstBooking['booking'] is Map
+                ? firstBooking['booking']
+                : firstBooking;
+            final paymentMode = firstBooking['paymentMode'] ??
+                bookingNested['paymentMode'] ??
+                '<MISSING>';
+            debugPrint('🔍 DEBUG: First booking paymentMode=$paymentMode');
+          } catch (_) {}
+        }
 
         // If there's a search query, filter bookings by various fields locally.
         List<Map<String, dynamic>> filtered = processed;
@@ -727,7 +858,7 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
 
         final processed = items
             .whereType<Map>()
-            .map((m) => Map<String, dynamic>.from(m))
+            .map((m) => _normalizeFetchedBooking(Map<String, dynamic>.from(m)))
             .toList();
 
         // If there's a search query, filter bookings by various fields locally.
@@ -1007,13 +1138,27 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
         (booking['booking']?['paymentStatus'] ?? booking['paymentStatus'] ?? '')
             .toString()
             .toLowerCase();
+
+    // Extract paymentMode from booking, with fallback to global PAYMENT_MODE from .env
+    final globalPaymentMode = dotenv.env['PAYMENT_MODE'] ?? 'upfront';
+    final paymentMode = (booking['booking']?['paymentMode'] ??
+            booking['paymentMode'] ??
+            globalPaymentMode)
+        .toString()
+        .toLowerCase();
+
     if (!st.contains('awaiting')) {
       if (mounted)
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Cannot accept booking: status is "$st"')));
       return;
     }
-    if (paymentStatus.isNotEmpty && paymentStatus != 'paid') {
+    // Allow acceptance if:
+    // 1. paymentMode is 'afterCompletion' (payment is deferred, unpaid status is expected), OR
+    // 2. paymentStatus is 'paid' (upfront payment is complete)
+    if (paymentStatus.isNotEmpty &&
+        paymentStatus != 'paid' &&
+        paymentMode != 'aftercompletion') {
       if (mounted)
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(
@@ -1034,7 +1179,7 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
       if (token != null && token.isNotEmpty)
         headers['Authorization'] = 'Bearer $token';
       debugPrint(
-          'Accept booking -> id=$id status=$st paymentStatus=$paymentStatus url=$API_BASE_URL/api/bookings/$id/accept');
+          'Accept booking -> id=$id status=$st paymentStatus=$paymentStatus paymentMode=$paymentMode url=$API_BASE_URL/api/bookings/$id/accept');
       final url = '$API_BASE_URL/api/bookings/$id/accept';
       final res = await http
           .post(Uri.parse(url), headers: headers, body: jsonEncode({}))
@@ -1066,10 +1211,12 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
         } else {
           setState(() {
             if (index != -1) {
-              _bookings[index]['booking'] = {
-                ...?_bookings[index]['booking'],
-                'status': 'accepted'
-              };
+              final b = _bookings[index];
+              if (b['booking'] is Map) {
+                b['booking'] = {...b['booking'], 'status': 'accepted'};
+              } else {
+                b['status'] = 'accepted';
+              }
             }
           });
         }
@@ -1183,11 +1330,17 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
         } else {
           setState(() {
             if (index != -1) {
-              _bookings[index]['booking'] = {
-                ...?_bookings[index]['booking'],
-                'status': 'cancelled',
-                'refundStatus': 'refunded'
-              };
+              final b = _bookings[index];
+              if (b['booking'] is Map) {
+                b['booking'] = {
+                  ...b['booking'],
+                  'status': 'cancelled',
+                  'refundStatus': 'refunded'
+                };
+              } else {
+                b['status'] = 'cancelled';
+                b['refundStatus'] = 'refunded';
+              }
             }
           });
         }
@@ -1280,6 +1433,7 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
     final st = (booking['booking']?['status'] ?? booking['status'] ?? '')
         .toString()
         .toLowerCase();
+    final shouldRefund = _shouldRefundForBooking(booking);
     // Only allow cancel when booking is awaiting artisan acceptance or still pending
     if (!(st.startsWith('await') ||
         st == 'pending' ||
@@ -1295,8 +1449,9 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
         builder: (ctx) {
           return AlertDialog(
             title: const Text('Cancel booking'),
-            content: const Text(
-                'Are you sure you want to cancel this booking? You will be refunded if payment was made.'),
+            content: Text(shouldRefund
+                ? 'Are you sure you want to cancel this booking? You will be refunded if payment was made.'
+                : 'Are you sure you want to cancel this booking? This booking uses after-completion payment, so no refund will be processed.'),
             actions: [
               TextButton(
                   onPressed: () => Navigator.of(ctx).pop(false),
@@ -1376,19 +1531,32 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
         } else {
           setState(() {
             if (index != -1) {
+              final current = _bookings[index];
+              final nestedBooking = current['booking'] is Map
+                  ? Map<String, dynamic>.from(current['booking'])
+                  : <String, dynamic>{};
               _bookings[index]['booking'] = {
-                ...?_bookings[index]['booking'],
+                ...nestedBooking,
                 'status': 'cancelled',
-                'refundStatus': 'refunded'
+                if (shouldRefund)
+                  'refundStatus': 'refunded'
+                else
+                  'refundStatus': 'none',
               };
             }
           });
         }
         if (!mounted) return;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Booking cancelled.')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(shouldRefund
+                ? 'Booking cancelled. Refund will be processed.'
+                : 'Booking cancelled. No refund is due for this payment mode.')));
         try {
-          AppNotification.showSuccess(context, 'Booking cancelled');
+          AppNotification.showSuccess(
+              context,
+              shouldRefund
+                  ? 'Booking cancelled. Refund will be processed.'
+                  : 'Booking cancelled.');
         } catch (_) {}
       } else {
         // Try to extract a helpful server message from the response body
@@ -2248,7 +2416,7 @@ class _BookingCard extends StatelessWidget {
   final String? initialThreadId;
 
   // New parameters for message handling
-  final void Function(BuildContext, String? , String? , String, String, String)
+  final void Function(BuildContext, String?, String?, String, String, String)
       onMessage;
   final bool isFetchingThread;
 
@@ -2271,9 +2439,24 @@ class _BookingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final data = booking['booking'] is Map ? booking['booking'] : booking;
+    final cardBookingId = _extractBookingId(booking) ??
+        booking['_id']?.toString() ??
+        booking['booking']?['_id']?.toString() ??
+        booking['id']?.toString();
+    final cardThreadId = _extractThreadId(booking);
+    final useInitialIdsForThisCard = initialBookingId != null &&
+        initialBookingId!.isNotEmpty &&
+        cardBookingId != null &&
+        cardBookingId == initialBookingId;
     final counterpart = (isArtisan
-        ? (data['customer'] ?? data['customerUser'] ?? booking['customer'] ?? booking['customerUser'])
-        : (data['artisan'] ?? data['artisanUser'] ?? booking['artisan'] ?? booking['artisanUser']));
+        ? (data['customer'] ??
+            data['customerUser'] ??
+            booking['customer'] ??
+            booking['customerUser'])
+        : (data['artisan'] ??
+            data['artisanUser'] ??
+            booking['artisan'] ??
+            booking['artisanUser']));
     final name = _extractName(counterpart);
     final profileUrl = _extractProfileUrl(counterpart);
     final jobTitle = _extractJobTitle(booking);
@@ -2285,7 +2468,9 @@ class _BookingCard extends StatelessWidget {
       booking['payment_status'],
       booking['paid'],
       booking['isPaid'],
-      booking['payment'] is Map ? booking['payment']['status'] : booking['payment'],
+      booking['payment'] is Map
+          ? booking['payment']['status']
+          : booking['payment'],
       booking['booking']?['paymentStatus'],
       booking['booking']?['payment_status'],
       booking['booking']?['paid'],
@@ -2343,8 +2528,9 @@ class _BookingCard extends StatelessWidget {
     // Special-request bookings are created first, then payment verification updates
     // the money state. If the server still returns raw `pending` while payment is
     // already `paid`, don't keep treating the booking like unpaid pending work.
-    final status =
-        rawStatus == 'pending' && paymentStatus == 'paid' ? 'accepted' : rawStatus;
+    final status = rawStatus == 'pending' && paymentStatus == 'paid'
+        ? 'accepted'
+        : rawStatus;
 
     // Determine broader cancel eligibility from the effective status.
     final cancelEligible = (status.startsWith('await') ||
@@ -2597,22 +2783,13 @@ class _BookingCard extends StatelessWidget {
                         onPressed: messageEnabled
                             ? () async {
                                 // Compose effective IDs from available data
-                                final effectiveBookingId =
-                                    (initialBookingId != null &&
-                                            initialBookingId!.isNotEmpty)
-                                        ? initialBookingId
-                                        : (_extractBookingId(booking) ??
-                                            (booking['_id']?.toString() ??
-                                                booking['booking']?['_id']
-                                                    ?.toString() ??
-                                                booking['id']?.toString()));
-                                final extractedThread =
-                                    _extractThreadId(booking);
+                                final effectiveBookingId = cardBookingId;
                                 final effectiveThreadId =
-                                    (initialThreadId != null &&
-                                            initialThreadId!.isNotEmpty)
+                                    useInitialIdsForThisCard &&
+                                            initialThreadId != null &&
+                                            initialThreadId!.isNotEmpty
                                         ? initialThreadId
-                                        : (extractedThread?.toString());
+                                        : cardThreadId;
 
                                 // Delegate fetching/navigation to parent state
                                 try {

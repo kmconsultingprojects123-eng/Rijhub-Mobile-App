@@ -52,3 +52,4 @@ final String? GOOGLE_WEB_CLIENT_ID = () {
   final value = const String.fromEnvironment(_googleWebClientIdKey);
   return value.isNotEmpty ? value : _defaultGoogleWebClientId;
 }();
+

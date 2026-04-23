@@ -1,11 +1,67 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../api_config.dart';
 import 'token_storage.dart';
 import 'user_service.dart';
 import 'api_client.dart';
 
 class JobService {
+  static Map<String, dynamic>? _extractMap(dynamic value) {
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return null;
+  }
+
+  static Map<String, dynamic>? _extractPaymentMap(dynamic value) {
+    final map = _extractMap(value);
+    if (map == null) return null;
+    if ((map['authorization_url'] ?? map['authorizationUrl']) != null) {
+      return map;
+    }
+    return _extractPaymentMap(
+          map['data'] ??
+              map['payment'] ??
+              map['paymentData'] ??
+              map['authorization'],
+        ) ??
+        map;
+  }
+
+  static Map<String, dynamic> _normalizeQuoteAcceptResponse(
+    Map<String, dynamic> input,
+  ) {
+    final quoteData = _extractMap(input['quote']) ?? <String, dynamic>{};
+    final bookingData = _extractMap(input['booking']);
+    final paymentData = _extractPaymentMap(input['payment']) ??
+        _extractPaymentMap(input['paymentData']) ??
+        _extractPaymentMap(input['authorization']) ??
+        _extractPaymentMap(input['data']);
+
+    final normalized = <String, dynamic>{...input};
+
+    if (quoteData.isNotEmpty) {
+      normalized['quote'] = quoteData;
+    }
+
+    if (bookingData != null && bookingData.isNotEmpty) {
+      normalized['booking'] = bookingData;
+      normalized['bookingId'] ??= bookingData['_id'] ?? bookingData['id'];
+    }
+
+    if (paymentData != null && paymentData.isNotEmpty) {
+      normalized['payment'] = paymentData;
+      normalized['authorization_url'] ??=
+          paymentData['authorization_url'] ?? paymentData['authorizationUrl'];
+      normalized['authorizationUrl'] ??=
+          paymentData['authorizationUrl'] ?? paymentData['authorization_url'];
+      normalized['reference'] ??= paymentData['reference'];
+      normalized['access_code'] ??=
+          paymentData['access_code'] ?? paymentData['accessCode'];
+    }
+
+    return normalized;
+  }
+
   static Future<Map<String, dynamic>> createJob(
       Map<String, dynamic> payload) async {
     final url = '$API_BASE_URL/api/jobs';
@@ -400,20 +456,25 @@ class JobService {
 
     // Prefer ApiClient.put so token handling, retries and nicer error messages are used.
     try {
-      final resp = await ApiClient.put(uri.toString(), headers: {'Content-Type': 'application/json'}, body: jsonEncode(payload));
+      final resp = await ApiClient.put(uri.toString(),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(payload));
       final status = resp['status'] as int? ?? 0;
       if (status >= 200 && status < 300) {
         // ignore: avoid_print
-        print('│ ApiClient.put succeeded with status=$status body=${resp['body']}');
+        print(
+            '│ ApiClient.put succeeded with status=$status body=${resp['body']}');
         final jsonBody = resp['json'];
-        if (jsonBody is Map && jsonBody['data'] is Map) return Map<String, dynamic>.from(jsonBody['data']);
+        if (jsonBody is Map && jsonBody['data'] is Map)
+          return Map<String, dynamic>.from(jsonBody['data']);
         if (jsonBody is Map) return Map<String, dynamic>.from(jsonBody);
         return {};
       }
       // ApiClient returned an error-like response; fall through to try raw HTTP as a last resort
       final userMessage = resp['userMessage'] ?? 'Failed to update job';
       // ignore: avoid_print
-      print('│ ApiClient.put failed with status=$status userMessage=$userMessage body=${resp['body']}');
+      print(
+          '│ ApiClient.put failed with status=$status userMessage=$userMessage body=${resp['body']}');
     } catch (e) {
       // ignore and fallback to low-level HTTP attempt below
       // ignore: avoid_print
@@ -442,7 +503,10 @@ class JobService {
       }
     }
 
-    if (!(resp.statusCode >= 200 && resp.statusCode < 300) && (resp.statusCode == 405 || resp.statusCode == 404 || resp.statusCode >= 400)) {
+    if (!(resp.statusCode >= 200 && resp.statusCode < 300) &&
+        (resp.statusCode == 405 ||
+            resp.statusCode == 404 ||
+            resp.statusCode >= 400)) {
       try {
         // ignore: avoid_print
         print('│ PATCH returned ${resp.statusCode}, retrying with PUT');
@@ -459,7 +523,8 @@ class JobService {
     print('│ Final HTTP response: ${resp.statusCode} ${resp.body}');
     if (resp.statusCode >= 200 && resp.statusCode < 300) {
       final body = resp.body.isNotEmpty ? jsonDecode(resp.body) : {};
-      if (body is Map && body['data'] is Map) return Map<String, dynamic>.from(body['data']);
+      if (body is Map && body['data'] is Map)
+        return Map<String, dynamic>.from(body['data']);
       if (body is Map) return Map<String, dynamic>.from(body);
       return {};
     }
@@ -471,11 +536,13 @@ class JobService {
     if (id.isEmpty) throw Exception('Job id required');
     final url = '$API_BASE_URL/api/jobs/$id';
     try {
-      final res = await ApiClient.get(url, headers: {'Content-Type': 'application/json'});
+      final res = await ApiClient.get(url,
+          headers: {'Content-Type': 'application/json'});
       final status = res['status'] as int? ?? 0;
       if (status >= 200 && status < 300) {
         final jsonBody = res['json'];
-        if (jsonBody is Map && jsonBody['data'] is Map) return Map<String, dynamic>.from(jsonBody['data']);
+        if (jsonBody is Map && jsonBody['data'] is Map)
+          return Map<String, dynamic>.from(jsonBody['data']);
         if (jsonBody is Map) return Map<String, dynamic>.from(jsonBody);
         return {};
       }
@@ -484,6 +551,101 @@ class JobService {
     } catch (e) {
       // Re-throw with a clear message
       throw Exception('Failed to fetch job: $e');
+    }
+  }
+
+  /// Accept a job quote with payment mode support.
+  /// Endpoint: POST /api/jobs/:jobId/quotes/:quoteId/accept
+  /// Accepts optional paymentMode parameter (defaults to .env PAYMENT_MODE or 'upfront').
+  /// Returns the response containing quote and payment information.
+  static Future<Map<String, dynamic>> acceptJobQuote(
+    String jobId,
+    String quoteId, {
+    String? email,
+    String? paymentMode,
+  }) async {
+    if (jobId.isEmpty) throw Exception('Job id required');
+    if (quoteId.isEmpty) throw Exception('Quote id required');
+
+    final token = await TokenStorage.getToken();
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    if (token != null) headers['Authorization'] = 'Bearer $token';
+
+    final uri =
+        Uri.parse('$API_BASE_URL/api/jobs/$jobId/quotes/$quoteId/accept');
+    final body = <String, dynamic>{};
+
+    if (email != null && email.isNotEmpty) {
+      body['email'] = email;
+    }
+
+    // Use paymentMode parameter if provided, otherwise default to .env PAYMENT_MODE, fallback to 'upfront'
+    final effectivePaymentMode =
+        paymentMode ?? dotenv.env['PAYMENT_MODE'] ?? 'upfront';
+    body['paymentMode'] = effectivePaymentMode;
+
+    // ┌──────────────────────────────────────────────────────────────────────────────
+    // │ API Logger - Request (JobService - acceptJobQuote)
+    // └──────────────────────────────────────────────────────────────────────────────
+    // ignore: avoid_print
+    print(
+        '┌──────────────────────────────────────────────────────────────────────────────');
+    // ignore: avoid_print
+    print('│ [API Request] POST $uri');
+    if (headers.isNotEmpty) {
+      // ignore: avoid_print
+      print('│ Headers:');
+      // ignore: avoid_print
+      headers.forEach((k, v) => print('│   $k: $v'));
+    }
+    // ignore: avoid_print
+    print('│ Body: ${jsonEncode(body)}');
+    // ignore: avoid_print
+    print(
+        '└──────────────────────────────────────────────────────────────────────────────');
+
+    try {
+      final resp = await http
+          .post(uri, headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 30));
+
+      // ┌──────────────────────────────────────────────────────────────────────────────
+      // │ API Logger - Response (JobService - acceptJobQuote)
+      // └──────────────────────────────────────────────────────────────────────────────
+      // ignore: avoid_print
+      print(
+          '┌──────────────────────────────────────────────────────────────────────────────');
+      // ignore: avoid_print
+      print('│ [API Response] ${resp.statusCode} $uri');
+      // ignore: avoid_print
+      print('│ Body: ${resp.body}');
+      // ignore: avoid_print
+      print(
+          '└──────────────────────────────────────────────────────────────────────────────');
+
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        final responseBody =
+            resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
+        if (responseBody == null) return {};
+
+        // Extract data from envelope if present
+        if (responseBody is Map && responseBody['data'] is Map) {
+          return _normalizeQuoteAcceptResponse(
+            Map<String, dynamic>.from(responseBody['data']),
+          );
+        }
+        if (responseBody is Map) {
+          return _normalizeQuoteAcceptResponse(
+            Map<String, dynamic>.from(responseBody),
+          );
+        }
+        return {};
+      }
+
+      throw Exception(
+          'Failed to accept job quote: ${resp.statusCode} ${resp.body}');
+    } catch (e) {
+      throw Exception('Error accepting job quote: $e');
     }
   }
 }

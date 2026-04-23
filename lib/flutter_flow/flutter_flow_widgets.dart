@@ -114,8 +114,12 @@ class _FFButtonWidgetState extends State<FFButtonWidget> {
                 : null,
             child: Center(
               child: SizedBox(
-                width: widget.options.textStyle?.fontSize != null ? (widget.options.textStyle!.fontSize! * 1.4) : 18.0,
-                height: widget.options.textStyle?.fontSize != null ? (widget.options.textStyle!.fontSize! * 1.4) : 18.0,
+                width: widget.options.textStyle?.fontSize != null
+                    ? (widget.options.textStyle!.fontSize! * 1.4)
+                    : 18.0,
+                height: widget.options.textStyle?.fontSize != null
+                    ? (widget.options.textStyle!.fontSize! * 1.4)
+                    : 18.0,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6.0),
                   child: CircularProgressIndicator(
@@ -198,14 +202,16 @@ class _FFButtonWidgetState extends State<FFButtonWidget> {
       }),
       padding: WidgetStateProperty.all(
         widget.options.padding ??
-            const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+            const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       ),
+      minimumSize: WidgetStateProperty.all(const Size(44.0, 44.0)),
+      tapTargetSize: MaterialTapTargetSize.padded,
       elevation: WidgetStateProperty.resolveWith<double?>((states) {
         if (states.contains(WidgetState.hovered) &&
             widget.options.hoverElevation != null) {
           return widget.options.hoverElevation!;
         }
-        return widget.options.elevation ?? 2.0;
+        return widget.options.elevation ?? 0.0;
       }),
       iconColor: WidgetStateProperty.resolveWith<Color?>((states) {
         if (states.contains(WidgetState.disabled) &&
