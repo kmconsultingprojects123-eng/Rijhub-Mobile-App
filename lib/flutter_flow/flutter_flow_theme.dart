@@ -164,12 +164,11 @@ class LightModeTheme extends FlutterFlowTheme {
   late Color primary = const Color(0xFFA20025);
   late Color secondary = const Color(0xFFA20025);
   late Color tertiary = const Color(0xFFEE8B60);
-  late Color alternate = const Color(0xFFE0E3E7);
-  late Color primaryText = const Color(0xFF1A1A1A);
-  late Color secondaryText = const Color(0xFF57636C);
-  late Color primaryBackground = const Color(0xFFF7F7F7);
-  late Color secondaryBackground = const Color(0xFFFFFFFF);
-  // Replace blue/teal accents with tinted primary color to avoid blue shades
+  late Color alternate = const Color(0xFFE2E8F0);
+  late Color primaryText = const Color(0xFF1A1A1B);
+  late Color secondaryText = const Color(0xFF64748B);
+  late Color primaryBackground = const Color(0xFFFFFFFF);
+  late Color secondaryBackground = const Color(0xFFF8F9FA);
   late Color accent1 = const Color(0x4CA20025);
   late Color accent2 = const Color(0x4DA20025);
   late Color accent3 = const Color(0x4DEE8B60);
@@ -357,16 +356,15 @@ class DarkModeTheme extends FlutterFlowTheme {
   late Color primary = const Color(0xFFA20025);
   late Color secondary = const Color(0xFFA20025);
   late Color tertiary = const Color(0xFFEE8B60);
-  late Color alternate = const Color(0xFF262D34);
-  late Color primaryText = const Color(0xFFFFFFFF);
-  late Color secondaryText = const Color(0xFF95A1AC);
-  late Color primaryBackground = const Color(0xFF1D2428);
-  late Color secondaryBackground = const Color(0xFF14181B);
-  // Replace blue/teal accents with tinted primary color to avoid blue shades in dark mode too
+  late Color alternate = const Color(0xFF2D2D30);
+  late Color primaryText = const Color(0xFFE4E4E7);
+  late Color secondaryText = const Color(0xFFA1A1AA);
+  late Color primaryBackground = const Color(0xFF121212);
+  late Color secondaryBackground = const Color(0xFF1E1E1E);
   late Color accent1 = const Color(0x4CA20025);
   late Color accent2 = const Color(0x4DA20025);
   late Color accent3 = const Color(0x4DEE8B60);
-  late Color accent4 = const Color(0xB2262D34);
+  late Color accent4 = const Color(0xB21E1E1E);
   late Color success = const Color(0xFF249689);
   late Color warning = const Color(0xFFF9CF58);
   late Color error = const Color(0xFFFF5963);

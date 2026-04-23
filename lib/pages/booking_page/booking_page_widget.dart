@@ -419,6 +419,7 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
     }
 
     await _fetchBookings(reset: true);
+    _startAutoRefresh();
   }
 
   @override
@@ -439,6 +440,7 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
       _realtimeSub?.cancel();
       _realtimeSub =
           RealtimeNotifications.instance.events.listen(_handleRealtimeEvent);
+      _startAutoRefresh();
     } catch (e) {
       if (kDebugMode) debugPrint('Realtime booking init error: $e');
     }
@@ -465,7 +467,54 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
     return normalized;
   }
 
+  String _resolvePaymentMode(Map<String, dynamic> booking) {
+    final nested = booking['booking'] is Map
+        ? Map<String, dynamic>.from(booking['booking'])
+        : <String, dynamic>{};
+    final globalPaymentMode = dotenv.env['PAYMENT_MODE'] ?? 'upfront';
+    return (booking['paymentMode'] ??
+            nested['paymentMode'] ??
+            globalPaymentMode)
+        .toString()
+        .toLowerCase();
+  }
+
+  bool _shouldRefundForBooking(Map<String, dynamic> booking) {
+    return _resolvePaymentMode(booking) != 'aftercompletion';
+  }
+
   bool _isBookingRealtimeEvent(Map<String, dynamic> event) {
+    bool hasKeyDeep(dynamic node, Set<String> keys, {int depth = 3}) {
+      if (node == null || depth < 0) return false;
+      if (node is Map) {
+        for (final entry in node.entries) {
+          final key = entry.key.toString().toLowerCase();
+          if (keys.contains(key)) return true;
+          if (hasKeyDeep(entry.value, keys, depth: depth - 1)) return true;
+        }
+      } else if (node is List) {
+        for (final value in node) {
+          if (hasKeyDeep(value, keys, depth: depth - 1)) return true;
+        }
+      }
+      return false;
+    }
+
+    bool hasValueDeep(dynamic node, Set<String> values, {int depth = 3}) {
+      if (node == null || depth < 0) return false;
+      if (node is String) return values.contains(node.toLowerCase());
+      if (node is Map) {
+        for (final value in node.values) {
+          if (hasValueDeep(value, values, depth: depth - 1)) return true;
+        }
+      } else if (node is List) {
+        for (final value in node) {
+          if (hasValueDeep(value, values, depth: depth - 1)) return true;
+        }
+      }
+      return false;
+    }
+
     final eventName = (event['event'] ?? '').toString().toLowerCase();
     final type = (event['type'] ?? event['category'] ?? event['kind'] ?? '')
         .toString()
@@ -480,8 +529,32 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
       event['payload'] is Map ? event['payload']['bookingId'] : null,
       event['data'] is Map ? event['data']['bookingId'] : null,
     ].any((v) => v != null && v.toString().isNotEmpty);
+    final hasBookingKeys = hasKeyDeep(event, {
+      'bookingid',
+      'booking_id',
+      'booking',
+      'bookingstatus',
+      'booking_status',
+      'status',
+      'paymentstatus',
+      'payment_status',
+    });
+    final hasBookingStatusValue = hasValueDeep(event, {
+      'accepted',
+      'rejected',
+      'cancelled',
+      'canceled',
+      'completed',
+      'in-progress',
+      'in_progress',
+      'awaiting-acceptance',
+      'awaiting_acceptance',
+      'paid',
+      'refunded',
+    });
 
     if (hasBookingId) return true;
+    if (hasBookingKeys && hasBookingStatusValue) return true;
     if (eventName.contains('booking') || eventName.contains('payment')) {
       return true;
     }
@@ -498,21 +571,43 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
   }
 
   String? _extractRealtimeBookingId(Map<String, dynamic> event) {
-    final candidates = [
-      event['bookingId'],
-      event['booking_id'],
-      event['id'],
-      event['payload'] is Map ? event['payload']['bookingId'] : null,
-      event['payload'] is Map ? event['payload']['booking_id'] : null,
-      event['data'] is Map ? event['data']['bookingId'] : null,
-      event['data'] is Map ? event['data']['booking_id'] : null,
-    ];
-    for (final candidate in candidates) {
-      if (candidate != null && candidate.toString().isNotEmpty) {
-        return candidate.toString();
+    String? findBookingIdDeep(dynamic node, {int depth = 4}) {
+      if (node == null || depth < 0) return null;
+      if (node is Map) {
+        const directKeys = ['bookingId', 'booking_id'];
+        for (final key in directKeys) {
+          final candidate = node[key];
+          if (candidate != null && candidate.toString().isNotEmpty) {
+            return candidate.toString();
+          }
+        }
+        for (final value in node.values) {
+          final nested = findBookingIdDeep(value, depth: depth - 1);
+          if (nested != null && nested.isNotEmpty) return nested;
+        }
+      } else if (node is List) {
+        for (final value in node) {
+          final nested = findBookingIdDeep(value, depth: depth - 1);
+          if (nested != null && nested.isNotEmpty) return nested;
+        }
       }
+      return null;
     }
-    return null;
+
+    return findBookingIdDeep(event);
+  }
+
+  void _startAutoRefresh() {
+    _autoRefreshTimer?.cancel();
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
+      if (!mounted ||
+          _loadingBookings ||
+          _loadingMore ||
+          _realtimeRefreshInFlight) {
+        return;
+      }
+      await _fetchBookingsInBackground();
+    });
   }
 
   Future<void> _handleRealtimeEvent(Map<String, dynamic> event) async {
@@ -1338,6 +1433,7 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
     final st = (booking['booking']?['status'] ?? booking['status'] ?? '')
         .toString()
         .toLowerCase();
+    final shouldRefund = _shouldRefundForBooking(booking);
     // Only allow cancel when booking is awaiting artisan acceptance or still pending
     if (!(st.startsWith('await') ||
         st == 'pending' ||
@@ -1353,8 +1449,9 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
         builder: (ctx) {
           return AlertDialog(
             title: const Text('Cancel booking'),
-            content: const Text(
-                'Are you sure you want to cancel this booking? You will be refunded if payment was made.'),
+            content: Text(shouldRefund
+                ? 'Are you sure you want to cancel this booking? You will be refunded if payment was made.'
+                : 'Are you sure you want to cancel this booking? This booking uses after-completion payment, so no refund will be processed.'),
             actions: [
               TextButton(
                   onPressed: () => Navigator.of(ctx).pop(false),
@@ -1434,19 +1531,32 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
         } else {
           setState(() {
             if (index != -1) {
+              final current = _bookings[index];
+              final nestedBooking = current['booking'] is Map
+                  ? Map<String, dynamic>.from(current['booking'])
+                  : <String, dynamic>{};
               _bookings[index]['booking'] = {
-                ...?_bookings[index]['booking'],
+                ...nestedBooking,
                 'status': 'cancelled',
-                'refundStatus': 'refunded'
+                if (shouldRefund)
+                  'refundStatus': 'refunded'
+                else
+                  'refundStatus': 'none',
               };
             }
           });
         }
         if (!mounted) return;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Booking cancelled.')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(shouldRefund
+                ? 'Booking cancelled. Refund will be processed.'
+                : 'Booking cancelled. No refund is due for this payment mode.')));
         try {
-          AppNotification.showSuccess(context, 'Booking cancelled');
+          AppNotification.showSuccess(
+              context,
+              shouldRefund
+                  ? 'Booking cancelled. Refund will be processed.'
+                  : 'Booking cancelled.');
         } catch (_) {}
       } else {
         // Try to extract a helpful server message from the response body
@@ -2329,6 +2439,15 @@ class _BookingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final data = booking['booking'] is Map ? booking['booking'] : booking;
+    final cardBookingId = _extractBookingId(booking) ??
+        booking['_id']?.toString() ??
+        booking['booking']?['_id']?.toString() ??
+        booking['id']?.toString();
+    final cardThreadId = _extractThreadId(booking);
+    final useInitialIdsForThisCard = initialBookingId != null &&
+        initialBookingId!.isNotEmpty &&
+        cardBookingId != null &&
+        cardBookingId == initialBookingId;
     final counterpart = (isArtisan
         ? (data['customer'] ??
             data['customerUser'] ??
@@ -2664,22 +2783,13 @@ class _BookingCard extends StatelessWidget {
                         onPressed: messageEnabled
                             ? () async {
                                 // Compose effective IDs from available data
-                                final effectiveBookingId =
-                                    (initialBookingId != null &&
-                                            initialBookingId!.isNotEmpty)
-                                        ? initialBookingId
-                                        : (_extractBookingId(booking) ??
-                                            (booking['_id']?.toString() ??
-                                                booking['booking']?['_id']
-                                                    ?.toString() ??
-                                                booking['id']?.toString()));
-                                final extractedThread =
-                                    _extractThreadId(booking);
+                                final effectiveBookingId = cardBookingId;
                                 final effectiveThreadId =
-                                    (initialThreadId != null &&
-                                            initialThreadId!.isNotEmpty)
+                                    useInitialIdsForThisCard &&
+                                            initialThreadId != null &&
+                                            initialThreadId!.isNotEmpty
                                         ? initialThreadId
-                                        : (extractedThread?.toString());
+                                        : cardThreadId;
 
                                 // Delegate fetching/navigation to parent state
                                 try {

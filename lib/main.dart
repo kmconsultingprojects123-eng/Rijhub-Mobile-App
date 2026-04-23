@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:math' as math;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 
@@ -30,8 +29,232 @@ import 'state/app_state_notifier.dart';
 import 'package:app_links/app_links.dart';
 
 import 'dart:io';
-import 'package:flutter/services.dart' show PlatformAssetBundle;
 import 'dart:convert';
+
+const Color _crimsonPrimary = Color(0xFFA20025);
+const Color _crimsonOnPrimary = Color(0xFFFFFFFF);
+const Color _lightBgMain = Color(0xFFFFFFFF);
+const Color _lightBgSurface = Color(0xFFF8F9FA);
+const Color _lightTextPrimary = Color(0xFF1A1A1B);
+const Color _lightTextSecondary = Color(0xFF64748B);
+const Color _lightStrokeDefault = Color(0xFFE2E8F0);
+const Color _darkBgMain = Color(0xFF121212);
+const Color _darkBgSurface = Color(0xFF1E1E1E);
+const Color _darkTextPrimary = Color(0xFFE4E4E7);
+const Color _darkTextSecondary = Color(0xFFA1A1AA);
+const Color _darkStrokeDefault = Color(0xFF2D2D30);
+
+ThemeData _buildAppTheme({required Brightness brightness}) {
+  final bool isDark = brightness == Brightness.dark;
+  final Color bgMain = isDark ? _darkBgMain : _lightBgMain;
+  final Color bgSurface = isDark ? _darkBgSurface : _lightBgSurface;
+  final Color textPrimary = isDark ? _darkTextPrimary : _lightTextPrimary;
+  final Color textSecondary = isDark ? _darkTextSecondary : _lightTextSecondary;
+  final Color outline = isDark ? _darkStrokeDefault : _lightStrokeDefault;
+
+  final colorScheme = isDark
+      ? const ColorScheme.dark(
+          primary: _crimsonPrimary,
+          onPrimary: _crimsonOnPrimary,
+          secondary: _crimsonPrimary,
+          onSecondary: _crimsonOnPrimary,
+          surface: _darkBgSurface,
+          onSurface: _darkTextPrimary,
+          error: Color(0xFFFF5963),
+          outline: _darkStrokeDefault,
+        )
+      : const ColorScheme.light(
+          primary: _crimsonPrimary,
+          onPrimary: _crimsonOnPrimary,
+          secondary: _crimsonPrimary,
+          onSecondary: _crimsonOnPrimary,
+          surface: _lightBgSurface,
+          onSurface: _lightTextPrimary,
+          error: Color(0xFFFF5963),
+          outline: _lightStrokeDefault,
+        );
+
+  final base = ThemeData(
+    brightness: brightness,
+    useMaterial3: false,
+    colorScheme: colorScheme,
+    scaffoldBackgroundColor: bgMain,
+    canvasColor: bgMain,
+    cardColor: bgSurface,
+    shadowColor: Colors.transparent,
+    dividerColor: outline,
+    disabledColor: textSecondary.withValues(alpha: 0.5),
+    splashColor: _crimsonPrimary.withValues(alpha: 0.08),
+    highlightColor: _crimsonPrimary.withValues(alpha: 0.06),
+    textSelectionTheme: const TextSelectionThemeData(
+      cursorColor: _crimsonPrimary,
+      selectionColor: Color(0x33A20025),
+      selectionHandleColor: _crimsonPrimary,
+    ),
+    appBarTheme: AppBarTheme(
+      backgroundColor: bgMain,
+      foregroundColor: textPrimary,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      shadowColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      centerTitle: false,
+      titleTextStyle: TextStyle(
+        fontFamily: 'Inter Tight',
+        fontSize: 18.0,
+        fontWeight: FontWeight.w600,
+        color: textPrimary,
+      ),
+      iconTheme: IconThemeData(color: textPrimary),
+      actionsIconTheme: IconThemeData(color: textPrimary),
+      shape: Border(
+        bottom: BorderSide(color: outline, width: 1.0),
+      ),
+    ),
+    cardTheme: CardThemeData(
+      color: bgSurface,
+      elevation: 0,
+      shadowColor: Colors.transparent,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: outline, width: 1),
+      ),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: bgSurface,
+      elevation: 0,
+      shadowColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: outline, width: 1),
+      ),
+      titleTextStyle: TextStyle(
+        fontFamily: 'Inter Tight',
+        fontSize: 20,
+        fontWeight: FontWeight.w600,
+        color: textPrimary,
+      ),
+      contentTextStyle: TextStyle(
+        fontFamily: 'Inter',
+        fontSize: 14,
+        color: textPrimary,
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: bgSurface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      labelStyle: TextStyle(
+        fontFamily: 'Inter',
+        color: textSecondary,
+      ),
+      floatingLabelStyle: const TextStyle(
+        fontFamily: 'Inter',
+        color: _crimsonPrimary,
+      ),
+      hintStyle: TextStyle(
+        fontFamily: 'Inter',
+        color: textSecondary.withValues(alpha: 0.85),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: outline, width: 1),
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: outline, width: 1),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: _crimsonPrimary, width: 2),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFFFF5963), width: 1),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFFFF5963), width: 2),
+      ),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: _crimsonPrimary,
+        foregroundColor: _crimsonOnPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        minimumSize: const Size(44, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        backgroundColor: Colors.transparent,
+        foregroundColor: _crimsonPrimary,
+        minimumSize: const Size(44, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        side: const BorderSide(color: _crimsonPrimary, width: 1.5),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: _crimsonPrimary,
+        minimumSize: const Size(44, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    ),
+    bottomNavigationBarTheme: BottomNavigationBarThemeData(
+      backgroundColor: bgMain,
+      selectedItemColor: _crimsonPrimary,
+      unselectedItemColor: textSecondary,
+      type: BottomNavigationBarType.fixed,
+      elevation: 0,
+      selectedLabelStyle: const TextStyle(
+        fontFamily: 'Inter',
+        fontWeight: FontWeight.w600,
+      ),
+      unselectedLabelStyle: const TextStyle(
+        fontFamily: 'Inter',
+        fontWeight: FontWeight.w500,
+      ),
+    ),
+    tabBarTheme: TabBarThemeData(
+      labelColor: _crimsonPrimary,
+      unselectedLabelColor: textSecondary,
+      indicatorColor: _crimsonPrimary,
+      dividerColor: outline,
+      labelStyle: const TextStyle(
+        fontFamily: 'Inter',
+        fontWeight: FontWeight.w600,
+      ),
+      unselectedLabelStyle: const TextStyle(
+        fontFamily: 'Inter',
+        fontWeight: FontWeight.w500,
+      ),
+    ),
+  );
+
+  return base.copyWith(
+    textTheme: base.textTheme.apply(
+      bodyColor: textPrimary,
+      displayColor: textPrimary,
+    ),
+    primaryTextTheme: base.primaryTextTheme.apply(
+      bodyColor: textPrimary,
+      displayColor: textPrimary,
+    ),
+  );
+}
 
 void main() async {
   // Ensure Flutter binding is initialized before calling any platform
@@ -340,81 +563,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: const [Locale('en', '')],
-      theme: ThemeData(
-        brightness: Brightness.light,
-        useMaterial3: false,
-        // Ensure the app-wide ColorScheme uses the brand primary color
-        colorScheme: ColorScheme.light(
-          primary: const Color(0xFFA20025),
-          onPrimary: Colors.white,
-        ),
-        // Use pure white scaffold background for light mode per design request
-        scaffoldBackgroundColor: Colors.white,
-        // Keep canvas consistent for widgets that inherit colors from the Material theme
-        canvasColor: Colors.white,
-        // Default card color (used by Cards, Containers that use Theme.cardColor)
-        cardColor: const Color(0xFFFFFFFF),
-        // Unified AppBar theme across the app: no elevation, consistent typography and colors
-        appBarTheme: AppBarTheme(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-          elevation: 0,
-          centerTitle: false,
-          titleTextStyle: const TextStyle(
-              fontFamily: 'Inter Tight',
-              fontSize: 18.0,
-              fontWeight: FontWeight.w600,
-              color: Colors.black),
-          iconTheme: const IconThemeData(color: Colors.black),
-          actionsIconTheme: const IconThemeData(color: Colors.black),
-        ),
-        // Input highlight and cursor theme — use app primary color and stronger highlight
-        inputDecorationTheme: InputDecorationTheme(
-          focusedBorder: OutlineInputBorder(
-              borderSide:
-                  BorderSide(color: const Color(0xFFA20025), width: 2.0),
-              borderRadius: BorderRadius.circular(12)),
-        ),
-        textSelectionTheme: TextSelectionThemeData(
-            cursorColor: const Color(0xFFA20025),
-            selectionColor: const Color(0x33A20025),
-            selectionHandleColor: const Color(0xFFA20025)),
-      ),
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
-        useMaterial3: false,
-        colorScheme: ColorScheme.dark(
-          primary: const Color(0xFFA20025),
-          onPrimary: Colors.white,
-        ),
-        // Match dark mode scaffold background to the theme's dark primaryBackground (keeps consistency).
-        scaffoldBackgroundColor: const Color(0xFF1D2428),
-        canvasColor: const Color(0xFF1D2428),
-        cardColor: const Color(0xFF14181B),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF000000),
-          foregroundColor: Colors.white,
-          elevation: 0,
-          centerTitle: false,
-          titleTextStyle: TextStyle(
-              fontFamily: 'Inter Tight',
-              fontSize: 18.0,
-              fontWeight: FontWeight.w600,
-              color: Colors.white),
-          iconTheme: IconThemeData(color: Colors.white),
-          actionsIconTheme: IconThemeData(color: Colors.white),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          focusedBorder: OutlineInputBorder(
-              borderSide:
-                  BorderSide(color: const Color(0xFFA20025), width: 2.0),
-              borderRadius: BorderRadius.circular(12)),
-        ),
-        textSelectionTheme: TextSelectionThemeData(
-            cursorColor: const Color(0xFFA20025),
-            selectionColor: const Color(0x33A20025),
-            selectionHandleColor: const Color(0xFFA20025)),
-      ),
+      theme: _buildAppTheme(brightness: Brightness.light),
+      darkTheme: _buildAppTheme(brightness: Brightness.dark),
       themeMode: _themeMode,
       routerConfig: _router,
     );
@@ -662,7 +812,8 @@ class _NavBarPageState extends State<NavBarPage> {
       'BookingPage': FontAwesomeIcons.solidCalendarDays,
       'profile': FontAwesomeIcons.solidUser,
     };
-    if (shouldShowDiscover) iconMap['DiscoverPage'] = FontAwesomeIcons.solidCompass;
+    if (shouldShowDiscover)
+      iconMap['DiscoverPage'] = FontAwesomeIcons.solidCompass;
 
     // Determine whether current cached profile represents a guest so we can dim restricted tabs visually
     final bool isGuestNow = (() {
@@ -720,7 +871,9 @@ class _NavBarPageState extends State<NavBarPage> {
               padding: EdgeInsets.all(iconPadding),
               decoration: BoxDecoration(
                 color: currentIndex == idx
-                    ? FlutterFlowTheme.of(context).primary.withValues(alpha: 0.2)
+                    ? FlutterFlowTheme.of(context)
+                        .primary
+                        .withValues(alpha: 0.12)
                     : Colors.transparent,
                 shape: BoxShape.circle,
               ),
@@ -790,7 +943,7 @@ class _NavBarPageState extends State<NavBarPage> {
                     color: FlutterFlowTheme.of(context).secondaryBackground,
                     border: Border(
                       top: BorderSide(
-                        color: FlutterFlowTheme.of(context).primaryBackground.withValues(alpha: 0.1),
+                        color: FlutterFlowTheme.of(context).alternate,
                         width: 1.0,
                       ),
                     ),
@@ -815,7 +968,8 @@ class _NavBarPageState extends State<NavBarPage> {
                             ];
                             final guest = await isGuestSession();
 
-                            if (guest && restrictedKeysForGuests.contains(key)) {
+                            if (guest &&
+                                restrictedKeysForGuests.contains(key)) {
                               // For guests: show the themed guest prompt (immediately on tap) and respect choice
                               final res = await _showGuestPrompt();
                               if (res == true) {
@@ -851,7 +1005,8 @@ class _NavBarPageState extends State<NavBarPage> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Center(
-                                  child: item.customWidget ?? const SizedBox.shrink(),
+                                  child: item.customWidget ??
+                                      const SizedBox.shrink(),
                                 ),
                               ],
                             ),

@@ -799,9 +799,9 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
               insetPadding: const EdgeInsets.symmetric(horizontal: 40),
               child: Padding(
                 padding: const EdgeInsets.all(20.0),
-                child: Row(children: const [
-                  CircularProgressIndicator(),
-                  SizedBox(width: 16),
+                child: Row(children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(width: 16),
                   Expanded(child: Text(_blockingTitle))
                 ]),
               ),
@@ -3002,19 +3002,31 @@ class _PaymentInitPageWidgetState extends State<PaymentInitPageWidget> {
                         const SizedBox(width: 6),
                         const CircularProgressIndicator(),
                         const SizedBox(width: 16),
-                        Column(
+                        // Allow the text column to flex and wrap within the available
+                        // space so the Row does not overflow on small screens.
+                        Flexible(
+                          child: Column(
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(_blockingTitle,
-                                  style:
-                                      FlutterFlowTheme.of(context).titleMedium),
+                              Text(
+                                _blockingTitle,
+                                style: FlutterFlowTheme.of(context).titleMedium,
+                                softWrap: true,
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 2,
+                              ),
                               const SizedBox(height: 6),
                               Text(
-                                  _blockingSubtitle,
-                                  style:
-                                      FlutterFlowTheme.of(context).bodySmall),
-                            ]),
+                                _blockingSubtitle,
+                                style: FlutterFlowTheme.of(context).bodySmall,
+                                softWrap: true,
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 3,
+                              ),
+                            ],
+                          ),
+                        ),
                         const SizedBox(width: 6),
                       ]),
                     ),
