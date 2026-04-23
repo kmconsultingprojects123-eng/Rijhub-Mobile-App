@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../services/user_service.dart';
+import '../../services/location_service.dart';
 import '../../services/token_storage.dart';
+import '../../services/artist_service.dart';
+import '../../services/api_client.dart';
+import '../../state/app_state_notifier.dart';
 import '../../api_config.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -30,6 +34,10 @@ class JobDetailsPageWidget extends StatefulWidget {
 }
 
 class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
+  static final Map<String, String> _userNameCache = {};
+  static final Map<String, String> _locationCache = {};
+  static final Map<String, List<Map<String, dynamic>>> _quotesCache = {};
+
   // Theme colors that adapt to light/dark mode
   Color get _primaryColor => const Color(0xFFA20025);
   Color get _successColor => const Color(0xFF10B981);
@@ -68,7 +76,6 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
   bool _hasApplied = false;
   bool _isOwner = false;
   bool _isLoggedIn = false;
-  String? _myId;
   String _role = '';
   // Human-readable location from reverse geocoding (if available)
   String? _humanLocation;
@@ -81,57 +88,228 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
   void initState() {
     super.initState();
     _initialize();
-    _loadHumanLocation();
-    _loadPostedBy();
+    if (!_hasReadableLocation()) {
+      _loadHumanLocation();
+    }
+    if (!_hasPostedByName()) {
+      _loadPostedBy();
+    }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.openApplications) _openApplicantsPage(context);
-      if (widget.openApply) _openSubmitQuotePage(context);
+      if (widget.openApply) {
+        _openSubmitQuotePage(context);
+      }
     });
+  }
+
+  bool _hasReadableLocation() {
+    final location =
+        (widget.job['location'] ?? widget.job['address'] ?? widget.job['place'])
+                ?.toString()
+                .trim() ??
+            '';
+    if (location.isEmpty) return false;
+    return !RegExp(r'^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$').hasMatch(location);
+  }
+
+  bool _hasPostedByName() {
+    final clientDetails = widget.job['clientDetails'];
+    if (clientDetails is Map) {
+      final name = (clientDetails['name'] ??
+                  clientDetails['fullName'] ??
+                  clientDetails['username'])
+              ?.toString()
+              .trim() ??
+          '';
+      if (name.isNotEmpty) return true;
+    }
+    final clientName =
+        (widget.job['clientName'] ?? widget.job['client'])?.toString().trim() ??
+            '';
+    return clientName.isNotEmpty;
+  }
+
+  bool _isApprovedKycStatus(String? status) {
+    if (status == null) return false;
+    final normalized = status.toLowerCase().trim();
+    return normalized == 'approved' ||
+        normalized == 'verified' ||
+        normalized == 'success' ||
+        normalized == 'approved_by_admin';
+  }
+
+  bool _extractVerifiedFromProfile(Map<String, dynamic>? profile) {
+    if (profile == null) return false;
+    try {
+      final kycObj = profile['kyc'];
+      if (kycObj is Map) {
+        final status = (kycObj['status'] ?? kycObj['state'])?.toString();
+        if (_isApprovedKycStatus(status)) return true;
+        final verified = kycObj['verified'];
+        if (verified is bool && verified) return true;
+        if (verified != null && _isApprovedKycStatus(verified.toString())) {
+          return true;
+        }
+      }
+
+      final candidates = [
+        profile['kycVerified'],
+        profile['verified'],
+        profile['isVerified'],
+        profile['kycVerifiedFlag'],
+      ];
+      for (final candidate in candidates) {
+        if (candidate is bool && candidate) return true;
+        if (candidate != null && _isApprovedKycStatus(candidate.toString())) {
+          return true;
+        }
+      }
+
+      final kycLevel = profile['kycLevel'] ?? profile['kyc']?['level'];
+      if (kycLevel is num && kycLevel >= 2) return true;
+      if (kycLevel != null) {
+        final parsed = int.tryParse(kycLevel.toString());
+        if (parsed != null && parsed >= 2) return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  Future<bool> _hasVerifiedKyc() async {
+    try {
+      final verified = await TokenStorage.getKycVerified();
+      if (verified == true) return true;
+
+      final status = await TokenStorage.getKycStatus();
+      if (_isApprovedKycStatus(status)) {
+        await TokenStorage.saveKycVerified(true);
+        return true;
+      }
+
+      try {
+        final resp = await ApiClient.get('$API_BASE_URL/api/kyc/status',
+            headers: {'Content-Type': 'application/json'});
+        final respStatus = resp['status'] as int? ?? 0;
+        final body = resp['body']?.toString() ?? '';
+        if (respStatus >= 200 && respStatus < 300 && body.isNotEmpty) {
+          final decoded = jsonDecode(body);
+          final data = decoded is Map ? (decoded['data'] ?? decoded) : decoded;
+          String? parsedStatus;
+          bool parsedVerified = false;
+
+          if (data is Map) {
+            parsedStatus = (data['status'] ?? data['state'])?.toString();
+            final directVerified = data['verified'] ?? data['isVerified'];
+            if (directVerified is bool) {
+              parsedVerified = directVerified;
+            } else if (directVerified != null) {
+              parsedVerified = _isApprovedKycStatus(directVerified.toString());
+            }
+          }
+
+          if (!parsedVerified && decoded is Map) {
+            final topVerified = decoded['verified'] ?? decoded['isVerified'];
+            if (topVerified is bool) {
+              parsedVerified = topVerified;
+            } else if (topVerified != null) {
+              parsedVerified = _isApprovedKycStatus(topVerified.toString());
+            }
+            parsedStatus ??= decoded['status']?.toString();
+          }
+
+          if (!parsedVerified && _isApprovedKycStatus(parsedStatus)) {
+            parsedVerified = true;
+          }
+
+          if (parsedStatus != null && parsedStatus.isNotEmpty) {
+            await TokenStorage.saveKycStatus(parsedStatus);
+          }
+          if (parsedVerified) {
+            await TokenStorage.saveKycVerified(true);
+            return true;
+          }
+        }
+      } catch (e) {
+        debugPrint('hasVerifiedKyc authoritative check error: $e');
+      }
+
+      try {
+        final myId =
+            _extractUserIdFromProfile(AppStateNotifier.instance.profile) ??
+                _extractUserIdFromProfile(await UserService.getProfile());
+        if (myId != null && myId.isNotEmpty) {
+          final artisan = await ArtistService.getByUserId(myId);
+          if (_extractVerifiedFromProfile(artisan)) {
+            await TokenStorage.saveKycVerified(true);
+            await TokenStorage.saveKycStatus('approved');
+            return true;
+          }
+        }
+      } catch (e) {
+        debugPrint('hasVerifiedKyc artisan profile check error: $e');
+      }
+
+      final cachedProfile = AppStateNotifier.instance.profile;
+      if (_extractVerifiedFromProfile(cachedProfile)) return true;
+
+      final liveProfile = await UserService.getProfile();
+      if (_extractVerifiedFromProfile(liveProfile)) {
+        await TokenStorage.saveKycVerified(true);
+        await TokenStorage.saveKycStatus('approved');
+        return true;
+      }
+    } catch (e) {
+      debugPrint('hasVerifiedKyc error: $e');
+    }
+    return false;
   }
 
   Future<void> _loadHumanLocation() async {
     try {
-      final coordsRaw = widget.job['coordinates'] ?? widget.job['coords'] ?? widget.job['locationCoords'];
+      final coordsRaw = widget.job['coordinates'] ??
+          widget.job['coords'] ??
+          widget.job['locationCoords'];
       double? lat, lon;
       if (coordsRaw is List && coordsRaw.length >= 2) {
-        lat = coordsRaw[1] is num ? coordsRaw[1].toDouble() : double.tryParse(coordsRaw[1].toString());
-        lon = coordsRaw[0] is num ? coordsRaw[0].toDouble() : double.tryParse(coordsRaw[0].toString());
+        lat = coordsRaw[1] is num
+            ? coordsRaw[1].toDouble()
+            : double.tryParse(coordsRaw[1].toString());
+        lon = coordsRaw[0] is num
+            ? coordsRaw[0].toDouble()
+            : double.tryParse(coordsRaw[0].toString());
       } else if (coordsRaw is Map) {
         lat = (coordsRaw['lat'] ?? coordsRaw['latitude']) is num
             ? (coordsRaw['lat'] ?? coordsRaw['latitude']).toDouble()
-            : double.tryParse((coordsRaw['lat'] ?? coordsRaw['latitude']).toString());
-        lon = (coordsRaw['lon'] ?? coordsRaw['lng'] ?? coordsRaw['longitude']) is num
-            ? (coordsRaw['lon'] ?? coordsRaw['lng'] ?? coordsRaw['longitude']).toDouble()
-            : double.tryParse((coordsRaw['lon'] ?? coordsRaw['lng'] ?? coordsRaw['longitude']).toString());
+            : double.tryParse(
+                (coordsRaw['lat'] ?? coordsRaw['latitude']).toString());
+        lon = (coordsRaw['lon'] ?? coordsRaw['lng'] ?? coordsRaw['longitude'])
+                is num
+            ? (coordsRaw['lon'] ?? coordsRaw['lng'] ?? coordsRaw['longitude'])
+                .toDouble()
+            : double.tryParse(
+                (coordsRaw['lon'] ?? coordsRaw['lng'] ?? coordsRaw['longitude'])
+                    .toString());
       }
 
       if (lat == null || lon == null) return;
 
+      final cacheKey = '${lat.toStringAsFixed(5)},${lon.toStringAsFixed(5)}';
+      final cached = _locationCache[cacheKey];
+      if (cached != null && cached.isNotEmpty) {
+        _humanLocation = cached;
+        if (mounted) setState(() {});
+        return;
+      }
+
       _loadingHumanLocation = true;
       if (mounted) setState(() {});
 
-      // Use OpenStreetMap Nominatim reverse geocoding (follow usage policy, add User-Agent)
-      final url = Uri.parse('https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=$lat&lon=$lon&addressdetails=1');
       try {
-        final resp = await http.get(url, headers: {'User-Agent': 'rijhub-app/1.0 (+https://example.com)'}).timeout(const Duration(seconds: 8));
-        if (resp.statusCode >= 200 && resp.statusCode < 300 && resp.body.isNotEmpty) {
-          final json = jsonDecode(resp.body);
-          if (json is Map) {
-            final display = json['display_name']?.toString();
-            if (display != null && display.isNotEmpty) {
-              _humanLocation = display;
-            } else if (json['address'] is Map) {
-              final addr = json['address'] as Map;
-              // Build a readable address from common components
-              final parts = <String>[];
-              for (final k in ['house_number','road','neighbourhood','suburb','city','town','village','state_district','state','postcode','country']) {
-                final v = addr[k];
-                if (v != null && v.toString().trim().isNotEmpty) parts.add(v.toString().trim());
-              }
-              if (parts.isNotEmpty) _humanLocation = parts.join(', ');
-            }
-          }
+        final resolved = await LocationService.reverseGeocode(lat, lon);
+        if (resolved != null && resolved.trim().isNotEmpty) {
+          _humanLocation = resolved.trim();
+          _locationCache[cacheKey] = _humanLocation!;
         }
       } catch (e) {
         debugPrint('reverse geocode failed: $e');
@@ -151,7 +329,14 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
       if (v is String) return v.trim();
       if (v is num) return v.toString();
       if (v is Map) {
-        final candidates = ['_id', 'id', 'userId', 'user_id', 'uid', 'clientId'];
+        final candidates = [
+          '_id',
+          'id',
+          'userId',
+          'user_id',
+          'uid',
+          'clientId'
+        ];
         for (final k in candidates) {
           final val = v[k];
           if (val != null) return val.toString().trim();
@@ -189,7 +374,8 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
       if (profile['data'] is Map) {
         final data = profile['data'] as Map;
         for (final k in candidates) {
-          final v = data[k] ?? (data['user'] is Map ? (data['user'] as Map)[k] : null);
+          final v = data[k] ??
+              (data['user'] is Map ? (data['user'] as Map)[k] : null);
           final id = _normalizeId(v);
           if (id != null && id.isNotEmpty) return id;
         }
@@ -203,7 +389,16 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
   String? _extractClientId(Map<String, dynamic> job) {
     try {
       // Try several common keys and nested shapes
-      final possible = ['clientId', 'client', 'owner', 'createdBy', 'created_by', 'ownerId', 'client_id', 'postedBy'];
+      final possible = [
+        'clientId',
+        'client',
+        'owner',
+        'createdBy',
+        'created_by',
+        'ownerId',
+        'client_id',
+        'postedBy'
+      ];
       for (final p in possible) {
         if (job[p] != null) {
           final id = _normalizeId(job[p]);
@@ -220,7 +415,8 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
 
       // fallback: check job['clientId'] if Map
       if (job['clientId'] is Map) {
-        return _normalizeId((job['clientId'] as Map)['_id'] ?? (job['clientId'] as Map)['id']);
+        return _normalizeId(
+            (job['clientId'] as Map)['_id'] ?? (job['clientId'] as Map)['id']);
       }
 
       return null;
@@ -232,11 +428,12 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
 
   Future<void> _initialize() async {
     try {
-      final profile = await UserService.getProfile();
+      final profile =
+          AppStateNotifier.instance.profile ?? await UserService.getProfile();
       _isLoggedIn = profile != null;
-      _role = (profile?['role'] ?? profile?['type'] ?? '').toString().toLowerCase();
+      _role =
+          (profile?['role'] ?? profile?['type'] ?? '').toString().toLowerCase();
       final id = _extractUserIdFromProfile(profile);
-      _myId = id;
 
       // Check if user is job owner
       final clientId = _extractClientId(widget.job);
@@ -247,7 +444,7 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
         _isOwner = isOwner;
       });
 
-      if (_isArtisan) await _checkIfApplied();
+      if (_isArtisan && id != null) await _checkIfApplied(myId: id);
     } catch (e) {
       debugPrint('JobDetails.initialize error: $e');
       // keep silent for users but log in debug
@@ -260,15 +457,16 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
     return widget.job['_id'] ?? widget.job['id'] ?? widget.job['jobId'];
   }
 
-  Future<void> _checkIfApplied() async {
+  Future<void> _checkIfApplied({String? myId}) async {
     try {
       final jobId = _extractJobId();
       if (jobId == null) return;
 
       final quotes = await _fetchJobQuotes(jobId.toString());
-      final profile = await UserService.getProfile();
-      final myId = _extractUserIdFromProfile(profile);
-      if (myId == null) return;
+      final resolvedMyId = myId ??
+          _extractUserIdFromProfile(AppStateNotifier.instance.profile) ??
+          _extractUserIdFromProfile(await UserService.getProfile());
+      if (resolvedMyId == null) return;
 
       final hasApplied = quotes.any((quote) {
         final artisan =
@@ -276,7 +474,7 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
         final artisanId = (artisan is Map)
             ? (artisan['_id'] ?? artisan['id'] ?? artisan['userId'])?.toString()
             : artisan?.toString();
-        return artisanId == myId;
+        return artisanId == resolvedMyId;
       });
 
       if (mounted) setState(() => _hasApplied = hasApplied);
@@ -286,6 +484,11 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
   }
 
   Future<List<Map<String, dynamic>>> _fetchJobQuotes(String jobId) async {
+    final cached = _quotesCache[jobId];
+    if (cached != null) {
+      return List<Map<String, dynamic>>.from(cached);
+    }
+
     final token = await TokenStorage.getToken();
     if (token == null) throw Exception('Not authenticated');
 
@@ -301,8 +504,10 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
       final body = jsonDecode(response.body);
       final data = body['data'] ?? body['quotes'] ?? body;
       if (data is List) {
-        return List<Map<String, dynamic>>.from(
+        final quotes = List<Map<String, dynamic>>.from(
             data.map((e) => Map<String, dynamic>.from(e)));
+        _quotesCache[jobId] = List<Map<String, dynamic>>.from(quotes);
+        return quotes;
       }
       return [];
     }
@@ -316,7 +521,7 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
         return '₦${NumberFormat('#,##0', 'en_US').format(budget)}';
       }
       final numVal =
-      num.tryParse(budget.toString().replaceAll(RegExp(r'[^0-9.-]'), ''));
+          num.tryParse(budget.toString().replaceAll(RegExp(r'[^0-9.-]'), ''));
       if (numVal != null) {
         return '₦${NumberFormat('#,##0', 'en_US').format(numVal)}';
       }
@@ -334,15 +539,24 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
       double? lat, lon;
 
       if (coordsRaw is List && coordsRaw.length >= 2) {
-        lat = coordsRaw[1] is num ? coordsRaw[1].toDouble() : double.tryParse(coordsRaw[1].toString());
-        lon = coordsRaw[0] is num ? coordsRaw[0].toDouble() : double.tryParse(coordsRaw[0].toString());
+        lat = coordsRaw[1] is num
+            ? coordsRaw[1].toDouble()
+            : double.tryParse(coordsRaw[1].toString());
+        lon = coordsRaw[0] is num
+            ? coordsRaw[0].toDouble()
+            : double.tryParse(coordsRaw[0].toString());
       } else if (coordsRaw is Map) {
         lat = (coordsRaw['lat'] ?? coordsRaw['latitude']) is num
             ? (coordsRaw['lat'] ?? coordsRaw['latitude']).toDouble()
-            : double.tryParse((coordsRaw['lat'] ?? coordsRaw['latitude']).toString());
-        lon = (coordsRaw['lon'] ?? coordsRaw['lng'] ?? coordsRaw['longitude']) is num
-            ? (coordsRaw['lon'] ?? coordsRaw['lng'] ?? coordsRaw['longitude']).toDouble()
-            : double.tryParse((coordsRaw['lon'] ?? coordsRaw['lng'] ?? coordsRaw['longitude']).toString());
+            : double.tryParse(
+                (coordsRaw['lat'] ?? coordsRaw['latitude']).toString());
+        lon = (coordsRaw['lon'] ?? coordsRaw['lng'] ?? coordsRaw['longitude'])
+                is num
+            ? (coordsRaw['lon'] ?? coordsRaw['lng'] ?? coordsRaw['longitude'])
+                .toDouble()
+            : double.tryParse(
+                (coordsRaw['lon'] ?? coordsRaw['lng'] ?? coordsRaw['longitude'])
+                    .toString());
       }
 
       if (lat != null && lon != null) {
@@ -354,11 +568,11 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
 
         int latDeg = absLat.floor();
         int latMin = ((absLat - latDeg) * 60).floor();
-        double latSec = ((absLat - latDeg - latMin/60) * 3600);
+        double latSec = ((absLat - latDeg - latMin / 60) * 3600);
 
         int lonDeg = absLon.floor();
         int lonMin = ((absLon - lonDeg) * 60).floor();
-        double lonSec = ((absLon - lonDeg - lonMin/60) * 3600);
+        double lonSec = ((absLon - lonDeg - lonMin / 60) * 3600);
 
         return '${latDeg}°${latMin}\'${latSec.toStringAsFixed(2)}"$latDir, ${lonDeg}°${lonMin}\'${lonSec.toStringAsFixed(2)}"$lonDir';
       }
@@ -377,34 +591,51 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
 
   bool _isJobPaid() {
     try {
-      final booking = widget.job['booking'] ?? widget.job['bookingData'] ?? widget.job['booking_data'];
+      final booking = widget.job['booking'] ??
+          widget.job['bookingData'] ??
+          widget.job['booking_data'];
       if (booking != null) {
-        final paymentStatus = booking['paymentStatus'] ?? (booking['payment'] is Map ? booking['payment']['status'] : booking['payment']);
+        final paymentStatus = booking['paymentStatus'] ??
+            (booking['payment'] is Map
+                ? booking['payment']['status']
+                : booking['payment']);
         if (paymentStatus is String) {
-          return paymentStatus.toLowerCase().contains('paid') || paymentStatus.toLowerCase().contains('success');
+          return paymentStatus.toLowerCase().contains('paid') ||
+              paymentStatus.toLowerCase().contains('success');
         }
         return paymentStatus == true;
       }
 
       final paymentStatus = widget.job['paymentStatus'];
-      if (paymentStatus is String) return paymentStatus.toLowerCase().contains('paid');
+      if (paymentStatus is String)
+        return paymentStatus.toLowerCase().contains('paid');
     } catch (_) {}
     return false;
   }
 
   List<String> _extractTrades() {
     try {
-      final tradeData = widget.job['trade'] ?? widget.job['trades'] ?? widget.job['skill'] ?? widget.job['skills'];
+      final tradeData = widget.job['trade'] ??
+          widget.job['trades'] ??
+          widget.job['skill'] ??
+          widget.job['skills'];
       if (tradeData == null) return [];
       if (tradeData is String) {
-        return tradeData.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+        return tradeData
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
       }
       if (tradeData is List) {
-        return tradeData.map((e) {
-          if (e is String) return e;
-          if (e is Map) return (e['name'] ?? e['title'] ?? '').toString();
-          return e.toString();
-        }).where((s) => s.isNotEmpty).toList();
+        return tradeData
+            .map((e) {
+              if (e is String) return e;
+              if (e is Map) return (e['name'] ?? e['title'] ?? '').toString();
+              return e.toString();
+            })
+            .where((s) => s.isNotEmpty)
+            .toList();
       }
     } catch (_) {}
     return [];
@@ -419,14 +650,15 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
 
     try {
       Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => ApplicantsPage(jobId: jobId.toString(), primaryColor: _primaryColor),
+        builder: (_) => ApplicantsPage(
+            jobId: jobId.toString(), primaryColor: _primaryColor),
       ));
     } catch (e) {
       debugPrint('openApplicantsPage error: $e');
     }
   }
 
-  void _openSubmitQuotePage(BuildContext context) {
+  Future<void> _openSubmitQuotePage(BuildContext context) async {
     final jobId = widget.job['_id'] ?? widget.job['id'] ?? widget.job['jobId'];
     if (jobId == null) {
       AppNotification.showError(context, 'Job ID not found');
@@ -434,9 +666,14 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
     }
 
     try {
-      Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => SubmitQuotePage(jobId: jobId.toString(), primaryColor: _primaryColor),
+      final result = await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => SubmitQuotePage(
+            jobId: jobId.toString(), primaryColor: _primaryColor),
       ));
+      if (result == true && mounted) {
+        _quotesCache.remove(jobId.toString());
+        setState(() => _hasApplied = true);
+      }
     } catch (e) {
       debugPrint('openSubmitQuotePage error: $e');
     }
@@ -445,20 +682,27 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
   @override
   Widget build(BuildContext context) {
     final job = widget.job;
-    final title = (job['title'] ?? job['jobTitle'] ?? 'Untitled Job').toString();
+    final title =
+        (job['title'] ?? job['jobTitle'] ?? 'Untitled Job').toString();
     final description = (job['description'] ?? job['details'] ?? '').toString();
     final budget = job['budget'];
     final isClosed = _isJobClosed();
     final trades = _extractTrades();
 
     // Additional job meta
-    final experienceLevel = (job['experienceLevel'] ?? job['experience'] ?? job['yearsExperience'])?.toString();
+    final experienceLevel =
+        (job['experienceLevel'] ?? job['experience'] ?? job['yearsExperience'])
+            ?.toString();
     final categoryName = (job['categoryDetails'] is Map)
-        ? (job['categoryDetails']['name'] ?? job['categoryDetails']['title'])?.toString()
+        ? (job['categoryDetails']['name'] ?? job['categoryDetails']['title'])
+            ?.toString()
         : (job['category'] ?? job['categoryId'])?.toString();
-    final location = (job['location'] ?? job['address'] ?? job['place'])?.toString();
-    final coordsRaw = job['coordinates'] ?? job['coords'] ?? job['locationCoords'];
-    final formattedLocation = _formatCoordinatesToLocation(coordsRaw) ?? location;
+    final location =
+        (job['location'] ?? job['address'] ?? job['place'])?.toString();
+    final coordsRaw =
+        job['coordinates'] ?? job['coords'] ?? job['locationCoords'];
+    final formattedLocation =
+        _formatCoordinatesToLocation(coordsRaw) ?? location;
     final locationLabel = _humanLocation ?? formattedLocation ?? '';
 
     final scheduleRaw = job['schedule'] ?? job['date'] ?? job['scheduledAt'];
@@ -466,13 +710,17 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
     try {
       if (scheduleRaw != null) {
         final d = DateTime.tryParse(scheduleRaw.toString());
-        if (d != null) scheduleStr = DateFormat('MMM dd, yyyy HH:mm').format(d.toLocal());
+        if (d != null)
+          scheduleStr = DateFormat('MMM dd, yyyy HH:mm').format(d.toLocal());
       }
     } catch (_) {}
 
-    final paymentStatus = job['paymentStatus'] ?? (job['booking'] is Map ? job['booking']['paymentStatus'] : null);
+    final paymentStatus = job['paymentStatus'] ??
+        (job['booking'] is Map ? job['booking']['paymentStatus'] : null);
     final clientName = (job['clientDetails'] is Map)
-        ? (job['clientDetails']['name'] ?? job['clientDetails']['fullName'] ?? job['clientDetails']['username'])
+        ? (job['clientDetails']['name'] ??
+            job['clientDetails']['fullName'] ??
+            job['clientDetails']['username'])
         : job['clientName'] ?? job['client'] ?? job['clientId'];
 
     // Format date
@@ -488,15 +736,20 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
     } catch (_) {}
 
     // Helper widget for info cards
-    Widget _buildInfoCard(String title, String value, IconData icon, {bool isPrimary = false}) {
+    Widget _buildInfoCard(String title, String value, IconData icon,
+        {bool isPrimary = false}) {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isPrimary ? _primaryColor.withOpacity(0.05) : _getSurfaceColor(context),
+          color: isPrimary
+              ? _primaryColor.withOpacity(0.05)
+              : _getSurfaceColor(context),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isPrimary ? _primaryColor.withOpacity(0.2) : _getBorderColor(context),
+            color: isPrimary
+                ? _primaryColor.withOpacity(0.2)
+                : _getBorderColor(context),
             width: 1,
           ),
         ),
@@ -518,7 +771,9 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: isPrimary ? _primaryColor : _getTextSecondary(context),
+                      color: isPrimary
+                          ? _primaryColor
+                          : _getTextSecondary(context),
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -670,19 +925,28 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
                   // Quick Info (reflowed): two-column header row and full-width LOCATION.
                   // Application deadline and Posted By will be shown below the boxed quick info as stacked rows.
                   Builder(builder: (_) {
-                    Widget? catCard = (categoryName != null && categoryName.isNotEmpty)
-                        ? _buildInfoCard('CATEGORY', categoryName, Icons.category_outlined)
+                    Widget? catCard = (categoryName != null &&
+                            categoryName.isNotEmpty)
+                        ? _buildInfoCard(
+                            'CATEGORY', categoryName, Icons.category_outlined)
                         : null;
 
                     Widget locationCard;
                     if (_loadingHumanLocation && (locationLabel.isEmpty)) {
-                      locationCard = _buildInfoCard('LOCATION', 'Looking up address...', Icons.location_on_outlined);
+                      locationCard = _buildInfoCard('LOCATION',
+                          'Looking up address...', Icons.location_on_outlined);
                     } else {
-                      locationCard = _buildInfoCard('LOCATION', locationLabel.isNotEmpty ? locationLabel : 'Not specified', Icons.location_on_outlined);
+                      locationCard = _buildInfoCard(
+                          'LOCATION',
+                          locationLabel.isNotEmpty
+                              ? locationLabel
+                              : 'Not specified',
+                          Icons.location_on_outlined);
                     }
 
                     Widget twoColRow(Widget? a, Widget? b) {
-                      if (a == null && b == null) return const SizedBox.shrink();
+                      if (a == null && b == null)
+                        return const SizedBox.shrink();
                       if (a == null) return b!;
                       if (b == null) return a;
                       return Row(
@@ -703,7 +967,8 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
                     }
 
                     // Spacing
-                    if (children.isNotEmpty) children.add(const SizedBox(height: 12));
+                    if (children.isNotEmpty)
+                      children.add(const SizedBox(height: 12));
 
                     // Full-width location
                     children.add(locationCard);
@@ -769,7 +1034,13 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
                             ),
                             Expanded(
                               child: Text(
-                                _loadingPostedBy ? 'Loading...' : (_postedByName ?? (clientName != null ? clientName.toString() : ( _extractClientId(widget.job) ?? 'Unknown'))),
+                                _loadingPostedBy
+                                    ? 'Loading...'
+                                    : (_postedByName ??
+                                        (clientName != null
+                                            ? clientName.toString()
+                                            : (_extractClientId(widget.job) ??
+                                                'Unknown'))),
                                 style: TextStyle(
                                   fontSize: 14,
                                   color: _getTextPrimary(context),
@@ -842,8 +1113,10 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
                               ),
-                              side: BorderSide(color: _primaryColor.withOpacity(0.3)),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              side: BorderSide(
+                                  color: _primaryColor.withOpacity(0.3)),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 6),
                             );
                           }).toList(),
                         ),
@@ -922,16 +1195,29 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
                                     ),
                                     Expanded(
                                       child: Builder(builder: (ctx) {
-                                        final statusStr = (job['status'] ?? job['state'] ?? '').toString();
-                                        final isClosedLocal = statusStr.toLowerCase() == 'closed' || statusStr.toLowerCase() == 'done' || statusStr.toLowerCase() == 'inactive';
-                                        final badgeColor = isClosedLocal ? _warningColor : _successColor;
+                                        final statusStr = (job['status'] ??
+                                                job['state'] ??
+                                                '')
+                                            .toString();
+                                        final isClosedLocal = statusStr
+                                                    .toLowerCase() ==
+                                                'closed' ||
+                                            statusStr.toLowerCase() == 'done' ||
+                                            statusStr.toLowerCase() ==
+                                                'inactive';
+                                        final badgeColor = isClosedLocal
+                                            ? _warningColor
+                                            : _successColor;
                                         return Align(
                                           alignment: Alignment.centerLeft,
                                           child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 12, vertical: 6),
                                             decoration: BoxDecoration(
-                                              color: badgeColor.withOpacity(0.12),
-                                              borderRadius: BorderRadius.circular(999),
+                                              color:
+                                                  badgeColor.withOpacity(0.12),
+                                              borderRadius:
+                                                  BorderRadius.circular(999),
                                             ),
                                             child: Text(
                                               statusStr.toString(),
@@ -982,7 +1268,6 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
                                 ),
                               ),
                             */
-
                           ].whereType<Widget>().toList(),
                         ),
                       ),
@@ -1009,169 +1294,194 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
         ),
         child: _loadingRole
             ? Center(
-          child: SizedBox(
-            width: 24,
-            height: 24,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              valueColor: AlwaysStoppedAnimation(_primaryColor),
-            ),
-          ),
-        )
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation(_primaryColor),
+                  ),
+                ),
+              )
             : ((_isLoggedIn && !_isOwner && !_isArtisan)
-            ? const SizedBox.shrink()
-            : SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: _isJobPaid() ||
-                isClosed ||
-                (_isArtisan && _hasApplied)
-                ? null
-                : () async {
-              // Owner should take precedence: open applicants
-              if (_isOwner) {
-                _openApplicantsPage(context);
-                return;
-              }
+                ? const SizedBox.shrink()
+                : SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isJobPaid() ||
+                              isClosed ||
+                              (_isArtisan && _hasApplied)
+                          ? null
+                          : () async {
+                              // Owner should take precedence: open applicants
+                              if (_isOwner) {
+                                _openApplicantsPage(context);
+                                return;
+                              }
 
-              // Guest or unauthenticated: prompt to sign in
-              if (!_isArtisan) {
-                await showGuestAuthRequiredDialog(context, message: 'Sign in or create an account to apply for this job.');
-                return;
-              }
+                              // Guest or unauthenticated: prompt to sign in
+                              if (!_isArtisan) {
+                                await showGuestAuthRequiredDialog(context,
+                                    message:
+                                        'Sign in or create an account to apply for this job.');
+                                return;
+                              }
 
-              if (_isArtisan) {
-                // Ensure KYC verified before allowing quote submission
-                try {
-                  final kyc = await TokenStorage.getKycVerified();
-                  if (kyc != true) {
-                    final go = await showDialog<bool>(
-                      context: context,
-                      barrierDismissible: false,
-                      builder: (ctx) {
-                        return AlertDialog(
-                          title: const Text('KYC required'),
-                          content: const Text(
-                              'You must complete KYC verification before you can submit quotes. Go to KYC now?'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(ctx).pop(false),
-                              child: const Text('Not now'),
-                            ),
-                            ElevatedButton(
-                              onPressed: () => Navigator.of(ctx).pop(true),
-                              child: const Text('Go to KYC'),
-                            ),
-                          ],
-                        );
-                      },
-                    );
-                    if (go == true) {
-                      try {
-                        final status = await TokenStorage.getKycStatus();
-                        if (status == 'pending') {
-                          // Inform user that admin review is in progress
-                          await showDialog<void>(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text('Awaiting KYC approval'),
-                              content: const Text('Your KYC request is pending admin review. We will notify you when it is approved.'),
-                              actions: [
-                                TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK')),
-                              ],
-                            ),
-                          );
-                        } else {
-                          await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ArtisanKycWidget()));
-                          final after = await TokenStorage.getKycVerified();
-                          if (after == true) {
-                            _openSubmitQuotePage(context);
-                          }
-                        }
-                      } catch (e) {
-                        debugPrint('KYC flow error: $e');
-                      }
-                    }
-                    return;
-                  }
-                } catch (e) {
-                  debugPrint('KYC check error: $e');
-                  final go = await showDialog<bool>(
-                    context: context,
-                    barrierDismissible: false,
-                    builder: (ctx) {
-                      return AlertDialog(
-                        title: const Text('KYC required'),
-                        content: const Text(
-                            'You must complete KYC verification before you can submit quotes. Go to KYC now?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(ctx).pop(false),
-                            child: const Text('Not now'),
-                          ),
-                          ElevatedButton(
-                            onPressed: () => Navigator.of(ctx).pop(true),
-                            child: const Text('Go to KYC'),
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                  if (go == true) {
-                    try {
-                      final status = await TokenStorage.getKycStatus();
-                      if (status == 'pending') {
-                        await showDialog<void>(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            title: const Text('Awaiting KYC approval'),
-                            content: const Text('Your KYC request is pending admin review. We will notify you when it is approved.'),
-                            actions: [
-                              TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK')),
-                            ],
-                          ),
-                        );
-                      } else {
-                        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ArtisanKycWidget()));
-                      }
-                    } catch (e) {
-                      debugPrint('KYC flow error: $e');
-                    }
-                  }
-                  return;
-                }
+                              if (_isArtisan) {
+                                // Ensure KYC verified before allowing quote submission
+                                try {
+                                  final hasVerifiedKyc =
+                                      await _hasVerifiedKyc();
+                                  if (!hasVerifiedKyc) {
+                                    final go = await showDialog<bool>(
+                                      context: context,
+                                      barrierDismissible: false,
+                                      builder: (ctx) {
+                                        return AlertDialog(
+                                          title: const Text('KYC required'),
+                                          content: const Text(
+                                              'You must complete KYC verification before you can submit quotes. Go to KYC now?'),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () =>
+                                                  Navigator.of(ctx).pop(false),
+                                              child: const Text('Not now'),
+                                            ),
+                                            ElevatedButton(
+                                              onPressed: () =>
+                                                  Navigator.of(ctx).pop(true),
+                                              child: const Text('Go to KYC'),
+                                            ),
+                                          ],
+                                        );
+                                      },
+                                    );
+                                    if (go == true) {
+                                      try {
+                                        final status =
+                                            await TokenStorage.getKycStatus();
+                                        if (status == 'pending') {
+                                          // Inform user that admin review is in progress
+                                          await showDialog<void>(
+                                            context: context,
+                                            builder: (ctx) => AlertDialog(
+                                              title: const Text(
+                                                  'Awaiting KYC approval'),
+                                              content: const Text(
+                                                  'Your KYC request is pending admin review. We will notify you when it is approved.'),
+                                              actions: [
+                                                TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.of(ctx).pop(),
+                                                    child: const Text('OK')),
+                                              ],
+                                            ),
+                                          );
+                                        } else {
+                                          await Navigator.of(context).push(
+                                              MaterialPageRoute(
+                                                  builder: (_) =>
+                                                      const ArtisanKycWidget()));
+                                          final after = await _hasVerifiedKyc();
+                                          if (after) {
+                                            _openSubmitQuotePage(context);
+                                          }
+                                        }
+                                      } catch (e) {
+                                        debugPrint('KYC flow error: $e');
+                                      }
+                                    }
+                                    return;
+                                  }
+                                } catch (e) {
+                                  debugPrint('KYC check error: $e');
+                                  final go = await showDialog<bool>(
+                                    context: context,
+                                    barrierDismissible: false,
+                                    builder: (ctx) {
+                                      return AlertDialog(
+                                        title: const Text('KYC required'),
+                                        content: const Text(
+                                            'You must complete KYC verification before you can submit quotes. Go to KYC now?'),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.of(ctx).pop(false),
+                                            child: const Text('Not now'),
+                                          ),
+                                          ElevatedButton(
+                                            onPressed: () =>
+                                                Navigator.of(ctx).pop(true),
+                                            child: const Text('Go to KYC'),
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  );
+                                  if (go == true) {
+                                    try {
+                                      final status =
+                                          await TokenStorage.getKycStatus();
+                                      if (status == 'pending') {
+                                        await showDialog<void>(
+                                          context: context,
+                                          builder: (ctx) => AlertDialog(
+                                            title: const Text(
+                                                'Awaiting KYC approval'),
+                                            content: const Text(
+                                                'Your KYC request is pending admin review. We will notify you when it is approved.'),
+                                            actions: [
+                                              TextButton(
+                                                  onPressed: () =>
+                                                      Navigator.of(ctx).pop(),
+                                                  child: const Text('OK')),
+                                            ],
+                                          ),
+                                        );
+                                      } else {
+                                        await Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                                builder: (_) =>
+                                                    const ArtisanKycWidget()));
+                                      }
+                                    } catch (e) {
+                                      debugPrint('KYC flow error: $e');
+                                    }
+                                  }
+                                  return;
+                                }
 
-                // KYC passed; open submit quote page
-                _openSubmitQuotePage(context);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _primaryColor,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: Text(
-              isClosed
-                  ? 'Job Closed'
-                  : _isJobPaid()
-                  ? 'Job Paid'
-                  : _isOwner
-                  ? 'View Applicants'
-                  : _isArtisan
-                  ? (_hasApplied
-                  ? 'Application Submitted'
-                  : 'Submit Quote')
-                  : 'Login to Apply',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        )),
+                                // KYC passed; open submit quote page
+                                _openSubmitQuotePage(context);
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _primaryColor,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(
+                        isClosed
+                            ? 'Job Closed'
+                            : _isJobPaid()
+                                ? 'Job Paid'
+                                : _isOwner
+                                    ? 'View Applicants'
+                                    : _isArtisan
+                                        ? (_hasApplied
+                                            ? 'Application Submitted'
+                                            : 'Submit Quote')
+                                        : 'Login to Apply',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  )),
       ),
     );
   }
@@ -1180,11 +1490,20 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
     try {
       final clientId = _extractClientId(widget.job);
       if (clientId == null || clientId.isEmpty) return;
+      final cached = _userNameCache[clientId];
+      if (cached != null && cached.isNotEmpty) {
+        _postedByName = cached;
+        if (mounted) setState(() {});
+        return;
+      }
       _loadingPostedBy = true;
       if (mounted) setState(() {});
 
       final name = await _fetchUserById(clientId);
-      if (name != null && name.isNotEmpty) _postedByName = name;
+      if (name != null && name.isNotEmpty) {
+        _postedByName = name;
+        _userNameCache[clientId] = name;
+      }
     } catch (e) {
       debugPrint('loadPostedBy error: $e');
     } finally {
@@ -1197,7 +1516,8 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
     try {
       final token = await TokenStorage.getToken();
       final headers = <String, String>{'Content-Type': 'application/json'};
-      if (token != null && token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
+      if (token != null && token.isNotEmpty)
+        headers['Authorization'] = 'Bearer $token';
 
       final candidates = [
         '$API_BASE_URL/api/users/$id',
@@ -1208,25 +1528,46 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
 
       for (final url in candidates) {
         try {
-          final resp = await http.get(Uri.parse(url), headers: headers).timeout(const Duration(seconds: 10));
-          if (resp.statusCode >= 200 && resp.statusCode < 300 && resp.body.isNotEmpty) {
+          final resp = await http
+              .get(Uri.parse(url), headers: headers)
+              .timeout(const Duration(seconds: 10));
+          if (resp.statusCode >= 200 &&
+              resp.statusCode < 300 &&
+              resp.body.isNotEmpty) {
             dynamic body;
-            try { body = jsonDecode(resp.body); } catch (_) { body = null; }
+            try {
+              body = jsonDecode(resp.body);
+            } catch (_) {
+              body = null;
+            }
             Map<String, dynamic>? userMap;
             if (body is Map) {
-              if (body['data'] is Map) userMap = Map<String, dynamic>.from(body['data']);
-              else if (body['user'] is Map) userMap = Map<String, dynamic>.from(body['user']);
-              else userMap = Map<String, dynamic>.from(body);
+              if (body['data'] is Map)
+                userMap = Map<String, dynamic>.from(body['data']);
+              else if (body['user'] is Map)
+                userMap = Map<String, dynamic>.from(body['user']);
+              else
+                userMap = Map<String, dynamic>.from(body);
             }
             if (userMap != null) {
-              final candidatesName = ['name', 'fullName', 'full_name', 'username', 'firstName', 'displayName'];
+              final candidatesName = [
+                'name',
+                'fullName',
+                'full_name',
+                'username',
+                'firstName',
+                'displayName'
+              ];
               for (final k in candidatesName) {
-                if (userMap[k] != null && userMap[k].toString().trim().isNotEmpty) return userMap[k].toString().trim();
+                if (userMap[k] != null &&
+                    userMap[k].toString().trim().isNotEmpty)
+                  return userMap[k].toString().trim();
               }
               if (userMap['user'] is Map) {
                 final u = Map<String, dynamic>.from(userMap['user']);
                 for (final k in candidatesName) {
-                  if (u[k] != null && u[k].toString().trim().isNotEmpty) return u[k].toString().trim();
+                  if (u[k] != null && u[k].toString().trim().isNotEmpty)
+                    return u[k].toString().trim();
                 }
               }
             }
@@ -1242,4 +1583,3 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
     return null;
   }
 }
-

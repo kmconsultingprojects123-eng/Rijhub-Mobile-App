@@ -36,6 +36,10 @@ class BookingPageWidget extends StatefulWidget {
 }
 
 class _BookingPageWidgetState extends State<BookingPageWidget> {
+  static final Map<String, List<Map<String, dynamic>>> _bookingListCache = {};
+  static final Map<String, DateTime> _bookingListCacheTimes = {};
+  static const Duration _bookingListCacheTtl = Duration(minutes: 2);
+
   late BookingPageModel _model;
   final GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -50,8 +54,12 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
   String _searchQuery = '';
   Timer? _searchDebounce;
   Timer? _autoRefreshTimer;
+  Timer? _postActionRefreshTimer;
   StreamSubscription<Map<String, dynamic>>? _realtimeSub;
   bool _realtimeRefreshInFlight = false;
+  final Set<String> _pendingRealtimeBookingIds = <String>{};
+  bool _pendingRealtimeFullRefresh = false;
+  bool _backgroundRefreshInFlight = false;
 
   String? _participantId;
   bool _isArtisan = false;
@@ -103,14 +111,6 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
       final resp = await http
           .get(uri, headers: headers)
           .timeout(const Duration(seconds: 12));
-      if (kDebugMode) {
-        debugPrint('--- Chat Thread API Request ---');
-        debugPrint('URL: $uri');
-        debugPrint('Headers: $headers');
-        debugPrint('Status Code: ${resp.statusCode}');
-        debugPrint('Response Body: ${resp.body}');
-        debugPrint('-------------------------------');
-      }
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
         if (kDebugMode)
           debugPrint(
@@ -418,7 +418,11 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
       _isArtisan = false;
     }
 
-    await _fetchBookings(reset: true);
+    _hydrateBookingsFromCacheIfAvailable();
+    await _fetchBookings(
+      reset: true,
+      preserveVisibleData: _bookings.isNotEmpty,
+    );
     _startAutoRefresh();
   }
 
@@ -426,6 +430,7 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
   void dispose() {
     _searchDebounce?.cancel();
     _autoRefreshTimer?.cancel();
+    _postActionRefreshTimer?.cancel();
     _realtimeSub?.cancel();
     _scrollController.dispose();
     _model.dispose();
@@ -481,6 +486,115 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
 
   bool _shouldRefundForBooking(Map<String, dynamic> booking) {
     return _resolvePaymentMode(booking) != 'aftercompletion';
+  }
+
+  String? _currentCacheKey() {
+    final pid = _participantId;
+    if (pid == null || pid.isEmpty) return null;
+    if (_searchQuery.isNotEmpty) return null;
+    return '${_isArtisan ? 'artisan' : 'customer'}:$pid';
+  }
+
+  void _hydrateBookingsFromCacheIfAvailable() {
+    final key = _currentCacheKey();
+    if (key == null) return;
+    final cached = _bookingListCache[key];
+    final cachedAt = _bookingListCacheTimes[key];
+    if (cached == null || cached.isEmpty || cachedAt == null) return;
+    if (DateTime.now().difference(cachedAt) > _bookingListCacheTtl) return;
+    if (!mounted) return;
+
+    setState(() {
+      _bookings
+        ..clear()
+        ..addAll(cached.map((e) => Map<String, dynamic>.from(e)));
+      _loadingBookings = false;
+      _hasMore = true;
+      _page = ((_bookings.length / _limit).ceil()).clamp(1, 1000000);
+    });
+  }
+
+  void _storeBookingsInCache() {
+    final key = _currentCacheKey();
+    if (key == null) return;
+    _bookingListCache[key] =
+        _bookings.map((e) => Map<String, dynamic>.from(e)).toList();
+    _bookingListCacheTimes[key] = DateTime.now();
+  }
+
+  String _extractStatus(Map<String, dynamic> booking) {
+    return (booking['booking']?['status'] ?? booking['status'] ?? '')
+        .toString()
+        .toLowerCase();
+  }
+
+  bool _isFinalBookingStatus(String status) {
+    return status == 'completed' ||
+        status == 'closed' ||
+        status == 'cancelled' ||
+        status == 'canceled' ||
+        status == 'rejected';
+  }
+
+  bool _isPollingCandidate(Map<String, dynamic> booking) {
+    final status = _extractStatus(booking);
+    return status.isNotEmpty && !_isFinalBookingStatus(status);
+  }
+
+  List<String> _activeBookingIdsForRefresh({int maxItems = 8}) {
+    final ids = <String>[];
+    for (final booking in _bookings) {
+      if (!_isPollingCandidate(booking)) continue;
+      final id = _extractBookingId(booking) ??
+          booking['_id']?.toString() ??
+          booking['booking']?['_id']?.toString() ??
+          booking['id']?.toString();
+      if (id == null || id.isEmpty || ids.contains(id)) continue;
+      ids.add(id);
+      if (ids.length >= maxItems) break;
+    }
+    return ids;
+  }
+
+  Future<void> _flushPendingRealtimeUpdates() async {
+    if (!mounted || _loadingBookings || _loadingMore) return;
+    if (_realtimeRefreshInFlight) return;
+
+    final queuedIds = _pendingRealtimeBookingIds.toList(growable: false);
+    final needsFullRefresh = _pendingRealtimeFullRefresh;
+    _pendingRealtimeBookingIds.clear();
+    _pendingRealtimeFullRefresh = false;
+
+    if (queuedIds.isEmpty && !needsFullRefresh) return;
+
+    _realtimeRefreshInFlight = true;
+    try {
+      for (final bookingId in queuedIds) {
+        final fresh = await _fetchBookingById(bookingId);
+        if (fresh != null) {
+          final existingIndex = _bookings.indexWhere((b) =>
+              (_extractBookingId(b) ??
+                  b['_id']?.toString() ??
+                  b['booking']?['_id']?.toString() ??
+                  b['id']?.toString()) ==
+              bookingId);
+          if (existingIndex != -1) {
+            _updateBookingState(bookingId, fresh);
+          } else {
+            _pendingRealtimeFullRefresh = true;
+          }
+        } else {
+          _pendingRealtimeFullRefresh = true;
+        }
+      }
+
+      if (needsFullRefresh || _pendingRealtimeFullRefresh) {
+        _pendingRealtimeFullRefresh = false;
+        await _fetchBookings(reset: true, preserveVisibleData: true);
+      }
+    } finally {
+      _realtimeRefreshInFlight = false;
+    }
   }
 
   bool _isBookingRealtimeEvent(Map<String, dynamic> event) {
@@ -599,28 +713,34 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
 
   void _startAutoRefresh() {
     _autoRefreshTimer?.cancel();
-    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 20), (_) async {
       if (!mounted ||
           _loadingBookings ||
           _loadingMore ||
-          _realtimeRefreshInFlight) {
+          _realtimeRefreshInFlight ||
+          _backgroundRefreshInFlight) {
         return;
       }
-      await _fetchBookingsInBackground();
+      await _refreshActiveBookingsInBackground();
     });
   }
 
   Future<void> _handleRealtimeEvent(Map<String, dynamic> event) async {
-    if (!mounted || _loadingBookings || _loadingMore) return;
+    if (!mounted) return;
     if (!_isBookingRealtimeEvent(event)) return;
+    final bookingId = _extractRealtimeBookingId(event);
+    if (_loadingBookings || _loadingMore) {
+      if (bookingId != null && bookingId.isNotEmpty) {
+        _pendingRealtimeBookingIds.add(bookingId);
+      } else {
+        _pendingRealtimeFullRefresh = true;
+      }
+      return;
+    }
     if (_realtimeRefreshInFlight) return;
 
     _realtimeRefreshInFlight = true;
     try {
-      final bookingId = _extractRealtimeBookingId(event);
-      if (kDebugMode) {
-        debugPrint('Realtime booking event: $event');
-      }
       if (bookingId != null && bookingId.isNotEmpty) {
         final fresh = await _fetchBookingById(bookingId);
         if (fresh != null) {
@@ -638,7 +758,7 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
           return;
         }
       }
-      await _fetchBookings(reset: true);
+      await _fetchBookings(reset: true, preserveVisibleData: true);
     } catch (e) {
       if (kDebugMode) debugPrint('Realtime booking update error: $e');
     } finally {
@@ -646,13 +766,19 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
     }
   }
 
-  Future<void> _fetchBookings({bool reset = false}) async {
+  Future<void> _fetchBookings(
+      {bool reset = false, bool preserveVisibleData = false}) async {
     if (!_hasMore && !reset) return;
     if (reset) {
       _page = 1;
       _hasMore = true;
-      _bookings.clear();
-      if (mounted) setState(() => _loadingBookings = true);
+      final shouldClearVisibleData = !preserveVisibleData || _bookings.isEmpty;
+      if (shouldClearVisibleData) {
+        _bookings.clear();
+      }
+      if (mounted) {
+        setState(() => _loadingBookings = shouldClearVisibleData);
+      }
     } else {
       if (mounted) setState(() => _loadingMore = true);
     }
@@ -685,14 +811,6 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
       final response = await http
           .get(Uri.parse(url), headers: headers)
           .timeout(const Duration(seconds: 8));
-      if (kDebugMode) {
-        debugPrint('--- Booking API Request ---');
-        debugPrint('URL: $url');
-        debugPrint('Headers: $headers');
-        debugPrint('Status Code: ${response.statusCode}');
-        debugPrint('Response Body: ${response.body}');
-        debugPrint('---------------------------');
-      }
       if (response.statusCode >= 200 &&
           response.statusCode < 300 &&
           response.body.isNotEmpty) {
@@ -710,20 +828,6 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
             .whereType<Map>()
             .map((m) => _normalizeFetchedBooking(Map<String, dynamic>.from(m)))
             .toList();
-
-        // Debug: Log paymentMode from first booking to diagnose missing field
-        if (kDebugMode && processed.isNotEmpty) {
-          try {
-            final firstBooking = processed[0];
-            final bookingNested = firstBooking['booking'] is Map
-                ? firstBooking['booking']
-                : firstBooking;
-            final paymentMode = firstBooking['paymentMode'] ??
-                bookingNested['paymentMode'] ??
-                '<MISSING>';
-            debugPrint('🔍 DEBUG: First booking paymentMode=$paymentMode');
-          } catch (_) {}
-        }
 
         // If there's a search query, filter bookings by various fields locally.
         List<Map<String, dynamic>> filtered = processed;
@@ -746,50 +850,8 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
             _loadingMore = false;
           });
         }
-
-        // Debugging aid: when a search query returns no client-side matches,
-        // log a short report showing what fields were inspected for the first
-        // few fetched bookings so developers can see why the visible name
-        // didn't match the query.
-        try {
-          if (kDebugMode &&
-              _searchQuery.isNotEmpty &&
-              filtered.isEmpty &&
-              processed.isNotEmpty) {
-            final qLower = _searchQuery.toLowerCase();
-            final maxSamples = processed.length < 10 ? processed.length : 10;
-            debugPrint(
-                '🔎 Booking search debug: query="${_searchQuery}" — no client-side matches found. Showing up to $maxSamples inspected items:');
-            for (var i = 0; i < maxSamples; i++) {
-              try {
-                final item = Map<String, dynamic>.from(processed[i]);
-                final id = (_extractBookingId(item) ??
-                        item['_id']?.toString() ??
-                        item['id']?.toString()) ??
-                    '<no-id>';
-                final artisan =
-                    _extractArtisanFromBooking(item) ?? <String, dynamic>{};
-                final artisanName = _extractNameFromUser(artisan);
-                final customer = item['customer'] ??
-                    item['customerUser'] ??
-                    (item['booking'] is Map
-                        ? item['booking']['customer']
-                        : null);
-                final customerName = _extractNameFromUser(customer);
-                final matchedPaths = _findMatchingPaths(item, qLower, depth: 3);
-                if (matchedPaths.isEmpty) {
-                  debugPrint(
-                      '  - id=$id artisan="$artisanName" customer="$customerName" -> no string field contained the query');
-                } else {
-                  debugPrint(
-                      '  - id=$id artisan="$artisanName" customer="$customerName" -> matched at: ${matchedPaths.join(', ')}');
-                }
-              } catch (e) {
-                debugPrint('  - error inspecting processed[$i]: $e');
-              }
-            }
-          }
-        } catch (_) {}
+        _storeBookingsInCache();
+        await _flushPendingRealtimeUpdates();
       } else {
         if (mounted)
           setState(() {
@@ -803,87 +865,57 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
           _loadingBookings = false;
           _loadingMore = false;
         });
+    } finally {
+      await _flushPendingRealtimeUpdates();
     }
   }
 
-  // Background fetch that updates the bookings list without toggling
-  // the visible loading indicators. Use this for silent periodic refreshes
-  // so the UI doesn't show a spinner or skeleton while new data is pulled.
-  Future<void> _fetchBookingsInBackground() async {
+  Future<void> _refreshActiveBookingsInBackground() async {
+    if (_backgroundRefreshInFlight) return;
+    final ids = _activeBookingIdsForRefresh();
+    if (ids.isEmpty) return;
+
+    _backgroundRefreshInFlight = true;
     try {
-      // Prevent overlapping background fetches
-      if (!_hasMore && _page > 1 && (_searchQuery.isEmpty)) {
-        // still attempt a short fetch if desired, but avoid frequent calls when no more pages
+      for (final bookingId in ids) {
+        final fresh = await _fetchBookingById(bookingId);
+        if (fresh != null && mounted) {
+          _updateBookingState(bookingId, fresh);
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('Active booking refresh error: $e');
+    } finally {
+      _backgroundRefreshInFlight = false;
+    }
+  }
+
+  void _schedulePostActionBackgroundRefresh(
+      {String? bookingId, Duration delay = const Duration(seconds: 1)}) {
+    _postActionRefreshTimer?.cancel();
+    _postActionRefreshTimer = Timer(delay, () async {
+      if (!mounted ||
+          _loadingBookings ||
+          _loadingMore ||
+          _realtimeRefreshInFlight ||
+          _backgroundRefreshInFlight) {
+        return;
       }
 
-      final token = await TokenStorage.getToken();
-      final headers = <String, String>{'Content-Type': 'application/json'};
-      if (token != null && token.isNotEmpty)
-        headers['Authorization'] = 'Bearer $token';
-
-      final pid = _participantId;
-      if (pid == null || pid.isEmpty) return;
-
-      final qParam = _searchQuery.isNotEmpty
-          ? '&q=${Uri.encodeComponent(_searchQuery)}'
-          : '';
-      // Request enough items to cover the currently visible pages to avoid truncation.
-      final effectiveLimit = _searchQuery.isNotEmpty ? 1000 : (_page * _limit);
-      final url = _isArtisan
-          ? '$API_BASE_URL/api/bookings/artisan/$pid?page=1&limit=$effectiveLimit$qParam'
-          : '$API_BASE_URL/api/bookings/customer/$pid?page=1&limit=$effectiveLimit$qParam';
-      final response = await http
-          .get(Uri.parse(url), headers: headers)
-          .timeout(const Duration(seconds: 8));
-      if (kDebugMode) {
-        debugPrint('--- Booking Background API Request ---');
-        debugPrint('URL: $url');
-        debugPrint('Headers: $headers');
-        debugPrint('Status Code: ${response.statusCode}');
-        debugPrint('Response Body: ${response.body}');
-        debugPrint('--------------------------------------');
-      }
-      if (response.statusCode >= 200 &&
-          response.statusCode < 300 &&
-          response.body.isNotEmpty) {
-        final decoded = jsonDecode(response.body);
-        dynamic data = decoded is Map ? (decoded['data'] ?? decoded) : decoded;
-        List items = [];
-        if (data is List)
-          items = data;
-        else if (data is Map && data['items'] is List)
-          items = data['items'];
-        else if (data is Map && data['bookings'] is List)
-          items = data['bookings'];
-
-        final processed = items
-            .whereType<Map>()
-            .map((m) => _normalizeFetchedBooking(Map<String, dynamic>.from(m)))
-            .toList();
-
-        // If there's a search query, filter bookings by various fields locally.
-        List<Map<String, dynamic>> filtered = processed;
-        if (_searchQuery.isNotEmpty) {
-          final qLower = _searchQuery.toLowerCase();
-          filtered = processed
-              .where(
-                  (b) => _matchesSearch(Map<String, dynamic>.from(b), qLower))
-              .toList();
+      try {
+        if (bookingId != null && bookingId.isNotEmpty) {
+          final fresh = await _fetchBookingById(bookingId);
+          if (fresh != null && mounted) {
+            _updateBookingState(bookingId, fresh);
+          }
         }
 
         if (!mounted) return;
-        // Update the list silently: replace items but don't flip loading flags.
-        setState(() {
-          // Keep paging state but refresh the data shown to the user.
-          _bookings.clear();
-          _bookings.addAll(filtered);
-          // Update hasMore conservatively based on fetched size
-          _hasMore = filtered.length == effectiveLimit;
-        });
+        await _fetchBookings(reset: true, preserveVisibleData: true);
+      } catch (e) {
+        if (kDebugMode) debugPrint('Post-action booking refresh error: $e');
       }
-    } catch (e) {
-      if (kDebugMode) debugPrint('Background fetch error: $e');
-    }
+    });
   }
 
   Future<void> _fetchMore() async {
@@ -902,14 +934,6 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
       final res = await http
           .get(Uri.parse(url), headers: headers)
           .timeout(const Duration(seconds: 6));
-      if (kDebugMode) {
-        debugPrint('--- User Details API Request ---');
-        debugPrint('URL: $url');
-        debugPrint('Headers: $headers');
-        debugPrint('Status Code: ${res.statusCode}');
-        debugPrint('Response Body: ${res.body}');
-        debugPrint('---------------------------------');
-      }
       if (res.statusCode >= 200 &&
           res.statusCode < 300 &&
           res.body.isNotEmpty) {
@@ -939,20 +963,6 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
       final res = await http
           .get(Uri.parse(url), headers: headers)
           .timeout(const Duration(seconds: 8));
-      if (kDebugMode) {
-        debugPrint('--- Booking Details API Request ---');
-        debugPrint('URL: $url');
-        // Avoid printing full Authorization token in logs
-        final maskedHeaders = Map<String, String>.from(headers);
-        if (maskedHeaders['Authorization'] != null &&
-            maskedHeaders['Authorization']!.length > 10)
-          maskedHeaders['Authorization'] =
-              maskedHeaders['Authorization']!.substring(0, 10) + '...';
-        debugPrint('Headers: $maskedHeaders');
-        debugPrint('Status Code: ${res.statusCode}');
-        debugPrint('Response Body: ${res.body}');
-        debugPrint('-----------------------------------');
-      }
       if (res.statusCode >= 200 &&
           res.statusCode < 300 &&
           res.body.isNotEmpty) {
@@ -964,6 +974,66 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
       if (kDebugMode) debugPrint('fetchBookingById error: $e');
     }
     return null;
+  }
+
+  bool _sameBookingSnapshot(
+    Map<String, dynamic> current,
+    Map<String, dynamic> next,
+  ) {
+    String read(dynamic source, List<List<String>> paths) {
+      for (final path in paths) {
+        dynamic node = source;
+        for (final key in path) {
+          if (node is Map && node.containsKey(key)) {
+            node = node[key];
+          } else {
+            node = null;
+            break;
+          }
+        }
+        final value = node?.toString();
+        if (value != null && value.isNotEmpty) return value;
+      }
+      return '';
+    }
+
+    const idPaths = [
+      ['_id'],
+      ['id'],
+      ['booking', '_id'],
+      ['booking', 'id'],
+    ];
+    const statusPaths = [
+      ['status'],
+      ['booking', 'status'],
+    ];
+    const paymentStatusPaths = [
+      ['paymentStatus'],
+      ['payment_status'],
+      ['booking', 'paymentStatus'],
+      ['booking', 'payment_status'],
+    ];
+    const refundStatusPaths = [
+      ['refundStatus'],
+      ['booking', 'refundStatus'],
+    ];
+    const updatedAtPaths = [
+      ['updatedAt'],
+      ['booking', 'updatedAt'],
+    ];
+    const threadPaths = [
+      ['threadId'],
+      ['booking', 'threadId'],
+      ['chat', '_id'],
+      ['booking', 'chat', '_id'],
+    ];
+
+    return read(current, idPaths) == read(next, idPaths) &&
+        read(current, statusPaths) == read(next, statusPaths) &&
+        read(current, paymentStatusPaths) == read(next, paymentStatusPaths) &&
+        read(current, refundStatusPaths) == read(next, refundStatusPaths) &&
+        read(current, updatedAtPaths) == read(next, updatedAtPaths) &&
+        read(current, threadPaths) == read(next, threadPaths);
   }
 
   // Helper to update a booking in the local list while preserving nested data
@@ -996,6 +1066,9 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
           if (updated[k] == null && old[k] != null) {
             updated[k] = old[k];
           }
+        }
+        if (_sameBookingSnapshot(old, updated)) {
+          return;
         }
         _bookings[index] = updated;
       }
@@ -1223,6 +1296,7 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
         if (!mounted) return;
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Booking accepted')));
+        _schedulePostActionBackgroundRefresh(bookingId: id);
 
         // Notify both artisan and client about the accepted booking
         try {
@@ -1347,6 +1421,7 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('Booking rejected. Refund will be processed.')));
+        _schedulePostActionBackgroundRefresh(bookingId: id);
 
         // Notify both artisan and client about the rejected booking
         try {
@@ -1551,6 +1626,7 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
             content: Text(shouldRefund
                 ? 'Booking cancelled. Refund will be processed.'
                 : 'Booking cancelled. No refund is due for this payment mode.')));
+        _schedulePostActionBackgroundRefresh(bookingId: id);
         try {
           AppNotification.showSuccess(
               context,
@@ -1746,6 +1822,7 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
         if (!mounted) return;
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Job marked complete.')));
+        _schedulePostActionBackgroundRefresh(bookingId: id);
 
         // Notify other participant
         try {
@@ -1826,51 +1903,6 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
     } finally {
       _setActionLoading(id, false);
     }
-  }
-
-  // Debug helper: find paths of string fields that contain the query (case-insensitive)
-  List<String> _findMatchingPaths(dynamic node, String qLower,
-      {String path = '', int depth = 3}) {
-    final matches = <String>[];
-    if (node == null || depth <= 0) return matches;
-    try {
-      if (node is String) {
-        if (node.toLowerCase().contains(qLower))
-          matches.add(path.isEmpty ? '<value>' : path);
-        return matches;
-      }
-      if (node is Map) {
-        for (final entry in node.entries) {
-          final key = entry.key?.toString() ?? '<key>';
-          final value = entry.value;
-          final childPath = path.isEmpty ? key : '$path.$key';
-          try {
-            if (value is String) {
-              if (value.toLowerCase().contains(qLower)) matches.add(childPath);
-            } else if (value is num) {
-              if (value.toString().toLowerCase().contains(qLower))
-                matches.add(childPath);
-            } else if (value is Map || value is List) {
-              matches.addAll(_findMatchingPaths(value, qLower,
-                  path: childPath, depth: depth - 1));
-            } else {
-              // ignore other types
-            }
-          } catch (_) {}
-        }
-        return matches;
-      }
-      if (node is List) {
-        for (var i = 0; i < node.length; i++) {
-          final v = node[i];
-          final childPath = '$path[$i]';
-          matches.addAll(
-              _findMatchingPaths(v, qLower, path: childPath, depth: depth - 1));
-        }
-        return matches;
-      }
-    } catch (_) {}
-    return matches;
   }
 
   // Helper to display API failure details: response body and latest booking fetch
@@ -2539,10 +2571,6 @@ class _BookingCard extends StatelessWidget {
         status.contains('waiting') ||
         status == 'created' ||
         status == 'held');
-    try {
-      debugPrint(
-          'BookingCard(build): id=${_extractBookingId(booking) ?? booking['_id'] ?? booking['id']}, rawStatus=$rawStatus, effectiveStatus=$status, paymentStatus=$paymentStatus, isArtisan=$isArtisan, cancelEligible=$cancelEligible, isQuote=$isQuote');
-    } catch (_) {}
     final statusColor = _getStatusColor(status, theme);
 
     // Define active statuses where messaging should be allowed
