@@ -1,6 +1,7 @@
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/notification_model.dart';
 import '../../services/notification_service.dart' as ServiceNotif;
@@ -77,7 +78,7 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
                 bookingId: notification.bookingId,
                 threadId: notification.threadId,
                 jobTitle: notification.title,
-                bookingPrice: notification.bookingPrice,
+                bookingPrice: _displayAmount(notification.bookingPrice),
                 bookingDateTime: notification.createdAt.toIso8601String(),
               ));
           return;
@@ -106,6 +107,40 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  String _displayAmount(dynamic value) {
+    try {
+      if (value == null) return '-';
+      if (value is num) {
+        return '₦${NumberFormat('#,##0', 'en_US').format(value)}';
+      }
+
+      final text = value.toString().trim();
+      if (text.isEmpty) return '-';
+
+      final normalized = text.replaceAll(RegExp(r'[^0-9.-]'), '');
+      final parsed = num.tryParse(normalized);
+      if (parsed != null) {
+        return '₦${NumberFormat('#,##0', 'en_US').format(parsed)}';
+      }
+
+      if (text.contains('?') || text.contains('�')) {
+        return text.replaceAll('?', '₦').replaceAll('�', '₦');
+      }
+
+      return text;
+    } catch (_) {
+      return value.toString();
+    }
+  }
+
+  String _normalizeCurrencyText(String text) {
+    if (text.isEmpty) return text;
+    return text.replaceAllMapped(
+      RegExp(r'([?�])(?=\s*\d)'),
+      (_) => '₦',
+    );
   }
 
   String _getDetailMessage(NotificationItem notification) {
@@ -140,252 +175,208 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final notification = widget.notification;
-    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              decoration: BoxDecoration(
-                color: isDark ? Colors.black : Colors.white,
-                border: Border(
-                  bottom: BorderSide(
-                    color: colorScheme.onSurface.withOpacity(0.1),
-                    width: 1,
-                  ),
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  IconButton(
-                    icon: Icon(
-                      Icons.chevron_left_rounded,
-                      color: colorScheme.onSurface.withOpacity(0.8),
-                      size: 28,
-                    ),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                  Text(
-                    'Notifications',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 18,
-                    ),
-                  ),
-                  IconButton(
-                    icon: Icon(
-                      Icons.check_rounded,
-                      color: colorScheme.primary,
-                      size: 24,
-                    ),
-                    onPressed: () {},
-                  ),
-                ],
-              ),
+      backgroundColor: theme.scaffoldBackgroundColor,
+      appBar: AppBar(
+        title: const Text('Notification Details'),
+        actions: [
+          IconButton(
+            icon: Icon(
+              Icons.check_rounded,
+              color: colorScheme.primary,
             ),
-
-            Expanded(
-              child: CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20.0),
+            onPressed: () {},
+          ),
+        ],
+      ),
+      body: SafeArea(
+        top: false,
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Icon and Type
+                    Center(
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Icon and Type
-                          Center(
-                            child: Column(
-                              children: [
-                                Container(
-                                  width: 80,
-                                  height: 80,
-                                  decoration: BoxDecoration(
-                                    color:
-                                        _getNotificationColor(notification.type)
-                                            .withOpacity(0.15),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    _getNotificationIcon(notification.type),
-                                    size: 40,
-                                    color: _getNotificationColor(
-                                        notification.type),
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        _getNotificationColor(notification.type)
-                                            .withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                      color: _getNotificationColor(
-                                              notification.type)
-                                          .withOpacity(0.3),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    notification.type
-                                        .replaceAll('_', ' ')
-                                        .toUpperCase(),
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      color: _getNotificationColor(
-                                          notification.type),
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-
-                          // Title
-                          Text(
-                            notification.title,
-                            style: theme.textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: colorScheme.onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Timestamp
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.access_time_rounded,
-                                size: 16,
-                                color: colorScheme.onSurface.withOpacity(0.5),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                _formatDateTime(notification.createdAt),
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: colorScheme.onSurface.withOpacity(0.6),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 24),
-
-                          // Message/Content
-                          if (notification.message.isNotEmpty)
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Message',
-                                  style: theme.textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: colorScheme.onSurface,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.all(16),
-                                  decoration: BoxDecoration(
-                                    color: colorScheme.surface,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: colorScheme.onSurface
-                                          .withOpacity(0.1),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    notification.message,
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: colorScheme.onSurface
-                                          .withOpacity(0.8),
-                                      height: 1.5,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
-                              ],
-                            ),
-
-                          // Details Section
-                          if (_hasDetailsToShow(notification))
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Details',
-                                  style: theme.textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: colorScheme.onSurface,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                _buildDetailsSection(
-                                    notification, colorScheme, theme),
-                                const SizedBox(height: 24),
-                              ],
-                            ),
-
-                          // Info Message
                           Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(16),
+                            width: 80,
+                            height: 80,
                             decoration: BoxDecoration(
-                              color: colorScheme.primary.withOpacity(0.08),
-                              borderRadius: BorderRadius.circular(12),
+                              color: _getNotificationColor(notification.type)
+                                  .withOpacity(0.15),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              _getNotificationIcon(notification.type),
+                              size: 40,
+                              color: _getNotificationColor(notification.type),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _getNotificationColor(notification.type)
+                                  .withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(20),
                               border: Border.all(
-                                color: colorScheme.primary.withOpacity(0.2),
+                                color: _getNotificationColor(notification.type)
+                                    .withOpacity(0.3),
                               ),
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.info_rounded,
-                                      size: 20,
-                                      color: colorScheme.primary,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Text(
-                                        'About This Notification',
-                                        style: theme.textTheme.bodyMedium
-                                            ?.copyWith(
-                                          fontWeight: FontWeight.w600,
-                                          color: colorScheme.primary,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  _getDetailMessage(notification),
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color:
-                                        colorScheme.onSurface.withOpacity(0.7),
-                                    height: 1.4,
-                                  ),
-                                ),
-                              ],
+                            child: Text(
+                              notification.type
+                                  .replaceAll('_', ' ')
+                                  .toUpperCase(),
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: _getNotificationColor(notification.type),
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 24),
+
+                    // Title
+                    Text(
+                      notification.title,
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Timestamp
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.access_time_rounded,
+                          size: 16,
+                          color: colorScheme.onSurface.withOpacity(0.5),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _formatDateTime(notification.createdAt),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurface.withOpacity(0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Message/Content
+                    if (notification.message.isNotEmpty)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Message',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: colorScheme.surface,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: colorScheme.onSurface.withOpacity(0.1),
+                              ),
+                            ),
+                            child: Text(
+                              _normalizeCurrencyText(notification.message),
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: colorScheme.onSurface.withOpacity(0.8),
+                                height: 1.5,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                        ],
+                      ),
+
+                    // Details Section
+                    if (_hasDetailsToShow(notification))
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Details',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _buildDetailsSection(
+                              notification, colorScheme, theme),
+                          const SizedBox(height: 24),
+                        ],
+                      ),
+
+                    // Info Message
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: colorScheme.primary.withOpacity(0.2),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.info_rounded,
+                                size: 20,
+                                color: colorScheme.primary,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'About This Notification',
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.primary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _getDetailMessage(notification),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurface.withOpacity(0.7),
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -409,10 +400,10 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
       details.add(MapEntry('Booking ID', notification.bookingId!));
     }
     if (notification.amount != null) {
-      details.add(MapEntry('Amount', '${notification.amount}'));
+      details.add(MapEntry('Amount', _displayAmount(notification.amount)));
     }
     if (notification.bookingPrice != null) {
-      details.add(MapEntry('Price', notification.bookingPrice!));
+      details.add(MapEntry('Price', _displayAmount(notification.bookingPrice)));
     }
 
     return Column(

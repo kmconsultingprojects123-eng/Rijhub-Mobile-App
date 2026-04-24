@@ -5,6 +5,7 @@ import '../../services/location_service.dart';
 import '../../services/token_storage.dart';
 import '../../services/artist_service.dart';
 import '../../services/api_client.dart';
+import '../../services/job_service.dart';
 import '../../state/app_state_notifier.dart';
 import '../../api_config.dart';
 import 'dart:convert';
@@ -56,9 +57,7 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
           : const Color(0xFF6B7280);
 
   Color _getSurfaceColor(BuildContext context) =>
-      Theme.of(context).brightness == Brightness.dark
-          ? const Color(0xFF1F2937)
-          : const Color(0xFFF9FAFB);
+      Theme.of(context).colorScheme.surface;
 
   Color _getBorderColor(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark
@@ -66,11 +65,10 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
           : const Color(0xFFE5E7EB);
 
   Color _getBackgroundColor(BuildContext context) =>
-      Theme.of(context).brightness == Brightness.dark
-          ? Colors.black
-          : Colors.white;
+      Theme.of(context).scaffoldBackgroundColor;
 
   // State variables
+  late Map<String, dynamic> _jobData;
   bool _loadingRole = true;
   bool _isArtisan = false;
   bool _hasApplied = false;
@@ -87,7 +85,9 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
   @override
   void initState() {
     super.initState();
+    _jobData = Map<String, dynamic>.from(widget.job);
     _initialize();
+    _refreshJobDetails();
     if (!_hasReadableLocation()) {
       _loadHumanLocation();
     }
@@ -103,18 +103,71 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
     });
   }
 
+  Map<String, dynamic> get _job => _jobData;
+
+  String _extractLocationText(Map<String, dynamic> job) {
+    final direct = [
+      job['location'],
+      job['address'],
+      job['place'],
+      job['venue'],
+      job['city'],
+      job['state'],
+    ];
+    for (final value in direct) {
+      final text = value?.toString().trim() ?? '';
+      if (text.isNotEmpty) return text;
+    }
+
+    final serviceArea = job['serviceArea'];
+    if (serviceArea is Map) {
+      final text = (serviceArea['address'] ??
+              serviceArea['location'] ??
+              serviceArea['place'])
+          ?.toString()
+          .trim();
+      if ((text ?? '').isNotEmpty) return text!;
+    }
+
+    return '';
+  }
+
+  dynamic _extractCoordinatesRaw(Map<String, dynamic> job) {
+    return job['coordinates'] ??
+        job['coords'] ??
+        job['locationCoords'] ??
+        (job['serviceArea'] is Map ? job['serviceArea']['coordinates'] : null);
+  }
+
+  Future<void> _refreshJobDetails() async {
+    final jobId = _extractJobId();
+    if (jobId == null || jobId.isEmpty) return;
+
+    try {
+      final freshJob = await JobService.getJob(jobId);
+      if (!mounted || freshJob.isEmpty) return;
+      setState(() {
+        _jobData = Map<String, dynamic>.from(freshJob);
+      });
+      if (!_hasReadableLocation()) {
+        await _loadHumanLocation();
+      }
+      if (!_hasPostedByName()) {
+        await _loadPostedBy();
+      }
+    } catch (e) {
+      debugPrint('JobDetails.refreshJobDetails error: $e');
+    }
+  }
+
   bool _hasReadableLocation() {
-    final location =
-        (widget.job['location'] ?? widget.job['address'] ?? widget.job['place'])
-                ?.toString()
-                .trim() ??
-            '';
+    final location = _extractLocationText(_job);
     if (location.isEmpty) return false;
     return !RegExp(r'^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$').hasMatch(location);
   }
 
   bool _hasPostedByName() {
-    final clientDetails = widget.job['clientDetails'];
+    final clientDetails = _job['clientDetails'];
     if (clientDetails is Map) {
       final name = (clientDetails['name'] ??
                   clientDetails['fullName'] ??
@@ -125,8 +178,7 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
       if (name.isNotEmpty) return true;
     }
     final clientName =
-        (widget.job['clientName'] ?? widget.job['client'])?.toString().trim() ??
-            '';
+        (_job['clientName'] ?? _job['client'])?.toString().trim() ?? '';
     return clientName.isNotEmpty;
   }
 
@@ -267,9 +319,7 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
 
   Future<void> _loadHumanLocation() async {
     try {
-      final coordsRaw = widget.job['coordinates'] ??
-          widget.job['coords'] ??
-          widget.job['locationCoords'];
+      final coordsRaw = _extractCoordinatesRaw(_job);
       double? lat, lon;
       if (coordsRaw is List && coordsRaw.length >= 2) {
         lat = coordsRaw[1] is num
@@ -436,7 +486,7 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
       final id = _extractUserIdFromProfile(profile);
 
       // Check if user is job owner
-      final clientId = _extractClientId(widget.job);
+      final clientId = _extractClientId(_job);
       final isOwner = id != null && clientId != null && id == clientId;
 
       setState(() {
@@ -454,7 +504,7 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
   }
 
   String? _extractJobId() {
-    return widget.job['_id'] ?? widget.job['id'] ?? widget.job['jobId'];
+    return _job['_id'] ?? _job['id'] ?? _job['jobId'];
   }
 
   Future<void> _checkIfApplied({String? myId}) async {
@@ -585,15 +635,14 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
   }
 
   bool _isJobClosed() {
-    final status = (widget.job['status'] ?? '').toString().toLowerCase();
+    final status = (_job['status'] ?? '').toString().toLowerCase();
     return status == 'closed' || status == 'done' || status == 'inactive';
   }
 
   bool _isJobPaid() {
     try {
-      final booking = widget.job['booking'] ??
-          widget.job['bookingData'] ??
-          widget.job['booking_data'];
+      final booking =
+          _job['booking'] ?? _job['bookingData'] ?? _job['booking_data'];
       if (booking != null) {
         final paymentStatus = booking['paymentStatus'] ??
             (booking['payment'] is Map
@@ -606,7 +655,7 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
         return paymentStatus == true;
       }
 
-      final paymentStatus = widget.job['paymentStatus'];
+      final paymentStatus = _job['paymentStatus'];
       if (paymentStatus is String)
         return paymentStatus.toLowerCase().contains('paid');
     } catch (_) {}
@@ -615,10 +664,8 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
 
   List<String> _extractTrades() {
     try {
-      final tradeData = widget.job['trade'] ??
-          widget.job['trades'] ??
-          widget.job['skill'] ??
-          widget.job['skills'];
+      final tradeData =
+          _job['trade'] ?? _job['trades'] ?? _job['skill'] ?? _job['skills'];
       if (tradeData == null) return [];
       if (tradeData is String) {
         return tradeData
@@ -642,7 +689,7 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
   }
 
   void _openApplicantsPage(BuildContext context) {
-    final jobId = widget.job['_id'] ?? widget.job['id'] ?? widget.job['jobId'];
+    final jobId = _job['_id'] ?? _job['id'] ?? _job['jobId'];
     if (jobId == null) {
       AppNotification.showError(context, 'Job ID not found');
       return;
@@ -659,7 +706,7 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
   }
 
   Future<void> _openSubmitQuotePage(BuildContext context) async {
-    final jobId = widget.job['_id'] ?? widget.job['id'] ?? widget.job['jobId'];
+    final jobId = _job['_id'] ?? _job['id'] ?? _job['jobId'];
     if (jobId == null) {
       AppNotification.showError(context, 'Job ID not found');
       return;
@@ -681,7 +728,7 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final job = widget.job;
+    final job = _job;
     final title =
         (job['title'] ?? job['jobTitle'] ?? 'Untitled Job').toString();
     final description = (job['description'] ?? job['details'] ?? '').toString();
@@ -697,10 +744,8 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
         ? (job['categoryDetails']['name'] ?? job['categoryDetails']['title'])
             ?.toString()
         : (job['category'] ?? job['categoryId'])?.toString();
-    final location =
-        (job['location'] ?? job['address'] ?? job['place'])?.toString();
-    final coordsRaw =
-        job['coordinates'] ?? job['coords'] ?? job['locationCoords'];
+    final location = _extractLocationText(job);
+    final coordsRaw = _extractCoordinatesRaw(job);
     final formattedLocation =
         _formatCoordinatesToLocation(coordsRaw) ?? location;
     final locationLabel = _humanLocation ?? formattedLocation ?? '';
@@ -1039,7 +1084,7 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
                                     : (_postedByName ??
                                         (clientName != null
                                             ? clientName.toString()
-                                            : (_extractClientId(widget.job) ??
+                                            : (_extractClientId(_job) ??
                                                 'Unknown'))),
                                 style: TextStyle(
                                   fontSize: 14,
@@ -1488,7 +1533,7 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
 
   Future<void> _loadPostedBy() async {
     try {
-      final clientId = _extractClientId(widget.job);
+      final clientId = _extractClientId(_job);
       if (clientId == null || clientId.isEmpty) return;
       final cached = _userNameCache[clientId];
       if (cached != null && cached.isNotEmpty) {

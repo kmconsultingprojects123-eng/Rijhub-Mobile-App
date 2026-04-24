@@ -16,14 +16,15 @@ class ArtisanJobsHistoryWidget extends StatefulWidget {
   static String routePath = '/artisanJobsHistory';
 
   @override
-  State<ArtisanJobsHistoryWidget> createState() => _ArtisanJobsHistoryWidgetState();
+  State<ArtisanJobsHistoryWidget> createState() =>
+      _ArtisanJobsHistoryWidgetState();
 }
 
 class _ArtisanJobsHistoryWidgetState extends State<ArtisanJobsHistoryWidget> {
   // Design system colors
   final Color _primaryColor = const Color(0xFFA20025);
-  final Color _surfaceColorLight = const Color(0xFFF9FAFB);
-  final Color _surfaceColorDark = const Color(0xFF1F2937);
+  final Color _surfaceColorLight = const Color(0xFFF8F9FA);
+  final Color _surfaceColorDark = const Color(0xFF1E1E1E);
   final Color _textPrimaryLight = const Color(0xFF111827);
   final Color _textPrimaryDark = Colors.white;
   final Color _textSecondaryLight = const Color(0xFF6B7280);
@@ -78,10 +79,11 @@ class _ArtisanJobsHistoryWidgetState extends State<ArtisanJobsHistoryWidget> {
       if (profile != null &&
           profile['role'] != null &&
           profile['role'].toString().toLowerCase().contains('artisan')) {
-
-        final artisanId = (profile['_id'] ?? profile['id'] ?? profile['userId'])?.toString();
+        final artisanId =
+            (profile['_id'] ?? profile['id'] ?? profile['userId'])?.toString();
         if (artisanId != null && artisanId.isNotEmpty) {
-          final bookings = await ArtistService.fetchArtisanBookings(artisanId, page: 1, limit: 100);
+          final bookings = await ArtistService.fetchArtisanBookings(artisanId,
+              page: 1, limit: 100);
           jobList = List<Map<String, dynamic>>.from(bookings);
         }
       } else {
@@ -104,7 +106,10 @@ class _ArtisanJobsHistoryWidgetState extends State<ArtisanJobsHistoryWidget> {
             .toString()
             .toLowerCase();
         final paymentStatus = (booking['paymentStatus'] ??
-            (booking['payment'] is Map ? booking['payment']['status'] : null) ?? '')
+                (booking['payment'] is Map
+                    ? booking['payment']['status']
+                    : null) ??
+                '')
             .toString()
             .toLowerCase();
 
@@ -117,24 +122,26 @@ class _ArtisanJobsHistoryWidgetState extends State<ArtisanJobsHistoryWidget> {
       // Apply search filter
       final filteredJobs = query != null && query.isNotEmpty
           ? completedJobs.where((job) {
-        final Map<String, dynamic> jobMap = Map<String, dynamic>.from(job);
-        final booking = jobMap['booking'] is Map
-            ? Map<String, dynamic>.from(jobMap['booking'])
-            : jobMap;
+              final Map<String, dynamic> jobMap =
+                  Map<String, dynamic>.from(job);
+              final booking = jobMap['booking'] is Map
+                  ? Map<String, dynamic>.from(jobMap['booking'])
+                  : jobMap;
 
-        final title = (booking['service'] ??
-            booking['title'] ??
-            booking['jobTitle'] ?? '')
-            .toString()
-            .toLowerCase();
-        final description = (booking['description'] ??
-            booking['details'] ?? '')
-            .toString()
-            .toLowerCase();
+              final title = (booking['service'] ??
+                      booking['title'] ??
+                      booking['jobTitle'] ??
+                      '')
+                  .toString()
+                  .toLowerCase();
+              final description =
+                  (booking['description'] ?? booking['details'] ?? '')
+                      .toString()
+                      .toLowerCase();
 
-        return title.contains(query.toLowerCase()) ||
-            description.contains(query.toLowerCase());
-      }).toList()
+              return title.contains(query.toLowerCase()) ||
+                  description.contains(query.toLowerCase());
+            }).toList()
           : completedJobs;
 
       if (mounted) {
@@ -147,10 +154,10 @@ class _ArtisanJobsHistoryWidgetState extends State<ArtisanJobsHistoryWidget> {
       if (mounted) {
         setState(() {
           _error = ErrorMessages.humanize(e);
-           _loading = false;
-         });
-       }
-     }
+          _loading = false;
+        });
+      }
+    }
   }
 
   Color _getSurfaceColor(BuildContext context) {
@@ -190,24 +197,28 @@ class _ArtisanJobsHistoryWidgetState extends State<ArtisanJobsHistoryWidget> {
         : Map<String, dynamic>.from(job);
 
     final title = (booking['service'] ??
-        booking['title'] ??
-        booking['jobTitle'] ??
-        job['title'] ?? 'Untitled Job')
+            booking['title'] ??
+            booking['jobTitle'] ??
+            job['title'] ??
+            'Untitled Job')
         .toString();
 
     final description = (booking['description'] ??
-        booking['details'] ??
-        job['description'] ?? '')
+            booking['details'] ??
+            job['description'] ??
+            '')
         .toString();
 
     // Format date
     String formattedDate = '';
     try {
       final rawDate = (booking['createdAt'] ??
-          booking['created_at'] ??
-          booking['created'] ??
-          job['createdAt'] ??
-          job['created'])?.toString() ?? '';
+                  booking['created_at'] ??
+                  booking['created'] ??
+                  job['createdAt'] ??
+                  job['created'])
+              ?.toString() ??
+          '';
       final date = DateTime.tryParse(rawDate);
       if (date != null) {
         formattedDate = DateFormat('MMM dd, yyyy').format(date.toLocal());
@@ -224,7 +235,8 @@ class _ArtisanJobsHistoryWidgetState extends State<ArtisanJobsHistoryWidget> {
       try {
         final numVal = (priceData is num)
             ? priceData
-            : num.tryParse(priceData.toString().replaceAll(RegExp(r'[^0-9.-]'), ''));
+            : num.tryParse(
+                priceData.toString().replaceAll(RegExp(r'[^0-9.-]'), ''));
         if (numVal != null) {
           priceText = '₦${NumberFormat('#,##0', 'en_US').format(numVal)}';
         }
@@ -242,8 +254,9 @@ class _ArtisanJobsHistoryWidgetState extends State<ArtisanJobsHistoryWidget> {
 
       if (customer is Map) {
         customerName = (customer['name'] ??
-            customer['fullName'] ??
-            customer['username'] ?? '')
+                customer['fullName'] ??
+                customer['username'] ??
+                '')
             .toString();
 
         final avatarData = customer['profileImage'];
@@ -273,9 +286,8 @@ class _ArtisanJobsHistoryWidgetState extends State<ArtisanJobsHistoryWidget> {
     } catch (_) {}
 
     // Determine status and color
-    final statusRaw = (booking['status'] ?? job['status'] ?? '')
-        .toString()
-        .toLowerCase();
+    final statusRaw =
+        (booking['status'] ?? job['status'] ?? '').toString().toLowerCase();
 
     Color statusColor = textSecondary;
     String statusText = 'Unknown';
@@ -283,10 +295,14 @@ class _ArtisanJobsHistoryWidgetState extends State<ArtisanJobsHistoryWidget> {
     if (statusRaw.contains('closed') ||
         statusRaw.contains('completed') ||
         statusRaw.contains('done') ||
-        (booking['paymentStatus'] ?? '').toString().toLowerCase().contains('paid')) {
+        (booking['paymentStatus'] ?? '')
+            .toString()
+            .toLowerCase()
+            .contains('paid')) {
       statusColor = _successColor;
       statusText = 'Completed';
-    } else if (statusRaw.contains('pending') || statusRaw.contains('accepted')) {
+    } else if (statusRaw.contains('pending') ||
+        statusRaw.contains('accepted')) {
       statusColor = _warningColor;
       statusText = 'Pending';
     } else {
@@ -388,12 +404,12 @@ class _ArtisanJobsHistoryWidgetState extends State<ArtisanJobsHistoryWidget> {
         boxShadow: isDark
             ? []
             : [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.02),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -446,7 +462,9 @@ class _ArtisanJobsHistoryWidgetState extends State<ArtisanJobsHistoryWidget> {
                         children: [
                           Expanded(
                             child: Text(
-                              customerName.isNotEmpty ? customerName : 'Customer',
+                              customerName.isNotEmpty
+                                  ? customerName
+                                  : 'Customer',
                               style: TextStyle(
                                 fontSize: 14,
                                 color: textSecondary,
@@ -752,16 +770,16 @@ class _ArtisanJobsHistoryWidgetState extends State<ArtisanJobsHistoryWidget> {
                     ),
                     suffixIcon: _searchController.text.isNotEmpty
                         ? IconButton(
-                      icon: Icon(
-                        Icons.clear_rounded,
-                        size: 18,
-                        color: textSecondary,
-                      ),
-                      onPressed: () {
-                        _searchController.clear();
-                        _loadJobs();
-                      },
-                    )
+                            icon: Icon(
+                              Icons.clear_rounded,
+                              size: 18,
+                              color: textSecondary,
+                            ),
+                            onPressed: () {
+                              _searchController.clear();
+                              _loadJobs();
+                            },
+                          )
                         : null,
                   ),
                 ),
@@ -773,65 +791,67 @@ class _ArtisanJobsHistoryWidgetState extends State<ArtisanJobsHistoryWidget> {
               Expanded(
                 child: _loading
                     ? ListView.builder(
-                  itemCount: 3,
-                  itemBuilder: (context, index) => _buildSkeletonCard(context),
-                )
+                        itemCount: 3,
+                        itemBuilder: (context, index) =>
+                            _buildSkeletonCard(context),
+                      )
                     : _error != null
-                    ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.error_outline_rounded,
-                          size: 48,
-                          color: _errorColor,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Failed to load jobs',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: textPrimary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _error!,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: textSecondary,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _loadJobs,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _primaryColor,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 12,
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(32),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.error_outline_rounded,
+                                    size: 48,
+                                    color: _errorColor,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'Failed to load jobs',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: textPrimary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    _error!,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: textSecondary,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  ElevatedButton(
+                                    onPressed: _loadJobs,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: _primaryColor,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 24,
+                                        vertical: 12,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                    child: const Text('Try Again'),
+                                  ),
+                                ],
+                              ),
                             ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text('Try Again'),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-                    : _jobs.isEmpty
-                    ? _buildEmptyState(context)
-                    : ListView.builder(
-                  itemCount: _jobs.length,
-                  itemBuilder: (context, index) => _buildJobCard(context, _jobs[index]),
-                ),
+                          )
+                        : _jobs.isEmpty
+                            ? _buildEmptyState(context)
+                            : ListView.builder(
+                                itemCount: _jobs.length,
+                                itemBuilder: (context, index) =>
+                                    _buildJobCard(context, _jobs[index]),
+                              ),
               ),
             ],
           ),
@@ -840,4 +860,3 @@ class _ArtisanJobsHistoryWidgetState extends State<ArtisanJobsHistoryWidget> {
     );
   }
 }
-

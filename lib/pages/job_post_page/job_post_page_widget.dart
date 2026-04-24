@@ -218,6 +218,19 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
     super.dispose();
   }
 
+  Color _getPrimaryColor(BuildContext context) =>
+      Theme.of(context).colorScheme.primary;
+  Color _getTextPrimary(BuildContext context) =>
+      Theme.of(context).colorScheme.onSurface;
+  Color _getTextSecondary(BuildContext context) =>
+      Theme.of(context).disabledColor;
+  Color _getBorderColor(BuildContext context) =>
+      Theme.of(context).colorScheme.outline;
+  Color _getSurfaceColor(BuildContext context) =>
+      Theme.of(context).scaffoldBackgroundColor;
+  Color _getMutedSurface(BuildContext context) =>
+      Theme.of(context).colorScheme.surface;
+
   Future<void> _fetchJobs({String? query, bool forceRefresh = false}) async {
     // Use server-side pagination: reset page and dedupe tracking
     if (mounted) {
@@ -348,16 +361,18 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
   }
 
   Widget _buildSkeletonCard() {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final textPrimary = _getTextPrimary(context);
+    final surface = _getSurfaceColor(context);
+    final border = _getBorderColor(context);
+    final shimmer = textPrimary.withAlpha((0.08 * 255).toInt());
 
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: colorScheme.surface,
+        color: surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: colorScheme.onSurface.withAlpha((0.1 * 255).toInt()),
+          color: border,
           width: 1,
         ),
       ),
@@ -370,7 +385,7 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
             height: 16,
             width: 180,
             decoration: BoxDecoration(
-              color: colorScheme.onSurface.withAlpha((0.08 * 255).toInt()),
+              color: shimmer,
               borderRadius: BorderRadius.circular(6),
             ),
           ),
@@ -381,7 +396,7 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
             height: 12,
             width: 100,
             decoration: BoxDecoration(
-              color: colorScheme.onSurface.withAlpha((0.06 * 255).toInt()),
+              color: shimmer,
               borderRadius: BorderRadius.circular(4),
             ),
           ),
@@ -392,7 +407,7 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
             height: 14,
             width: double.infinity,
             decoration: BoxDecoration(
-              color: colorScheme.onSurface.withAlpha((0.08 * 255).toInt()),
+              color: shimmer,
               borderRadius: BorderRadius.circular(4),
             ),
           ),
@@ -401,7 +416,7 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
             height: 14,
             width: 280,
             decoration: BoxDecoration(
-              color: colorScheme.onSurface.withAlpha((0.08 * 255).toInt()),
+              color: shimmer,
               borderRadius: BorderRadius.circular(4),
             ),
           ),
@@ -418,8 +433,7 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                     height: 14,
                     width: 80,
                     decoration: BoxDecoration(
-                      color:
-                          colorScheme.onSurface.withAlpha((0.08 * 255).toInt()),
+                      color: shimmer,
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
@@ -428,8 +442,7 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                     height: 12,
                     width: 120,
                     decoration: BoxDecoration(
-                      color:
-                          colorScheme.onSurface.withAlpha((0.06 * 255).toInt()),
+                      color: shimmer,
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
@@ -439,7 +452,7 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                 height: 36,
                 width: 110,
                 decoration: BoxDecoration(
-                  color: colorScheme.onSurface.withAlpha((0.08 * 255).toInt()),
+                  color: shimmer,
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
@@ -470,7 +483,12 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
     }
 
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final primaryColor = _getPrimaryColor(context);
+    final textPrimary = _getTextPrimary(context);
+    final textSecondary = _getTextSecondary(context);
+    final borderColor = _getBorderColor(context);
+    final surface = _getSurfaceColor(context);
+    final mutedSurface = _getMutedSurface(context);
 
     return GestureDetector(
       onTap: () {
@@ -479,8 +497,7 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
       },
       child: Scaffold(
         key: scaffoldKey,
-        // Use surface so the page background follows the theme surface color
-        backgroundColor: colorScheme.surface,
+        backgroundColor: surface,
         body: SafeArea(
           child: Column(
             children: [
@@ -491,8 +508,7 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                 decoration: BoxDecoration(
                   border: Border(
                     bottom: BorderSide(
-                      color:
-                          colorScheme.onSurface.withAlpha((0.1 * 255).toInt()),
+                      color: borderColor,
                       width: 1,
                     ),
                   ),
@@ -507,6 +523,7 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                       style: theme.textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w500,
                         fontSize: 18,
+                        color: textPrimary,
                       ),
                     ),
                     const SizedBox(width: 48), // For balance
@@ -523,7 +540,7 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                     _currentQuery = '';
                     await _fetchJobs(forceRefresh: true);
                   },
-                  color: colorScheme.primary,
+                  color: primaryColor,
                   child: ListView.builder(
                     controller: _scrollController,
                     padding: EdgeInsets.only(
@@ -555,20 +572,22 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                                 obscureText: false,
                                 decoration: InputDecoration(
                                   hintText: 'Search jobs...',
-                                  hintStyle: TextStyle(
-                                    color: colorScheme.onSurface
-                                        .withAlpha((0.4 * 255).toInt()),
-                                  ),
+                                  hintStyle: TextStyle(color: textSecondary),
                                   filled: true,
-                                  fillColor: colorScheme.surface,
+                                  fillColor: mutedSurface,
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12.0),
-                                    borderSide: BorderSide.none,
+                                    borderSide: BorderSide(color: borderColor),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12.0),
+                                    borderSide: BorderSide(
+                                        color: borderColor, width: 1),
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12.0),
                                     borderSide: BorderSide(
-                                      color: colorScheme.primary,
+                                      color: primaryColor,
                                       width: 1.5,
                                     ),
                                   ),
@@ -578,8 +597,7 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                                   ),
                                   prefixIcon: Icon(
                                     Icons.search_rounded,
-                                    color: colorScheme.onSurface
-                                        .withAlpha((0.4 * 255).toInt()),
+                                    color: textSecondary,
                                     size: 20.0,
                                   ),
                                   suffixIcon: _model
@@ -587,8 +605,7 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                                       ? IconButton(
                                           icon: Icon(
                                             Icons.clear_rounded,
-                                            color: colorScheme.onSurface
-                                                .withAlpha((0.4 * 255).toInt()),
+                                            color: textSecondary,
                                             size: 20.0,
                                           ),
                                           onPressed: () {
@@ -616,7 +633,7 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                                       : null,
                                 ),
                                 style: TextStyle(
-                                  color: colorScheme.onSurface,
+                                  color: textPrimary,
                                   fontSize: 16,
                                 ),
                                 validator: _model.textControllerValidator
@@ -640,8 +657,8 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                                       child: Text('Available Jobs',
                                           style: theme.textTheme.titleLarge
                                               ?.copyWith(
-                                                  fontWeight:
-                                                      FontWeight.w600))),
+                                                  fontWeight: FontWeight.w600,
+                                                  color: textPrimary))),
                                   Row(children: [
                                     OutlinedButton(
                                       onPressed: () async {
@@ -671,10 +688,9 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                                         }
                                       },
                                       style: OutlinedButton.styleFrom(
-                                        foregroundColor: colorScheme.primary,
+                                        foregroundColor: primaryColor,
                                         side: BorderSide(
-                                            color: colorScheme.primary,
-                                            width: 1),
+                                            color: primaryColor, width: 1),
                                         shape: RoundedRectangleBorder(
                                             borderRadius:
                                                 BorderRadius.circular(10)),
@@ -744,9 +760,8 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                                           } catch (_) {}
                                         },
                                         style: ElevatedButton.styleFrom(
-                                          backgroundColor: colorScheme.primary,
-                                          foregroundColor:
-                                              colorScheme.onPrimary,
+                                          backgroundColor: primaryColor,
+                                          foregroundColor: Colors.white,
                                           shape: RoundedRectangleBorder(
                                               borderRadius:
                                                   BorderRadius.circular(10)),
@@ -791,18 +806,16 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                             child: Column(
                               children: [
                                 Icon(Icons.work_outline,
-                                    size: 56,
-                                    color: colorScheme.onSurface
-                                        .withAlpha((0.4 * 255).toInt())),
+                                    size: 56, color: textSecondary),
                                 const SizedBox(height: 12),
                                 Text('No jobs found',
-                                    style: theme.textTheme.titleMedium),
+                                    style: theme.textTheme.titleMedium
+                                        ?.copyWith(color: textPrimary)),
                                 const SizedBox(height: 8),
                                 Text(
                                     'Try a different search or pull to refresh',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                        color: colorScheme.onSurface
-                                            .withAlpha((0.6 * 255).toInt()))),
+                                    style: theme.textTheme.bodySmall
+                                        ?.copyWith(color: textSecondary)),
                                 const SizedBox(height: 20),
                                 if (_hasMore)
                                   ElevatedButton(
@@ -822,10 +835,11 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                             child: Column(
                               children: [
                                 Icon(Icons.error_outline,
-                                    size: 56, color: colorScheme.error),
+                                    size: 56, color: const Color(0xFFEF4444)),
                                 const SizedBox(height: 12),
                                 Text('Failed to load jobs',
-                                    style: theme.textTheme.titleMedium),
+                                    style: theme.textTheme.titleMedium
+                                        ?.copyWith(color: textPrimary)),
                                 const SizedBox(height: 8),
                                 ElevatedButton(
                                     onPressed: () {
@@ -918,11 +932,10 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                           child: Container(
                             width: double.infinity,
                             decoration: BoxDecoration(
-                              color: colorScheme.surface,
+                              color: surface,
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
-                                color: colorScheme.onSurface
-                                    .withAlpha((0.1 * 255).toInt()),
+                                color: borderColor,
                                 width: 1,
                               ),
                             ),
@@ -957,10 +970,7 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                                               postedText,
                                               style: theme.textTheme.bodySmall
                                                   ?.copyWith(
-                                                      color: colorScheme
-                                                          .onSurface
-                                                          .withAlpha((0.6 * 255)
-                                                              .toInt())),
+                                                      color: textSecondary),
                                             ),
                                           ],
                                         ),
@@ -971,10 +981,11 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                                             horizontal: 12, vertical: 6),
                                         decoration: BoxDecoration(
                                           color: isOpen
-                                              ? colorScheme.primary.withAlpha(
+                                              ? primaryColor.withAlpha(
                                                   (0.1 * 255).toInt())
-                                              : colorScheme.error.withAlpha(
-                                                  (0.1 * 255).toInt()),
+                                              : const Color(0xFFEF4444)
+                                                  .withAlpha(
+                                                      (0.1 * 255).toInt()),
                                           borderRadius:
                                               BorderRadius.circular(20),
                                         ),
@@ -983,8 +994,8 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                                           style: theme.textTheme.bodySmall
                                               ?.copyWith(
                                             color: isOpen
-                                                ? colorScheme.primary
-                                                : colorScheme.error,
+                                                ? primaryColor
+                                                : const Color(0xFFEF4444),
                                             fontWeight: FontWeight.w600,
                                           ),
                                         ),
@@ -999,9 +1010,8 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                                     desc,
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                        color: colorScheme.onSurface
-                                            .withAlpha((0.8 * 255).toInt())),
+                                    style: theme.textTheme.bodyMedium
+                                        ?.copyWith(color: textSecondary),
                                   ),
 
                                   const SizedBox(height: 20),
@@ -1022,8 +1032,7 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                                                   ?.copyWith(
                                                       fontWeight:
                                                           FontWeight.w700,
-                                                      color:
-                                                          colorScheme.primary),
+                                                      color: primaryColor),
                                             ),
                                             const SizedBox(height: 4),
                                             // Constrain location text to at most 2 lines and ellipsize to avoid pushing the action button
@@ -1033,10 +1042,7 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                                               overflow: TextOverflow.ellipsis,
                                               style: theme.textTheme.bodySmall
                                                   ?.copyWith(
-                                                      color: colorScheme
-                                                          .onSurface
-                                                          .withAlpha((0.6 * 255)
-                                                              .toInt())),
+                                                      color: textSecondary),
                                             ),
                                           ],
                                         ),
@@ -1049,9 +1055,8 @@ class _JobPostPageWidgetState extends State<JobPostPageWidget> {
                                               extra: {'job': job});
                                         },
                                         style: ElevatedButton.styleFrom(
-                                          backgroundColor: colorScheme.primary,
-                                          foregroundColor:
-                                              colorScheme.onPrimary,
+                                          backgroundColor: primaryColor,
+                                          foregroundColor: Colors.white,
                                           shape: RoundedRectangleBorder(
                                               borderRadius:
                                                   BorderRadius.circular(8)),

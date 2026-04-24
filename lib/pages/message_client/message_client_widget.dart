@@ -56,6 +56,7 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
   String? _currentUserId;
   String? _currentUserRole;
   String? _threadId;
+  String? _currentUserImageUrl;
   String? _participantImageUrl;
   String? _participantName;
   String? _participantId;
@@ -530,8 +531,11 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       _currentUserId =
           profile?['_id']?.toString() ?? profile?['id']?.toString();
       _currentUserRole = profile?['role']?.toString();
+      _currentUserImageUrl =
+          profile != null ? _extractParticipantImage(profile) : null;
     } catch (_) {
       _currentUserId = null;
+      _currentUserImageUrl = null;
     }
 
     // Emit presence online when we know our user id and socket is ready
@@ -2350,14 +2354,12 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                   if (isMe)
                     Padding(
                       padding: const EdgeInsets.only(left: 8.0),
-                      child: CircleAvatar(
+                      child: _buildProfileAvatar(
+                        imageUrl: _resolveMessageAvatarUrl(m, isMe: isMe),
                         radius: screenWidth < 360 ? 14 : 18,
                         backgroundColor: theme.primary.withOpacity(0.1),
-                        child: Icon(
-                          Icons.person,
-                          size: screenWidth < 360 ? 14 : 18,
-                          color: theme.primary,
-                        ),
+                        iconColor: theme.primary,
+                        iconSize: screenWidth < 360 ? 14 : 18,
                       ),
                     ),
                 ],
@@ -2407,6 +2409,16 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
         _participantImageUrl != null &&
         _participantImageUrl!.isNotEmpty) {
       normalized['senderImageUrl'] = _participantImageUrl;
+    } else if ((normalized['senderImageUrl'] == null ||
+            normalized['senderImageUrl'].toString().trim().isEmpty) &&
+        senderId != null &&
+        senderId.isNotEmpty &&
+        _currentUserId != null &&
+        _currentUserId!.isNotEmpty &&
+        senderId == _currentUserId &&
+        _currentUserImageUrl != null &&
+        _currentUserImageUrl!.isNotEmpty) {
+      normalized['senderImageUrl'] = _currentUserImageUrl;
     }
 
     return normalized;
@@ -2416,8 +2428,6 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
     Map<String, dynamic> message, {
     required bool isMe,
   }) {
-    if (isMe) return null;
-
     final direct = _normalizeImageUrl(message['senderImageUrl']);
     if (direct != null && direct.isNotEmpty) return direct;
 
@@ -2427,6 +2437,14 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
           _extractParticipantImage(Map<String, dynamic>.from(sender));
       if (nested != null && nested.isNotEmpty) return nested;
     }
+
+    if (isMe &&
+        _currentUserImageUrl != null &&
+        _currentUserImageUrl!.isNotEmpty) {
+      return _currentUserImageUrl;
+    }
+
+    if (isMe) return null;
 
     return _participantImageUrl;
   }
@@ -2580,6 +2598,31 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       );
     }
 
+    final appBarTitle =
+        (widget.jobTitle != null && widget.jobTitle!.trim().isNotEmpty)
+            ? widget.jobTitle!.trim()
+            : ((_participantName != null && _participantName!.trim().isNotEmpty)
+                ? _participantName!.trim()
+                : 'Chat');
+    final appBarMeta = <String>[
+      if (_participantName != null &&
+          _participantName!.trim().isNotEmpty &&
+          _participantName!.trim() != appBarTitle)
+        _participantName!.trim(),
+      if ((_bookingPriceFromThread ?? widget.bookingPrice) != null &&
+          (_bookingPriceFromThread ?? widget.bookingPrice)!
+              .toString()
+              .trim()
+              .isNotEmpty)
+        (_bookingPriceFromThread ?? widget.bookingPrice)!.toString().trim(),
+      if (widget.bookingDateTime != null &&
+          widget.bookingDateTime!.trim().isNotEmpty)
+        widget.bookingDateTime!.trim(),
+      if (_bookingStatusFromThread != null &&
+          _bookingStatusFromThread!.trim().isNotEmpty)
+        _bookingStatusFromThread!.trim(),
+    ];
+
     return GestureDetector(
       onTap: () {
         FocusScope.of(context).unfocus();
@@ -2640,7 +2683,7 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _participantName ?? widget.jobTitle ?? 'Chat',
+                      appBarTitle,
                       overflow: TextOverflow.ellipsis,
                       style: theme.titleMedium.override(
                         fontFamily: 'Inter',
@@ -2648,18 +2691,9 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    if (((_bookingPriceFromThread ?? widget.bookingPrice) !=
-                            null) ||
-                        widget.bookingDateTime != null ||
-                        _bookingStatusFromThread != null)
+                    if (appBarMeta.isNotEmpty)
                       Text(
-                        [
-                          _bookingPriceFromThread ?? widget.bookingPrice,
-                          widget.bookingDateTime,
-                          _bookingStatusFromThread,
-                        ]
-                            .where((e) => e != null && e.toString().isNotEmpty)
-                            .join(' • '),
+                        appBarMeta.join(' • '),
                         overflow: TextOverflow.ellipsis,
                         style: theme.bodySmall.override(
                           fontFamily: 'Inter',
