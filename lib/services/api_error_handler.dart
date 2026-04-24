@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'token_storage.dart';
+import '../utils/status_mapper.dart';
+import '../utils/app_notification.dart';
 
 /// Minimal, reusable API error handling and safe http wrappers for the project.
 ///
@@ -32,21 +34,6 @@ class ApiResponse {
 }
 
 class ApiErrorHandler {
-  // Map of HTTP status codes to friendly messages
-  static const Map<int, String> _statusMessages = {
-    400: 'Some of the information you entered is incorrect.',
-    401: 'Your session has expired. Please log in again.',
-    403: 'You don\'t have permission to do this.',
-    404: 'We couldn\'t find what you were looking for.',
-    413: 'This file is too large. Please upload a file smaller than 5MB.',
-    422: 'Some of your input is invalid.',
-    429: 'You are sending too many requests. Please wait a moment.',
-    500: 'Something went wrong on our side.',
-    502: 'Our service is temporarily unavailable. Please try again.',
-    503: 'Our service is temporarily unavailable. Please try again.',
-    504: 'Our service is temporarily unavailable. Please try again.',
-  };
-
   /// Convert a raw exception or http.Response into a friendly message and an ApiResponse
   static ApiResponse fromException(Object error, {String? url}) {
     final String technical = _technicalForException(error, url: url);
@@ -78,12 +65,22 @@ class ApiErrorHandler {
     if (_isHtml(body) || (resp.headers['content-type']?.contains('text/html') ?? false)) {
       // Map common server HTML pages to friendly messages (especially file upload 413)
       if (status == 413 || body.toLowerCase().contains('request entity too large')) {
-        return ApiResponse(ok: false, statusCode: status, message: _statusMessages[413]!, raw: technical);
+        return ApiResponse(
+          ok: false,
+          statusCode: status,
+          message: StatusMapper.getError(413),
+          raw: technical,
+        );
       }
 
       // Generic server unavailable
       if (status == 502 || status == 503 || status == 504) {
-        return ApiResponse(ok: false, statusCode: status, message: _statusMessages[status]!, raw: technical);
+        return ApiResponse(
+          ok: false,
+          statusCode: status,
+          message: StatusMapper.getError(status),
+          raw: technical,
+        );
       }
 
       return ApiResponse(ok: false, statusCode: status, message: _friendlyForStatus(status), raw: technical);
@@ -96,14 +93,26 @@ class ApiErrorHandler {
     } catch (e) {
       // Not JSON - if success code return raw, otherwise map to friendly
       if (status >= 200 && status < 300) {
-        return ApiResponse(ok: true, statusCode: status, data: body, message: 'OK', raw: technical);
+        return ApiResponse(
+          ok: true,
+          statusCode: status,
+          data: body,
+          message: StatusMapper.getLabel(status),
+          raw: technical,
+        );
       }
       return ApiResponse(ok: false, statusCode: status, message: _friendlyForStatus(status), raw: technical);
     }
 
     // If status is success, return decoded
     if (status >= 200 && status < 300) {
-      return ApiResponse(ok: true, statusCode: status, data: decoded, message: 'OK', raw: technical);
+      return ApiResponse(
+        ok: true,
+        statusCode: status,
+        data: decoded,
+        message: StatusMapper.getLabel(status),
+        raw: technical,
+      );
     }
 
     // Non-success JSON response: map known status codes and try to extract server message safely
@@ -126,14 +135,14 @@ class ApiErrorHandler {
 
     // File upload specific handling
     if (isFileUpload && (status == 413 || (body.toLowerCase().contains('request entity too large')))) {
-      friendly = _statusMessages[413]!;
+      friendly = StatusMapper.getError(413);
     }
 
     return ApiResponse(ok: false, statusCode: status, data: decoded, message: friendly, raw: technical);
   }
 
   static String _friendlyForStatus(int status) {
-    return _statusMessages[status] ?? 'Something went wrong. Please try again.';
+    return StatusMapper.getError(status);
   }
 
   static bool _isHtml(String body) {
@@ -165,10 +174,19 @@ class ApiErrorHandler {
   }
 
   /// Helper to show a friendly message in the UI. Prefer SnackBar but caller can override.
-  static void showUserMessage(BuildContext context, String message, {Duration duration = const Duration(seconds: 4)}) {
+  static void showUserMessage(
+    BuildContext context,
+    String message, {
+    int? statusCode,
+    Duration? duration,
+  }) {
     try {
-      ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), duration: duration));
+      AppNotification.showForStatus(
+        context,
+        statusCode: statusCode,
+        message: message,
+        duration: duration,
+      );
     } catch (e) {
       // Fallback, in case there is no Scaffold
       debugPrint('Could not show SnackBar: $e');
@@ -199,11 +217,19 @@ class ApiClient {
 
       final resp = await http.get(Uri.parse(url), headers: mergedHeaders).timeout(timeout);
       final result = ApiErrorHandler.fromHttpResponse(resp, url: url);
-      if (!result.ok && context != null) ApiErrorHandler.showUserMessage(context, result.message);
+      if (!result.ok && context != null) {
+        ApiErrorHandler.showUserMessage(
+          context,
+          result.message,
+          statusCode: result.statusCode,
+        );
+      }
       return result;
     } on Object catch (e) {
       final res = ApiErrorHandler.fromException(e, url: url);
-      if (context != null) ApiErrorHandler.showUserMessage(context, res.message);
+      if (context != null) {
+        ApiErrorHandler.showUserMessage(context, res.message);
+      }
       return res;
     }
   }
@@ -224,11 +250,19 @@ class ApiClient {
           .post(Uri.parse(url), headers: h, body: body is String ? body : (body != null ? json.encode(body) : null))
           .timeout(timeout);
       final result = ApiErrorHandler.fromHttpResponse(resp, url: url);
-      if (!result.ok && context != null) ApiErrorHandler.showUserMessage(context, result.message);
+      if (!result.ok && context != null) {
+        ApiErrorHandler.showUserMessage(
+          context,
+          result.message,
+          statusCode: result.statusCode,
+        );
+      }
       return result;
     } on Object catch (e) {
       final res = ApiErrorHandler.fromException(e, url: url);
-      if (context != null) ApiErrorHandler.showUserMessage(context, res.message);
+      if (context != null) {
+        ApiErrorHandler.showUserMessage(context, res.message);
+      }
       return res;
     }
   }
@@ -249,11 +283,19 @@ class ApiClient {
           .put(Uri.parse(url), headers: h, body: body is String ? body : (body != null ? json.encode(body) : null))
           .timeout(timeout);
       final result = ApiErrorHandler.fromHttpResponse(resp, url: url);
-      if (!result.ok && context != null) ApiErrorHandler.showUserMessage(context, result.message);
+      if (!result.ok && context != null) {
+        ApiErrorHandler.showUserMessage(
+          context,
+          result.message,
+          statusCode: result.statusCode,
+        );
+      }
       return result;
     } on Object catch (e) {
       final res = ApiErrorHandler.fromException(e, url: url);
-      if (context != null) ApiErrorHandler.showUserMessage(context, res.message);
+      if (context != null) {
+        ApiErrorHandler.showUserMessage(context, res.message);
+      }
       return res;
     }
   }
@@ -269,11 +311,19 @@ class ApiClient {
       } catch (_) {}
       final resp = await http.delete(Uri.parse(url), headers: merged).timeout(timeout);
       final result = ApiErrorHandler.fromHttpResponse(resp, url: url);
-      if (!result.ok && context != null) ApiErrorHandler.showUserMessage(context, result.message);
+      if (!result.ok && context != null) {
+        ApiErrorHandler.showUserMessage(
+          context,
+          result.message,
+          statusCode: result.statusCode,
+        );
+      }
       return result;
     } on Object catch (e) {
       final res = ApiErrorHandler.fromException(e, url: url);
-      if (context != null) ApiErrorHandler.showUserMessage(context, res.message);
+      if (context != null) {
+        ApiErrorHandler.showUserMessage(context, res.message);
+      }
       return res;
     }
   }
@@ -306,8 +356,18 @@ class ApiClient {
           final len = await file.length();
           // Simple client-side size check: warn if > 8MB (tunable)
           if (len > 8 * 1024 * 1024) {
-            final ApiResponse res = ApiResponse(ok: false, message: 'This file is too large. Please upload a file smaller than 5MB.');
-            if (context != null) ApiErrorHandler.showUserMessage(context, res.message);
+            final ApiResponse res = ApiResponse(
+              ok: false,
+              statusCode: 413,
+              message: StatusMapper.getError(413),
+            );
+            if (context != null) {
+              ApiErrorHandler.showUserMessage(
+                context,
+                res.message,
+                statusCode: res.statusCode,
+              );
+            }
             return res;
           }
 
@@ -320,11 +380,19 @@ class ApiClient {
       final streamed = await req.send().timeout(timeout);
       final response = await http.Response.fromStream(streamed);
       final res = ApiErrorHandler.fromHttpResponse(response, url: url, isFileUpload: true);
-      if (!res.ok && context != null) ApiErrorHandler.showUserMessage(context, res.message);
+      if (!res.ok && context != null) {
+        ApiErrorHandler.showUserMessage(
+          context,
+          res.message,
+          statusCode: res.statusCode,
+        );
+      }
       return res;
     } on Object catch (e) {
       final res = ApiErrorHandler.fromException(e);
-      if (context != null) ApiErrorHandler.showUserMessage(context, res.message);
+      if (context != null) {
+        ApiErrorHandler.showUserMessage(context, res.message);
+      }
       return res;
     }
   }

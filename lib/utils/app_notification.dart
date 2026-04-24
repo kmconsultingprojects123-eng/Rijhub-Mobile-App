@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'status_mapper.dart';
 
 /// Lightweight wrapper for showing snackbars and notifications.
 /// Use AppNotification.showSuccess/showError/showInfo across the app.
@@ -34,6 +35,42 @@ class AppNotification {
 
   static void showInfo(BuildContext context, String message, {Duration duration = const Duration(seconds: 3)}) {
     _show(context, message, Colors.grey.shade800, duration);
+  }
+
+  static void showForStatus(
+    BuildContext context, {
+    int? statusCode,
+    String? message,
+    String? networkError,
+    Duration? duration,
+  }) {
+    final resolved = (message != null && message.trim().isNotEmpty)
+        ? message.trim()
+        : StatusMapper.getMessage(statusCode, networkError: networkError);
+
+    if (StatusMapper.isSuccess(statusCode)) {
+      showSuccess(
+        context,
+        resolved,
+        duration: duration ?? const Duration(seconds: 3),
+      );
+      return;
+    }
+
+    if (StatusMapper.isRedirect(statusCode)) {
+      showInfo(
+        context,
+        resolved,
+        duration: duration ?? const Duration(seconds: 3),
+      );
+      return;
+    }
+
+    showError(
+      context,
+      resolved,
+      duration: duration ?? const Duration(seconds: 4),
+    );
   }
 
   static void _show(BuildContext context, String message, Color backgroundColor, Duration duration) {

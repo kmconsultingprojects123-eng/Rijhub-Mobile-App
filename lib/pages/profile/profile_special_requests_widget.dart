@@ -28,7 +28,8 @@ class _ProfileSpecialRequestsWidgetState
   bool _loading = true;
   List<Map<String, dynamic>> _items = [];
   String _searchQuery = '';
-  List<String> _selectedStatuses = [];
+  final List<String> _selectedStatuses = [];
+  final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool _loadingMore = false;
   int _currentPage = 1;
@@ -47,13 +48,43 @@ class _ProfileSpecialRequestsWidgetState
 
   List<Map<String, dynamic>> get filteredItems {
     return _items.where((item) {
-      final title = item['title']?.toString().toLowerCase() ?? '';
-      final matchesSearch = title.contains(_searchQuery.toLowerCase());
       final status = item['status']?.toString().toLowerCase() ?? '';
+      final matchesSearch = _matchesSearch(item);
       final matchesFilter =
           _selectedStatuses.isEmpty || _selectedStatuses.contains(status);
       return matchesSearch && matchesFilter;
     }).toList();
+  }
+
+  bool get _hasActiveFilters =>
+      _searchQuery.trim().isNotEmpty || _selectedStatuses.isNotEmpty;
+
+  bool _matchesSearch(Map<String, dynamic> item) {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) return true;
+
+    final searchFields = <String>[
+      item['title']?.toString() ?? '',
+      item['categoryName']?.toString() ?? '',
+      item['description']?.toString() ?? '',
+      item['location']?.toString() ?? '',
+      item['urgency']?.toString() ?? '',
+      item['status']?.toString() ?? '',
+      item['_id']?.toString() ?? '',
+      item['id']?.toString() ?? '',
+      item['client']?['name']?.toString() ?? '',
+      item['artisan']?['name']?.toString() ?? '',
+    ];
+
+    return searchFields.any((field) => field.toLowerCase().contains(query));
+  }
+
+  void _clearSearchAndFilters() {
+    _searchController.clear();
+    setState(() {
+      _searchQuery = '';
+      _selectedStatuses.clear();
+    });
   }
 
   Future<void> _notifyCancellation(Map<String, dynamic> request) async {
@@ -179,6 +210,7 @@ class _ProfileSpecialRequestsWidgetState
 
   @override
   void dispose() {
+    _searchController.dispose();
     _scrollController.dispose();
     _autoRefreshTimer?.cancel();
     _notificationSubscription?.cancel();
@@ -470,8 +502,18 @@ class _ProfileSpecialRequestsWidgetState
     final bodyFontSize = isSmallScreen ? 14.0 : 15.0;
     final smallFontSize = isSmallScreen ? 12.0 : 13.0;
 
-    Color _surfaceColor() => Theme.of(context).colorScheme.surface;
     Color _borderColor() => Theme.of(context).dividerColor;
+    final chipBackgroundColor =
+        isDark ? const Color(0xFF1F2937) : Colors.grey.shade100;
+    final chipBorderColor =
+        isDark ? const Color(0xFF374151) : Colors.grey.shade300;
+    final chipLabelColor = isDark ? Colors.grey.shade300 : Colors.grey.shade700;
+    final selectedChipBackground = isDark
+        ? primaryColor.withValues(alpha: 0.24)
+        : primaryColor.withValues(alpha: 0.12);
+    final selectedChipBorder = isDark
+        ? primaryColor.withValues(alpha: 0.52)
+        : primaryColor.withValues(alpha: 0.28);
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -521,11 +563,23 @@ class _ProfileSpecialRequestsWidgetState
                       padding: EdgeInsets.symmetric(
                           horizontal: horizontalPadding, vertical: 8),
                       child: TextField(
+                        controller: _searchController,
                         onChanged: (value) =>
-                            setState(() => _searchQuery = value),
+                            setState(() => _searchQuery = value.trim()),
                         decoration: InputDecoration(
                           hintText: 'Search requests...',
                           prefixIcon: const Icon(Icons.search),
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear_rounded),
+                                  onPressed: () {
+                                    setState(() {
+                                      _searchController.clear();
+                                      _searchQuery = '';
+                                    });
+                                  },
+                                )
+                              : null,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(color: _borderColor()),
@@ -551,6 +605,7 @@ class _ProfileSpecialRequestsWidgetState
                         scrollDirection: Axis.horizontal,
                         child: Row(
                           children: [
+                            'all',
                             'pending',
                             'responded',
                             'confirmed',
@@ -561,16 +616,22 @@ class _ProfileSpecialRequestsWidgetState
                             'declined',
                             'cancelled'
                           ].map((status) {
-                            final isSelected =
-                                _selectedStatuses.contains(status);
+                            final isSelected = status == 'all'
+                                ? _selectedStatuses.isEmpty
+                                : _selectedStatuses.contains(status);
                             return Padding(
                               padding: const EdgeInsets.only(right: 8),
                               child: FilterChip(
-                                label: Text(_statusText(status)),
+                                label: Text(status == 'all'
+                                    ? 'All'
+                                    : _statusText(status)),
                                 selected: isSelected,
                                 onSelected: (selected) {
                                   setState(() {
-                                    if (selected) {
+                                    if (status == 'all') {
+                                      _selectedStatuses.clear();
+                                    } else if (selected) {
+                                      _selectedStatuses.remove('all');
                                       _selectedStatuses.add(status);
                                     } else {
                                       _selectedStatuses.remove(status);
@@ -578,14 +639,21 @@ class _ProfileSpecialRequestsWidgetState
                                   });
                                 },
                                 backgroundColor: isSelected
-                                    ? primaryColor.withOpacity(0.1)
-                                    : Colors.grey.shade100,
-                                selectedColor: primaryColor.withOpacity(0.2),
+                                    ? selectedChipBackground
+                                    : chipBackgroundColor,
+                                selectedColor: selectedChipBackground,
+                                side: BorderSide(
+                                  color: isSelected
+                                      ? selectedChipBorder
+                                      : chipBorderColor,
+                                  width: 1,
+                                ),
+                                showCheckmark: false,
                                 checkmarkColor: primaryColor,
                                 labelStyle: TextStyle(
                                   color: isSelected
                                       ? primaryColor
-                                      : Colors.grey.shade700,
+                                      : chipLabelColor,
                                   fontWeight: isSelected
                                       ? FontWeight.w600
                                       : FontWeight.w500,
@@ -605,100 +673,118 @@ class _ProfileSpecialRequestsWidgetState
                           : _items.isEmpty
                               ? _buildEmptyState(
                                   context, theme, primaryColor, bodyFontSize)
-                              : ListView.builder(
-                                  controller: _scrollController,
-                                  physics: const BouncingScrollPhysics(),
-                                  padding: EdgeInsets.symmetric(
-                                      horizontal: horizontalPadding,
-                                      vertical: 8),
-                                  itemCount: filteredItems.length +
-                                      (_loadingMore ? 1 : 0),
-                                  itemBuilder: (context, index) {
-                                    if (index == filteredItems.length) {
-                                      return const Center(
-                                        child: Padding(
-                                          padding: EdgeInsets.all(16),
-                                          child: CircularProgressIndicator(),
-                                        ),
-                                      );
-                                    }
-                                    final item = filteredItems[index];
-                                    return _buildRequestCard(
-                                      context: context,
-                                      item: item,
-                                      theme: theme,
-                                      primaryColor: primaryColor,
-                                      isDark: isDark,
-                                      bodyFontSize: bodyFontSize,
-                                      smallFontSize: smallFontSize,
-                                      isClient: _isClient,
-                                      onTap: () {
-                                        Navigator.of(context).push(
-                                          MaterialPageRoute(
-                                            builder: (_) =>
-                                                SpecialRequestDetailsWidget(
-                                                    request: item),
-                                          ),
-                                        );
-                                      },
-                                      onCancel: () async {
-                                        final confirmed =
-                                            await showDialog<bool>(
-                                          context: context,
-                                          builder: (c) => AlertDialog(
-                                            title: const Text('Cancel Request'),
-                                            content: const Text(
-                                                'Are you sure you want to cancel this request?'),
-                                            actions: [
-                                              TextButton(
-                                                onPressed: () =>
-                                                    Navigator.of(c).pop(false),
-                                                child: const Text('No'),
-                                              ),
-                                              ElevatedButton(
-                                                onPressed: () =>
-                                                    Navigator.of(c).pop(true),
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: primaryColor,
-                                                ),
-                                                child: const Text('Yes'),
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                        if (confirmed == true) {
-                                          final id = item['_id']?.toString() ??
-                                              item['id']?.toString() ??
-                                              '';
-                                          if (id.isEmpty) {
-                                            AppNotification.showError(
-                                                context, 'Invalid request id');
-                                            return;
-                                          }
-                                          try {
-                                            final updated =
-                                                await SpecialServiceRequestService
-                                                    .updateStatus(
-                                                        id, 'cancelled');
-                                            if (updated != null) {
-                                              await _notifyCancellation(
-                                                  updated);
-                                              AppNotification.showSuccess(
-                                                  context, 'Request cancelled');
-                                              await _load();
-                                            } else {
-                                              AppNotification.showError(
-                                                  context, 'Failed to cancel');
-                                            }
-                                          } catch (e) {
-                                            AppNotification.showError(context,
-                                                'Error cancelling request');
-                                          }
+                              : filteredItems.isEmpty
+                                  ? _buildFilteredEmptyState(
+                                      context,
+                                      theme,
+                                      primaryColor,
+                                      bodyFontSize,
+                                    )
+                                  : ListView.builder(
+                                      controller: _scrollController,
+                                      physics: const BouncingScrollPhysics(),
+                                      padding: EdgeInsets.symmetric(
+                                          horizontal: horizontalPadding,
+                                          vertical: 8),
+                                      itemCount: filteredItems.length +
+                                          (_loadingMore ? 1 : 0),
+                                      itemBuilder: (context, index) {
+                                        if (index == filteredItems.length) {
+                                          return const Center(
+                                            child: Padding(
+                                              padding: EdgeInsets.all(16),
+                                              child:
+                                                  CircularProgressIndicator(),
+                                            ),
+                                          );
                                         }
+                                        final item = filteredItems[index];
+                                        return _buildRequestCard(
+                                          context: context,
+                                          item: item,
+                                          theme: theme,
+                                          primaryColor: primaryColor,
+                                          isDark: isDark,
+                                          bodyFontSize: bodyFontSize,
+                                          smallFontSize: smallFontSize,
+                                          isClient: _isClient,
+                                          onTap: () {
+                                            Navigator.of(context).push(
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    SpecialRequestDetailsWidget(
+                                                        request: item),
+                                              ),
+                                            );
+                                          },
+                                          onCancel: () async {
+                                            final confirmed =
+                                                await showDialog<bool>(
+                                              context: context,
+                                              builder: (c) => AlertDialog(
+                                                title: const Text(
+                                                    'Cancel Request'),
+                                                content: const Text(
+                                                    'Are you sure you want to cancel this request?'),
+                                                actions: [
+                                                  TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.of(c)
+                                                            .pop(false),
+                                                    child: const Text('No'),
+                                                  ),
+                                                  ElevatedButton(
+                                                    onPressed: () =>
+                                                        Navigator.of(c)
+                                                            .pop(true),
+                                                    style: ElevatedButton
+                                                        .styleFrom(
+                                                      backgroundColor:
+                                                          primaryColor,
+                                                    ),
+                                                    child: const Text('Yes'),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                            if (confirmed == true) {
+                                              final id =
+                                                  item['_id']?.toString() ??
+                                                      item['id']?.toString() ??
+                                                      '';
+                                              if (id.isEmpty) {
+                                                AppNotification.showError(
+                                                    context,
+                                                    'Invalid request id');
+                                                return;
+                                              }
+                                              try {
+                                                final updated =
+                                                    await SpecialServiceRequestService
+                                                        .updateStatus(
+                                                            id, 'cancelled');
+                                                if (updated != null) {
+                                                  await _notifyCancellation(
+                                                      updated);
+                                                  AppNotification.showSuccess(
+                                                      context,
+                                                      'Request cancelled');
+                                                  await _load();
+                                                } else {
+                                                  AppNotification.showError(
+                                                      context,
+                                                      'Failed to cancel');
+                                                }
+                                              } catch (e) {
+                                                AppNotification.showError(
+                                                    context,
+                                                    'Error cancelling request');
+                                              }
+                                            }
+                                          },
+                                        );
                                       },
-                                    );
-                                  },
-                                ),
+                                    ),
                     ),
                   ],
                 ),
@@ -936,6 +1022,83 @@ class _ProfileSpecialRequestsWidgetState
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildFilteredEmptyState(BuildContext context, var theme,
+      Color primaryColor, double bodyFontSize) {
+    final selectedLabels = _selectedStatuses.map(_statusText).join(', ');
+    final hasSearch = _searchQuery.trim().isNotEmpty;
+    final hasStatusFilter = _selectedStatuses.isNotEmpty;
+
+    String subtitle;
+    if (hasSearch && hasStatusFilter) {
+      subtitle =
+          'No requests found for "${_searchQuery.trim()}" in $selectedLabels.';
+    } else if (hasSearch) {
+      subtitle =
+          'No requests found for "${_searchQuery.trim()}". Try a different keyword.';
+    } else {
+      subtitle =
+          'No requests match the selected status filter. Try another tab.';
+    }
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 92,
+              height: 92,
+              decoration: BoxDecoration(
+                color: primaryColor.withOpacity(0.08),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.search_off_rounded,
+                size: 42,
+                color: primaryColor.withOpacity(0.55),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'No matching requests',
+              style: TextStyle(
+                fontSize: bodyFontSize + 2,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: bodyFontSize,
+                color: Colors.grey[600],
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 20),
+            OutlinedButton.icon(
+              onPressed: _clearSearchAndFilters,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label:
+                  Text(_hasActiveFilters ? 'Clear search & filters' : 'Reset'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: primaryColor,
+                side: BorderSide(color: primaryColor.withOpacity(0.4)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
