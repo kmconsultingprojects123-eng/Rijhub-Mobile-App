@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'token_storage.dart';
 import '../utils/status_mapper.dart';
 import '../utils/app_notification.dart';
+import '../utils/error_messages.dart';
 
 /// Minimal, reusable API error handling and safe http wrappers for the project.
 ///
@@ -38,33 +39,26 @@ class ApiErrorHandler {
   static ApiResponse fromException(Object error, {String? url}) {
     final String technical = _technicalForException(error, url: url);
     _logTechnical(technical);
-
-    String friendly;
-    if (error is SocketException) {
-      friendly = 'Network error. Please check your internet connection.';
-    } else if (error is TimeoutException) {
-      friendly = 'Request timed out. Please try again.';
-    } else if (error is http.ClientException) {
-      friendly = 'Network error. Please check your connection.';
-    } else {
-      friendly = 'Something went wrong. Please try again.';
-    }
-
+    final String friendly = ErrorMessages.humanize(error);
     return ApiResponse(ok: false, message: friendly, raw: technical);
   }
 
   /// Handle a successful HTTP response (may still be error status code)
-  static ApiResponse fromHttpResponse(http.Response resp, {String? url, bool isFileUpload = false}) {
+  static ApiResponse fromHttpResponse(http.Response resp,
+      {String? url, bool isFileUpload = false}) {
     final int status = resp.statusCode;
     final String body = resp.body;
 
-    final String technical = 'HTTP ${resp.statusCode} ${url ?? ''}\nheaders=${resp.headers}\nbody=${body}';
+    final String technical =
+        'HTTP ${resp.statusCode} ${url ?? ''}\nheaders=${resp.headers}\nbody=${body}';
     _logTechnical(technical);
 
     // Detect HTML error pages
-    if (_isHtml(body) || (resp.headers['content-type']?.contains('text/html') ?? false)) {
+    if (_isHtml(body) ||
+        (resp.headers['content-type']?.contains('text/html') ?? false)) {
       // Map common server HTML pages to friendly messages (especially file upload 413)
-      if (status == 413 || body.toLowerCase().contains('request entity too large')) {
+      if (status == 413 ||
+          body.toLowerCase().contains('request entity too large')) {
         return ApiResponse(
           ok: false,
           statusCode: status,
@@ -83,7 +77,11 @@ class ApiErrorHandler {
         );
       }
 
-      return ApiResponse(ok: false, statusCode: status, message: _friendlyForStatus(status), raw: technical);
+      return ApiResponse(
+          ok: false,
+          statusCode: status,
+          message: _friendlyForStatus(status),
+          raw: technical);
     }
 
     // Try decode JSON
@@ -101,7 +99,11 @@ class ApiErrorHandler {
           raw: technical,
         );
       }
-      return ApiResponse(ok: false, statusCode: status, message: _friendlyForStatus(status), raw: technical);
+      return ApiResponse(
+          ok: false,
+          statusCode: status,
+          message: _friendlyForStatus(status),
+          raw: technical);
     }
 
     // If status is success, return decoded
@@ -125,20 +127,27 @@ class ApiErrorHandler {
         // Optionally include short server message but don't reveal raw stack traces
         final String s = decoded['message'];
         if (!_looksTechnical(s)) {
-          friendly = s;
+          friendly = ErrorMessages.humanize(s);
         }
       } else if (decoded['error'] is String) {
         final String s = decoded['error'];
-        if (!_looksTechnical(s)) friendly = s;
+        if (!_looksTechnical(s)) friendly = ErrorMessages.humanize(s);
       }
     }
 
     // File upload specific handling
-    if (isFileUpload && (status == 413 || (body.toLowerCase().contains('request entity too large')))) {
+    if (isFileUpload &&
+        (status == 413 ||
+            (body.toLowerCase().contains('request entity too large')))) {
       friendly = StatusMapper.getError(413);
     }
 
-    return ApiResponse(ok: false, statusCode: status, data: decoded, message: friendly, raw: technical);
+    return ApiResponse(
+        ok: false,
+        statusCode: status,
+        data: decoded,
+        message: friendly,
+        raw: technical);
   }
 
   static String _friendlyForStatus(int status) {
@@ -147,7 +156,10 @@ class ApiErrorHandler {
 
   static bool _isHtml(String body) {
     final String s = body.trimLeft().toLowerCase();
-    if (s.startsWith('<!doctype html') || s.startsWith('<html') || s.contains('<html') || s.contains('<!doctype')) return true;
+    if (s.startsWith('<!doctype html') ||
+        s.startsWith('<html') ||
+        s.contains('<html') ||
+        s.contains('<!doctype')) return true;
     if (s.contains('<head>') && s.contains('<body')) return true;
     return false;
   }
@@ -155,7 +167,14 @@ class ApiErrorHandler {
   static bool _looksTechnical(String s) {
     final low = s.toLowerCase();
     // crude heuristics: stacktrace keywords, html tags, exception names
-    final techKeywords = ['stack', 'exception', 'at ', '<html', '<!doctype', 'trace'];
+    final techKeywords = [
+      'stack',
+      'exception',
+      'at ',
+      '<html',
+      '<!doctype',
+      'trace'
+    ];
     return techKeywords.any((k) => low.contains(k));
   }
 
@@ -203,19 +222,27 @@ class ApiClient {
       : defaultHeaders = defaultHeaders ?? {'Accept': 'application/json'},
         timeout = timeout ?? const Duration(seconds: 30);
 
-  Future<ApiResponse> safeGet(String url, {Map<String, String>? headers, BuildContext? context}) async {
+  Future<ApiResponse> safeGet(String url,
+      {Map<String, String>? headers, BuildContext? context}) async {
     try {
       final token = await TokenStorage.getToken();
       // Build merged headers and include Authorization if available
       final mergedHeaders = {...defaultHeaders, ...?headers};
-      if (token != null && token.isNotEmpty) mergedHeaders['Authorization'] = 'Bearer $token';
+      if (token != null && token.isNotEmpty)
+        mergedHeaders['Authorization'] = 'Bearer $token';
       // Log token presence (redacted) for debugging
       try {
-        final redacted = (token == null || token.isEmpty) ? '<missing>' : (token.length > 8 ? '${token.substring(0,4)}...${token.substring(token.length-4)}' : '${token.substring(0,2)}...');
+        final redacted = (token == null || token.isEmpty)
+            ? '<missing>'
+            : (token.length > 8
+                ? '${token.substring(0, 4)}...${token.substring(token.length - 4)}'
+                : '${token.substring(0, 2)}...');
         debugPrint('ApiClient.safeGet token: $redacted');
       } catch (_) {}
 
-      final resp = await http.get(Uri.parse(url), headers: mergedHeaders).timeout(timeout);
+      final resp = await http
+          .get(Uri.parse(url), headers: mergedHeaders)
+          .timeout(timeout);
       final result = ApiErrorHandler.fromHttpResponse(resp, url: url);
       if (!result.ok && context != null) {
         ApiErrorHandler.showUserMessage(
@@ -234,20 +261,32 @@ class ApiClient {
     }
   }
 
-  Future<ApiResponse> safePost(String url, {Map<String, String>? headers, dynamic body, BuildContext? context}) async {
+  Future<ApiResponse> safePost(String url,
+      {Map<String, String>? headers,
+      dynamic body,
+      BuildContext? context}) async {
     try {
       final token = await TokenStorage.getToken();
       final Map<String, String> h = {...defaultHeaders, ...?headers};
-      if (token != null && token.isNotEmpty) h['Authorization'] = 'Bearer $token';
+      if (token != null && token.isNotEmpty)
+        h['Authorization'] = 'Bearer $token';
       try {
-        final redacted = (token == null || token.isEmpty) ? '<missing>' : (token.length > 8 ? '${token.substring(0,4)}...${token.substring(token.length-4)}' : '${token.substring(0,2)}...');
+        final redacted = (token == null || token.isEmpty)
+            ? '<missing>'
+            : (token.length > 8
+                ? '${token.substring(0, 4)}...${token.substring(token.length - 4)}'
+                : '${token.substring(0, 2)}...');
         debugPrint('ApiClient.safePost token: $redacted');
       } catch (_) {}
       if (body != null && body is! String && !h.containsKey('Content-Type')) {
         h['Content-Type'] = 'application/json';
       }
       final resp = await http
-          .post(Uri.parse(url), headers: h, body: body is String ? body : (body != null ? json.encode(body) : null))
+          .post(Uri.parse(url),
+              headers: h,
+              body: body is String
+                  ? body
+                  : (body != null ? json.encode(body) : null))
           .timeout(timeout);
       final result = ApiErrorHandler.fromHttpResponse(resp, url: url);
       if (!result.ok && context != null) {
@@ -267,20 +306,32 @@ class ApiClient {
     }
   }
 
-  Future<ApiResponse> safePut(String url, {Map<String, String>? headers, dynamic body, BuildContext? context}) async {
+  Future<ApiResponse> safePut(String url,
+      {Map<String, String>? headers,
+      dynamic body,
+      BuildContext? context}) async {
     try {
       final token = await TokenStorage.getToken();
       final Map<String, String> h = {...defaultHeaders, ...?headers};
-      if (token != null && token.isNotEmpty) h['Authorization'] = 'Bearer $token';
+      if (token != null && token.isNotEmpty)
+        h['Authorization'] = 'Bearer $token';
       try {
-        final redacted = (token == null || token.isEmpty) ? '<missing>' : (token.length > 8 ? '${token.substring(0,4)}...${token.substring(token.length-4)}' : '${token.substring(0,2)}...');
+        final redacted = (token == null || token.isEmpty)
+            ? '<missing>'
+            : (token.length > 8
+                ? '${token.substring(0, 4)}...${token.substring(token.length - 4)}'
+                : '${token.substring(0, 2)}...');
         debugPrint('ApiClient.safePut token: $redacted');
       } catch (_) {}
       if (body != null && body is! String && !h.containsKey('Content-Type')) {
         h['Content-Type'] = 'application/json';
       }
       final resp = await http
-          .put(Uri.parse(url), headers: h, body: body is String ? body : (body != null ? json.encode(body) : null))
+          .put(Uri.parse(url),
+              headers: h,
+              body: body is String
+                  ? body
+                  : (body != null ? json.encode(body) : null))
           .timeout(timeout);
       final result = ApiErrorHandler.fromHttpResponse(resp, url: url);
       if (!result.ok && context != null) {
@@ -300,16 +351,23 @@ class ApiClient {
     }
   }
 
-  Future<ApiResponse> safeDelete(String url, {Map<String, String>? headers, BuildContext? context}) async {
+  Future<ApiResponse> safeDelete(String url,
+      {Map<String, String>? headers, BuildContext? context}) async {
     try {
       final token = await TokenStorage.getToken();
       final merged = {...defaultHeaders, ...?headers};
-      if (token != null && token.isNotEmpty) merged['Authorization'] = 'Bearer $token';
+      if (token != null && token.isNotEmpty)
+        merged['Authorization'] = 'Bearer $token';
       try {
-        final redacted = (token == null || token.isEmpty) ? '<missing>' : (token.length > 8 ? '${token.substring(0,4)}...${token.substring(token.length-4)}' : '${token.substring(0,2)}...');
+        final redacted = (token == null || token.isEmpty)
+            ? '<missing>'
+            : (token.length > 8
+                ? '${token.substring(0, 4)}...${token.substring(token.length - 4)}'
+                : '${token.substring(0, 2)}...');
         debugPrint('ApiClient.safeDelete token: $redacted');
       } catch (_) {}
-      final resp = await http.delete(Uri.parse(url), headers: merged).timeout(timeout);
+      final resp =
+          await http.delete(Uri.parse(url), headers: merged).timeout(timeout);
       final result = ApiErrorHandler.fromHttpResponse(resp, url: url);
       if (!result.ok && context != null) {
         ApiErrorHandler.showUserMessage(
@@ -342,9 +400,14 @@ class ApiClient {
       final req = http.MultipartRequest('POST', uri);
       final token = await TokenStorage.getToken();
       final merged = {...defaultHeaders, ...?headers};
-      if (token != null && token.isNotEmpty) merged['Authorization'] = 'Bearer $token';
+      if (token != null && token.isNotEmpty)
+        merged['Authorization'] = 'Bearer $token';
       try {
-        final redacted = (token == null || token.isEmpty) ? '<missing>' : (token.length > 8 ? '${token.substring(0,4)}...${token.substring(token.length-4)}' : '${token.substring(0,2)}...');
+        final redacted = (token == null || token.isEmpty)
+            ? '<missing>'
+            : (token.length > 8
+                ? '${token.substring(0, 4)}...${token.substring(token.length - 4)}'
+                : '${token.substring(0, 2)}...');
         debugPrint('ApiClient.safeMultipartUpload token: $redacted');
       } catch (_) {}
       req.headers.addAll(merged);
@@ -372,14 +435,16 @@ class ApiClient {
           }
 
           final stream = http.ByteStream(Stream.castFrom(file.openRead()));
-          final multipartFile = http.MultipartFile(fileField, stream, len, filename: file.path.split(Platform.pathSeparator).last);
+          final multipartFile = http.MultipartFile(fileField, stream, len,
+              filename: file.path.split(Platform.pathSeparator).last);
           req.files.add(multipartFile);
         }
       }
 
       final streamed = await req.send().timeout(timeout);
       final response = await http.Response.fromStream(streamed);
-      final res = ApiErrorHandler.fromHttpResponse(response, url: url, isFileUpload: true);
+      final res = ApiErrorHandler.fromHttpResponse(response,
+          url: url, isFileUpload: true);
       if (!res.ok && context != null) {
         ApiErrorHandler.showUserMessage(
           context,

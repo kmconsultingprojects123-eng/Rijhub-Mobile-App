@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'status_mapper.dart';
+import 'error_messages.dart';
 
 /// Lightweight wrapper for showing snackbars and notifications.
 /// Use AppNotification.showSuccess/showError/showInfo across the app.
 class AppNotification {
-  static void showSuccess(BuildContext context, String message, {Duration duration = const Duration(seconds: 3)}) {
+  static void showSuccess(BuildContext context, String message,
+      {Duration duration = const Duration(seconds: 3)}) {
     try {
       final messenger = ScaffoldMessenger.of(context);
       messenger.hideCurrentSnackBar();
@@ -29,11 +31,13 @@ class AppNotification {
     }
   }
 
-  static void showError(BuildContext context, String message, {Duration duration = const Duration(seconds: 4)}) {
+  static void showError(BuildContext context, String message,
+      {Duration duration = const Duration(seconds: 4)}) {
     _show(context, message, Colors.red.shade700, duration);
   }
 
-  static void showInfo(BuildContext context, String message, {Duration duration = const Duration(seconds: 3)}) {
+  static void showInfo(BuildContext context, String message,
+      {Duration duration = const Duration(seconds: 3)}) {
     _show(context, message, Colors.grey.shade800, duration);
   }
 
@@ -73,11 +77,30 @@ class AppNotification {
     );
   }
 
-  static void _show(BuildContext context, String message, Color backgroundColor, Duration duration) {
+  static void showException(
+    BuildContext context,
+    Object error, {
+    int? statusCode,
+    Duration? duration,
+  }) {
+    final message = ErrorMessages.humanize(error);
+    showForStatus(
+      context,
+      statusCode: statusCode,
+      message: message,
+      duration: duration,
+    );
+  }
+
+  static void _show(BuildContext context, String message, Color backgroundColor,
+      Duration duration) {
     try {
       final messenger = ScaffoldMessenger.of(context);
       messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(SnackBar(content: Text(message), backgroundColor: backgroundColor, duration: duration));
+      messenger.showSnackBar(SnackBar(
+          content: Text(message),
+          backgroundColor: backgroundColor,
+          duration: duration));
     } catch (e) {
       if (kDebugMode) debugPrint('AppNotification failed: $e');
     }
