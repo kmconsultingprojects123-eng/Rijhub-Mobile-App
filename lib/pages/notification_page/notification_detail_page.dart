@@ -1,6 +1,7 @@
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/notification_model.dart';
 import '../../services/notification_service.dart' as ServiceNotif;
@@ -42,8 +43,8 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
       if (notification.type == 'special_request' &&
           notification.requestId != null &&
           notification.requestId!.isNotEmpty) {
-        final request =
-            await SpecialServiceRequestService.fetchById(notification.requestId!);
+        final request = await SpecialServiceRequestService.fetchById(
+            notification.requestId!);
         if (request != null && mounted) {
           await Navigator.of(context).push(
             MaterialPageRoute(
@@ -77,7 +78,7 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
                 bookingId: notification.bookingId,
                 threadId: notification.threadId,
                 jobTitle: notification.title,
-                bookingPrice: notification.bookingPrice,
+                bookingPrice: _displayAmount(notification.bookingPrice),
                 bookingDateTime: notification.createdAt.toIso8601String(),
               ));
           return;
@@ -92,19 +93,54 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
 
       // Default: show info
       AppNotification.showInfo(
-          context, notification.message.isNotEmpty
+          context,
+          notification.message.isNotEmpty
               ? notification.message
               : 'No additional details available');
     } catch (e) {
       if (mounted) {
-        AppNotification.showError(context,
-            'Failed to navigate: ${e.toString()}');
+        AppNotification.showError(
+            context, 'Failed to navigate: ${e.toString()}');
       }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  String _displayAmount(dynamic value) {
+    try {
+      if (value == null) return '-';
+      if (value is num) {
+        return '₦${NumberFormat('#,##0', 'en_US').format(value)}';
+      }
+
+      final text = value.toString().trim();
+      if (text.isEmpty) return '-';
+
+      final normalized = text.replaceAll(RegExp(r'[^0-9.-]'), '');
+      final parsed = num.tryParse(normalized);
+      if (parsed != null) {
+        return '₦${NumberFormat('#,##0', 'en_US').format(parsed)}';
+      }
+
+      if (text.contains('?') || text.contains('�')) {
+        return text.replaceAll('?', '₦').replaceAll('�', '₦');
+      }
+
+      return text;
+    } catch (_) {
+      return value.toString();
+    }
+  }
+
+  String _normalizeCurrencyText(String text) {
+    if (text.isEmpty) return text;
+    return text.replaceAllMapped(
+      RegExp(r'([?�])(?=\s*\d)'),
+      (_) => '₦',
+    );
   }
 
   String _getDetailMessage(NotificationItem notification) {
@@ -141,34 +177,23 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
     final notification = widget.notification;
 
     return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      appBar: AppBar(
+        title: const Text('Notification Details'),
+        actions: [
+          IconButton(
+            icon: Icon(
+              Icons.check_rounded,
+              color: colorScheme.primary,
+            ),
+            onPressed: () {},
+          ),
+        ],
+      ),
       body: SafeArea(
+        top: false,
         child: CustomScrollView(
           slivers: [
-            // App Bar
-            SliverAppBar(
-              floating: true,
-              snap: true,
-              elevation: 0,
-              backgroundColor:
-                  theme.brightness == Brightness.dark ? Colors.black : Colors.white,
-              leading: IconButton(
-                icon: Icon(
-                  Icons.chevron_left_rounded,
-                  color: colorScheme.onSurface.withOpacity(0.8),
-                  size: 28,
-                ),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-              title: Text(
-                'Notification Details',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 18,
-                ),
-              ),
-              centerTitle: false,
-            ),
-            // Content
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.all(20.0),
@@ -190,8 +215,7 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
                             child: Icon(
                               _getNotificationIcon(notification.type),
                               size: 40,
-                              color:
-                                  _getNotificationColor(notification.type),
+                              color: _getNotificationColor(notification.type),
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -277,7 +301,7 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
                               ),
                             ),
                             child: Text(
-                              notification.message,
+                              _normalizeCurrencyText(notification.message),
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 color: colorScheme.onSurface.withOpacity(0.8),
                                 height: 1.5,
@@ -301,7 +325,8 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          _buildDetailsSection(notification, colorScheme, theme),
+                          _buildDetailsSection(
+                              notification, colorScheme, theme),
                           const SizedBox(height: 24),
                         ],
                       ),
@@ -361,8 +386,8 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
   }
 
   /// Build details section based on notification type
-  Widget _buildDetailsSection(NotificationItem notification,
-      ColorScheme colorScheme, ThemeData theme) {
+  Widget _buildDetailsSection(
+      NotificationItem notification, ColorScheme colorScheme, ThemeData theme) {
     final details = <MapEntry<String, String>>[];
 
     if (notification.requestId != null) {
@@ -375,52 +400,48 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
       details.add(MapEntry('Booking ID', notification.bookingId!));
     }
     if (notification.amount != null) {
-      details.add(MapEntry('Amount', '${notification.amount}'));
+      details.add(MapEntry('Amount', _displayAmount(notification.amount)));
     }
     if (notification.bookingPrice != null) {
-      details.add(MapEntry('Price', notification.bookingPrice!));
+      details.add(MapEntry('Price', _displayAmount(notification.bookingPrice)));
     }
 
     return Column(
-      children: details
-          .asMap()
-          .entries
-          .map((entry) {
-            final isLast = entry.key == details.length - 1;
-            return Column(
+      children: details.asMap().entries.map((entry) {
+        final isLast = entry.key == details.length - 1;
+        return Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      entry.value.key,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurface.withOpacity(0.6),
-                      ),
-                    ),
-                    Text(
-                      entry.value.value,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onSurface,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-                if (!isLast) ...[
-                  const SizedBox(height: 12),
-                  Divider(
-                    color: colorScheme.onSurface.withOpacity(0.08),
-                    height: 1,
+                Text(
+                  entry.value.key,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurface.withOpacity(0.6),
                   ),
-                  const SizedBox(height: 12),
-                ],
+                ),
+                Text(
+                  entry.value.value,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: colorScheme.onSurface,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
-            );
-          })
-          .toList(),
+            ),
+            if (!isLast) ...[
+              const SizedBox(height: 12),
+              Divider(
+                color: colorScheme.onSurface.withOpacity(0.08),
+                height: 1,
+              ),
+              const SizedBox(height: 12),
+            ],
+          ],
+        );
+      }).toList(),
     );
   }
 
@@ -504,8 +525,7 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = DateTime(now.year, now.month, now.day - 1);
-    final notificationDate =
-        DateTime(dt.year, dt.month, dt.day);
+    final notificationDate = DateTime(dt.year, dt.month, dt.day);
 
     String dayString;
     if (notificationDate == today) {
@@ -522,4 +542,3 @@ class _NotificationDetailPageState extends State<NotificationDetailPage> {
     return '$dayString at $timeString';
   }
 }
-

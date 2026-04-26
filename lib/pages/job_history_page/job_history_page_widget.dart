@@ -57,9 +57,14 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
       _jobEventsSub = JobEvents.jobUpdatedStream.listen((updated) {
         if (!mounted) return;
         try {
-          final updatedId = (updated['id'] ?? updated['_id'] ?? updated['jobId'])?.toString() ?? '';
+          final updatedId =
+              (updated['id'] ?? updated['_id'] ?? updated['jobId'])
+                      ?.toString() ??
+                  '';
           if (updatedId.isEmpty) return;
-          final idx = _jobs.indexWhere((j) => ((j['_id'] ?? j['id'] ?? j['jobId'])?.toString() ?? '') == updatedId);
+          final idx = _jobs.indexWhere((j) =>
+              ((j['_id'] ?? j['id'] ?? j['jobId'])?.toString() ?? '') ==
+              updatedId);
           setState(() {
             if (idx >= 0) {
               _jobs[idx] = Map<String, dynamic>.from(updated);
@@ -76,9 +81,24 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
   void dispose() {
     _debounce?.cancel();
     _searchController?.dispose();
-    try { _jobEventsSub?.cancel(); } catch (_) {}
+    try {
+      _jobEventsSub?.cancel();
+    } catch (_) {}
     super.dispose();
   }
+
+  Color _getPrimaryColor(BuildContext context) =>
+      Theme.of(context).colorScheme.primary;
+  Color _getTextPrimary(BuildContext context) =>
+      Theme.of(context).colorScheme.onSurface;
+  Color _getTextSecondary(BuildContext context) =>
+      Theme.of(context).disabledColor;
+  Color _getBorderColor(BuildContext context) =>
+      Theme.of(context).colorScheme.outline;
+  Color _getSurfaceColor(BuildContext context) =>
+      Theme.of(context).scaffoldBackgroundColor;
+  Color _getMutedSurface(BuildContext context) =>
+      Theme.of(context).colorScheme.surface;
 
   Future<void> _loadUserRole() async {
     try {
@@ -89,7 +109,8 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
       }
 
       final profile = await UserService.getProfile();
-      final role = (profile?['role'] ?? profile?['type'] ?? '').toString().toLowerCase();
+      final role =
+          (profile?['role'] ?? profile?['type'] ?? '').toString().toLowerCase();
       if (mounted) {
         setState(() {
           _isArtisan = role.contains('artisan');
@@ -122,9 +143,13 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
       // Filter by search query
       if (query != null && query.isNotEmpty) {
         jobList = jobList.where((job) {
-          final title = (job['title'] ?? job['jobTitle'] ?? '').toString().toLowerCase();
-          final description = (job['description'] ?? job['details'] ?? '').toString().toLowerCase();
-          return title.contains(query.toLowerCase()) || description.contains(query.toLowerCase());
+          final title =
+              (job['title'] ?? job['jobTitle'] ?? '').toString().toLowerCase();
+          final description = (job['description'] ?? job['details'] ?? '')
+              .toString()
+              .toLowerCase();
+          return title.contains(query.toLowerCase()) ||
+              description.contains(query.toLowerCase());
         }).toList();
       }
 
@@ -170,7 +195,9 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
           borderRadius: BorderRadius.circular(20),
         ),
         elevation: isDark ? 0 : 2,
-        shadowColor: isDark ? Colors.transparent : Colors.black.withAlpha((0.1 * 255).toInt()),
+        shadowColor: isDark
+            ? Colors.transparent
+            : Colors.black.withAlpha((0.1 * 255).toInt()),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -224,10 +251,15 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
     final Map<String, dynamic> prefilledJob = Map<String, dynamic>.from(job);
 
     // Basic textual fields
-    prefilledJob['id'] = (job['_id'] ?? job['id'] ?? job['jobId'] ?? '').toString();
-    prefilledJob['title'] = (job['title'] ?? job['jobTitle'] ?? job['name'] ?? '').toString();
-    prefilledJob['company'] = (job['company'] ?? job['employer'] ?? job['companyName'] ?? '').toString();
-    prefilledJob['description'] = (job['description'] ?? job['details'] ?? job['desc'] ?? '').toString();
+    prefilledJob['id'] =
+        (job['_id'] ?? job['id'] ?? job['jobId'] ?? '').toString();
+    prefilledJob['title'] =
+        (job['title'] ?? job['jobTitle'] ?? job['name'] ?? '').toString();
+    prefilledJob['company'] =
+        (job['company'] ?? job['employer'] ?? job['companyName'] ?? '')
+            .toString();
+    prefilledJob['description'] =
+        (job['description'] ?? job['details'] ?? job['desc'] ?? '').toString();
 
     // Location/address
     prefilledJob['location'] = (job['location'] is String)
@@ -235,13 +267,20 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
         : (job['address'] ?? job['venue'] ?? job['place'] ?? '')?.toString();
 
     // Price / budget normalization (keep original if possible)
-    prefilledJob['budget'] = job['budget'] ?? job['price'] ?? job['amount'] ?? job['salary'] ?? '';
-    prefilledJob['price'] = job['price'] ?? job['amount'] ?? job['salary'] ?? prefilledJob['budget'];
+    prefilledJob['budget'] =
+        job['budget'] ?? job['price'] ?? job['amount'] ?? job['salary'] ?? '';
+    prefilledJob['price'] = job['price'] ??
+        job['amount'] ??
+        job['salary'] ??
+        prefilledJob['budget'];
 
     // Currency / negotiable / duration / type
-    prefilledJob['currency'] = job['currency'] ?? job['budgetCurrency'] ?? job['currencyCode'];
-    prefilledJob['negotiable'] = job['negotiable'] ?? job['isNegotiable'] ?? false;
-    prefilledJob['duration'] = job['duration'] ?? job['job_duration'] ?? job['timeFrame'];
+    prefilledJob['currency'] =
+        job['currency'] ?? job['budgetCurrency'] ?? job['currencyCode'];
+    prefilledJob['negotiable'] =
+        job['negotiable'] ?? job['isNegotiable'] ?? false;
+    prefilledJob['duration'] =
+        job['duration'] ?? job['job_duration'] ?? job['timeFrame'];
     prefilledJob['jobType'] = job['jobType'] ?? job['type'] ?? job['job_type'];
 
     // Images / media / attachments
@@ -263,35 +302,68 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
         prefilledJob['trade'] = List.from(job['trade']);
       } else if (job['skills'] is List) {
         prefilledJob['trade'] = List.from(job['skills']);
-      } else if (job['skills'] is String && (job['skills'] as String).trim().isNotEmpty) {
-        prefilledJob['trade'] = (job['skills'] as String).split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
-      } else if (job['trade'] is String && (job['trade'] as String).trim().isNotEmpty) {
-        prefilledJob['trade'] = (job['trade'] as String).split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      } else if (job['skills'] is String &&
+          (job['skills'] as String).trim().isNotEmpty) {
+        prefilledJob['trade'] = (job['skills'] as String)
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+      } else if (job['trade'] is String &&
+          (job['trade'] as String).trim().isNotEmpty) {
+        prefilledJob['trade'] = (job['trade'] as String)
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
       }
     } catch (_) {}
 
     // Subservice / skills ids and names (map common API shapes to CreateJobPage expectations)
     try {
-      final dynamic sids = job['subCategoryIds'] ?? job['sub_category_ids'] ?? job['subCategories'] ?? job['subCategoryId'] ?? job['sub_category_id'] ?? job['serviceIds'];
+      final dynamic sids = job['subCategoryIds'] ??
+          job['sub_category_ids'] ??
+          job['subCategories'] ??
+          job['subCategoryId'] ??
+          job['sub_category_id'] ??
+          job['serviceIds'];
       if (sids is List) {
-        prefilledJob['subCategoryIds'] = sids.map((e) => e?.toString() ?? '').where((s) => s.isNotEmpty).toList();
+        prefilledJob['subCategoryIds'] = sids
+            .map((e) => e?.toString() ?? '')
+            .where((s) => s.isNotEmpty)
+            .toList();
       } else if (sids is String || sids is num) {
-        final s = sids.toString(); if (s.isNotEmpty) prefilledJob['subCategoryIds'] = [s];
+        final s = sids.toString();
+        if (s.isNotEmpty) prefilledJob['subCategoryIds'] = [s];
       } else if (sids is Map) {
-        final id = (sids['_id'] ?? sids['id'])?.toString(); if (id != null) prefilledJob['subCategoryIds'] = [id];
+        final id = (sids['_id'] ?? sids['id'])?.toString();
+        if (id != null) prefilledJob['subCategoryIds'] = [id];
       }
 
-      final dynamic snames = job['subCategoryNames'] ?? job['sub_category_names'] ?? job['services'] ?? job['serviceNames'];
+      final dynamic snames = job['subCategoryNames'] ??
+          job['sub_category_names'] ??
+          job['services'] ??
+          job['serviceNames'];
       if (snames is List) {
-        prefilledJob['subCategoryNames'] = snames.map((e) => e?.toString() ?? '').where((s) => s.isNotEmpty).toList();
+        prefilledJob['subCategoryNames'] = snames
+            .map((e) => e?.toString() ?? '')
+            .where((s) => s.isNotEmpty)
+            .toList();
       } else if (job['services'] is List) {
-        prefilledJob['subCategoryNames'] = (job['services'] as List).map((s) => (s is Map ? ((s['name'] ?? s['title'])?.toString() ?? '') : s.toString())).where((s) => s.isNotEmpty).toList();
+        prefilledJob['subCategoryNames'] = (job['services'] as List)
+            .map((s) => (s is Map
+                ? ((s['name'] ?? s['title'])?.toString() ?? '')
+                : s.toString()))
+            .where((s) => s.isNotEmpty)
+            .toList();
       }
     } catch (_) {}
 
     // If trade isn't set but we have subCategoryNames, use those as trade (CreateJob prefers this)
     try {
-      if (prefilledJob['trade'] == null || (prefilledJob['trade'] is List && (prefilledJob['trade'] as List).isEmpty)) {
+      if (prefilledJob['trade'] == null ||
+          (prefilledJob['trade'] is List &&
+              (prefilledJob['trade'] as List).isEmpty)) {
         if (prefilledJob['subCategoryNames'] != null) {
           final names = List<String>.from(prefilledJob['subCategoryNames']);
           if (names.isNotEmpty) prefilledJob['trade'] = names;
@@ -301,8 +373,12 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
 
     // Coordinates: unify to [lon, lat] if possible
     try {
-      if (job['coordinates'] is List && (job['coordinates'] as List).length >= 2) {
-        prefilledJob['coordinates'] = List<double>.from((job['coordinates'] as List).map((e) => (e is num) ? e.toDouble() : double.tryParse(e.toString()) ?? 0.0));
+      if (job['coordinates'] is List &&
+          (job['coordinates'] as List).length >= 2) {
+        prefilledJob['coordinates'] = List<double>.from(
+            (job['coordinates'] as List).map((e) => (e is num)
+                ? e.toDouble()
+                : double.tryParse(e.toString()) ?? 0.0));
       } else if (job['coords'] is Map) {
         final c = job['coords'];
         final lat = (c['lat'] ?? c['latitude'])?.toString();
@@ -310,7 +386,8 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
         if (lat != null && lon != null) {
           final latN = double.tryParse(lat);
           final lonN = double.tryParse(lon);
-          if (latN != null && lonN != null) prefilledJob['coordinates'] = [lonN, latN];
+          if (latN != null && lonN != null)
+            prefilledJob['coordinates'] = [lonN, latN];
         }
       } else if (job['location'] is Map) {
         final loc = job['location'];
@@ -319,23 +396,31 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
         if (lat != null && lon != null) {
           final latN = double.tryParse(lat);
           final lonN = double.tryParse(lon);
-          if (latN != null && lonN != null) prefilledJob['coordinates'] = [lonN, latN];
+          if (latN != null && lonN != null)
+            prefilledJob['coordinates'] = [lonN, latN];
         }
       }
     } catch (_) {}
 
     // Schedule/deadline normalization
-    prefilledJob['schedule'] = job['schedule'] ?? job['deadline'] ?? job['dueDate'] ?? job['date'] ?? job['createdAt'];
+    prefilledJob['schedule'] = job['schedule'] ??
+        job['deadline'] ??
+        job['dueDate'] ??
+        job['date'] ??
+        job['createdAt'];
     try {
       final sched = prefilledJob['schedule'];
       if (sched != null) {
         if (sched is num) {
           final n = sched.toInt();
-          final dt = (n > 1e12) ? DateTime.fromMillisecondsSinceEpoch(n) : DateTime.fromMillisecondsSinceEpoch(n * 1000);
+          final dt = (n > 1e12)
+              ? DateTime.fromMillisecondsSinceEpoch(n)
+              : DateTime.fromMillisecondsSinceEpoch(n * 1000);
           prefilledJob['schedule'] = dt.toIso8601String();
         } else if (sched is String) {
           final parsed = DateTime.tryParse(sched);
-          if (parsed != null) prefilledJob['schedule'] = parsed.toIso8601String();
+          if (parsed != null)
+            prefilledJob['schedule'] = parsed.toIso8601String();
         } else if (sched is DateTime) {
           prefilledJob['schedule'] = sched.toIso8601String();
         }
@@ -345,15 +430,22 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
     // Category id normalization
     try {
       if (job['category'] is Map) {
-        prefilledJob['categoryId'] = (job['category']['_id'] ?? job['category']['id'] ?? job['category']['categoryId'])?.toString();
+        prefilledJob['categoryId'] = (job['category']['_id'] ??
+                job['category']['id'] ??
+                job['category']['categoryId'])
+            ?.toString();
       } else {
-        prefilledJob['categoryId'] = (job['categoryId'] ?? job['category'] ?? job['category_id'])?.toString();
+        prefilledJob['categoryId'] =
+            (job['categoryId'] ?? job['category'] ?? job['category_id'])
+                ?.toString();
       }
     } catch (_) {}
 
     // Experience/type normalization to tokens used by CreateJobPage ('entry','mid','senior')
     try {
-      final rawExp = (job['experienceLevel'] ?? job['type'] ?? job['experience'])?.toString();
+      final rawExp =
+          (job['experienceLevel'] ?? job['type'] ?? job['experience'])
+              ?.toString();
       if (rawExp != null) {
         final low = rawExp.toLowerCase();
         if (low == 'entry' || low.contains('entry')) {
@@ -370,16 +462,20 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
 
     // Ensure coordinates are [lon, lat] doubles (also accept geo or location.geo)
     try {
-      final coordsRaw = prefilledJob['coordinates'] ?? job['geo'] ?? job['location']?['coordinates'];
+      final coordsRaw = prefilledJob['coordinates'] ??
+          job['geo'] ??
+          job['location']?['coordinates'];
       if (coordsRaw is List && coordsRaw.length >= 2) {
-        prefilledJob['coordinates'] = List<double>.from(coordsRaw.map((e) => (e is num) ? e.toDouble() : double.tryParse(e.toString()) ?? 0.0));
+        prefilledJob['coordinates'] = List<double>.from(coordsRaw.map((e) =>
+            (e is num) ? e.toDouble() : double.tryParse(e.toString()) ?? 0.0));
       } else if (coordsRaw is Map) {
         final lat = (coordsRaw['lat'] ?? coordsRaw['latitude'])?.toString();
         final lon = (coordsRaw['lon'] ?? coordsRaw['longitude'])?.toString();
         if (lat != null && lon != null) {
           final latN = double.tryParse(lat);
           final lonN = double.tryParse(lon);
-          if (latN != null && lonN != null) prefilledJob['coordinates'] = [lonN, latN];
+          if (latN != null && lonN != null)
+            prefilledJob['coordinates'] = [lonN, latN];
         }
       }
     } catch (_) {}
@@ -407,7 +503,8 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
             return Container(
               decoration: BoxDecoration(
                 color: colorScheme.surface,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(24)),
               ),
               child: Column(
                 children: [
@@ -424,7 +521,8 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
 
                   // Header
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 16),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       crossAxisAlignment: CrossAxisAlignment.center,
@@ -444,7 +542,8 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                             Text(
                               'Update job details',
                               style: theme.textTheme.bodyMedium?.copyWith(
-                                color: colorScheme.onSurface.withAlpha((0.7 * 255).toInt()),
+                                color: colorScheme.onSurface
+                                    .withAlpha((0.7 * 255).toInt()),
                               ),
                             ),
                           ],
@@ -457,13 +556,16 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: isDark
-                                  ? colorScheme.surfaceContainerHighest.withAlpha((0.5 * 255).toInt())
-                                  : colorScheme.surfaceContainerHighest.withAlpha((0.3 * 255).toInt()),
+                                  ? colorScheme.surfaceContainerHighest
+                                      .withAlpha((0.5 * 255).toInt())
+                                  : colorScheme.surfaceContainerHighest
+                                      .withAlpha((0.3 * 255).toInt()),
                             ),
                             child: Icon(
                               Icons.close_rounded,
                               size: 20,
-                              color: colorScheme.onSurface.withAlpha((0.8 * 255).toInt()),
+                              color: colorScheme.onSurface
+                                  .withAlpha((0.8 * 255).toInt()),
                             ),
                           ),
                           splashRadius: 20,
@@ -481,7 +583,9 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                       gradient: LinearGradient(
                         colors: [
                           Colors.transparent,
-                          colorScheme.outline.withAlpha(isDark ? (0.6 * 255).toInt() : (0.4 * 255).toInt()),
+                          colorScheme.outline.withAlpha(isDark
+                              ? (0.6 * 255).toInt()
+                              : (0.4 * 255).toInt()),
                           Colors.transparent,
                         ],
                         stops: const [0.0, 0.5, 1.0],
@@ -496,7 +600,8 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                     child: SingleChildScrollView(
                       controller: scrollController,
                       physics: const ClampingScrollPhysics(),
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 16),
                       child: EditJobForm(
                         key: formKey,
                         // Pass the normalized job so the form fields are prefilled consistently
@@ -504,14 +609,24 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                         embedded: true,
                         onUpdated: (Map<String, dynamic> updatedJob) {
                           // Close the sheet and update local list so changes appear immediately.
-                          try { Navigator.pop(context); } catch (_) {}
+                          try {
+                            Navigator.pop(context);
+                          } catch (_) {}
 
                           if (!mounted) return;
 
                           try {
-                            final updatedId = (updatedJob['id'] ?? updatedJob['_id'] ?? updatedJob['jobId'])?.toString() ?? '';
+                            final updatedId = (updatedJob['id'] ??
+                                        updatedJob['_id'] ??
+                                        updatedJob['jobId'])
+                                    ?.toString() ??
+                                '';
                             if (updatedId.isNotEmpty) {
-                              final idx = _jobs.indexWhere((j) => ((j['_id'] ?? j['id'] ?? j['jobId'])?.toString() ?? '') == updatedId);
+                              final idx = _jobs.indexWhere((j) =>
+                                  ((j['_id'] ?? j['id'] ?? j['jobId'])
+                                          ?.toString() ??
+                                      '') ==
+                                  updatedId);
                               setState(() {
                                 if (idx >= 0) {
                                   // replace in-place
@@ -527,7 +642,9 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                             }
                           } catch (_) {
                             // On any failure, do a safe refresh
-                            try { _loadJobs(query: _searchController!.text.trim()); } catch (_) {}
+                            try {
+                              _loadJobs(query: _searchController!.text.trim());
+                            } catch (_) {}
                           }
                         },
                       ),
@@ -536,14 +653,17 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
 
                   // Bottom action bar
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 16),
                     decoration: BoxDecoration(
                       color: isDark
                           ? colorScheme.surface.withAlpha((0.95 * 255).toInt())
                           : colorScheme.surface.withAlpha((0.98 * 255).toInt()),
                       border: Border(
                         top: BorderSide(
-                          color: colorScheme.outline.withAlpha(isDark ? (0.15 * 255).toInt() : (0.1 * 255).toInt()),
+                          color: colorScheme.outline.withAlpha(isDark
+                              ? (0.15 * 255).toInt()
+                              : (0.1 * 255).toInt()),
                           width: 0.5,
                         ),
                       ),
@@ -559,14 +679,17 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               side: BorderSide(
-                                color: colorScheme.outline.withAlpha(isDark ? (0.15 * 255).toInt() : (0.1 * 255).toInt()),
+                                color: colorScheme.outline.withAlpha(isDark
+                                    ? (0.15 * 255).toInt()
+                                    : (0.1 * 255).toInt()),
                                 width: 1.5,
                               ),
                             ),
                             child: Text(
                               'Cancel',
                               style: TextStyle(
-                                color: colorScheme.onSurface.withAlpha((0.7 * 255).toInt()),
+                                color: colorScheme.onSurface
+                                    .withAlpha((0.7 * 255).toInt()),
                                 fontWeight: FontWeight.w500,
                                 fontSize: 15,
                               ),
@@ -579,15 +702,20 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                             onPressed: _sheetSubmitting
                                 ? null
                                 : () async {
-                              try {
-                                setState(() => _sheetSubmitting = true);
-                                await formKey.currentState?.submit();
-                              } catch (e) {
-                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ErrorMessages.humanize(e))));
-                              } finally {
-                                if (mounted) setState(() => _sheetSubmitting = false);
-                              }
-                            },
+                                    try {
+                                      setState(() => _sheetSubmitting = true);
+                                      await formKey.currentState?.submit();
+                                    } catch (e) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(SnackBar(
+                                              content: Text(
+                                                  ErrorMessages.humanize(e))));
+                                    } finally {
+                                      if (mounted)
+                                        setState(
+                                            () => _sheetSubmitting = false);
+                                    }
+                                  },
                             style: ElevatedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: const StadiumBorder(),
@@ -597,14 +725,18 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                             ),
                             child: _sheetSubmitting
                                 ? SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation(colorScheme.onPrimary),
-                              ),
-                            )
-                                : Text('Save Changes', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation(
+                                          colorScheme.onPrimary),
+                                    ),
+                                  )
+                                : Text('Save Changes',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 15)),
                           ),
                         ),
                       ],
@@ -624,26 +756,28 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
 
   Widget _buildJobCard(Map<String, dynamic> job) {
     final theme = Theme.of(context);
-    final cs = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
     final screenWidth = MediaQuery.of(context).size.width;
     final isSmallScreen = screenWidth < 360;
 
     // Adaptive colors
-    final primaryColor = cs.primary;
-    final surface = cs.surface;
-    final textPrimary = cs.onSurface;
-    final textSecondary = cs.onSurface.withAlpha((0.7 * 255).toInt());
-    final borderColor = cs.outline.withAlpha(isDark ? (0.15 * 255).toInt() : (0.1 * 255).toInt());
-    final successColor = Color.lerp(cs.secondary, Colors.green, 0.5) ?? Colors.green;
-    final warningColor = cs.primaryContainer;
+    final primaryColor = _getPrimaryColor(context);
+    final surface = _getSurfaceColor(context);
+    final textPrimary = _getTextPrimary(context);
+    final textSecondary = _getTextSecondary(context);
+    final borderColor = _getBorderColor(context);
+    final successColor = const Color(0xFF10B981);
+    final warningColor = const Color(0xFFF59E0B);
 
     // Extract job data
-    final title = (job['title'] ?? job['jobTitle'] ?? 'Untitled Job').toString();
+    final title =
+        (job['title'] ?? job['jobTitle'] ?? 'Untitled Job').toString();
     final description = (job['description'] ?? job['details'] ?? '').toString();
 
     // Parse date
-    final rawDate = (job['createdAt'] ?? job['created_at'] ?? job['created'])?.toString() ?? '';
+    final rawDate =
+        (job['createdAt'] ?? job['created_at'] ?? job['created'])?.toString() ??
+            '';
     DateTime? date = DateTime.tryParse(rawDate);
     final formattedDate = date != null
         ? DateFormat('MMM dd, yyyy').format(date.toLocal())
@@ -653,7 +787,9 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
     final budget = job['budget'];
     String budgetText = '';
     if (budget != null) {
-      final numVal = (budget is num) ? budget : num.tryParse(_stripNumericDotHyphen(budget.toString()));
+      final numVal = (budget is num)
+          ? budget
+          : num.tryParse(_stripNumericDotHyphen(budget.toString()));
       if (numVal != null) {
         budgetText = '₦${NumberFormat('#,##0', 'en_US').format(numVal)}';
       }
@@ -663,7 +799,9 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
     final rawStatus = (job['status'] ?? '').toString();
     final statusLower = rawStatus.toLowerCase().trim();
     final isCompleted = statusLower == 'closed' || statusLower == 'done';
-    final statusText = rawStatus.isEmpty ? 'Unknown' : rawStatus[0].toUpperCase() + rawStatus.substring(1).toLowerCase();
+    final statusText = rawStatus.isEmpty
+        ? 'Unknown'
+        : rawStatus[0].toUpperCase() + rawStatus.substring(1).toLowerCase();
     Color statusColor = textSecondary;
 
     if (statusLower == 'open' || statusLower == 'active') {
@@ -722,7 +860,8 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                     vertical: isSmallScreen ? 4 : 6,
                   ),
                   decoration: BoxDecoration(
-                    color: statusColor.withAlpha((isDark ? 0.2 : 0.1 * 255).toInt()),
+                    color: statusColor
+                        .withAlpha((isDark ? 0.2 : 0.1 * 255).toInt()),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                       color: statusColor.withAlpha((0.3 * 255).toInt()),
@@ -790,7 +929,7 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                 return Column(
                   children: [
                     if (useCompactLayout)
-                    // Compact layout for small screens
+                      // Compact layout for small screens
                       Column(
                         children: [
                           if (!isCompleted)
@@ -800,19 +939,26 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                                   child: OutlinedButton(
                                     onPressed: () => _showEditDialog(job),
                                     style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(vertical: 10),
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 10),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(12),
                                       ),
-                                      side: BorderSide(color: primaryColor, width: 1.5),
+                                      side: BorderSide(
+                                          color: primaryColor, width: 1.5),
                                     ),
                                     child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.edit_outlined, size: 16, color: primaryColor),
+                                        Icon(Icons.edit_outlined,
+                                            size: 16, color: primaryColor),
                                         const SizedBox(width: 6),
-                                        Text('Edit', style: TextStyle(fontSize: 13, color: primaryColor)),
+                                        Text('Edit',
+                                            style: TextStyle(
+                                                fontSize: 13,
+                                                color: primaryColor)),
                                       ],
                                     ),
                                   ),
@@ -821,25 +967,35 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                                 Expanded(
                                   child: OutlinedButton(
                                     onPressed: () {
-                                      final id = job['_id'] ?? job['id'] ?? job['jobId'] ?? '';
+                                      final id = job['_id'] ??
+                                          job['id'] ??
+                                          job['jobId'] ??
+                                          '';
                                       if (id.toString().isNotEmpty) {
                                         _deleteJob(id.toString());
                                       }
                                     },
                                     style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(vertical: 10),
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 10),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(12),
                                       ),
-                                      side: BorderSide(color: primaryColor, width: 1.5),
+                                      side: BorderSide(
+                                          color: primaryColor, width: 1.5),
                                     ),
                                     child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.delete_outline, size: 16, color: primaryColor),
+                                        Icon(Icons.delete_outline,
+                                            size: 16, color: primaryColor),
                                         const SizedBox(width: 6),
-                                        Text('Delete', style: TextStyle(fontSize: 13, color: primaryColor)),
+                                        Text('Delete',
+                                            style: TextStyle(
+                                                fontSize: 13,
+                                                color: primaryColor)),
                                       ],
                                     ),
                                   ),
@@ -853,23 +1009,34 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                                 child: OutlinedButton(
                                   onPressed: () {
                                     try {
-                                      NavigationUtils.safePushRoute(context, JobDetailsPageWidget.routePath, extra: {'job': job});
+                                      NavigationUtils.safePushRoute(context,
+                                          JobDetailsPageWidget.routePath,
+                                          extra: {'job': job});
                                     } catch (_) {}
                                   },
                                   style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 10),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
                                     ),
-                                    side: BorderSide(color: borderColor, width: 1.5),
+                                    side: BorderSide(
+                                        color: borderColor, width: 1.5),
                                   ),
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(Icons.visibility_outlined, size: 16, color: textPrimary.withAlpha((0.8 * 255).toInt())),
+                                      Icon(Icons.visibility_outlined,
+                                          size: 16,
+                                          color: textPrimary
+                                              .withAlpha((0.8 * 255).toInt())),
                                       const SizedBox(width: 6),
-                                      Text('Details', style: TextStyle(fontSize: 13, color: textPrimary.withAlpha((0.8 * 255).toInt()))),
+                                      Text('Details',
+                                          style: TextStyle(
+                                              fontSize: 13,
+                                              color: textPrimary.withAlpha(
+                                                  (0.8 * 255).toInt()))),
                                     ],
                                   ),
                                 ),
@@ -881,36 +1048,62 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                                     onPressed: () {
                                       try {
                                         String? threadId;
-                                        try { threadId = job['booking']?['threadId']?.toString(); } catch (_) {}
-                                        try { threadId ??= job['booking']?['chat']?['_id']?.toString(); } catch (_) {}
-                                        try { threadId ??= job['booking']?['chat']?['id']?.toString(); } catch (_) {}
-                                        try { threadId ??= job['booking']?['thread']?['_id']?.toString(); } catch (_) {}
+                                        try {
+                                          threadId = job['booking']?['threadId']
+                                              ?.toString();
+                                        } catch (_) {}
+                                        try {
+                                          threadId ??= job['booking']?['chat']
+                                                  ?['_id']
+                                              ?.toString();
+                                        } catch (_) {}
+                                        try {
+                                          threadId ??= job['booking']?['chat']
+                                                  ?['id']
+                                              ?.toString();
+                                        } catch (_) {}
+                                        try {
+                                          threadId ??= job['booking']?['thread']
+                                                  ?['_id']
+                                              ?.toString();
+                                        } catch (_) {}
                                         NavigationUtils.safePush(
                                           context,
                                           MessageClientWidget(
-                                            bookingId: job['booking']?['_id']?.toString() ?? job['bookingId']?.toString(),
+                                            bookingId: job['booking']?['_id']
+                                                    ?.toString() ??
+                                                job['bookingId']?.toString(),
                                             threadId: threadId?.toString(),
                                             jobTitle: job['title']?.toString(),
-                                            bookingPrice: job['price']?.toString(),
-                                            bookingDateTime: job['createdAt']?.toString(),
+                                            bookingPrice:
+                                                job['price']?.toString(),
+                                            bookingDateTime:
+                                                job['createdAt']?.toString(),
                                           ),
                                         );
                                       } catch (_) {}
                                     },
                                     style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(vertical: 10),
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 10),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(12),
                                       ),
-                                      side: BorderSide(color: successColor, width: 1.5),
+                                      side: BorderSide(
+                                          color: successColor, width: 1.5),
                                     ),
                                     child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.chat_outlined, size: 16, color: successColor),
+                                        Icon(Icons.chat_outlined,
+                                            size: 16, color: successColor),
                                         const SizedBox(width: 6),
-                                        Text('Chat', style: TextStyle(fontSize: 13, color: successColor)),
+                                        Text('Chat',
+                                            style: TextStyle(
+                                                fontSize: 13,
+                                                color: successColor)),
                                       ],
                                     ),
                                   ),
@@ -921,7 +1114,7 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                         ],
                       )
                     else
-                    // Regular layout for larger screens
+                      // Regular layout for larger screens
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -935,42 +1128,57 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                                   OutlinedButton(
                                     onPressed: () => _showEditDialog(job),
                                     style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 8),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(12),
                                       ),
-                                      side: BorderSide(color: primaryColor, width: 1.5),
+                                      side: BorderSide(
+                                          color: primaryColor, width: 1.5),
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.edit_outlined, size: 16, color: primaryColor),
+                                        Icon(Icons.edit_outlined,
+                                            size: 16, color: primaryColor),
                                         const SizedBox(width: 6),
-                                        Text('Edit', style: TextStyle(fontSize: 14, color: primaryColor)),
+                                        Text('Edit',
+                                            style: TextStyle(
+                                                fontSize: 14,
+                                                color: primaryColor)),
                                       ],
                                     ),
                                   ),
                                 if (!isCompleted)
                                   OutlinedButton(
                                     onPressed: () {
-                                      final id = job['_id'] ?? job['id'] ?? job['jobId'] ?? '';
+                                      final id = job['_id'] ??
+                                          job['id'] ??
+                                          job['jobId'] ??
+                                          '';
                                       if (id.toString().isNotEmpty) {
                                         _deleteJob(id.toString());
                                       }
                                     },
                                     style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 8),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(12),
                                       ),
-                                      side: BorderSide(color: primaryColor, width: 1.5),
+                                      side: BorderSide(
+                                          color: primaryColor, width: 1.5),
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.delete_outline, size: 16, color: primaryColor),
+                                        Icon(Icons.delete_outline,
+                                            size: 16, color: primaryColor),
                                         const SizedBox(width: 6),
-                                        Text('Delete', style: TextStyle(fontSize: 14, color: primaryColor)),
+                                        Text('Delete',
+                                            style: TextStyle(
+                                                fontSize: 14,
+                                                color: primaryColor)),
                                       ],
                                     ),
                                   ),
@@ -988,22 +1196,33 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                                 OutlinedButton(
                                   onPressed: () {
                                     try {
-                                      NavigationUtils.safePushRoute(context, JobDetailsPageWidget.routePath, extra: {'job': job});
+                                      NavigationUtils.safePushRoute(context,
+                                          JobDetailsPageWidget.routePath,
+                                          extra: {'job': job});
                                     } catch (_) {}
                                   },
                                   style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 8),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
                                     ),
-                                    side: BorderSide(color: borderColor, width: 1.5),
+                                    side: BorderSide(
+                                        color: borderColor, width: 1.5),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(Icons.visibility_outlined, size: 16, color: textPrimary.withAlpha((0.8 * 255).toInt())),
+                                      Icon(Icons.visibility_outlined,
+                                          size: 16,
+                                          color: textPrimary
+                                              .withAlpha((0.8 * 255).toInt())),
                                       const SizedBox(width: 6),
-                                      Text('Details', style: TextStyle(fontSize: 14, color: textPrimary.withAlpha((0.8 * 255).toInt()))),
+                                      Text('Details',
+                                          style: TextStyle(
+                                              fontSize: 14,
+                                              color: textPrimary.withAlpha(
+                                                  (0.8 * 255).toInt()))),
                                     ],
                                   ),
                                 ),
@@ -1012,35 +1231,60 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                                     onPressed: () {
                                       try {
                                         String? threadId;
-                                        try { threadId = job['booking']?['threadId']?.toString(); } catch (_) {}
-                                        try { threadId ??= job['booking']?['chat']?['_id']?.toString(); } catch (_) {}
-                                        try { threadId ??= job['booking']?['chat']?['id']?.toString(); } catch (_) {}
-                                        try { threadId ??= job['booking']?['thread']?['_id']?.toString(); } catch (_) {}
+                                        try {
+                                          threadId = job['booking']?['threadId']
+                                              ?.toString();
+                                        } catch (_) {}
+                                        try {
+                                          threadId ??= job['booking']?['chat']
+                                                  ?['_id']
+                                              ?.toString();
+                                        } catch (_) {}
+                                        try {
+                                          threadId ??= job['booking']?['chat']
+                                                  ?['id']
+                                              ?.toString();
+                                        } catch (_) {}
+                                        try {
+                                          threadId ??= job['booking']?['thread']
+                                                  ?['_id']
+                                              ?.toString();
+                                        } catch (_) {}
                                         NavigationUtils.safePush(
                                           context,
                                           MessageClientWidget(
-                                            bookingId: job['booking']?['_id']?.toString() ?? job['bookingId']?.toString(),
+                                            bookingId: job['booking']?['_id']
+                                                    ?.toString() ??
+                                                job['bookingId']?.toString(),
                                             threadId: threadId?.toString(),
                                             jobTitle: job['title']?.toString(),
-                                            bookingPrice: job['price']?.toString(),
-                                            bookingDateTime: job['createdAt']?.toString(),
+                                            bookingPrice:
+                                                job['price']?.toString(),
+                                            bookingDateTime:
+                                                job['createdAt']?.toString(),
                                           ),
                                         );
                                       } catch (_) {}
                                     },
                                     style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 8),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(12),
                                       ),
-                                      side: BorderSide(color: successColor, width: 1.5),
+                                      side: BorderSide(
+                                          color: successColor, width: 1.5),
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.chat_outlined, size: 16, color: successColor),
+                                        Icon(Icons.chat_outlined,
+                                            size: 16, color: successColor),
                                         const SizedBox(width: 6),
-                                        Text('Chat', style: TextStyle(fontSize: 14, color: successColor)),
+                                        Text('Chat',
+                                            style: TextStyle(
+                                                fontSize: 14,
+                                                color: successColor)),
                                       ],
                                     ),
                                   ),
@@ -1075,7 +1319,8 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: colorScheme.outline.withAlpha(isDark ? (0.1 * 255).toInt() : (0.08 * 255).toInt()),
+          color: colorScheme.outline
+              .withAlpha(isDark ? (0.1 * 255).toInt() : (0.08 * 255).toInt()),
           width: 1.5,
         ),
       ),
@@ -1208,14 +1453,18 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
     final screenW = MediaQuery.of(context).size.width;
     final isSmallScreen = screenW < 360;
 
-    final iconColor = cs.onSurface.withAlpha(((isDark ? 0.5 : 0.4) * 255).toInt());
+    final iconColor =
+        cs.onSurface.withAlpha(((isDark ? 0.5 : 0.4) * 255).toInt());
     final titleColor = cs.onSurface;
-    final subtitleColor = cs.onSurface.withAlpha(((isDark ? 0.7 : 0.6) * 255).toInt());
+    final subtitleColor =
+        cs.onSurface.withAlpha(((isDark ? 0.7 : 0.6) * 255).toInt());
 
     return Center(
       child: SingleChildScrollView(
         child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: isSmallScreen ? 16 : 24, vertical: math.min(48.0, screenH * 0.06)),
+          padding: EdgeInsets.symmetric(
+              horizontal: isSmallScreen ? 16 : 24,
+              vertical: math.min(48.0, screenH * 0.06)),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1224,17 +1473,24 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                 height: isSmallScreen ? 100 : 120,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: (isDark ? cs.surfaceContainerHighest : cs.surfaceContainerHighest).withAlpha(((isDark ? 0.3 : 0.1) * 255).toInt()),
+                  color: (isDark
+                          ? cs.surfaceContainerHighest
+                          : cs.surfaceContainerHighest)
+                      .withAlpha(((isDark ? 0.3 : 0.1) * 255).toInt()),
                 ),
                 child: Icon(
-                  _selectedTab == 'Posted' ? Icons.work_outline_rounded : Icons.check_circle_outline_rounded,
+                  _selectedTab == 'Posted'
+                      ? Icons.work_outline_rounded
+                      : Icons.check_circle_outline_rounded,
                   size: isSmallScreen ? 40 : 48,
                   color: iconColor,
                 ),
               ),
               SizedBox(height: isSmallScreen ? 20 : 24),
               Text(
-                _selectedTab == 'Posted' ? 'No Active Jobs' : 'No Completed Jobs',
+                _selectedTab == 'Posted'
+                    ? 'No Active Jobs'
+                    : 'No Completed Jobs',
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w600,
                   color: titleColor,
@@ -1243,7 +1499,8 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
               ),
               SizedBox(height: isSmallScreen ? 8 : 12),
               Padding(
-                padding: EdgeInsets.symmetric(horizontal: isSmallScreen ? 8 : 0),
+                padding:
+                    EdgeInsets.symmetric(horizontal: isSmallScreen ? 8 : 0),
                 child: Text(
                   _selectedTab == 'Posted'
                       ? 'Start by creating your first job posting'
@@ -1275,7 +1532,8 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                       horizontal: isSmallScreen ? 20 : 28,
                       vertical: isSmallScreen ? 14 : 16,
                     ),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
                     elevation: isDark ? 0 : 2,
                   ),
                   child: Row(
@@ -1283,10 +1541,10 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                     children: [
                       Icon(Icons.add_rounded, size: isSmallScreen ? 18 : 20),
                       SizedBox(width: isSmallScreen ? 6 : 8),
-                      Text('Create New Job', style: TextStyle(
-                          fontSize: isSmallScreen ? 14 : 15,
-                          fontWeight: FontWeight.w600
-                      )),
+                      Text('Create New Job',
+                          style: TextStyle(
+                              fontSize: isSmallScreen ? 14 : 15,
+                              fontWeight: FontWeight.w600)),
                     ],
                   ),
                 ),
@@ -1308,15 +1566,21 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final cs = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
     final screenWidth = MediaQuery.of(context).size.width;
     final isSmallScreen = screenWidth < 360;
+    final primaryColor = _getPrimaryColor(context);
+    final textPrimary = _getTextPrimary(context);
+    final textSecondary = _getTextSecondary(context);
+    final borderColor = _getBorderColor(context);
+    final surface = _getSurfaceColor(context);
+    final mutedSurface = _getMutedSurface(context);
 
     // Filter jobs based on selected tab
     final filteredJobs = _jobs.where((job) {
       final status = (job['status'] ?? '').toString().toLowerCase();
-      final booking = job['booking'] ?? job['bookingData'] ?? job['booking_data'];
+      final booking =
+          job['booking'] ?? job['bookingData'] ?? job['booking_data'];
       final bookingStatus = booking != null
           ? (booking['status'] ?? '').toString().toLowerCase()
           : '';
@@ -1335,14 +1599,14 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
-        backgroundColor: theme.scaffoldBackgroundColor,
+        backgroundColor: surface,
         appBar: AppBar(
-          backgroundColor: theme.scaffoldBackgroundColor,
+          backgroundColor: surface,
           elevation: 0,
           leading: IconButton(
             icon: Icon(
               Icons.arrow_back_rounded,
-              color: cs.onSurface,
+              color: textPrimary,
               size: isSmallScreen ? 22 : 24,
             ),
             onPressed: () => Navigator.of(context).maybePop(),
@@ -1352,7 +1616,7 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
             style: TextStyle(
               fontSize: isSmallScreen ? 18 : 20,
               fontWeight: FontWeight.w600,
-              color: cs.onSurface,
+              color: textPrimary,
             ),
           ),
           centerTitle: false,
@@ -1369,10 +1633,10 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                 // Search bar
                 Container(
                   decoration: BoxDecoration(
-                    color: cs.surface,
+                    color: mutedSurface,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: cs.outline.withAlpha(isDark ? (0.2 * 255).toInt() : (0.1 * 255).toInt()),
+                      color: borderColor,
                       width: 1.5,
                     ),
                   ),
@@ -1381,7 +1645,7 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                     decoration: InputDecoration(
                       hintText: 'Search jobs...',
                       hintStyle: TextStyle(
-                        color: cs.onSurface.withAlpha((0.5 * 255).toInt()),
+                        color: textSecondary,
                         fontSize: isSmallScreen ? 14 : 15,
                       ),
                       border: InputBorder.none,
@@ -1391,26 +1655,26 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                       ),
                       prefixIcon: Icon(
                         Icons.search_rounded,
-                        color: cs.onSurface.withAlpha((0.5 * 255).toInt()),
+                        color: textSecondary,
                         size: isSmallScreen ? 20 : 22,
                       ),
                       suffixIcon: _searchController!.text.isNotEmpty
                           ? IconButton(
-                        icon: Icon(
-                          Icons.clear_rounded,
-                          size: 18,
-                          color: cs.onSurface.withAlpha((0.5 * 255).toInt()),
-                        ),
-                        onPressed: () {
-                          _searchController!.clear();
-                          _loadJobs();
-                        },
-                      )
+                              icon: Icon(
+                                Icons.clear_rounded,
+                                size: 18,
+                                color: textSecondary,
+                              ),
+                              onPressed: () {
+                                _searchController!.clear();
+                                _loadJobs();
+                              },
+                            )
                           : null,
                     ),
                     style: TextStyle(
                       fontSize: isSmallScreen ? 14 : 15,
-                      color: cs.onSurface,
+                      color: textPrimary,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -1432,8 +1696,8 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                         } catch (_) {}
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: cs.primary,
-                        foregroundColor: cs.onPrimary,
+                        backgroundColor: primaryColor,
+                        foregroundColor: Colors.white,
                         padding: EdgeInsets.symmetric(
                           horizontal: isSmallScreen ? 16 : 20,
                           vertical: isSmallScreen ? 12 : 14,
@@ -1446,7 +1710,8 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.add_rounded, size: isSmallScreen ? 16 : 18),
+                          Icon(Icons.add_rounded,
+                              size: isSmallScreen ? 16 : 18),
                           SizedBox(width: isSmallScreen ? 6 : 8),
                           Text(
                             'Create Job',
@@ -1466,12 +1731,10 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                 Container(
                   height: isSmallScreen ? 44 : 48,
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? cs.surfaceContainerHighest.withAlpha((0.2 * 255).toInt())
-                        : cs.surfaceContainerHighest.withAlpha((0.1 * 255).toInt()),
+                    color: mutedSurface,
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: cs.outline.withAlpha(isDark ? (0.2 * 255).toInt() : (0.1 * 255).toInt()),
+                      color: borderColor,
                       width: 1.5,
                     ),
                   ),
@@ -1480,7 +1743,8 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                       final isSelected = _selectedTab == tab;
                       return Expanded(
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 2, vertical: 2),
                           child: GestureDetector(
                             onTap: () {
                               setState(() => _selectedTab = tab);
@@ -1489,7 +1753,9 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                               duration: const Duration(milliseconds: 200),
                               curve: Curves.easeOut,
                               decoration: BoxDecoration(
-                                color: isSelected ? cs.primary : Colors.transparent,
+                                color: isSelected
+                                    ? primaryColor
+                                    : Colors.transparent,
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Center(
@@ -1499,8 +1765,8 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                                     fontWeight: FontWeight.w500,
                                     fontSize: isSmallScreen ? 13 : 14,
                                     color: isSelected
-                                        ? cs.onPrimary
-                                        : cs.onSurface.withAlpha((0.7 * 255).toInt()),
+                                        ? Colors.white
+                                        : textSecondary,
                                   ),
                                 ),
                               ),
@@ -1518,69 +1784,75 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
                 Expanded(
                   child: _loading
                       ? ListView.builder(
-                    itemCount: 3,
-                    itemBuilder: (context, index) => _buildSkeletonCard(),
-                  )
+                          itemCount: 3,
+                          itemBuilder: (context, index) => _buildSkeletonCard(),
+                        )
                       : _error != null
-                      ? Center(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: isSmallScreen ? 16 : 24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.error_outline_rounded,
-                            size: isSmallScreen ? 48 : 56,
-                            color: cs.error.withAlpha((0.8 * 255).toInt()),
-                          ),
-                          SizedBox(height: isSmallScreen ? 16 : 20),
-                          Text(
-                            'Unable to Load Jobs',
-                            style: TextStyle(
-                              fontSize: isSmallScreen ? 18 : 20,
-                              fontWeight: FontWeight.w600,
-                              color: cs.onSurface,
-                            ),
-                          ),
-                          SizedBox(height: isSmallScreen ? 6 : 8),
-                          Text(
-                            _error!,
-                            style: TextStyle(
-                              fontSize: isSmallScreen ? 13 : 14,
-                              color: cs.onSurface.withAlpha((0.7 * 255).toInt()),
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          SizedBox(height: isSmallScreen ? 20 : 24),
-                          ElevatedButton.icon(
-                            onPressed: _loadJobs,
-                            icon: Icon(Icons.refresh_rounded, size: isSmallScreen ? 16 : 18),
-                            label: Text(
-                              'Try Again',
-                              style: TextStyle(fontWeight: FontWeight.w500),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: cs.primary,
-                              foregroundColor: cs.onPrimary,
-                              padding: EdgeInsets.symmetric(
-                                horizontal: isSmallScreen ? 20 : 24,
-                                vertical: isSmallScreen ? 12 : 14,
+                          ? Center(
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(
+                                    horizontal: isSmallScreen ? 16 : 24),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.error_outline_rounded,
+                                      size: isSmallScreen ? 48 : 56,
+                                      color: const Color(0xFFEF4444)
+                                          .withAlpha((0.8 * 255).toInt()),
+                                    ),
+                                    SizedBox(height: isSmallScreen ? 16 : 20),
+                                    Text(
+                                      'Unable to Load Jobs',
+                                      style: TextStyle(
+                                        fontSize: isSmallScreen ? 18 : 20,
+                                        fontWeight: FontWeight.w600,
+                                        color: textPrimary,
+                                      ),
+                                    ),
+                                    SizedBox(height: isSmallScreen ? 6 : 8),
+                                    Text(
+                                      _error!,
+                                      style: TextStyle(
+                                        fontSize: isSmallScreen ? 13 : 14,
+                                        color: textSecondary,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    SizedBox(height: isSmallScreen ? 20 : 24),
+                                    ElevatedButton.icon(
+                                      onPressed: _loadJobs,
+                                      icon: Icon(Icons.refresh_rounded,
+                                          size: isSmallScreen ? 16 : 18),
+                                      label: Text(
+                                        'Try Again',
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.w500),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: primaryColor,
+                                        foregroundColor: Colors.white,
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: isSmallScreen ? 20 : 24,
+                                          vertical: isSmallScreen ? 12 : 14,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                      : filteredJobs.isEmpty
-                      ? _buildEmptyState()
-                      : ListView.builder(
-                    itemCount: filteredJobs.length,
-                    itemBuilder: (context, index) => _buildJobCard(filteredJobs[index]),
-                  ),
+                            )
+                          : filteredJobs.isEmpty
+                              ? _buildEmptyState()
+                              : ListView.builder(
+                                  itemCount: filteredJobs.length,
+                                  itemBuilder: (context, index) =>
+                                      _buildJobCard(filteredJobs[index]),
+                                ),
                 ),
               ],
             ),
@@ -1590,4 +1862,3 @@ class _JobHistoryPageWidgetState extends State<JobHistoryPageWidget> {
     );
   }
 }
-

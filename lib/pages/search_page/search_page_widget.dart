@@ -60,6 +60,43 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
   // Search tracking
   Timer? _searchDebounceTimer;
 
+  void _resetSearchContext({
+    bool clearQuery = false,
+    bool clearLastQuery = false,
+  }) {
+    if (clearQuery) {
+      _model.textController?.clear();
+    }
+
+    _currentMainCategory = null;
+    _currentMainCategoryId = null;
+    _currentSubservices = [];
+    _isMainService = false;
+    _selectedTrade = null;
+    _selectedSubservice = null;
+
+    if (clearLastQuery) {
+      _lastSearchedQuery = null;
+    }
+  }
+
+  String _activeSearchTerm() {
+    if (_selectedSubservice != null && _selectedSubservice!.isNotEmpty) {
+      final selected = _currentSubservices.where((subservice) {
+        return (subservice['id']?.toString() ?? '') == _selectedSubservice;
+      }).toList();
+      if (selected.isNotEmpty) {
+        return selected.first['name']?.toString() ?? '';
+      }
+    }
+
+    if (_isMainService && _currentMainCategory != null) {
+      return _currentMainCategory!;
+    }
+
+    return _model.textController?.text.trim() ?? '';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -70,7 +107,7 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
 
     _scrollController.addListener(() {
       if (_scrollController.position.pixels >=
-          _scrollController.position.maxScrollExtent - 200 &&
+              _scrollController.position.maxScrollExtent - 200 &&
           !_isLoadingMore &&
           _hasMore &&
           _hasSearched) {
@@ -126,15 +163,15 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
         if (items != null && items.isNotEmpty) {
           final mainServices = items
               .map((e) {
-            if (e is! Map) return null;
-            final m = Map<String, dynamic>.from(e.cast<String, dynamic>());
-            return {
-              'id': m['_id'] ?? m['id'],
-              'name': m['name'] ?? 'Service',
-              'slug': m['slug'] ?? '',
-              'type': 'main',
-            };
-          })
+                if (e is! Map) return null;
+                final m = Map<String, dynamic>.from(e.cast<String, dynamic>());
+                return {
+                  'id': m['_id'] ?? m['id'],
+                  'name': m['name'] ?? 'Service',
+                  'slug': m['slug'] ?? '',
+                  'type': 'main',
+                };
+              })
               .whereType<Map<String, dynamic>>()
               .toList();
 
@@ -172,19 +209,19 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
   double _calculateSimilarity(String s1, String s2) {
     final s1Lower = s1.toLowerCase().trim();
     final s2Lower = s2.toLowerCase().trim();
-    
+
     if (s1Lower == s2Lower) return 1.0;
     if (s1Lower.isEmpty || s2Lower.isEmpty) return 0.0;
-    
+
     // Substring match (high weight)
     if (s1Lower.contains(s2Lower) || s2Lower.contains(s1Lower)) return 0.85;
-    
+
     // Character overlap similarity
     final chars1 = s1Lower.split('').toSet();
     final chars2 = s2Lower.split('').toSet();
     final intersection = chars1.intersection(chars2).length;
     final union = chars1.union(chars2).length;
-    
+
     return union > 0 ? intersection / union : 0.0;
   }
 
@@ -196,7 +233,8 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
     // Strategy 1: Exact match
     try {
       return _allMainServices.firstWhere(
-        (service) => service['name'].toString().toLowerCase() == normalizedQuery,
+        (service) =>
+            service['name'].toString().toLowerCase() == normalizedQuery,
         orElse: () => <String, dynamic>{},
       );
     } catch (_) {}
@@ -204,7 +242,8 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
     // Strategy 2: Query is contained in service name
     try {
       return _allMainServices.firstWhere(
-        (service) => service['name'].toString().toLowerCase().contains(normalizedQuery),
+        (service) =>
+            service['name'].toString().toLowerCase().contains(normalizedQuery),
         orElse: () => <String, dynamic>{},
       );
     } catch (_) {}
@@ -212,7 +251,8 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
     // Strategy 3: Service name is contained in query
     try {
       return _allMainServices.firstWhere(
-        (service) => normalizedQuery.contains(service['name'].toString().toLowerCase()),
+        (service) =>
+            normalizedQuery.contains(service['name'].toString().toLowerCase()),
         orElse: () => <String, dynamic>{},
       );
     } catch (_) {}
@@ -220,11 +260,11 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
     // Strategy 4: Fuzzy matching by similarity score
     Map<String, dynamic>? bestMatch;
     double bestScore = 0.0;
-    
+
     for (final service in _allMainServices) {
       final serviceName = service['name'].toString();
       final score = _calculateSimilarity(normalizedQuery, serviceName);
-      
+
       if (score > bestScore) {
         bestScore = score;
         bestMatch = service;
@@ -237,31 +277,30 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
 
   /// Process search query with intelligent Main Service mapping
   Future<void> _processSearchQuery(String query) async {
-    if (query.isEmpty) {
+    final normalizedQuery = query.trim();
+
+    if (normalizedQuery.isEmpty) {
       setState(() {
-        _currentMainCategory = null;
-        _currentMainCategoryId = null;
-        _currentSubservices = [];
-        _isMainService = false;
-        _selectedTrade = null;
-        _selectedSubservice = null;
+        _resetSearchContext();
       });
       _startSearch();
       return;
     }
 
-    if (kDebugMode) debugPrint('SearchPage: Processing query: "$query"');
+    if (kDebugMode)
+      debugPrint('SearchPage: Processing query: "$normalizedQuery"');
 
     // Try to find best matching main service
-    final matchedService = _findBestServiceMatch(query);
+    final matchedService = _findBestServiceMatch(normalizedQuery);
 
     if (matchedService != null && matchedService.isNotEmpty) {
       // Found a matching main service - map to it
       final serviceId = matchedService['id'];
       final serviceName = matchedService['name'];
-      
+
       if (kDebugMode) {
-        debugPrint('SearchPage: Mapped query "$query" to main service "$serviceName" (ID: $serviceId)');
+        debugPrint(
+            'SearchPage: Mapped query "$normalizedQuery" to main service "$serviceName" (ID: $serviceId)');
       }
 
       setState(() {
@@ -276,15 +315,12 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
       await _loadSubservicesForMainService(serviceId);
     } else {
       // No main service match found - perform generic search
-      if (kDebugMode) debugPrint('SearchPage: No main service match for "$query", performing generic search');
+      if (kDebugMode)
+        debugPrint(
+            'SearchPage: No main service match for "$normalizedQuery", performing generic search');
 
       setState(() {
-        _currentMainCategory = null;
-        _currentMainCategoryId = null;
-        _currentSubservices = [];
-        _isMainService = false;
-        _selectedTrade = null;
-        _selectedSubservice = null;
+        _resetSearchContext();
       });
     }
 
@@ -307,7 +343,8 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
     }
 
     try {
-      final uri = Uri.parse('$API_BASE_URL/api/job-subcategories?categoryId=$categoryId&limit=50');
+      final uri = Uri.parse(
+          '$API_BASE_URL/api/job-subcategories?categoryId=$categoryId&limit=50');
       final response = await http.get(uri).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
@@ -323,15 +360,15 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
         if (items != null && items.isNotEmpty) {
           final subservices = items
               .map((e) {
-            if (e is! Map) return null;
-            final m = Map<String, dynamic>.from(e.cast<String, dynamic>());
-            return {
-              'id': m['_id'] ?? m['id'],
-              'name': m['name'] ?? 'Service',
-              'slug': m['slug'] ?? '',
-              'categoryId': categoryId,
-            };
-          })
+                if (e is! Map) return null;
+                final m = Map<String, dynamic>.from(e.cast<String, dynamic>());
+                return {
+                  'id': m['_id'] ?? m['id'],
+                  'name': m['name'] ?? 'Service',
+                  'slug': m['slug'] ?? '',
+                  'categoryId': categoryId,
+                };
+              })
               .whereType<Map<String, dynamic>>()
               .toList();
 
@@ -426,7 +463,8 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
       }
 
       if (kDebugMode) {
-        debugPrint('SearchPage._fetchArtisans -> q="$q" tradeParam=$tradeParam subservice=$subserviceParam isMainService=$_isMainService page=$_page limit=$_limit');
+        debugPrint(
+            'SearchPage._fetchArtisans -> q="$q" tradeParam=$tradeParam subservice=$subserviceParam isMainService=$_isMainService page=$_page limit=$_limit');
       }
 
       final results = await ArtistService.fetchArtisans(
@@ -434,6 +472,7 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
         limit: _limit,
         q: !_isMainService && q.isNotEmpty ? q : null,
         trade: tradeParam,
+        categoryId: _isMainService ? _currentMainCategoryId : null,
         subCategoryId: subserviceParam,
       );
 
@@ -446,32 +485,6 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
           if (_hasMore) _page++;
         });
 
-        // Extract main category from first artisan's services (if on first page)
-        if (reset && results.isNotEmpty) {
-          final firstArtisan = results.first;
-          if (firstArtisan['services'] is List && (firstArtisan['services'] as List).isNotEmpty) {
-            final firstService = (firstArtisan['services'] as List)[0];
-            if (firstService is Map<String, dynamic>) {
-              final categoryId = firstService['categoryId'];
-              String? extractedCategoryId;
-              String? extractedCategoryName;
-
-              if (categoryId is Map<String, dynamic>) {
-                extractedCategoryId = categoryId['_id']?.toString() ?? categoryId['id']?.toString();
-                extractedCategoryName = categoryId['name']?.toString();
-              } else if (categoryId is String) {
-                extractedCategoryId = categoryId;
-              }
-
-              // Update subservices based on the extracted category
-              if (extractedCategoryId != null && extractedCategoryId.isNotEmpty) {
-                await _loadSubservicesForMainService(extractedCategoryId);
-                if (kDebugMode) debugPrint('SearchPage: Updated subservices for category: $extractedCategoryName (id: $extractedCategoryId)');
-              }
-            }
-          }
-        }
-
         // Batch load services for all artisans
         _batchLoadServices();
       } else {
@@ -482,7 +495,8 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
       if (mounted) {
         setState(() {
           _hasMore = false;
-          _errorMessage = 'Failed to load artisans. Please check your connection.';
+          _errorMessage =
+              'Failed to load artisans. Please check your connection.';
         });
       }
     } finally {
@@ -499,7 +513,8 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
     // Get all artisan IDs that aren't in cache
     final artisanIds = _artisans
         .map((a) => a['_id']?.toString() ?? a['id']?.toString())
-        .where((id) => id != null && id.isNotEmpty && !_serviceCache.containsKey(id))
+        .where((id) =>
+            id != null && id.isNotEmpty && !_serviceCache.containsKey(id))
         .cast<String>()
         .toList();
 
@@ -543,7 +558,9 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
 
     // Check cache first
     if (_serviceCache.containsKey(artisanId)) {
-      if (kDebugMode) debugPrint('SearchPage: Returning cached services for artisanId=$artisanId');
+      if (kDebugMode)
+        debugPrint(
+            'SearchPage: Returning cached services for artisanId=$artisanId');
       return _serviceCache[artisanId] ?? <String>[];
     }
 
@@ -599,8 +616,10 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
         final nested = Map<String, dynamic>.from(
           (item[field] as Map).cast<String, dynamic>(),
         );
-        final nestedName =
-            nested['name'] ?? nested['title'] ?? nested['label'] ?? nested['service'];
+        final nestedName = nested['name'] ??
+            nested['title'] ??
+            nested['label'] ??
+            nested['service'];
         if (nestedName != null && nestedName.toString().trim().isNotEmpty) {
           return nestedName.toString().trim();
         }
@@ -625,8 +644,10 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
     final bool isMediumScreen = screenWidth < 420;
 
     // Adaptive padding based on screen size
-    final horizontalPadding = isSmallScreen ? 14.0 : (isMediumScreen ? 16.0 : 20.0);
-    final verticalPadding = isSmallScreen ? 8.0 : (isMediumScreen ? 10.0 : 12.0);
+    final horizontalPadding =
+        isSmallScreen ? 14.0 : (isMediumScreen ? 16.0 : 20.0);
+    final verticalPadding =
+        isSmallScreen ? 8.0 : (isMediumScreen ? 10.0 : 12.0);
 
     // Adaptive font size
     final fontSize = isSmallScreen ? 13.0 : (isMediumScreen ? 14.0 : 15.0);
@@ -635,9 +656,7 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
     final borderRadius = BorderRadius.circular(isSmallScreen ? 16 : 20);
 
     // Adaptive colors based on theme
-    final backgroundColor = selected
-        ? _primaryColor
-        : Colors.transparent;
+    final backgroundColor = selected ? _primaryColor : Colors.transparent;
 
     final borderColor = selected
         ? _primaryColor
@@ -669,14 +688,16 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
             color: borderColor,
             width: selected ? 1.5 : 1.0,
           ),
-          boxShadow: selected ? [
-            BoxShadow(
-              color: shadowColor,
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-              spreadRadius: 0,
-            ),
-          ] : null,
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: shadowColor,
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                    spreadRadius: 0,
+                  ),
+                ]
+              : null,
         ),
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 200),
@@ -698,7 +719,8 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
   }
 
   /// Build the tabs section based on current search context
-  Widget _buildTabsSection(bool isDark, double horizontalPadding, double filterChipHeight, bool isSmallScreen) {
+  Widget _buildTabsSection(bool isDark, double horizontalPadding,
+      double filterChipHeight, bool isSmallScreen) {
     if (_isMainService && _currentMainCategory != null) {
       // Show main service and its subservices
       return Column(
@@ -720,7 +742,6 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
                     label: _currentMainCategory!,
                     selected: true,
                     onTap: () {
-                      // Clear subservice filter but keep main service
                       setState(() {
                         _selectedSubservice = null;
                       });
@@ -772,7 +793,8 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
                           selected: selected,
                           onTap: () {
                             setState(() {
-                              _selectedSubservice = selected ? null : subserviceId;
+                              _selectedSubservice =
+                                  selected ? null : subserviceId;
                             });
                             _startSearch();
                           },
@@ -791,60 +813,63 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
       return _popularServices.isEmpty
           ? const SizedBox.shrink()
           : Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: EdgeInsets.only(
-              left: horizontalPadding,
-              right: horizontalPadding,
-              bottom: 8,
-            ),
-            child: Text(
-              'Popular Services',
-              style: TextStyle(
-                fontSize: isSmallScreen ? 12 : 13,
-                fontWeight: FontWeight.w600,
-                color: isDark ? const Color(0xFFD1D5DB) : _textSecondary,
-              ),
-            ),
-          ),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-            child: Row(
               mainAxisSize: MainAxisSize.min,
-              children: List.generate(
-                _popularServices.length,
-                (index) {
-                  final service = _popularServices[index];
-                  final serviceName = service['name'] ?? 'Service';
-                  final selected = _selectedTrade == serviceName;
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: EdgeInsets.only(
+                    left: horizontalPadding,
+                    right: horizontalPadding,
+                    bottom: 8,
+                  ),
+                  child: Text(
+                    'Popular Services',
+                    style: TextStyle(
+                      fontSize: isSmallScreen ? 12 : 13,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? const Color(0xFFD1D5DB) : _textSecondary,
+                    ),
+                  ),
+                ),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: List.generate(
+                      _popularServices.length,
+                      (index) {
+                        final service = _popularServices[index];
+                        final serviceName = service['name'] ?? 'Service';
+                        final selected = _selectedTrade == serviceName;
 
-                  return _buildEnhancedFilterChip(
-                    label: serviceName,
-                    selected: selected,
-                    onTap: () {
-                      setState(() {
-                        _selectedTrade = selected ? null : serviceName;
-                        _model.textController?.text = selected ? '' : serviceName;
-                      });
-
-                      if (!selected) {
-                        // When tapping a popular service, treat it as a main service search
-                        _processSearchQuery(serviceName);
-                      } else {
-                        _startSearch();
-                      }
-                    },
-                    isDark: isDark,
-                  );
-                },
-              ),
-            ),
-          ),
-        ],
-      );
+                        return _buildEnhancedFilterChip(
+                          label: serviceName,
+                          selected: selected,
+                          onTap: () {
+                            if (!selected) {
+                              setState(() {
+                                _selectedTrade = serviceName;
+                                _model.textController?.text = serviceName;
+                              });
+                              // When tapping a popular service, treat it as a main service search
+                              _processSearchQuery(serviceName);
+                            } else {
+                              setState(() {
+                                _resetSearchContext(
+                                    clearQuery: true, clearLastQuery: true);
+                              });
+                              _startSearch();
+                            }
+                          },
+                          isDark: isDark,
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            );
     }
   }
 
@@ -853,34 +878,46 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
 
     // Adaptive colors for dark/light mode
     final Color surfaceColor = isDark ? const Color(0xFF1F2937) : Colors.white;
-    final Color cardBorderColor = isDark ? const Color(0xFF374151) : _borderColor;
+    final Color cardBorderColor =
+        isDark ? const Color(0xFF374151) : _borderColor;
     final Color textPrimaryColor = isDark ? Colors.white : _textPrimary;
-    final Color textSecondaryColor = isDark ? const Color(0xFF9CA3AF) : _textSecondary;
+    final Color textSecondaryColor =
+        isDark ? const Color(0xFF9CA3AF) : _textSecondary;
 
     // Trade badge background color - using primary color with opacity
     final Color tradeBadgeColor = isDark
         ? _primaryColor.withAlpha((0.2 * 255).round())
         : _primaryColor.withAlpha((0.1 * 255).round());
-    final Color tradeTextColor = isDark
-        ? _primaryColor.lighten(0.2)
-        : _primaryColor.darken(0.1);
+    final Color tradeTextColor =
+        isDark ? _primaryColor.lighten(0.2) : _primaryColor.darken(0.1);
 
     String _extractName(Map<String, dynamic> src) {
       try {
         final top = src['name'];
-        if (top != null && top.toString().trim().isNotEmpty) return top.toString().trim();
+        if (top != null && top.toString().trim().isNotEmpty)
+          return top.toString().trim();
 
         // Fixed: Removed duplicate entry
-        final authKeys = {'artisanAuthDetails', 'artisanAuthdDetails', 'artisanAuthdetails'}.toList();
+        final authKeys = {
+          'artisanAuthDetails',
+          'artisanAuthdDetails',
+          'artisanAuthdetails'
+        }.toList();
         for (final k in authKeys) {
           final a = src[k];
-          if (a is Map && a['name'] != null && a['name'].toString().trim().isNotEmpty) return a['name'].toString().trim();
+          if (a is Map &&
+              a['name'] != null &&
+              a['name'].toString().trim().isNotEmpty)
+            return a['name'].toString().trim();
         }
 
         final possibleKeys = ['user', 'userId', 'owner', 'artisan'];
         for (final k in possibleKeys) {
           final p = src[k];
-          if (p is Map && p['name'] != null && p['name'].toString().trim().isNotEmpty) return p['name'].toString().trim();
+          if (p is Map &&
+              p['name'] != null &&
+              p['name'].toString().trim().isNotEmpty)
+            return p['name'].toString().trim();
         }
       } catch (_) {}
       return 'Artisan';
@@ -888,7 +925,14 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
 
     String _extractImageUrl(Map<String, dynamic> src) {
       try {
-        for (final k in ['profileImage', 'profile_image', 'profileImageUrl', 'profileImageURL', 'avatar', 'image']) {
+        for (final k in [
+          'profileImage',
+          'profile_image',
+          'profileImageUrl',
+          'profileImageURL',
+          'avatar',
+          'image'
+        ]) {
           final v = src[k];
           if (v is String && v.isNotEmpty) return v;
           if (v is Map) {
@@ -897,7 +941,17 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
           }
         }
 
-        final nestedKeys = ['user', 'userId', 'artisan', 'owner', 'artisanUser', 'artisanProfile', 'artisanAuthDetails', 'artisanAuthdDetails', 'artisanAuthdetails'];
+        final nestedKeys = [
+          'user',
+          'userId',
+          'artisan',
+          'owner',
+          'artisanUser',
+          'artisanProfile',
+          'artisanAuthDetails',
+          'artisanAuthdDetails',
+          'artisanAuthdetails'
+        ];
         for (final nk in nestedKeys) {
           final node = src[nk];
           if (node is Map) {
@@ -915,7 +969,8 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
         }
 
         if (src.containsKey('artisanProfile') && src['artisanProfile'] is Map) {
-          final maybe = _extractImageUrl(Map<String, dynamic>.from(src['artisanProfile']));
+          final maybe = _extractImageUrl(
+              Map<String, dynamic>.from(src['artisanProfile']));
           if (maybe.isNotEmpty) return maybe;
         }
       } catch (_) {}
@@ -935,17 +990,24 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
         location = artisan['serviceArea']['address']?.toString() ?? '';
       }
     } catch (_) {}
-    if (location.isEmpty) location = artisan['location'] ?? artisan['city'] ?? '';
+    if (location.isEmpty)
+      location = artisan['location'] ?? artisan['city'] ?? '';
 
     // Extract rating and review count
-    final rating = (artisan['rating'] is num) ? (artisan['rating'] as num).toDouble() :
-    (artisan['averageRating'] ?? artisan['average_rating'] ?? 0).toDouble();
-    final reviewCount = artisan['reviewsCount'] ?? artisan['reviewCount'] ?? artisan['review_count'] ?? 0;
+    final rating = (artisan['rating'] is num)
+        ? (artisan['rating'] as num).toDouble()
+        : (artisan['averageRating'] ?? artisan['average_rating'] ?? 0)
+            .toDouble();
+    final reviewCount = artisan['reviewsCount'] ??
+        artisan['reviewCount'] ??
+        artisan['review_count'] ??
+        0;
 
     // Extract artisan ID to fetch their services
     String? artisanId;
     try {
-      artisanId = (artisan['_id'] ?? artisan['id'] ?? artisan['artisanId'])?.toString();
+      artisanId =
+          (artisan['_id'] ?? artisan['id'] ?? artisan['artisanId'])?.toString();
     } catch (_) {}
 
     return _buildArtisanCardWithServices(
@@ -989,14 +1051,16 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
       final parts = s.trim().split(' ');
       if (parts.isEmpty) return 'A';
       if (parts.length == 1) return parts[0].substring(0, 1).toUpperCase();
-      return (parts[0].substring(0, 1) + parts[1].substring(0, 1)).toUpperCase();
+      return (parts[0].substring(0, 1) + parts[1].substring(0, 1))
+          .toUpperCase();
     }
 
     return FutureBuilder<List<String>>(
       future: _fetchArtisanServicesForCard(artisanId),
       builder: (context, snapshot) {
         if (kDebugMode) {
-          debugPrint('FutureBuilder for artisan $artisanId - state: ${snapshot.connectionState}, hasData: ${snapshot.hasData}, data: ${snapshot.data}');
+          debugPrint(
+              'FutureBuilder for artisan $artisanId - state: ${snapshot.connectionState}, hasData: ${snapshot.hasData}, data: ${snapshot.data}');
         }
 
         List<String> services = <String>[];
@@ -1058,7 +1122,8 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
                                 height: 20,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation(_primaryColor),
+                                  valueColor:
+                                      AlwaysStoppedAnimation(_primaryColor),
                                 ),
                               ),
                             ),
@@ -1090,90 +1155,91 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
                   ),
                   const SizedBox(width: 16),
 
-                   // Name and rating
-                   Expanded(
-                     child: Column(
-                       crossAxisAlignment: CrossAxisAlignment.start,
-                       children: [
-                         Text(
-                           name,
-                           style: TextStyle(
-                             fontSize: 16,
-                             fontWeight: FontWeight.w600,
-                             color: textPrimaryColor,
-                             letterSpacing: -0.3,
-                             height: 1.3,
-                           ),
-                           maxLines: 1,
-                           overflow: TextOverflow.ellipsis,
-                         ),
-                         const SizedBox(height: 6),
-                         // Service badge - show only 1 service
-                         if (services.isNotEmpty)
-                           Container(
-                             padding: const EdgeInsets.symmetric(
-                               horizontal: 12,
-                               vertical: 6,
-                             ),
-                             decoration: BoxDecoration(
-                               color: tradeBadgeColor,
-                               borderRadius: BorderRadius.circular(16),
-                               border: Border.all(
-                                 color: _primaryColor.withAlpha((0.2 * 255).round()),
-                                 width: 1,
-                               ),
-                             ),
-                             child: Text(
-                               services.first,
-                               style: TextStyle(
-                                 fontSize: 13,
-                                 fontWeight: FontWeight.w600,
-                                 color: tradeTextColor,
-                               ),
-                               maxLines: 1,
-                               overflow: TextOverflow.ellipsis,
-                             ),
-                           )
-                         else
-                           Text(
-                             'No service yet',
-                             style: TextStyle(
-                               fontSize: 13,
-                               fontWeight: FontWeight.w500,
-                               color: textSecondaryColor,
-                               fontStyle: FontStyle.italic,
-                             ),
-                           ),
-                         const SizedBox(height: 6),
-                         Row(
-                           children: [
-                             Icon(
-                               Icons.star_rounded,
-                               size: 16,
-                               color: const Color(0xFFF59E0B),
-                             ),
-                             const SizedBox(width: 6),
-                             Text(
-                               rating.toStringAsFixed(1),
-                               style: TextStyle(
-                                 fontSize: 14,
-                                 fontWeight: FontWeight.w600,
-                                 color: textPrimaryColor,
-                               ),
-                             ),
-                             const SizedBox(width: 8),
-                             Text(
-                               '($reviewCount reviews)',
-                               style: TextStyle(
-                                 fontSize: 13,
-                                 color: textSecondaryColor,
-                               ),
-                             ),
-                           ],
-                         ),
-                       ],
-                     ),
-                   ),
+                  // Name and rating
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: textPrimaryColor,
+                            letterSpacing: -0.3,
+                            height: 1.3,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 6),
+                        // Service badge - show only 1 service
+                        if (services.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: tradeBadgeColor,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: _primaryColor
+                                    .withAlpha((0.2 * 255).round()),
+                                width: 1,
+                              ),
+                            ),
+                            child: Text(
+                              services.first,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: tradeTextColor,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          )
+                        else
+                          Text(
+                            'No service yet',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: textSecondaryColor,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.star_rounded,
+                              size: 16,
+                              color: const Color(0xFFF59E0B),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              rating.toStringAsFixed(1),
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: textPrimaryColor,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '($reviewCount reviews)',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: textSecondaryColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
 
                   // Book Button
                   Container(
@@ -1183,7 +1249,8 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
                         try {
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) => ArtisanDetailPageWidget(artisan: artisan),
+                              builder: (_) =>
+                                  ArtisanDetailPageWidget(artisan: artisan),
                             ),
                           );
                         } catch (_) {}
@@ -1192,7 +1259,8 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
                         backgroundColor: _primaryColor,
                         foregroundColor: Colors.white,
                         padding: EdgeInsets.symmetric(
-                          horizontal: MediaQuery.of(context).size.width < 360 ? 16 : 20,
+                          horizontal:
+                              MediaQuery.of(context).size.width < 360 ? 16 : 20,
                           vertical: 10,
                         ),
                         shape: RoundedRectangleBorder(
@@ -1213,30 +1281,30 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
 
               const SizedBox(height: 20),
 
-               // Location only - services now shown in badge above
-               if (location.isNotEmpty)
-                 Row(
-                   children: [
-                     Icon(
-                       Icons.location_on_outlined,
-                       size: 16,
-                       color: textSecondaryColor,
-                     ),
-                     const SizedBox(width: 8),
-                     Expanded(
-                       child: Text(
-                         location,
-                         style: TextStyle(
-                           fontSize: 14,
-                           color: textSecondaryColor,
-                           height: 1.4,
-                         ),
-                         maxLines: 1,
-                         overflow: TextOverflow.ellipsis,
-                       ),
-                     ),
-                   ],
-                 ),
+              // Location only - services now shown in badge above
+              if (location.isNotEmpty)
+                Row(
+                  children: [
+                    Icon(
+                      Icons.location_on_outlined,
+                      size: 16,
+                      color: textSecondaryColor,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        location,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: textSecondaryColor,
+                          height: 1.4,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
         );
@@ -1252,9 +1320,7 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
     final placeholderAlt = isDark
         ? Colors.white.withAlpha((0.08 * 255).round())
         : Colors.black.withAlpha((0.08 * 255).round());
-    final borderColor = isDark
-        ? const Color(0xFF374151)
-        : _borderColor;
+    final borderColor = isDark ? const Color(0xFF374151) : _borderColor;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -1324,14 +1390,16 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
-            children: List.generate(3, (_) => Container(
-              width: 60,
-              height: 24,
-              decoration: BoxDecoration(
-                color: placeholder,
-                borderRadius: BorderRadius.circular(12),
-              ),
-            )),
+            children: List.generate(
+                3,
+                (_) => Container(
+                      width: 60,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: placeholder,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    )),
           ),
         ],
       ),
@@ -1350,25 +1418,18 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
     final bool isMediumScreen = screenWidth < 420;
 
     // Responsive padding
-    final horizontalPadding = isSmallScreen
-        ? 16.0
-        : (isMediumScreen ? 20.0 : 24.0);
+    final horizontalPadding =
+        isSmallScreen ? 16.0 : (isMediumScreen ? 20.0 : 24.0);
 
-    final filterChipHeight = screenHeight < 700
-        ? 42.0
-        : (isSmallScreen ? 46.0 : 52.0);
+    final filterChipHeight =
+        screenHeight < 700 ? 42.0 : (isSmallScreen ? 46.0 : 52.0);
 
-    final emptyIconSize = screenHeight < 600
-        ? 40.0
-        : (screenHeight < 700 ? 48.0 : 56.0);
+    final emptyIconSize =
+        screenHeight < 600 ? 40.0 : (screenHeight < 700 ? 48.0 : 56.0);
 
-    final emptyTitleSpacing = screenHeight < 600
-        ? 12.0
-        : 16.0;
+    final emptyTitleSpacing = screenHeight < 600 ? 12.0 : 16.0;
 
-    final emptySubSpacing = screenHeight < 600
-        ? 6.0
-        : 8.0;
+    final emptySubSpacing = screenHeight < 600 ? 6.0 : 8.0;
 
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
@@ -1409,14 +1470,18 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
                 child: Container(
                   decoration: BoxDecoration(
                     color: isDark ? const Color(0xFF1F2937) : _surfaceColor,
-                    borderRadius: BorderRadius.circular(isSmallScreen ? 10 : 12),
-                    boxShadow: isDark ? null : [
-                      BoxShadow(
-                        color: Colors.black.withAlpha((0.02 * 255).round()),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
+                    borderRadius:
+                        BorderRadius.circular(isSmallScreen ? 10 : 12),
+                    boxShadow: isDark
+                        ? null
+                        : [
+                            BoxShadow(
+                              color:
+                                  Colors.black.withAlpha((0.02 * 255).round()),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                   ),
                   child: TextFormField(
                     controller: _model.textController,
@@ -1424,8 +1489,10 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
                     onTap: () {
                       if (!mounted) return;
                       setState(() {
-                        _selectedTrade = null;
-                        _selectedSubservice = null;
+                        if (_model.textController!.text.trim().isNotEmpty ||
+                            _isMainService) {
+                          _resetSearchContext(clearLastQuery: true);
+                        }
                       });
                     },
                     onChanged: _handleSearchInput,
@@ -1439,7 +1506,8 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
                     decoration: InputDecoration(
                       hintText: 'Search artisans or services...',
                       hintStyle: TextStyle(
-                        color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
+                        color:
+                            isDark ? const Color(0xFF9CA3AF) : _textSecondary,
                         fontSize: isSmallScreen ? 14 : 15,
                       ),
                       border: InputBorder.none,
@@ -1449,30 +1517,27 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
                       ),
                       prefixIcon: Icon(
                         Icons.search_rounded,
-                        color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
+                        color:
+                            isDark ? const Color(0xFF9CA3AF) : _textSecondary,
                         size: isSmallScreen ? 18 : 20,
                       ),
                       suffixIcon: _model.textController!.text.isNotEmpty
                           ? IconButton(
-                        icon: Icon(
-                          Icons.clear_rounded,
-                          size: isSmallScreen ? 16 : 18,
-                          color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
-                        ),
-                        onPressed: () {
-                          _model.textController?.clear();
-                          setState(() {
-                            _currentMainCategory = null;
-                            _currentMainCategoryId = null;
-                            _currentSubservices = [];
-                            _isMainService = false;
-                            _selectedTrade = null;
-                            _selectedSubservice = null;
-                            _lastSearchedQuery = null;
-                          });
-                          _startSearch();
-                        },
-                      )
+                              icon: Icon(
+                                Icons.clear_rounded,
+                                size: isSmallScreen ? 16 : 18,
+                                color: isDark
+                                    ? const Color(0xFF9CA3AF)
+                                    : _textSecondary,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _resetSearchContext(
+                                      clearQuery: true, clearLastQuery: true);
+                                });
+                                _startSearch();
+                              },
+                            )
                           : null,
                     ),
                   ),
@@ -1480,12 +1545,14 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
               ),
 
               // Dynamic Tabs Section
-              _buildTabsSection(isDark, horizontalPadding, filterChipHeight, isSmallScreen),
+              _buildTabsSection(
+                  isDark, horizontalPadding, filterChipHeight, isSmallScreen),
 
               // Divider with responsive height
               Container(
                 height: 1,
-                margin: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 8),
+                margin: EdgeInsets.symmetric(
+                    horizontal: horizontalPadding, vertical: 8),
                 decoration: BoxDecoration(
                   border: Border(
                     bottom: BorderSide(
@@ -1500,159 +1567,221 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
               Expanded(
                 child: _hasSearched
                     ? _isLoading
-                    ? ListView.builder(
-                  padding: EdgeInsets.all(horizontalPadding),
-                  itemCount: 3,
-                  itemBuilder: (context, index) => _buildSkeletonCard(),
-                )
-                    : _errorMessage != null
-                    ? Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(horizontalPadding),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.error_outline_rounded,
-                          size: emptyIconSize,
-                          color: isDark ? const Color(0xFF6B7280) : _textSecondary,
-                        ),
-                        SizedBox(height: emptyTitleSpacing),
-                        Text(
-                          _errorMessage!,
-                          style: TextStyle(
-                            fontSize: isSmallScreen ? 14 : 16,
-                            color: isDark ? Colors.white : _textPrimary,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        SizedBox(height: emptySubSpacing * 2),
-                        ElevatedButton(
-                          onPressed: _startSearch,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _primaryColor,
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 12,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-                    : _artisans.isEmpty
-                    ? Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(horizontalPadding),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.search_off_rounded,
-                          size: emptyIconSize,
-                          color: isDark ? const Color(0xFF6B7280) : _textSecondary,
-                        ),
-                        SizedBox(height: emptyTitleSpacing),
-                        Text(
-                          'No artisans found',
-                          style: TextStyle(
-                            fontSize: isSmallScreen ? 16 : 18,
-                            fontWeight: FontWeight.w500,
-                            color: isDark ? Colors.white : _textPrimary,
-                          ),
-                        ),
-                        SizedBox(height: emptySubSpacing),
-                        Text(
-                          'Try different keywords or filters',
-                          style: TextStyle(
-                            fontSize: isSmallScreen ? 13 : 14,
-                            color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-                    : RefreshIndicator(
-                  onRefresh: () async {
-                    await _startSearch();
-                  },
-                  color: _primaryColor,
-                  child: ListView.builder(
-                    controller: _scrollController,
-                    padding: EdgeInsets.all(horizontalPadding),
-                    itemCount: _artisans.length + (_isLoadingMore ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index < _artisans.length) {
-                        return _buildArtisanCard(context, _artisans[index]);
-                      } else {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 24),
-                          child: Center(
-                            child: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation(_primaryColor),
-                              ),
-                            ),
-                          ),
-                        );
-                      }
-                    },
-                  ),
-                )
+                        ? ListView.builder(
+                            padding: EdgeInsets.all(horizontalPadding),
+                            itemCount: 3,
+                            itemBuilder: (context, index) =>
+                                _buildSkeletonCard(),
+                          )
+                        : _errorMessage != null
+                            ? Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(horizontalPadding),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.error_outline_rounded,
+                                        size: emptyIconSize,
+                                        color: isDark
+                                            ? const Color(0xFF6B7280)
+                                            : _textSecondary,
+                                      ),
+                                      SizedBox(height: emptyTitleSpacing),
+                                      Text(
+                                        _errorMessage!,
+                                        style: TextStyle(
+                                          fontSize: isSmallScreen ? 14 : 16,
+                                          color: isDark
+                                              ? Colors.white
+                                              : _textPrimary,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      SizedBox(height: emptySubSpacing * 2),
+                                      ElevatedButton(
+                                        onPressed: _startSearch,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: _primaryColor,
+                                          foregroundColor: Colors.white,
+                                          padding: EdgeInsets.symmetric(
+                                            horizontal: 24,
+                                            vertical: 12,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                          ),
+                                        ),
+                                        child: const Text('Retry'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            : _artisans.isEmpty
+                                ? Center(
+                                    child: Padding(
+                                      padding:
+                                          EdgeInsets.all(horizontalPadding),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.search_off_rounded,
+                                            size: emptyIconSize,
+                                            color: isDark
+                                                ? const Color(0xFF6B7280)
+                                                : _textSecondary,
+                                          ),
+                                          SizedBox(height: emptyTitleSpacing),
+                                          Text(
+                                            _activeSearchTerm().isEmpty
+                                                ? 'No artisans available'
+                                                : 'No artisans found',
+                                            style: TextStyle(
+                                              fontSize: isSmallScreen ? 16 : 18,
+                                              fontWeight: FontWeight.w500,
+                                              color: isDark
+                                                  ? Colors.white
+                                                  : _textPrimary,
+                                            ),
+                                          ),
+                                          SizedBox(height: emptySubSpacing),
+                                          Text(
+                                            _activeSearchTerm().isEmpty
+                                                ? 'Try browsing another service category.'
+                                                : 'No results for "${_activeSearchTerm()}". Try a different keyword or filter.',
+                                            style: TextStyle(
+                                              fontSize: isSmallScreen ? 13 : 14,
+                                              color: isDark
+                                                  ? const Color(0xFF9CA3AF)
+                                                  : _textSecondary,
+                                            ),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                          SizedBox(height: emptySubSpacing * 2),
+                                          if (_activeSearchTerm().isNotEmpty)
+                                            OutlinedButton(
+                                              onPressed: () {
+                                                setState(() {
+                                                  _resetSearchContext(
+                                                      clearQuery: true,
+                                                      clearLastQuery: true);
+                                                });
+                                                _startSearch();
+                                              },
+                                              style: OutlinedButton.styleFrom(
+                                                side: BorderSide(
+                                                  color: isDark
+                                                      ? const Color(0xFF4B5563)
+                                                      : _borderColor,
+                                                ),
+                                                foregroundColor: isDark
+                                                    ? Colors.white
+                                                    : _textPrimary,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 18,
+                                                  vertical: 12,
+                                                ),
+                                                shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                ),
+                                              ),
+                                              child: const Text('Clear search'),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                : RefreshIndicator(
+                                    onRefresh: () async {
+                                      await _startSearch();
+                                    },
+                                    color: _primaryColor,
+                                    child: ListView.builder(
+                                      controller: _scrollController,
+                                      padding:
+                                          EdgeInsets.all(horizontalPadding),
+                                      itemCount: _artisans.length +
+                                          (_isLoadingMore ? 1 : 0),
+                                      itemBuilder: (context, index) {
+                                        if (index < _artisans.length) {
+                                          return _buildArtisanCard(
+                                              context, _artisans[index]);
+                                        } else {
+                                          return Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                                vertical: 24),
+                                            child: Center(
+                                              child: SizedBox(
+                                                width: 24,
+                                                height: 24,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  valueColor:
+                                                      AlwaysStoppedAnimation(
+                                                          _primaryColor),
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                      },
+                                    ),
+                                  )
                     : Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(horizontalPadding),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.search_rounded,
-                          size: emptyIconSize,
-                          color: isDark ? const Color(0xFF6B7280) : _textSecondary,
-                        ),
-                        SizedBox(height: emptyTitleSpacing),
-                        Text(
-                          'Find Artisans',
-                          style: TextStyle(
-                            fontSize: isSmallScreen ? 18 : 20,
-                            fontWeight: FontWeight.w500,
-                            color: isDark ? Colors.white : _textPrimary,
-                            letterSpacing: -0.5,
+                        child: Padding(
+                          padding: EdgeInsets.all(horizontalPadding),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.search_rounded,
+                                size: emptyIconSize,
+                                color: isDark
+                                    ? const Color(0xFF6B7280)
+                                    : _textSecondary,
+                              ),
+                              SizedBox(height: emptyTitleSpacing),
+                              Text(
+                                'Find Artisans',
+                                style: TextStyle(
+                                  fontSize: isSmallScreen ? 18 : 20,
+                                  fontWeight: FontWeight.w500,
+                                  color: isDark ? Colors.white : _textPrimary,
+                                  letterSpacing: -0.5,
+                                ),
+                              ),
+                              SizedBox(height: emptySubSpacing),
+                              Text(
+                                'Search for skilled professionals',
+                                style: TextStyle(
+                                  fontSize: isSmallScreen ? 13 : 14,
+                                  color: isDark
+                                      ? const Color(0xFF9CA3AF)
+                                      : _textSecondary,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              SizedBox(height: emptySubSpacing / 2),
+                              Text(
+                                'Use filters or type a keyword',
+                                style: TextStyle(
+                                  fontSize: isSmallScreen ? 12 : 13,
+                                  color: isDark
+                                      ? const Color(0xFF9CA3AF)
+                                      : _textSecondary,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
                           ),
                         ),
-                        SizedBox(height: emptySubSpacing),
-                        Text(
-                          'Search for skilled professionals',
-                          style: TextStyle(
-                            fontSize: isSmallScreen ? 13 : 14,
-                            color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        SizedBox(height: emptySubSpacing / 2),
-                        Text(
-                          'Use filters or type a keyword',
-                          style: TextStyle(
-                            fontSize: isSmallScreen ? 12 : 13,
-                            color: isDark ? const Color(0xFF9CA3AF) : _textSecondary,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                      ),
               ),
             ],
           ),
@@ -1677,7 +1806,8 @@ extension ColorExtension on Color {
     assert(amount >= 0 && amount <= 1);
 
     final hsl = HSLColor.fromColor(this);
-    final hslLight = hsl.withLightness((hsl.lightness + amount).clamp(0.0, 1.0));
+    final hslLight =
+        hsl.withLightness((hsl.lightness + amount).clamp(0.0, 1.0));
 
     return hslLight.toColor();
   }

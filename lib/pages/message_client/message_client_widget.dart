@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:http/http.dart' as http;
 import '../../services/user_service.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
@@ -55,6 +56,7 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
   String? _currentUserId;
   String? _currentUserRole;
   String? _threadId;
+  String? _currentUserImageUrl;
   String? _participantImageUrl;
   String? _participantName;
   String? _participantId;
@@ -63,7 +65,7 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
   bool _waitingForThread = false;
   String? _bookingStatusFromThread;
   String? _bookingPriceFromThread;
-   String? _bookingPaymentMode; // 'upfront' or 'afterCompletion'
+  String? _bookingPaymentMode; // 'upfront' or 'afterCompletion'
   bool _sendingMessage = false;
   bool _bookingCompleted = false;
   bool _completing = false;
@@ -87,19 +89,20 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
 
   // Last known booking payment status observed while waiting for thread
   String? _lastBookingPaymentStatus;
-  bool _didAttemptConfirmNudge = false; // avoid repeating backend nudge attempts
+  bool _didAttemptConfirmNudge =
+      false; // avoid repeating backend nudge attempts
   // Realtime notifications handled by RealtimeNotifications (socket.io)
   int _reconnectAttempts = 0;
   bool _wsConnecting = false;
   // Background silent refresh timer (no UI loading indicators)
   Timer? _backgroundRefreshTimer;
 
-    // Subscription for RealtimeNotifications events (socket.io)
-    StreamSubscription<Map<String, dynamic>>? _rnSub;
-    // Debug: last realtime event name and a small sub to update connection status for UI
-    StreamSubscription<Map<String, dynamic>>? _rnDebugSub;
-    String? _lastRealtimeEvent;
-    bool _socketConnected = false;
+  // Subscription for RealtimeNotifications events (socket.io)
+  StreamSubscription<Map<String, dynamic>>? _rnSub;
+  // Debug: last realtime event name and a small sub to update connection status for UI
+  StreamSubscription<Map<String, dynamic>>? _rnDebugSub;
+  String? _lastRealtimeEvent;
+  bool _socketConnected = false;
 
   // Scroll controller
   final ScrollController _messagesScrollController = ScrollController();
@@ -119,14 +122,15 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
   // --- Typing & presence state ---
   bool _peerTyping = false; // whether the other participant is typing
   bool _peerOnline = false; // whether the other participant is online
-  Timer? _typingStoppedTimer; // local timer to send typing:false after inactivity
+  Timer?
+      _typingStoppedTimer; // local timer to send typing:false after inactivity
   DateTime? _lastTypingSentAt; // throttle typing:true re-emits
   final Duration _typingStopWindow = const Duration(seconds: 2);
   final Duration _typingStartThrottle = const Duration(seconds: 5);
   StreamSubscription<Map<String, dynamic>>? _rnEventSub;
 
-    @override
-    void initState() {
+  @override
+  void initState() {
     super.initState();
     _model = createModel(context, () => MessageClientModel());
     _model.textController ??= TextEditingController();
@@ -156,7 +160,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
 
     try {
       if (_kDebugMode) {
-        debugPrint('MessageClient(init): widget.bookingId=${widget.bookingId ?? '<null>'} widget.threadId=${widget.threadId ?? '<null>'}');
+        debugPrint(
+            'MessageClient(init): widget.bookingId=${widget.bookingId ?? '<null>'} widget.threadId=${widget.threadId ?? '<null>'}');
       }
     } catch (_) {}
 
@@ -193,20 +198,20 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
             return;
           }
 
-           if (eventName == 'booking_closed' || eventName == 'chat_closed') {
-             _handleBookingClosed();
-             return;
-           }
+          if (eventName == 'booking_closed' || eventName == 'chat_closed') {
+            _handleBookingClosed();
+            return;
+          }
 
-           // Handle payment confirmation events for afterCompletion bookings
-           if (eventName == 'booking_paid' ||
-               eventName == 'payment_confirmed' ||
-               eventName == 'payment_success') {
-             _handlePaymentConfirmed(ev);
-             return;
-           }
-         } catch (e) {
-           if (_kDebugMode) debugPrint('Error handling socket event: $e');
+          // Handle payment confirmation events for afterCompletion bookings
+          if (eventName == 'booking_paid' ||
+              eventName == 'payment_confirmed' ||
+              eventName == 'payment_success') {
+            _handlePaymentConfirmed(ev);
+            return;
+          }
+        } catch (e) {
+          if (_kDebugMode) debugPrint('Error handling socket event: $e');
         }
       });
     } catch (e) {
@@ -217,10 +222,14 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
     // we'll skip polling because realtime events will arrive.
     try {
       _backgroundRefreshTimer?.cancel();
-      _backgroundRefreshTimer = Timer.periodic(const Duration(seconds: 5), (t) async {
+      _backgroundRefreshTimer =
+          Timer.periodic(const Duration(seconds: 5), (t) async {
         try {
           if (!mounted) return;
-          if (_bookingCompleted) { _backgroundRefreshTimer?.cancel(); return; }
+          if (_bookingCompleted) {
+            _backgroundRefreshTimer?.cancel();
+            return;
+          }
           // Prefer realtime socket; if connected, skip background polling
           if (RealtimeNotifications.instance.connected) return;
           // If there's an existing poll fallback timer active, skip to avoid duplicate requests
@@ -236,7 +245,7 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
         }
       });
     } catch (_) {}
-    }
+  }
 
   void _handleTypingEvent(Map<String, dynamic> ev) {
     try {
@@ -262,7 +271,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
     try {
       final payload = ev['payload'] ?? ev;
       final uid = payload is Map ? (payload['userId']?.toString() ?? '') : '';
-      final status = payload is Map ? (payload['status']?.toString() ?? '') : '';
+      final status =
+          payload is Map ? (payload['status']?.toString() ?? '') : '';
 
       if (uid == _participantId) {
         if (mounted) setState(() => _peerOnline = status == 'online');
@@ -275,7 +285,9 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
     if (tid != null && tid.isNotEmpty) {
       _threadId = tid;
       try {
-        if (_kDebugMode) debugPrint('RealtimeNotifications -> thread created. threadId=$_threadId');
+        if (_kDebugMode)
+          debugPrint(
+              'RealtimeNotifications -> thread created. threadId=$_threadId');
       } catch (_) {}
       RealtimeNotifications.instance.joinThread(tid);
       if (mounted) setState(() {});
@@ -285,20 +297,27 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
   void _handleIncomingMessage(Map<String, dynamic> ev) {
     try {
       final rawMsg = ev['message'] ?? ev['payload'] ?? ev;
-      final msg = (rawMsg is Map) ? Map<String, dynamic>.from(rawMsg) : null;
+      final msg = (rawMsg is Map)
+          ? _normalizeMessage(Map<String, dynamic>.from(rawMsg))
+          : null;
 
       if (msg != null) {
         // Check if this message belongs to our current thread
-        final incomingTid = msg['threadId']?.toString() ?? msg['chatId']?.toString();
-        if (incomingTid != null && incomingTid.isNotEmpty &&
+        final incomingTid =
+            msg['threadId']?.toString() ?? msg['chatId']?.toString();
+        if (incomingTid != null &&
+            incomingTid.isNotEmpty &&
             (_threadId == null || incomingTid != _threadId)) {
-          if (_kDebugMode) debugPrint('Ignoring message for thread $incomingTid (current=$_threadId)');
+          if (_kDebugMode)
+            debugPrint(
+                'Ignoring message for thread $incomingTid (current=$_threadId)');
           return;
         }
 
         // Check for duplicates
         if (_isDuplicateMessage(msg)) {
-          if (_kDebugMode) debugPrint('Ignoring duplicate message: ${msg['_id']}');
+          if (_kDebugMode)
+            debugPrint('Ignoring duplicate message: ${msg['_id']}');
           return;
         }
 
@@ -307,7 +326,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
             _messages.add(msg);
             _loadingMessages = false;
           });
-          WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => _scrollToBottom());
         }
       }
     } catch (e) {
@@ -323,82 +343,89 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
     if (mounted) setState(() {});
   }
 
-   /// Handle payment confirmation from socket event (booking_paid, payment_confirmed, etc.)
-   void _handlePaymentConfirmed(Map<String, dynamic> ev) {
-     if (!_waitingForPaymentConfirmation) {
-       if (_kDebugMode) debugPrint('Received payment confirmation but not waiting for one');
-       return;
-     }
+  /// Handle payment confirmation from socket event (booking_paid, payment_confirmed, etc.)
+  void _handlePaymentConfirmed(Map<String, dynamic> ev) {
+    if (!_waitingForPaymentConfirmation) {
+      if (_kDebugMode)
+        debugPrint('Received payment confirmation but not waiting for one');
+      return;
+    }
 
-     try {
-       final payload = ev['payload'] ?? ev;
-       final payloadMap = payload is Map ? Map<String, dynamic>.from(payload) : <String, dynamic>{};
-       final incomingBookingId =
-           payloadMap['bookingId']?.toString() ??
-           (payloadMap['booking'] is Map
-               ? (payloadMap['booking']['_id'] ?? payloadMap['booking']['id'])?.toString()
-               : null);
-       final reference = payload is Map ? payload['reference']?.toString() : null;
+    try {
+      final payload = ev['payload'] ?? ev;
+      final payloadMap = payload is Map
+          ? Map<String, dynamic>.from(payload)
+          : <String, dynamic>{};
+      final incomingBookingId = payloadMap['bookingId']?.toString() ??
+          (payloadMap['booking'] is Map
+              ? (payloadMap['booking']['_id'] ?? payloadMap['booking']['id'])
+                  ?.toString()
+              : null);
+      final reference =
+          payload is Map ? payload['reference']?.toString() : null;
 
-       if (widget.bookingId != null &&
-           widget.bookingId!.isNotEmpty &&
-           incomingBookingId != null &&
-           incomingBookingId.isNotEmpty &&
-           incomingBookingId != widget.bookingId) {
-         if (_kDebugMode) {
-           debugPrint('Ignoring payment confirmation for different booking: $incomingBookingId');
-         }
-         return;
-       }
+      if (widget.bookingId != null &&
+          widget.bookingId!.isNotEmpty &&
+          incomingBookingId != null &&
+          incomingBookingId.isNotEmpty &&
+          incomingBookingId != widget.bookingId) {
+        if (_kDebugMode) {
+          debugPrint(
+              'Ignoring payment confirmation for different booking: $incomingBookingId');
+        }
+        return;
+      }
 
-       if (_lastPaymentReference != null &&
-           _lastPaymentReference!.isNotEmpty &&
-           reference != null &&
-           reference.isNotEmpty &&
-           reference != _lastPaymentReference) {
-         if (_kDebugMode) {
-           debugPrint('Ignoring payment confirmation for different reference: $reference');
-         }
-         return;
-       }
+      if (_lastPaymentReference != null &&
+          _lastPaymentReference!.isNotEmpty &&
+          reference != null &&
+          reference.isNotEmpty &&
+          reference != _lastPaymentReference) {
+        if (_kDebugMode) {
+          debugPrint(
+              'Ignoring payment confirmation for different reference: $reference');
+        }
+        return;
+      }
 
-       if (_kDebugMode) {
-         debugPrint('MessageClient: Payment confirmed via socket. Reference: $reference');
-       }
+      if (_kDebugMode) {
+        debugPrint(
+            'MessageClient: Payment confirmed via socket. Reference: $reference');
+      }
 
-       // Cancel any pending timeout
-       _paymentConfirmationTimeout?.cancel();
-       _paymentConfirmationTimeout = null;
+      // Cancel any pending timeout
+      _paymentConfirmationTimeout?.cancel();
+      _paymentConfirmationTimeout = null;
 
-       // Mark as confirmed and update state
-       if (mounted) {
-         setState(() {
-           _paymentConfirmedBySocket = true;
-           _waitingForPaymentConfirmation = false;
-           if (reference != null) _lastPaymentReference = reference;
-         });
-       }
+      // Mark as confirmed and update state
+      if (mounted) {
+        setState(() {
+          _paymentConfirmedBySocket = true;
+          _waitingForPaymentConfirmation = false;
+          if (reference != null) _lastPaymentReference = reference;
+        });
+      }
 
-       if (_paymentWebViewOpen) return;
+      if (_paymentWebViewOpen) return;
 
-       if (mounted) {
-         _closePaymentConfirmationDialogIfOpen();
-         Future.delayed(const Duration(milliseconds: 200), () async {
-           if (mounted && !_submittingReview) {
-             // Mark booking as complete after payment confirmed via socket
-             final token = await TokenStorage.getToken();
-             if (token != null && token.isNotEmpty) {
-               await _completeBookingAndShowRating(token);
-             } else {
-               await _showRatingBottomSheet();
-             }
-           }
-         });
-       }
-     } catch (e) {
-       if (_kDebugMode) debugPrint('Error handling payment confirmation: $e');
-     }
-   }
+      if (mounted) {
+        _closePaymentConfirmationDialogIfOpen();
+        Future.delayed(const Duration(milliseconds: 200), () async {
+          if (mounted && !_submittingReview) {
+            // Mark booking as complete after payment confirmed via socket
+            final token = await TokenStorage.getToken();
+            if (token != null && token.isNotEmpty) {
+              await _completeBookingAndShowRating(token);
+            } else {
+              await _showRatingBottomSheet();
+            }
+          }
+        });
+      }
+    } catch (e) {
+      if (_kDebugMode) debugPrint('Error handling payment confirmation: $e');
+    }
+  }
 
   @override
   void dispose() {
@@ -425,9 +452,18 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
     _model.dispose();
 
     // Cancel realtime subscriptions to avoid leaks / duplicate handlers
-    try { _rnSub?.cancel(); _rnSub = null; } catch (_) {}
-    try { _rnDebugSub?.cancel(); _rnDebugSub = null; } catch (_) {}
-    try { _rnEventSub?.cancel(); _rnEventSub = null; } catch (_) {}
+    try {
+      _rnSub?.cancel();
+      _rnSub = null;
+    } catch (_) {}
+    try {
+      _rnDebugSub?.cancel();
+      _rnDebugSub = null;
+    } catch (_) {}
+    try {
+      _rnEventSub?.cancel();
+      _rnEventSub = null;
+    } catch (_) {}
 
     super.dispose();
   }
@@ -437,10 +473,12 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       // Consider user active while typing/has focus; emit online presence
       try {
         if (_currentUserId != null && _currentUserId!.isNotEmpty) {
-          RealtimeNotifications.instance.emitPresence(_currentUserId!, 'online');
+          RealtimeNotifications.instance
+              .emitPresence(_currentUserId!, 'online');
         }
       } catch (_) {}
-      Future.delayed(const Duration(milliseconds: 200), () => _scrollToBottom());
+      Future.delayed(
+          const Duration(milliseconds: 200), () => _scrollToBottom());
     }
   }
 
@@ -490,10 +528,14 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
   Future<void> _maybeInitChat() async {
     try {
       final profile = await UserService.getProfile();
-      _currentUserId = profile?['_id']?.toString() ?? profile?['id']?.toString();
+      _currentUserId =
+          profile?['_id']?.toString() ?? profile?['id']?.toString();
       _currentUserRole = profile?['role']?.toString();
+      _currentUserImageUrl =
+          profile != null ? _extractParticipantImage(profile) : null;
     } catch (_) {
       _currentUserId = null;
+      _currentUserImageUrl = null;
     }
 
     // Emit presence online when we know our user id and socket is ready
@@ -505,7 +547,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
         } catch (_) {}
 
         try {
-          RealtimeNotifications.instance.emitPresence(_currentUserId!, 'online');
+          RealtimeNotifications.instance
+              .emitPresence(_currentUserId!, 'online');
         } catch (_) {}
       }
     } catch (_) {}
@@ -513,7 +556,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
     if (widget.threadId != null && widget.threadId!.isNotEmpty) {
       _threadId = widget.threadId;
       try {
-        if (_kDebugMode) debugPrint('MessageClient: using provided threadId=${_threadId}');
+        if (_kDebugMode)
+          debugPrint('MessageClient: using provided threadId=${_threadId}');
       } catch (_) {}
     }
 
@@ -537,10 +581,13 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
     // handshake and reconnection logic. We only need to ensure it's initialized
     // and that we join the thread room when we have a threadId.
     if (_wsConnecting) return;
-    if (_threadId == null && (widget.bookingId == null || widget.bookingId!.isEmpty)) return;
+    if (_threadId == null &&
+        (widget.bookingId == null || widget.bookingId!.isEmpty)) return;
 
     try {
-      if (_kDebugMode) debugPrint('MessageClient: init websocket connection with threadId=${_threadId ?? '<null>'}');
+      if (_kDebugMode)
+        debugPrint(
+            'MessageClient: init websocket connection with threadId=${_threadId ?? '<null>'}');
     } catch (_) {}
 
     _wsConnecting = true;
@@ -551,7 +598,9 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
         RealtimeNotifications.instance.joinThread(_threadId!);
       }
     } catch (e) {
-      if (_kDebugMode) debugPrint('MessageClient: realtime init failed -> $e; falling back to polling');
+      if (_kDebugMode)
+        debugPrint(
+            'MessageClient: realtime init failed -> $e; falling back to polling');
       _startPollingFallback();
     } finally {
       _wsConnecting = false;
@@ -574,7 +623,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
   void didUpdateWidget(covariant MessageClientWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    final bookingChanged = (widget.bookingId ?? '') != (oldWidget.bookingId ?? '');
+    final bookingChanged =
+        (widget.bookingId ?? '') != (oldWidget.bookingId ?? '');
     final threadChanged = (widget.threadId ?? '') != (oldWidget.threadId ?? '');
 
     if (bookingChanged || threadChanged) {
@@ -613,7 +663,9 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       if (token == null || token.isEmpty) {
         // No auth token available — this will make protected endpoints return 401.
         _lastChatError = 'Missing auth token. Please sign in.';
-        if (_kDebugMode) debugPrint('MessageClient: getToken returned null — cannot fetch chat');
+        if (_kDebugMode)
+          debugPrint(
+              'MessageClient: getToken returned null — cannot fetch chat');
         setState(() {
           _loadingMessages = false;
         });
@@ -625,24 +677,32 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
         'Authorization': 'Bearer $token'
       };
 
-      final uri = Uri.parse('$API_BASE_URL/api/chat/booking/${widget.bookingId}');
+      final uri =
+          Uri.parse('$API_BASE_URL/api/chat/booking/${widget.bookingId}');
       if (_kDebugMode) debugPrint('MessageClient: GET $uri');
 
-      final resp = await http.get(uri, headers: headers).timeout(const Duration(seconds: 15));
+      final resp = await http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 15));
 
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
         // Surface HTTP-level diagnostics so _waitForThreadAvailable can show exact reason
-        _lastChatError = 'Failed to fetch chat: HTTP ${resp.statusCode} ${resp.body}';
-        if (_kDebugMode) debugPrint('MessageClient: _fetchChat non-2xx -> $_lastChatError');
+        _lastChatError =
+            'Failed to fetch chat: HTTP ${resp.statusCode} ${resp.body}';
+        if (_kDebugMode)
+          debugPrint('MessageClient: _fetchChat non-2xx -> $_lastChatError');
         setState(() {
           _loadingMessages = false;
         });
         return;
       }
 
-      if (_kDebugMode) debugPrint('MessageClient: _fetchChat resp ${resp.statusCode}');
+      if (_kDebugMode)
+        debugPrint('MessageClient: _fetchChat resp ${resp.statusCode}');
 
-      if (resp.statusCode >= 200 && resp.statusCode < 300 && resp.body.isNotEmpty) {
+      if (resp.statusCode >= 200 &&
+          resp.statusCode < 300 &&
+          resp.body.isNotEmpty) {
         final body = jsonDecode(resp.body);
         final data = body is Map ? (body['data'] ?? body) : body;
 
@@ -658,7 +718,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
           } catch (_) {}
 
           _threadId = data['threadId']?.toString() ?? data['_id']?.toString();
-          if (_kDebugMode) debugPrint('MessageClient: _fetchChat set _threadId=$_threadId');
+          if (_kDebugMode)
+            debugPrint('MessageClient: _fetchChat set _threadId=$_threadId');
 
           // Extract participant info
           _extractParticipantInfo(Map<String, dynamic>.from(data));
@@ -667,9 +728,12 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
           _extractBookingInfo(Map<String, dynamic>.from(data));
 
           final msgs = <Map<String, dynamic>>[];
-          final rawMsgs = (data['messages'] is List) ? data['messages'] as List : [];
+          final rawMsgs =
+              (data['messages'] is List) ? data['messages'] as List : [];
           for (final m in rawMsgs) {
-            if (m is Map) msgs.add(Map<String, dynamic>.from(m));
+            if (m is Map) {
+              msgs.add(_normalizeMessage(Map<String, dynamic>.from(m)));
+            }
           }
 
           if (mounted) {
@@ -677,7 +741,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
               _messages = msgs;
               _loadingMessages = false;
             });
-            WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+            WidgetsBinding.instance
+                .addPostFrameCallback((_) => _scrollToBottom());
           }
           return;
         }
@@ -696,50 +761,296 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
   void _extractParticipantInfo(Map<String, dynamic> data) {
     try {
       final parts = data['participants'];
-      if (parts is List && parts.isNotEmpty) {
-        String? otherName;
-        String? otherImg;
-        String? otherId;
-        for (final p in parts) {
-          if (p is Map) {
-            final pid = p['_id']?.toString() ?? p['id']?.toString() ?? p['userId']?.toString();
-            if (pid != null && pid.isNotEmpty && pid != (_currentUserId ?? '')) {
-              otherName = p['name']?.toString() ?? p['fullName']?.toString() ?? otherName;
-              otherImg = (p['profileImage'] is String)
-                  ? p['profileImage']
-                  : (p['profileImage'] is Map
-                  ? (p['profileImage']['url'] ?? p['profileImage']['path'])
-                  : null);
-              otherId = pid;
-              break;
-            }
+      final resolvedOther = _resolveOtherParticipant(data, parts);
+      if (resolvedOther != null) {
+        _participantName =
+            resolvedOther['name']?.toString() ?? _participantName;
+        _participantImageUrl =
+            resolvedOther['imageUrl']?.toString() ?? _participantImageUrl;
+        _participantId = resolvedOther['id']?.toString() ?? _participantId;
+      }
+
+      // Check and set participant verification status (artisan KYC)
+      _participantVerified = data['verified'] == true;
+    } catch (_) {}
+  }
+
+  Map<String, String>? _resolveOtherParticipant(
+    Map<String, dynamic> threadData,
+    dynamic participants,
+  ) {
+    final candidates = <Map<String, dynamic>>[];
+
+    if (participants is List) {
+      for (final entry in participants) {
+        if (entry is Map) {
+          candidates.add(Map<String, dynamic>.from(entry));
+        }
+      }
+    }
+
+    Map<String, dynamic>? pickBestParticipant() {
+      if (candidates.isEmpty) return null;
+
+      Map<String, dynamic>? roleBasedMatch;
+      Map<String, dynamic>? idBasedMatch;
+      Map<String, dynamic>? firstCandidate;
+
+      for (final candidate in candidates) {
+        final pid = _extractUserId(candidate);
+        final role = (candidate['role'] ?? '').toString().toLowerCase();
+        firstCandidate ??= candidate;
+
+        if (_currentUserId != null &&
+            _currentUserId!.isNotEmpty &&
+            pid != null &&
+            pid.isNotEmpty &&
+            pid != _currentUserId) {
+          idBasedMatch ??= candidate;
+        }
+
+        if (_currentUserRole != null && _currentUserRole!.isNotEmpty) {
+          final currentRole = _currentUserRole!.toLowerCase();
+          final isOtherRole = (currentRole.contains('artisan') &&
+                  (role.contains('client') || role.contains('customer'))) ||
+              ((currentRole.contains('client') ||
+                      currentRole.contains('customer')) &&
+                  role.contains('artisan'));
+          if (isOtherRole) {
+            roleBasedMatch ??= candidate;
           }
         }
-        _participantName = otherName ?? _participantName;
-        _participantImageUrl = otherImg ?? _participantImageUrl;
-        _participantId = otherId ?? _participantId;
-
-        // Check and set participant verification status (artisan KYC)
-        _participantVerified = data['verified'] == true;
       }
-    } catch (_) {}
+
+      return roleBasedMatch ?? idBasedMatch ?? firstCandidate;
+    }
+
+    final participant = pickBestParticipant();
+    if (participant != null) {
+      final participantName = _extractParticipantName(participant);
+      final participantImage = _extractParticipantImage(participant);
+      final participantId = _extractUserId(participant);
+      if ((participantName ?? '').isNotEmpty ||
+          (participantImage ?? '').isNotEmpty ||
+          (participantId ?? '').isNotEmpty) {
+        return <String, String>{
+          if (participantName != null && participantName.isNotEmpty)
+            'name': participantName,
+          if (participantImage != null && participantImage.isNotEmpty)
+            'imageUrl': participantImage,
+          if (participantId != null && participantId.isNotEmpty)
+            'id': participantId,
+        };
+      }
+    }
+
+    final currentRole = (_currentUserRole ?? '').toLowerCase();
+    final bookingNode = threadData['booking'] is Map
+        ? Map<String, dynamic>.from(threadData['booking'])
+        : null;
+    final fallbackCustomer =
+        bookingNode != null ? bookingNode['customer'] : null;
+    final fallbackArtisan = bookingNode != null ? bookingNode['artisan'] : null;
+    final fallbackSource = currentRole.contains('artisan')
+        ? threadData['customer'] ??
+            threadData['customerUser'] ??
+            threadData['client'] ??
+            fallbackCustomer
+        : threadData['artisan'] ??
+            threadData['artisanUser'] ??
+            threadData['artisanProfile'] ??
+            fallbackArtisan;
+
+    if (fallbackSource is Map) {
+      final fallback = Map<String, dynamic>.from(fallbackSource);
+      final fallbackName = _extractParticipantName(fallback);
+      final fallbackImage = _extractParticipantImage(fallback);
+      final fallbackId = _extractUserId(fallback);
+      if ((fallbackName ?? '').isNotEmpty ||
+          (fallbackImage ?? '').isNotEmpty ||
+          (fallbackId ?? '').isNotEmpty) {
+        return <String, String>{
+          if (fallbackName != null && fallbackName.isNotEmpty)
+            'name': fallbackName,
+          if (fallbackImage != null && fallbackImage.isNotEmpty)
+            'imageUrl': fallbackImage,
+          if (fallbackId != null && fallbackId.isNotEmpty) 'id': fallbackId,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  String? _extractUserId(Map<String, dynamic> data) {
+    for (final key in ['_id', 'id', 'userId', 'participantId']) {
+      final value = data[key];
+      if (value is String && value.trim().isNotEmpty) return value.trim();
+      if (value != null && value.toString().trim().isNotEmpty) {
+        return value.toString().trim();
+      }
+    }
+    final nestedUser = data['user'];
+    if (nestedUser is Map) {
+      return _extractUserId(Map<String, dynamic>.from(nestedUser));
+    }
+    return null;
+  }
+
+  String? _extractParticipantName(Map<String, dynamic> data) {
+    for (final key in ['name', 'fullName', 'displayName', 'businessName']) {
+      final value = data[key];
+      if (value is String && value.trim().isNotEmpty) return value.trim();
+    }
+    final nestedUser = data['user'];
+    if (nestedUser is Map) {
+      return _extractParticipantName(Map<String, dynamic>.from(nestedUser));
+    }
+    return null;
+  }
+
+  String? _extractParticipantImage(Map<String, dynamic> data) {
+    final directCandidates = [
+      data['profileImageUrl'],
+      data['senderImageUrl'],
+      data['profileImage'],
+      data['avatar'],
+      data['image'],
+      data['photo'],
+      data['picture'],
+    ];
+    for (final candidate in directCandidates) {
+      final normalized = _normalizeImageUrl(candidate);
+      if (normalized != null && normalized.isNotEmpty) {
+        return normalized;
+      }
+    }
+
+    final nestedCandidates = [
+      data['user'],
+      data['profile'],
+      data['artisanAuthDetails'],
+    ];
+    for (final candidate in nestedCandidates) {
+      if (candidate is Map) {
+        final normalized =
+            _extractParticipantImage(Map<String, dynamic>.from(candidate));
+        if (normalized != null && normalized.isNotEmpty) {
+          return normalized;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  String? _extractImageUrl(dynamic value) {
+    if (value == null) return null;
+    if (value is String) return value.trim().isEmpty ? null : value;
+    if (value is Map) {
+      for (final key in [
+        'url',
+        'secure_url',
+        'secureUrl',
+        'path',
+        'src',
+        'imageUrl',
+        'image_url',
+      ]) {
+        final candidate = value[key];
+        if (candidate is String && candidate.trim().isNotEmpty) {
+          return candidate.trim();
+        }
+      }
+    }
+    return null;
+  }
+
+  String? _normalizeImageUrl(dynamic value) {
+    final raw = _extractImageUrl(value);
+    if (raw == null || raw.trim().isEmpty) return null;
+    if (raw.startsWith('//')) return 'https:$raw';
+    return raw.trim();
+  }
+
+  Widget _buildProfileAvatar({
+    required String? imageUrl,
+    required double radius,
+    required Color backgroundColor,
+    required Color iconColor,
+    required double iconSize,
+  }) {
+    final normalizedUrl = _normalizeImageUrl(imageUrl);
+    if (normalizedUrl == null || normalizedUrl.isEmpty) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: backgroundColor,
+        child: Icon(Icons.person, color: iconColor, size: iconSize),
+      );
+    }
+
+    return ClipOval(
+      child: CachedNetworkImage(
+        imageUrl: normalizedUrl,
+        width: radius * 2,
+        height: radius * 2,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => Container(
+          width: radius * 2,
+          height: radius * 2,
+          color: backgroundColor,
+          alignment: Alignment.center,
+          child: SizedBox(
+            width: iconSize,
+            height: iconSize,
+            child: CircularProgressIndicator(
+              strokeWidth: 1.8,
+              valueColor: AlwaysStoppedAnimation<Color>(iconColor),
+            ),
+          ),
+        ),
+        errorWidget: (context, url, error) => CircleAvatar(
+          radius: radius,
+          backgroundColor: backgroundColor,
+          child: Icon(Icons.person, color: iconColor, size: iconSize),
+        ),
+        imageBuilder: (context, imageProvider) => Container(
+          width: radius * 2,
+          height: radius * 2,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            image: DecorationImage(
+              image: imageProvider,
+              fit: BoxFit.cover,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _extractBookingInfo(Map<String, dynamic> data) {
     try {
-      final bookingMeta = data['booking'] ?? data['bookingInfo'] ?? data['bookingMeta'];
+      final bookingMeta =
+          data['booking'] ?? data['bookingInfo'] ?? data['bookingMeta'];
       if (bookingMeta is Map) {
-        _bookingStatusFromThread = bookingMeta['status']?.toString() ?? _bookingStatusFromThread;
-        _bookingPaymentMode = bookingMeta['paymentMode']?.toString() ?? _bookingPaymentMode;
-        final priceVal = bookingMeta['price'] ?? bookingMeta['amount'] ?? bookingMeta['total'];
+        _bookingStatusFromThread =
+            bookingMeta['status']?.toString() ?? _bookingStatusFromThread;
+        _bookingPaymentMode =
+            bookingMeta['paymentMode']?.toString() ?? _bookingPaymentMode;
+        final priceVal = bookingMeta['price'] ??
+            bookingMeta['amount'] ??
+            bookingMeta['total'];
         if (priceVal != null) {
           if (priceVal is num) {
-            _bookingPriceFromThread = '₦' + NumberFormat('#,##0', 'en_US').format(priceVal);
+            _bookingPriceFromThread =
+                '₦' + NumberFormat('#,##0', 'en_US').format(priceVal);
           } else {
             final s = priceVal.toString();
             final n = num.tryParse(s.replaceAll(RegExp(r'[^0-9.-]'), ''));
             if (n != null) {
-              _bookingPriceFromThread = '₦' + NumberFormat('#,##0', 'en_US').format(n);
+              _bookingPriceFromThread =
+                  '₦' + NumberFormat('#,##0', 'en_US').format(n);
             } else {
               _bookingPriceFromThread = s;
             }
@@ -759,8 +1070,10 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
 
   bool _serverRequiresPaymentInitializationBeforeCompletion(String? message) {
     final normalized = (message ?? '').trim().toLowerCase();
-    return normalized.contains('payment must be initialize before marking work completed') ||
-        normalized.contains('payment must be initialized before marking work completed') ||
+    return normalized.contains(
+            'payment must be initialize before marking work completed') ||
+        normalized.contains(
+            'payment must be initialized before marking work completed') ||
         normalized.contains('initialize payment before marking work completed');
   }
 
@@ -773,7 +1086,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
   }
 
   Future<String?> _refreshBookingPaymentMode({String? token}) async {
-    if (widget.bookingId == null || widget.bookingId!.isEmpty) return _bookingPaymentMode;
+    if (widget.bookingId == null || widget.bookingId!.isEmpty)
+      return _bookingPaymentMode;
 
     try {
       final authToken = token ?? await TokenStorage.getToken();
@@ -785,7 +1099,9 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       };
 
       final uri = Uri.parse('$API_BASE_URL/api/bookings/${widget.bookingId}');
-      final response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 10));
+      final response = await http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode >= 200 &&
           response.statusCode < 300 &&
@@ -800,17 +1116,20 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
           if (mounted) {
             setState(() {
               _bookingPaymentMode = paymentMode ?? _bookingPaymentMode;
-              _bookingStatusFromThread = bookingStatus ?? _bookingStatusFromThread;
+              _bookingStatusFromThread =
+                  bookingStatus ?? _bookingStatusFromThread;
             });
           } else {
             _bookingPaymentMode = paymentMode ?? _bookingPaymentMode;
-            _bookingStatusFromThread = bookingStatus ?? _bookingStatusFromThread;
+            _bookingStatusFromThread =
+                bookingStatus ?? _bookingStatusFromThread;
           }
           return paymentMode ?? _bookingPaymentMode;
         }
       }
     } catch (e) {
-      if (_kDebugMode) debugPrint('MessageClient: failed to refresh booking payment mode: $e');
+      if (_kDebugMode)
+        debugPrint('MessageClient: failed to refresh booking payment mode: $e');
     }
 
     return _bookingPaymentMode;
@@ -876,7 +1195,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       }
     }
 
-    return _isCompletedBookingStatus(_bookingStatusFromThread) || _bookingCompleted;
+    return _isCompletedBookingStatus(_bookingStatusFromThread) ||
+        _bookingCompleted;
   }
 
   Future<int?> _resolveBookingAmountForDeferredPayment(String token) async {
@@ -897,7 +1217,9 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
         'Authorization': 'Bearer $token'
       };
       final uri = Uri.parse('$API_BASE_URL/api/bookings/${widget.bookingId}');
-      final response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 10));
+      final response = await http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode >= 200 &&
           response.statusCode < 300 &&
@@ -930,7 +1252,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       }
     } catch (e) {
       if (_kDebugMode) {
-        debugPrint('MessageClient: failed to resolve booking amount for deferred payment: $e');
+        debugPrint(
+            'MessageClient: failed to resolve booking amount for deferred payment: $e');
       }
     }
 
@@ -948,7 +1271,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
 
       final amount = await _resolveBookingAmountForDeferredPayment(token);
       if (amount == null || amount <= 0) {
-        AppNotification.showError(context, 'Unable to determine the booking amount for payment.');
+        AppNotification.showError(
+            context, 'Unable to determine the booking amount for payment.');
         return;
       }
 
@@ -959,7 +1283,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       } catch (_) {}
 
       if (customerEmail == null || customerEmail.isEmpty) {
-        AppNotification.showError(context, 'Unable to retrieve your email for payment');
+        AppNotification.showError(
+            context, 'Unable to retrieve your email for payment');
         return;
       }
 
@@ -985,7 +1310,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       };
 
       if (_kDebugMode) {
-        debugPrint('MessageClient: Initializing generic deferred payment before completion POST $uri');
+        debugPrint(
+            'MessageClient: Initializing generic deferred payment before completion POST $uri');
       }
 
       final response = await http
@@ -1001,8 +1327,10 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final parsed = jsonDecode(response.body);
         final data = parsed is Map ? (parsed['data'] ?? parsed) : parsed;
-        final authUrl = data is Map ? data['authorization_url']?.toString() : null;
-        final paymentReference = data is Map ? data['reference']?.toString() : null;
+        final authUrl =
+            data is Map ? data['authorization_url']?.toString() : null;
+        final paymentReference =
+            data is Map ? data['reference']?.toString() : null;
 
         if (authUrl != null && authUrl.isNotEmpty) {
           if (mounted) {
@@ -1025,8 +1353,10 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
 
       String serverMsg = 'Failed to initialize payment';
       try {
-        final parsed = response.body.isNotEmpty ? jsonDecode(response.body) : null;
-        if (parsed is Map && (parsed['message'] != null || parsed['error'] != null)) {
+        final parsed =
+            response.body.isNotEmpty ? jsonDecode(response.body) : null;
+        if (parsed is Map &&
+            (parsed['message'] != null || parsed['error'] != null)) {
           serverMsg = (parsed['message'] ?? parsed['error']).toString();
         } else if (response.body.isNotEmpty) {
           serverMsg = response.body;
@@ -1034,7 +1364,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       } catch (_) {}
       AppNotification.showError(context, serverMsg);
     } catch (e) {
-      if (_kDebugMode) debugPrint('Error initializing payment before completion: $e');
+      if (_kDebugMode)
+        debugPrint('Error initializing payment before completion: $e');
       AppNotification.showError(context, 'Error initializing payment: $e');
     } finally {
       if (mounted) setState(() => _initializingPayment = false);
@@ -1061,7 +1392,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       final payload = <String, dynamic>{'reference': reference};
 
       if (_kDebugMode) {
-        debugPrint('MessageClient: verifying payment reference $reference via $uri');
+        debugPrint(
+            'MessageClient: verifying payment reference $reference via $uri');
       }
 
       final response = await http
@@ -1069,7 +1401,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
           .timeout(const Duration(seconds: 20));
 
       if (_kDebugMode) {
-        debugPrint('MessageClient: payment verify response ${response.statusCode} ${response.body}');
+        debugPrint(
+            'MessageClient: payment verify response ${response.statusCode} ${response.body}');
       }
 
       if (response.statusCode < 200 ||
@@ -1126,7 +1459,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
         }
       }
     } catch (e) {
-      if (_kDebugMode) debugPrint('MessageClient: verify payment reference error: $e');
+      if (_kDebugMode)
+        debugPrint('MessageClient: verify payment reference error: $e');
     }
 
     return false;
@@ -1143,7 +1477,9 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       final token = await TokenStorage.getToken();
       if (token == null || token.isEmpty) {
         _lastChatError = 'Missing auth token. Please sign in.';
-        if (_kDebugMode) debugPrint('MessageClient: getToken returned null — cannot fetch chat by thread');
+        if (_kDebugMode)
+          debugPrint(
+              'MessageClient: getToken returned null — cannot fetch chat by thread');
         setState(() {
           _loadingMessages = false;
         });
@@ -1158,11 +1494,16 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       final uri = Uri.parse('$API_BASE_URL/api/chat/${_threadId}');
       if (_kDebugMode) debugPrint('MessageClient: GET thread $uri');
 
-      final resp = await http.get(uri, headers: headers).timeout(const Duration(seconds: 15));
+      final resp = await http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 15));
 
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
-        _lastChatError = 'Failed to fetch chat by thread: HTTP ${resp.statusCode} ${resp.body}';
-        if (_kDebugMode) debugPrint('MessageClient: _fetchChatByThreadId non-2xx -> $_lastChatError');
+        _lastChatError =
+            'Failed to fetch chat by thread: HTTP ${resp.statusCode} ${resp.body}';
+        if (_kDebugMode)
+          debugPrint(
+              'MessageClient: _fetchChatByThreadId non-2xx -> $_lastChatError');
         setState(() {
           _loadingMessages = false;
         });
@@ -1177,9 +1518,12 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
         _extractParticipantInfo(Map<String, dynamic>.from(data));
 
         final msgs = <Map<String, dynamic>>[];
-        final rawMsgs = (data['messages'] is List) ? data['messages'] as List : [];
+        final rawMsgs =
+            (data['messages'] is List) ? data['messages'] as List : [];
         for (final m in rawMsgs) {
-          if (m is Map) msgs.add(Map<String, dynamic>.from(m));
+          if (m is Map) {
+            msgs.add(_normalizeMessage(Map<String, dynamic>.from(m)));
+          }
         }
 
         if (mounted) {
@@ -1187,7 +1531,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
             _messages = msgs;
             _loadingMessages = false;
           });
-          WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => _scrollToBottom());
         }
         return;
       }
@@ -1197,7 +1542,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
         _loadingMessages = false;
       });
     } catch (e) {
-      if (_kDebugMode) debugPrint('MessageClient: _fetchChatByThreadId exception: $e');
+      if (_kDebugMode)
+        debugPrint('MessageClient: _fetchChatByThreadId exception: $e');
       if (mounted) setState(() => _loadingMessages = false);
     }
   }
@@ -1208,22 +1554,36 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       if (_threadId == null || _threadId!.isEmpty) return;
       final token = await TokenStorage.getToken();
       if (token == null || token.isEmpty) return;
-      final headers = <String, String>{'Content-Type':'application/json','Authorization':'Bearer $token'};
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token'
+      };
       final uri = Uri.parse('$API_BASE_URL/api/chat/${_threadId}');
-      final resp = await http.get(uri, headers: headers).timeout(const Duration(seconds: 10));
-      if (resp.statusCode >=200 && resp.statusCode <300 && resp.body.isNotEmpty) {
+      final resp = await http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 10));
+      if (resp.statusCode >= 200 &&
+          resp.statusCode < 300 &&
+          resp.body.isNotEmpty) {
         final body = jsonDecode(resp.body);
         final data = body is Map ? (body['data'] ?? body) : body;
         if (data is Map) {
-          final msgs = <Map<String,dynamic>>[];
-          final rawMsgs = (data['messages'] is List) ? data['messages'] as List : [];
-          for (final m in rawMsgs) if (m is Map) msgs.add(Map<String,dynamic>.from(m));
+          _extractParticipantInfo(Map<String, dynamic>.from(data));
+          final msgs = <Map<String, dynamic>>[];
+          final rawMsgs =
+              (data['messages'] is List) ? data['messages'] as List : [];
+          for (final m in rawMsgs) {
+            if (m is Map) {
+              msgs.add(_normalizeMessage(Map<String, dynamic>.from(m)));
+            }
+          }
           if (!mounted) return;
           setState(() {
             _messages = msgs;
             // don't change _loadingMessages here so UI isn't affected
           });
-          WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => _scrollToBottom());
         }
       }
     } catch (e) {
@@ -1237,23 +1597,47 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       if (widget.bookingId == null || widget.bookingId!.isEmpty) return;
       final token = await TokenStorage.getToken();
       if (token == null || token.isEmpty) return;
-      final headers = <String, String>{'Content-Type':'application/json','Authorization':'Bearer $token'};
-      final uri = Uri.parse('$API_BASE_URL/api/chat/booking/${widget.bookingId}');
-      final resp = await http.get(uri, headers: headers).timeout(const Duration(seconds: 10));
-      if (resp.statusCode >=200 && resp.statusCode <300 && resp.body.isNotEmpty) {
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token'
+      };
+      final uri =
+          Uri.parse('$API_BASE_URL/api/chat/booking/${widget.bookingId}');
+      final resp = await http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 10));
+      if (resp.statusCode >= 200 &&
+          resp.statusCode < 300 &&
+          resp.body.isNotEmpty) {
         final body = jsonDecode(resp.body);
         final data = body is Map ? (body['data'] ?? body) : body;
         if (data is Map) {
-          final msgs = <Map<String,dynamic>>[];
-          final rawMsgs = (data['messages'] is List) ? data['messages'] as List : [];
-          for (final m in rawMsgs) if (m is Map) msgs.add(Map<String,dynamic>.from(m));
+          final msgs = <Map<String, dynamic>>[];
+          final rawMsgs =
+              (data['messages'] is List) ? data['messages'] as List : [];
+          for (final m in rawMsgs) {
+            if (m is Map) {
+              msgs.add(_normalizeMessage(Map<String, dynamic>.from(m)));
+            }
+          }
           if (!mounted) return;
           // Update threadId/participant info silently as well
-          try { _threadId = data['threadId']?.toString() ?? data['_id']?.toString() ?? _threadId; } catch (_) {}
-          try { _extractParticipantInfo(Map<String,dynamic>.from(data)); } catch (_) {}
-          try { _extractBookingInfo(Map<String,dynamic>.from(data)); } catch (_) {}
-          setState(() { _messages = msgs; });
-          WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+          try {
+            _threadId = data['threadId']?.toString() ??
+                data['_id']?.toString() ??
+                _threadId;
+          } catch (_) {}
+          try {
+            _extractParticipantInfo(Map<String, dynamic>.from(data));
+          } catch (_) {}
+          try {
+            _extractBookingInfo(Map<String, dynamic>.from(data));
+          } catch (_) {}
+          setState(() {
+            _messages = msgs;
+          });
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => _scrollToBottom());
         }
       }
     } catch (e) {
@@ -1264,7 +1648,9 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
   Future<void> _notifyMessageSent(String text) async {
     try {
       // Prefer to send chat messages over the socket if connected and threadId is known.
-      if (RealtimeNotifications.instance.connected && _threadId != null && _threadId!.isNotEmpty) {
+      if (RealtimeNotifications.instance.connected &&
+          _threadId != null &&
+          _threadId!.isNotEmpty) {
         try {
           // Ensure socket is ready
           if (!RealtimeNotifications.instance.connected) {
@@ -1273,10 +1659,13 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
 
           // Use the sendChatMessage method (fire-and-forget: method is void)
           RealtimeNotifications.instance.sendChatMessage(_threadId!, text);
-          if (_kDebugMode) debugPrint('notifyMessageSent: sent via socket for thread=$_threadId');
+          if (_kDebugMode)
+            debugPrint(
+                'notifyMessageSent: sent via socket for thread=$_threadId');
           return;
         } catch (e) {
-          if (_kDebugMode) debugPrint('notifyMessageSent socket send error: $e');
+          if (_kDebugMode)
+            debugPrint('notifyMessageSent socket send error: $e');
         }
       }
 
@@ -1292,33 +1681,37 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
         'title': widget.jobTitle ?? 'New message',
       };
       await RealtimeNotifications.instance.emitNotification(payload);
-      if (_kDebugMode) debugPrint('notifyMessageSent: emitted notification fallback');
+      if (_kDebugMode)
+        debugPrint('notifyMessageSent: emitted notification fallback');
     } catch (e) {
       if (_kDebugMode) debugPrint('notifyMessageSent error: $e');
     }
   }
 
-  Future<bool> _waitForThreadAvailable({
-    int attempts = 3,
-    Duration delay = const Duration(seconds: 1)
-  }) async {
+  Future<bool> _waitForThreadAvailable(
+      {int attempts = 3, Duration delay = const Duration(seconds: 1)}) async {
     if (widget.bookingId == null || widget.bookingId!.isEmpty) return false;
 
     try {
       for (int i = 0; i < attempts; i++) {
-        if (_kDebugMode) debugPrint('MessageClient: waitForThreadAvailable attempt ${i + 1}/${attempts} currentThreadId=${_threadId}');
+        if (_kDebugMode)
+          debugPrint(
+              'MessageClient: waitForThreadAvailable attempt ${i + 1}/${attempts} currentThreadId=${_threadId}');
 
         // If we already have a thread, we're done
         if (_threadId != null && _threadId!.isNotEmpty) return true;
 
         // Fetch latest chat info which will set _threadId if created
         await _fetchChat();
-        if (_kDebugMode) debugPrint('MessageClient: after _fetchChat threadId=${_threadId} lastChatError=${_lastChatError}');
+        if (_kDebugMode)
+          debugPrint(
+              'MessageClient: after _fetchChat threadId=${_threadId} lastChatError=${_lastChatError}');
 
         if (_threadId != null && _threadId!.isNotEmpty) return true;
 
         // If we got a 404 "Thread not found" but booking is paid, try nudging the backend once
-        if (!_didAttemptConfirmNudge && _lastChatError != null &&
+        if (!_didAttemptConfirmNudge &&
+            _lastChatError != null &&
             (_lastChatError!.toLowerCase().contains('404') ||
                 _lastChatError!.toLowerCase().contains('thread not found'))) {
           await _attemptConfirmNudge();
@@ -1344,31 +1737,47 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       };
 
       final uri = Uri.parse('$API_BASE_URL/api/bookings/${widget.bookingId}');
-      final resp = await http.get(uri, headers: headers).timeout(const Duration(seconds: 8));
+      final resp = await http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 8));
 
-      if (resp.statusCode >= 200 && resp.statusCode < 300 && resp.body.isNotEmpty) {
+      if (resp.statusCode >= 200 &&
+          resp.statusCode < 300 &&
+          resp.body.isNotEmpty) {
         final parsed = jsonDecode(resp.body);
         final booking = parsed is Map ? (parsed['data'] ?? parsed) : parsed;
 
         if (booking is Map) {
-          final payStatus = (booking['paymentStatus'] ?? booking['payment'] ?? '').toString().toLowerCase();
+          final payStatus =
+              (booking['paymentStatus'] ?? booking['payment'] ?? '')
+                  .toString()
+                  .toLowerCase();
           _lastBookingPaymentStatus = payStatus;
 
           if (payStatus == 'paid') {
             // Attempt to nudge backend to create/confirm booking resources (idempotent)
             try {
-              final confirmUri = Uri.parse('$API_BASE_URL/api/bookings/${widget.bookingId}/confirm-payment');
-              if (_kDebugMode) debugPrint('MessageClient: nudging backend confirm-payment $confirmUri');
+              final confirmUri = Uri.parse(
+                  '$API_BASE_URL/api/bookings/${widget.bookingId}/confirm-payment');
+              if (_kDebugMode)
+                debugPrint(
+                    'MessageClient: nudging backend confirm-payment $confirmUri');
 
-              final nresp = await http.post(confirmUri, headers: headers).timeout(const Duration(seconds: 8));
-              if (_kDebugMode) debugPrint('MessageClient: confirm nudge resp ${nresp.statusCode} ${nresp.body}');
+              final nresp = await http
+                  .post(confirmUri, headers: headers)
+                  .timeout(const Duration(seconds: 8));
+              if (_kDebugMode)
+                debugPrint(
+                    'MessageClient: confirm nudge resp ${nresp.statusCode} ${nresp.body}');
             } catch (e) {
-              if (_kDebugMode) debugPrint('MessageClient: confirm nudge failed: $e');
+              if (_kDebugMode)
+                debugPrint('MessageClient: confirm nudge failed: $e');
             }
             _didAttemptConfirmNudge = true;
           } else {
             // booking not paid yet — chat won't exist until webhook runs
-            if (_kDebugMode) debugPrint('Chat not ready: booking paymentStatus=$payStatus');
+            if (_kDebugMode)
+              debugPrint('Chat not ready: booking paymentStatus=$payStatus');
             _lastChatError = 'Chat not ready: booking paymentStatus=$payStatus';
           }
         }
@@ -1450,15 +1859,18 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
           duration: Duration(hours: 1),
         ));
 
-        final got = await _waitForThreadAvailable(attempts: 4, delay: const Duration(seconds: 1));
+        final got = await _waitForThreadAvailable(
+            attempts: 4, delay: const Duration(seconds: 1));
 
         // hide preparing snackbar
         scaffold.hideCurrentSnackBar();
         setState(() => _waitingForThread = false);
 
         if (!got) {
-          final err = _lastChatError ?? 'Unable to send message — chat not ready.';
-          final composed = '$err\n\nContext: bookingId=${widget.bookingId ?? 'null'} threadId=${_threadId ?? 'null'} lastBookingPaymentStatus=${_lastBookingPaymentStatus ?? 'unknown'}';
+          final err =
+              _lastChatError ?? 'Unable to send message — chat not ready.';
+          final composed =
+              '$err\n\nContext: bookingId=${widget.bookingId ?? 'null'} threadId=${_threadId ?? 'null'} lastBookingPaymentStatus=${_lastBookingPaymentStatus ?? 'unknown'}';
           _lastChatError = composed;
           await _showChatErrorDialog(composed);
 
@@ -1511,13 +1923,16 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
         duration: Duration(hours: 1),
       ));
 
-      final got = await _waitForThreadAvailable(attempts: 4, delay: const Duration(seconds: 1));
+      final got = await _waitForThreadAvailable(
+          attempts: 4, delay: const Duration(seconds: 1));
       scaffold.hideCurrentSnackBar();
       setState(() => _waitingForThread = false);
 
       if (!got) {
-        final err = _lastChatError ?? 'Unable to send message — chat not ready.';
-        final composed = '$err\n\nContext: bookingId=${widget.bookingId ?? 'null'} threadId=${_threadId ?? 'null'} lastBookingPaymentStatus=${_lastBookingPaymentStatus ?? 'unknown'}';
+        final err =
+            _lastChatError ?? 'Unable to send message — chat not ready.';
+        final composed =
+            '$err\n\nContext: bookingId=${widget.bookingId ?? 'null'} threadId=${_threadId ?? 'null'} lastBookingPaymentStatus=${_lastBookingPaymentStatus ?? 'unknown'}';
         _lastChatError = composed;
         await _showChatErrorDialog(composed);
         return;
@@ -1539,13 +1954,17 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
     if (_kDebugMode) {
       debugPrint('MessageClient: POST $uri body=$body');
       debugPrint('Sending message - Thread ID: $_threadId');
-      debugPrint('Socket connected: ${RealtimeNotifications.instance.connected}');
+      debugPrint(
+          'Socket connected: ${RealtimeNotifications.instance.connected}');
     }
 
     try {
-      final resp = await http.post(uri, headers: headers, body: body).timeout(const Duration(seconds: 15));
+      final resp = await http
+          .post(uri, headers: headers, body: body)
+          .timeout(const Duration(seconds: 15));
 
-      if (_kDebugMode) debugPrint('MessageClient: send resp ${resp.statusCode} ${resp.body}');
+      if (_kDebugMode)
+        debugPrint('MessageClient: send resp ${resp.statusCode} ${resp.body}');
 
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         // Try to extract the saved message from response to append locally.
@@ -1558,7 +1977,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
             if (parsed['data'] != null) {
               saved = parsed['data'];
               // Some APIs return data: { message: <msg> }
-              if (saved is Map && saved['message'] != null &&
+              if (saved is Map &&
+                  saved['message'] != null &&
                   (saved['message'] is Map || saved['message'] is String)) {
                 saved = saved['message'];
               }
@@ -1573,7 +1993,7 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
 
           Map<String, dynamic>? msgObj;
           if (saved is Map) {
-            msgObj = Map<String, dynamic>.from(saved);
+            msgObj = _normalizeMessage(Map<String, dynamic>.from(saved));
           } else if (saved is String) {
             msgObj = {
               'text': saved,
@@ -1593,7 +2013,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
             _loadingMessages = false;
           });
 
-          WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => _scrollToBottom());
 
           // Best-effort notify via socket
           _notifyMessageSent(text.trim());
@@ -1619,7 +2040,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
         String msg = 'Failed to send message';
         try {
           final parsed = resp.body.isNotEmpty ? jsonDecode(resp.body) : null;
-          if (parsed is Map && (parsed['message'] != null || parsed['error'] != null)) {
+          if (parsed is Map &&
+              (parsed['message'] != null || parsed['error'] != null)) {
             msg = (parsed['message'] ?? parsed['error']).toString();
           } else if (resp.body.isNotEmpty) {
             msg = resp.body;
@@ -1652,8 +2074,10 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
   bool _isDuplicateMessage(Map<String, dynamic> msg) {
     try {
       final incomingId = msg['_id']?.toString();
-      final incomingText = msg['text']?.toString() ?? msg['message']?.toString();
-      final incomingTime = msg['createdAt']?.toString() ?? msg['timestamp']?.toString();
+      final incomingText =
+          msg['text']?.toString() ?? msg['message']?.toString();
+      final incomingTime =
+          msg['createdAt']?.toString() ?? msg['timestamp']?.toString();
 
       // Check if we already have this message
       for (final existing in _messages) {
@@ -1686,9 +2110,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
 
     // Responsive message width
     final screenWidth = MediaQuery.of(context).size.width;
-    final messageMaxWidth = screenWidth < 400
-        ? screenWidth * 0.75
-        : screenWidth * 0.7;
+    final messageMaxWidth =
+        screenWidth < 400 ? screenWidth * 0.75 : screenWidth * 0.7;
 
     if (_loadingMessages) {
       return ListView.separated(
@@ -1718,7 +2141,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
               ),
               SizedBox(width: screenWidth < 360 ? 8 : 12),
               Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
                         height: screenWidth < 360 ? 10 : 12,
@@ -1784,7 +2208,7 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       padding: const EdgeInsets.only(bottom: 8.0),
       itemCount: _messages.length,
       itemBuilder: (ctx, i) {
-        final m = _messages[i];
+        final m = _normalizeMessage(_messages[i]);
         // Skip temporary messages that are being sent
         if (m['isLocal'] == true) {
           return _buildSendingMessage(m, theme, screenWidth);
@@ -1848,27 +2272,19 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                 horizontal: screenWidth < 360 ? 8 : 0,
               ),
               child: Row(
-                mainAxisAlignment: isMe
-                    ? MainAxisAlignment.end
-                    : MainAxisAlignment.start,
+                mainAxisAlignment:
+                    isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   if (!isMe) ...[
                     Padding(
                       padding: const EdgeInsets.only(right: 8.0),
-                      child: CircleAvatar(
+                      child: _buildProfileAvatar(
+                        imageUrl: _resolveMessageAvatarUrl(m, isMe: isMe),
                         radius: screenWidth < 360 ? 14 : 18,
-                        backgroundImage: m['senderImageUrl'] != null
-                            ? NetworkImage(m['senderImageUrl'].toString())
-                            : null,
                         backgroundColor: theme.alternate,
-                        child: m['senderImageUrl'] == null
-                            ? Icon(
-                          Icons.person,
-                          size: screenWidth < 360 ? 14 : 18,
-                          color: theme.secondaryText,
-                        )
-                            : null,
+                        iconColor: theme.secondaryText,
+                        iconSize: screenWidth < 360 ? 14 : 18,
                       ),
                     ),
                   ],
@@ -1881,8 +2297,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                         color: isMe
                             ? theme.primary
                             : (isDark
-                            ? const Color(0xFF374151)
-                            : Colors.grey[100]),
+                                ? const Color(0xFF374151)
+                                : Colors.grey[100]),
                         borderRadius: BorderRadius.circular(18.0),
                         boxShadow: [
                           BoxShadow(
@@ -1913,9 +2329,7 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                           Text(
                             messageText,
                             style: theme.bodyMedium.copyWith(
-                              color: isMe
-                                  ? Colors.white
-                                  : theme.primaryText,
+                              color: isMe ? Colors.white : theme.primaryText,
                               height: 1.4,
                               fontSize: screenWidth < 360 ? 14 : 15,
                             ),
@@ -1940,14 +2354,12 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                   if (isMe)
                     Padding(
                       padding: const EdgeInsets.only(left: 8.0),
-                      child: CircleAvatar(
+                      child: _buildProfileAvatar(
+                        imageUrl: _resolveMessageAvatarUrl(m, isMe: isMe),
                         radius: screenWidth < 360 ? 14 : 18,
                         backgroundColor: theme.primary.withOpacity(0.1),
-                        child: Icon(
-                          Icons.person,
-                          size: screenWidth < 360 ? 14 : 18,
-                          color: theme.primary,
-                        ),
+                        iconColor: theme.primary,
+                        iconSize: screenWidth < 360 ? 14 : 18,
                       ),
                     ),
                 ],
@@ -1959,7 +2371,86 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
     );
   }
 
-  Widget _buildSendingMessage(Map<String, dynamic> m, FlutterFlowTheme theme, double screenWidth) {
+  Map<String, dynamic> _normalizeMessage(Map<String, dynamic> message) {
+    final normalized = Map<String, dynamic>.from(message);
+    final senderId = normalized['senderId']?.toString() ??
+        normalized['sender']?['_id']?.toString() ??
+        normalized['sender']?['id']?.toString();
+
+    if ((normalized['senderName'] == null ||
+            normalized['senderName'].toString().trim().isEmpty) &&
+        normalized['sender'] is Map) {
+      normalized['senderName'] = _extractParticipantName(
+        Map<String, dynamic>.from(normalized['sender']),
+      );
+    }
+
+    final existingSenderImage = _normalizeImageUrl(
+        normalized['senderImageUrl'] ?? normalized['avatar']);
+    if (existingSenderImage != null && existingSenderImage.isNotEmpty) {
+      normalized['senderImageUrl'] = existingSenderImage;
+    } else if (normalized['sender'] is Map) {
+      final nestedImage = _extractParticipantImage(
+        Map<String, dynamic>.from(normalized['sender']),
+      );
+      if (nestedImage != null && nestedImage.isNotEmpty) {
+        normalized['senderImageUrl'] = nestedImage;
+      }
+    }
+
+    final isOtherParticipant = senderId != null &&
+        senderId.isNotEmpty &&
+        _participantId != null &&
+        _participantId!.isNotEmpty &&
+        senderId == _participantId;
+    if ((normalized['senderImageUrl'] == null ||
+            normalized['senderImageUrl'].toString().trim().isEmpty) &&
+        isOtherParticipant &&
+        _participantImageUrl != null &&
+        _participantImageUrl!.isNotEmpty) {
+      normalized['senderImageUrl'] = _participantImageUrl;
+    } else if ((normalized['senderImageUrl'] == null ||
+            normalized['senderImageUrl'].toString().trim().isEmpty) &&
+        senderId != null &&
+        senderId.isNotEmpty &&
+        _currentUserId != null &&
+        _currentUserId!.isNotEmpty &&
+        senderId == _currentUserId &&
+        _currentUserImageUrl != null &&
+        _currentUserImageUrl!.isNotEmpty) {
+      normalized['senderImageUrl'] = _currentUserImageUrl;
+    }
+
+    return normalized;
+  }
+
+  String? _resolveMessageAvatarUrl(
+    Map<String, dynamic> message, {
+    required bool isMe,
+  }) {
+    final direct = _normalizeImageUrl(message['senderImageUrl']);
+    if (direct != null && direct.isNotEmpty) return direct;
+
+    final sender = message['sender'];
+    if (sender is Map) {
+      final nested =
+          _extractParticipantImage(Map<String, dynamic>.from(sender));
+      if (nested != null && nested.isNotEmpty) return nested;
+    }
+
+    if (isMe &&
+        _currentUserImageUrl != null &&
+        _currentUserImageUrl!.isNotEmpty) {
+      return _currentUserImageUrl;
+    }
+
+    if (isMe) return null;
+
+    return _participantImageUrl;
+  }
+
+  Widget _buildSendingMessage(
+      Map<String, dynamic> m, FlutterFlowTheme theme, double screenWidth) {
     return Padding(
       padding: EdgeInsets.symmetric(
         vertical: 4.0,
@@ -1972,7 +2463,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
           Flexible(
             child: Container(
               constraints: BoxConstraints(
-                maxWidth: screenWidth < 400 ? screenWidth * 0.75 : screenWidth * 0.7,
+                maxWidth:
+                    screenWidth < 400 ? screenWidth * 0.75 : screenWidth * 0.7,
               ),
               decoration: BoxDecoration(
                 color: theme.primary.withOpacity(0.7),
@@ -2106,6 +2598,31 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       );
     }
 
+    final appBarTitle =
+        (widget.jobTitle != null && widget.jobTitle!.trim().isNotEmpty)
+            ? widget.jobTitle!.trim()
+            : ((_participantName != null && _participantName!.trim().isNotEmpty)
+                ? _participantName!.trim()
+                : 'Chat');
+    final appBarMeta = <String>[
+      if (_participantName != null &&
+          _participantName!.trim().isNotEmpty &&
+          _participantName!.trim() != appBarTitle)
+        _participantName!.trim(),
+      if ((_bookingPriceFromThread ?? widget.bookingPrice) != null &&
+          (_bookingPriceFromThread ?? widget.bookingPrice)!
+              .toString()
+              .trim()
+              .isNotEmpty)
+        (_bookingPriceFromThread ?? widget.bookingPrice)!.toString().trim(),
+      if (widget.bookingDateTime != null &&
+          widget.bookingDateTime!.trim().isNotEmpty)
+        widget.bookingDateTime!.trim(),
+      if (_bookingStatusFromThread != null &&
+          _bookingStatusFromThread!.trim().isNotEmpty)
+        _bookingStatusFromThread!.trim(),
+    ];
+
     return GestureDetector(
       onTap: () {
         FocusScope.of(context).unfocus();
@@ -2132,38 +2649,32 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
           title: Row(
             mainAxisSize: MainAxisSize.max,
             children: [
-              CircleAvatar(
-                radius: isSmallScreen ? 16 : 20,
-                backgroundImage: _participantImageUrl != null &&
-                    _participantImageUrl!.isNotEmpty
-                    ? NetworkImage(_participantImageUrl!) as ImageProvider
-                    : null,
-                backgroundColor: theme.alternate,
-                child: Stack(
-                  children: [
-                    if (_participantImageUrl == null ||
-                        _participantImageUrl!.isEmpty)
-                      Icon(
-                        Icons.person,
-                        color: theme.secondaryText,
-                        size: isSmallScreen ? 16 : 20,
-                      ),
-                    // presence indicator (small dot)
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: _peerOnline ? theme.success : theme.alternate,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: theme.primaryBackground, width: 1.5),
+              Stack(
+                children: [
+                  _buildProfileAvatar(
+                    imageUrl: _participantImageUrl,
+                    radius: isSmallScreen ? 16 : 20,
+                    backgroundColor: theme.alternate,
+                    iconColor: theme.secondaryText,
+                    iconSize: isSmallScreen ? 16 : 20,
+                  ),
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: _peerOnline ? theme.success : theme.alternate,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: theme.primaryBackground,
+                          width: 1.5,
                         ),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
               SizedBox(width: isSmallScreen ? 8 : 12.0),
               Expanded(
@@ -2172,7 +2683,7 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _participantName ?? widget.jobTitle ?? 'Chat',
+                      appBarTitle,
                       overflow: TextOverflow.ellipsis,
                       style: theme.titleMedium.override(
                         fontFamily: 'Inter',
@@ -2180,15 +2691,9 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    if (((_bookingPriceFromThread ?? widget.bookingPrice) != null) ||
-                        widget.bookingDateTime != null ||
-                        _bookingStatusFromThread != null)
+                    if (appBarMeta.isNotEmpty)
                       Text(
-                        [
-                          _bookingPriceFromThread ?? widget.bookingPrice,
-                          widget.bookingDateTime,
-                          _bookingStatusFromThread,
-                        ].where((e) => e != null && e.toString().isNotEmpty).join(' • '),
+                        appBarMeta.join(' • '),
                         overflow: TextOverflow.ellipsis,
                         style: theme.bodySmall.override(
                           fontFamily: 'Inter',
@@ -2206,10 +2711,17 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
             Padding(
               padding: const EdgeInsetsDirectional.fromSTEB(0, 0, 8, 0),
               child: IconButton(
-                tooltip: _lastRealtimeEvent != null ? 'Last event: $_lastRealtimeEvent' : 'Realtime status',
+                tooltip: _lastRealtimeEvent != null
+                    ? 'Last event: $_lastRealtimeEvent'
+                    : 'Realtime status',
                 icon: Icon(
-                  RealtimeNotifications.instance.connected || _socketConnected ? Icons.wifi_rounded : Icons.wifi_off_rounded,
-                  color: RealtimeNotifications.instance.connected || _socketConnected ? theme.success : theme.secondaryText,
+                  RealtimeNotifications.instance.connected || _socketConnected
+                      ? Icons.wifi_rounded
+                      : Icons.wifi_off_rounded,
+                  color: RealtimeNotifications.instance.connected ||
+                          _socketConnected
+                      ? theme.success
+                      : theme.secondaryText,
                   size: isSmallScreen ? 16 : 20,
                 ),
                 onPressed: () async {
@@ -2220,14 +2732,18 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                       RealtimeNotifications.instance.joinThread(_threadId!);
                     }
                     setState(() {
-                      _socketConnected = RealtimeNotifications.instance.connected;
+                      _socketConnected =
+                          RealtimeNotifications.instance.connected;
                     });
                     final snack = ScaffoldMessenger.of(context);
-                    snack.showSnackBar(SnackBar(content: Text('Realtime: ${RealtimeNotifications.instance.connected ? 'connected' : 'disconnected'}')));
+                    snack.showSnackBar(SnackBar(
+                        content: Text(
+                            'Realtime: ${RealtimeNotifications.instance.connected ? 'connected' : 'disconnected'}')));
                   } catch (e) {
                     if (_kDebugMode) debugPrint('Manual reconnect failed: $e');
                     final snack = ScaffoldMessenger.of(context);
-                    snack.showSnackBar(SnackBar(content: Text('Realtime reconnect failed: $e')));
+                    snack.showSnackBar(SnackBar(
+                        content: Text('Realtime reconnect failed: $e')));
                   }
                 },
               ),
@@ -2252,13 +2768,13 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                   gradient: LinearGradient(
                     colors: _bookingCompleted
                         ? [
-                      theme.alternate.withOpacity(0.1),
-                      theme.alternate.withOpacity(0.05)
-                    ]
+                            theme.alternate.withOpacity(0.1),
+                            theme.alternate.withOpacity(0.05)
+                          ]
                         : [
-                      theme.success.withOpacity(0.1),
-                      theme.success.withOpacity(0.05)
-                    ],
+                            theme.success.withOpacity(0.1),
+                            theme.success.withOpacity(0.05)
+                          ],
                   ),
                   border: Border(
                     bottom: BorderSide(color: theme.alternate.withOpacity(0.1)),
@@ -2268,8 +2784,12 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Icon(
-                      _bookingCompleted ? Icons.check_circle_outline : Icons.check_circle,
-                      color: _bookingCompleted ? theme.secondaryText : theme.success,
+                      _bookingCompleted
+                          ? Icons.check_circle_outline
+                          : Icons.check_circle,
+                      color: _bookingCompleted
+                          ? theme.secondaryText
+                          : theme.success,
                       size: isSmallScreen ? 16 : 20.0,
                     ),
                     SizedBox(width: isSmallScreen ? 6 : 8),
@@ -2283,7 +2803,9 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                         style: theme.bodySmall.override(
                           fontFamily: 'Inter',
                           fontWeight: FontWeight.w500,
-                          color: _bookingCompleted ? theme.secondaryText : theme.success,
+                          color: _bookingCompleted
+                              ? theme.secondaryText
+                              : theme.success,
                           fontSize: isSmallScreen ? 12.0 : 13.0,
                         ),
                       ),
@@ -2296,23 +2818,26 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                           onPressed: (_bookingCompleted || _completing)
                               ? null
                               : () async {
-                            if (!mounted) return;
-                            setState(() => _completing = true);
-                            await _markJobComplete();
-                            if (mounted) setState(() => _completing = false);
-                          },
+                                  if (!mounted) return;
+                                  setState(() => _completing = true);
+                                  await _markJobComplete();
+                                  if (mounted)
+                                    setState(() => _completing = false);
+                                },
                           style: ElevatedButton.styleFrom(
                             elevation: 0,
                             backgroundColor: _bookingCompleted
                                 ? theme.alternate.withOpacity(0.3)
                                 : theme.primary,
-                            foregroundColor:
-                            _bookingCompleted ? theme.secondaryText : Colors.white,
+                            foregroundColor: _bookingCompleted
+                                ? theme.secondaryText
+                                : Colors.white,
                             padding: EdgeInsets.symmetric(
                               horizontal: isSmallScreen ? 12 : 16,
                             ),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(isSmallScreen ? 10 : 12),
+                              borderRadius: BorderRadius.circular(
+                                  isSmallScreen ? 10 : 12),
                             ),
                           ),
                           child: _buildMarkCompleteChild(),
@@ -2370,8 +2895,10 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                           child: Container(
                             decoration: BoxDecoration(
                               color: theme.primaryBackground,
-                              borderRadius: BorderRadius.circular(isSmallScreen ? 20 : 24.0),
-                              border: Border.all(color: theme.alternate.withOpacity(0.2)),
+                              borderRadius: BorderRadius.circular(
+                                  isSmallScreen ? 20 : 24.0),
+                              border: Border.all(
+                                  color: theme.alternate.withOpacity(0.2)),
                             ),
                             child: TextFormField(
                               controller: _model.textController,
@@ -2386,7 +2913,9 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                                     : 'Type your message...',
                                 hintStyle: theme.bodyMedium.override(
                                   fontFamily: 'Inter',
-                                  color: _bookingCompleted ? theme.error : theme.secondaryText,
+                                  color: _bookingCompleted
+                                      ? theme.error
+                                      : theme.secondaryText,
                                   fontSize: isSmallScreen ? 13 : 14.0,
                                 ),
                                 border: InputBorder.none,
@@ -2403,7 +2932,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                               ),
                               maxLines: 4,
                               minLines: 1,
-                              validator: _model.textControllerValidator.asValidator(context),
+                              validator: _model.textControllerValidator
+                                  .asValidator(context),
                               onFieldSubmitted: (_) => _sendMessage(),
                             ),
                           ),
@@ -2415,39 +2945,49 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: (!_sendButtonEnabled ||
-                                _sendingMessage ||
-                                _waitingForThread ||
-                                (_model.textController?.text.trim().isEmpty ?? true) ||
-                                _bookingCompleted)
+                                    _sendingMessage ||
+                                    _waitingForThread ||
+                                    (_model.textController?.text
+                                            .trim()
+                                            .isEmpty ??
+                                        true) ||
+                                    _bookingCompleted)
                                 ? theme.alternate.withOpacity(0.3)
                                 : theme.primary,
                           ),
                           child: IconButton(
                             icon: (_sendingMessage || _waitingForThread)
                                 ? SizedBox(
-                              width: isSmallScreen ? 16 : 20,
-                              height: isSmallScreen ? 16 : 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.0,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
+                                    width: isSmallScreen ? 16 : 20,
+                                    height: isSmallScreen ? 16 : 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.0,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                          Colors.white),
+                                    ),
+                                  )
                                 : Icon(
-                              Icons.send_rounded,
-                              color: (!_sendButtonEnabled ||
-                                  _sendingMessage ||
-                                  _waitingForThread ||
-                                  (_model.textController?.text.trim().isEmpty ?? true) ||
-                                  _bookingCompleted)
-                                  ? theme.secondaryText
-                                  : Colors.white,
-                              size: isSmallScreen ? 18 : 20.0,
-                            ),
+                                    Icons.send_rounded,
+                                    color: (!_sendButtonEnabled ||
+                                            _sendingMessage ||
+                                            _waitingForThread ||
+                                            (_model.textController?.text
+                                                    .trim()
+                                                    .isEmpty ??
+                                                true) ||
+                                            _bookingCompleted)
+                                        ? theme.secondaryText
+                                        : Colors.white,
+                                    size: isSmallScreen ? 18 : 20.0,
+                                  ),
                             onPressed: (!_sendButtonEnabled ||
-                                _sendingMessage ||
-                                _waitingForThread ||
-                                (_model.textController?.text.trim().isEmpty ?? true) ||
-                                _bookingCompleted)
+                                    _sendingMessage ||
+                                    _waitingForThread ||
+                                    (_model.textController?.text
+                                            .trim()
+                                            .isEmpty ??
+                                        true) ||
+                                    _bookingCompleted)
                                 ? null
                                 : () async => await _sendMessage(),
                           ),
@@ -2456,7 +2996,7 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                     ),
                   ),
                 ),
-               ),
+              ),
             ],
           ),
         ),
@@ -2480,7 +3020,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                 ElevatedButton(
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: error));
-                    scaffold.showSnackBar(const SnackBar(content: Text('Error details copied to clipboard.')));
+                    scaffold.showSnackBar(const SnackBar(
+                        content: Text('Error details copied to clipboard.')));
                     Navigator.of(ctx).pop();
                   },
                   child: const Text('Copy to clipboard'),
@@ -2512,19 +3053,23 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
         return;
       }
 
-      final resolvedPaymentMode = await _refreshBookingPaymentMode(token: token);
+      final resolvedPaymentMode =
+          await _refreshBookingPaymentMode(token: token);
 
       // For after-completion payments: initialize payment first. The booking should only
       // be marked complete after payment succeeds.
       if (_isAfterCompletionMode(resolvedPaymentMode)) {
         if (_kDebugMode) {
-          debugPrint('MessageClient: After-completion payment mode detected. Initializing generic payment before completion...');
+          debugPrint(
+              'MessageClient: After-completion payment mode detected. Initializing generic payment before completion...');
         }
         try {
           if (mounted) await Future.delayed(const Duration(milliseconds: 200));
           await _initializeDeferredPaymentBeforeCompletion(token);
         } catch (e) {
-          if (_kDebugMode) debugPrint('Error initializing generic payment before completion: $e');
+          if (_kDebugMode)
+            debugPrint(
+                'Error initializing generic payment before completion: $e');
           AppNotification.showError(
             context,
             'Unable to initialize payment. Please try again.',
@@ -2533,7 +3078,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       } else {
         // For upfront payments: Mark complete immediately, then show rating
         if (_kDebugMode) {
-          debugPrint('MessageClient: Upfront payment mode. Marking booking as complete...');
+          debugPrint(
+              'MessageClient: Upfront payment mode. Marking booking as complete...');
         }
         await _completeBookingAndShowRating(token);
       }
@@ -2560,9 +3106,12 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
         'Authorization': 'Bearer $token'
       };
 
-      final uri = Uri.parse('$API_BASE_URL/api/bookings/${widget.bookingId}/complete');
-      final payload = jsonEncode({ 'sendEmail': true });
-      final response = await http.post(uri, headers: headers, body: payload).timeout(const Duration(seconds: 15));
+      final uri =
+          Uri.parse('$API_BASE_URL/api/bookings/${widget.bookingId}/complete');
+      final payload = jsonEncode({'sendEmail': true});
+      final response = await http
+          .post(uri, headers: headers, body: payload)
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         AppNotification.showSuccess(context, 'Booking marked as completed');
@@ -2581,8 +3130,10 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
         // Try to extract error message from response
         String serverMsg = 'Failed to mark booking as complete';
         try {
-          final parsed = response.body.isNotEmpty ? jsonDecode(response.body) : null;
-          if (parsed is Map && (parsed['message'] != null || parsed['error'] != null)) {
+          final parsed =
+              response.body.isNotEmpty ? jsonDecode(response.body) : null;
+          if (parsed is Map &&
+              (parsed['message'] != null || parsed['error'] != null)) {
             serverMsg = (parsed['message'] ?? parsed['error']).toString();
           } else if (response.body.isNotEmpty) {
             serverMsg = response.body;
@@ -2601,8 +3152,10 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
   /// `pay-after-completion` is allowed.
   Future<void> _completeBookingThenInitPayment(String token) async {
     try {
-      if (_bookingCompleted || _isCompletedBookingStatus(_bookingStatusFromThread)) {
-        final completed = await _waitForBookingCompletedStatus(token, maxAttempts: 2);
+      if (_bookingCompleted ||
+          _isCompletedBookingStatus(_bookingStatusFromThread)) {
+        final completed =
+            await _waitForBookingCompletedStatus(token, maxAttempts: 2);
         if (!completed) {
           AppNotification.showError(
             context,
@@ -2620,9 +3173,12 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
         'Authorization': 'Bearer $token'
       };
 
-      final uri = Uri.parse('$API_BASE_URL/api/bookings/${widget.bookingId}/complete');
-      final payload = jsonEncode({ 'sendEmail': true });
-      final response = await http.post(uri, headers: headers, body: payload).timeout(const Duration(seconds: 15));
+      final uri =
+          Uri.parse('$API_BASE_URL/api/bookings/${widget.bookingId}/complete');
+      final payload = jsonEncode({'sendEmail': true});
+      final response = await http
+          .post(uri, headers: headers, body: payload)
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         AppNotification.showSuccess(context, 'Booking marked as completed');
@@ -2645,14 +3201,19 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
         try {
           if (mounted) await _initializeDeferredPayment();
         } catch (e) {
-          if (_kDebugMode) debugPrint('Error initializing deferred payment after completion: $e');
-          AppNotification.showError(context, 'Unable to initialize payment after completion.');
+          if (_kDebugMode)
+            debugPrint(
+                'Error initializing deferred payment after completion: $e');
+          AppNotification.showError(
+              context, 'Unable to initialize payment after completion.');
         }
       } else {
         String serverMsg = 'Failed to mark booking as complete';
         try {
-          final parsed = response.body.isNotEmpty ? jsonDecode(response.body) : null;
-          if (parsed is Map && (parsed['message'] != null || parsed['error'] != null)) {
+          final parsed =
+              response.body.isNotEmpty ? jsonDecode(response.body) : null;
+          if (parsed is Map &&
+              (parsed['message'] != null || parsed['error'] != null)) {
             serverMsg = (parsed['message'] ?? parsed['error']).toString();
           } else if (response.body.isNotEmpty) {
             serverMsg = response.body;
@@ -2665,194 +3226,189 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
         AppNotification.showError(context, serverMsg);
       }
     } catch (e) {
-      if (_kDebugMode) debugPrint('Error completing booking then initializing payment: $e');
+      if (_kDebugMode)
+        debugPrint('Error completing booking then initializing payment: $e');
       AppNotification.showError(context, 'Error: $e');
     }
   }
 
-   /// Initialize deferred payment for afterCompletion bookings
-   /// Calls POST /booking/:id/pay-after-completion
-   /// Navigates to WebView for secure payment and waits for confirmation
-   Future<void> _initializeDeferredPayment() async {
-     try {
-       setState(() => _initializingPayment = true);
+  /// Initialize deferred payment for afterCompletion bookings
+  /// Calls POST /booking/:id/pay-after-completion
+  /// Navigates to WebView for secure payment and waits for confirmation
+  Future<void> _initializeDeferredPayment() async {
+    try {
+      setState(() => _initializingPayment = true);
 
-       final token = await TokenStorage.getToken();
-       if (token == null || token.isEmpty) {
-         AppNotification.showError(context, 'Please login to proceed with payment');
-         setState(() => _initializingPayment = false);
-         return;
-       }
+      final token = await TokenStorage.getToken();
+      if (token == null || token.isEmpty) {
+        AppNotification.showError(
+            context, 'Please login to proceed with payment');
+        setState(() => _initializingPayment = false);
+        return;
+      }
 
-       if (widget.bookingId == null || widget.bookingId!.isEmpty) {
-         AppNotification.showError(context, 'No booking selected');
-         setState(() => _initializingPayment = false);
-         return;
-       }
+      if (widget.bookingId == null || widget.bookingId!.isEmpty) {
+        AppNotification.showError(context, 'No booking selected');
+        setState(() => _initializingPayment = false);
+        return;
+      }
 
-       final headers = <String, String>{
-         'Content-Type': 'application/json',
-         'Authorization': 'Bearer $token'
-       };
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token'
+      };
 
-       // Get user profile for email
-       String? customerEmail;
-       try {
-         final profile = await UserService.getProfile();
-         customerEmail = profile?['email']?.toString();
-       } catch (_) {}
+      // Get user profile for email
+      String? customerEmail;
+      try {
+        final profile = await UserService.getProfile();
+        customerEmail = profile?['email']?.toString();
+      } catch (_) {}
 
-       if (customerEmail == null || customerEmail.isEmpty) {
-         AppNotification.showError(context, 'Unable to retrieve your email for payment');
-         setState(() => _initializingPayment = false);
-         return;
-       }
+      if (customerEmail == null || customerEmail.isEmpty) {
+        AppNotification.showError(
+            context, 'Unable to retrieve your email for payment');
+        setState(() => _initializingPayment = false);
+        return;
+      }
 
-       final uri = Uri.parse('$API_BASE_URL/api/bookings/${widget.bookingId}/pay-after-completion');
-       final payload = jsonEncode({
-         'email': customerEmail,
-         'customerCoords': {
-           'lat': 0.0,
-           'lon': 0.0
-         }
-       });
+      final uri = Uri.parse(
+          '$API_BASE_URL/api/bookings/${widget.bookingId}/pay-after-completion');
+      final payload = jsonEncode({
+        'email': customerEmail,
+        'customerCoords': {'lat': 0.0, 'lon': 0.0}
+      });
 
-       if (_kDebugMode) debugPrint('MessageClient: Initializing deferred payment POST $uri');
+      if (_kDebugMode)
+        debugPrint('MessageClient: Initializing deferred payment POST $uri');
 
-       final response = await http.post(uri, headers: headers, body: payload)
-           .timeout(const Duration(seconds: 15));
+      final response = await http
+          .post(uri, headers: headers, body: payload)
+          .timeout(const Duration(seconds: 15));
 
-       if (_kDebugMode) debugPrint('MessageClient: deferred payment init response ${response.statusCode} ${response.body}');
+      if (_kDebugMode)
+        debugPrint(
+            'MessageClient: deferred payment init response ${response.statusCode} ${response.body}');
 
-       if (response.statusCode >= 200 && response.statusCode < 300) {
-         try {
-           final parsed = jsonDecode(response.body);
-           final data = parsed is Map ? (parsed['data'] ?? parsed) : parsed;
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        try {
+          final parsed = jsonDecode(response.body);
+          final data = parsed is Map ? (parsed['data'] ?? parsed) : parsed;
 
-           if (data is Map) {
-             final payment = data['payment'];
-             final authUrl = payment is Map
-                 ? (payment['authorization_url'] ?? payment['authorizationUrl'])
-                 : null;
-             final paymentReference = payment is Map
-                 ? (payment['reference'] ?? payment['paymentReference'])?.toString()
-                 : null;
+          if (data is Map) {
+            final payment = data['payment'];
+            final authUrl = payment is Map
+                ? (payment['authorization_url'] ?? payment['authorizationUrl'])
+                : null;
+            final paymentReference = payment is Map
+                ? (payment['reference'] ?? payment['paymentReference'])
+                    ?.toString()
+                : null;
 
-             if (authUrl != null && authUrl.toString().isNotEmpty) {
-               if (mounted) {
-                 setState(() {
-                   _waitingForPaymentConfirmation = true;
-                   _paymentConfirmedBySocket = false;
-                   _lastPaymentReference = paymentReference;
-                 });
-               }
-
-               if (mounted) {
-                 await _handlePaymentWebView(authUrl.toString(), paymentReference);
-               }
-             } else {
-               AppNotification.showError(
-                 context,
-                 'Payment initialization succeeded but no checkout URL was returned.',
-               );
-             }
-           }
-         } catch (e) {
-           if (_kDebugMode) debugPrint('Error parsing payment response: $e');
-           AppNotification.showError(
-             context,
-             'Payment initialization response could not be processed.',
-           );
-         }
-       } else {
-         String serverMsg = 'Failed to initialize payment';
-         try {
-           final parsed = response.body.isNotEmpty ? jsonDecode(response.body) : null;
-           if (parsed is Map && (parsed['message'] != null || parsed['error'] != null)) {
-             serverMsg = (parsed['message'] ?? parsed['error']).toString();
-           } else if (response.body.isNotEmpty) {
-             serverMsg = response.body;
-           }
-         } catch (_) {}
-         AppNotification.showError(context, serverMsg);
-       }
-     } catch (e) {
-       if (_kDebugMode) debugPrint('Error initializing deferred payment: $e');
-       AppNotification.showError(context, 'Error initializing payment: $e');
-     } finally {
-       if (mounted) setState(() => _initializingPayment = false);
-     }
-   }
-
-   /// Handle payment via WebView and wait for confirmation
-   /// Navigates to PaymentWebviewPageWidget and handles the result
-   Future<void> _handlePaymentWebView(String authUrl, String? expectedReference) async {
-     try {
-       if (!mounted) return;
-
-       if (_kDebugMode) {
-         debugPrint('MessageClient: Navigating to payment WebView with URL: $authUrl');
-       }
-
-       _paymentWebViewOpen = true;
-
-       // Navigate to payment WebView and await result
-       final result = await Navigator.of(context).push<Map<String, dynamic>>(
-         MaterialPageRoute(
-           builder: (context) => PaymentWebviewPageWidget(
-             url: authUrl,
-             expectedReference: expectedReference,
-           ),
-           fullscreenDialog: true,
-         ),
-       );
-
-       _paymentWebViewOpen = false;
-
-       if (!mounted) return;
-
-       if (_kDebugMode) {
-         debugPrint('MessageClient: WebView returned result: $result');
-       }
-
-       // Check if payment was successful
-       final success = result?['success'] ?? false;
-
-        if (success) {
-          final returnedReference = result?['reference']?.toString();
-          if (returnedReference != null && returnedReference.isNotEmpty) {
-            _lastPaymentReference = returnedReference;
-          }
-
-          final referenceToVerify = _lastPaymentReference ?? expectedReference;
-          if (referenceToVerify != null && referenceToVerify.isNotEmpty) {
-            final verified = await _verifyPaymentReference(referenceToVerify);
-            if (verified) {
+            if (authUrl != null && authUrl.toString().isNotEmpty) {
               if (mounted) {
                 setState(() {
-                  _paymentConfirmedBySocket = true;
-                  _waitingForPaymentConfirmation = false;
+                  _waitingForPaymentConfirmation = true;
+                  _paymentConfirmedBySocket = false;
+                  _lastPaymentReference = paymentReference;
                 });
               }
-              AppNotification.showSuccess(context, 'Payment verified!');
-              await Future.delayed(const Duration(milliseconds: 200));
-              // Now mark the booking as complete after payment is verified
+
               if (mounted) {
-                final token = await TokenStorage.getToken();
-                if (token != null && token.isNotEmpty) {
-                  await _completeBookingAndShowRating(token);
-                } else {
-                  if (mounted) await _showRatingBottomSheet();
-                }
+                await _handlePaymentWebView(
+                    authUrl.toString(), paymentReference);
               }
-              return;
+            } else {
+              AppNotification.showError(
+                context,
+                'Payment initialization succeeded but no checkout URL was returned.',
+              );
             }
           }
+        } catch (e) {
+          if (_kDebugMode) debugPrint('Error parsing payment response: $e');
+          AppNotification.showError(
+            context,
+            'Payment initialization response could not be processed.',
+          );
+        }
+      } else {
+        String serverMsg = 'Failed to initialize payment';
+        try {
+          final parsed =
+              response.body.isNotEmpty ? jsonDecode(response.body) : null;
+          if (parsed is Map &&
+              (parsed['message'] != null || parsed['error'] != null)) {
+            serverMsg = (parsed['message'] ?? parsed['error']).toString();
+          } else if (response.body.isNotEmpty) {
+            serverMsg = response.body;
+          }
+        } catch (_) {}
+        AppNotification.showError(context, serverMsg);
+      }
+    } catch (e) {
+      if (_kDebugMode) debugPrint('Error initializing deferred payment: $e');
+      AppNotification.showError(context, 'Error initializing payment: $e');
+    } finally {
+      if (mounted) setState(() => _initializingPayment = false);
+    }
+  }
 
-          if (_paymentConfirmedBySocket) {
-            AppNotification.showSuccess(context, 'Payment confirmed');
+  /// Handle payment via WebView and wait for confirmation
+  /// Navigates to PaymentWebviewPageWidget and handles the result
+  Future<void> _handlePaymentWebView(
+      String authUrl, String? expectedReference) async {
+    try {
+      if (!mounted) return;
+
+      if (_kDebugMode) {
+        debugPrint(
+            'MessageClient: Navigating to payment WebView with URL: $authUrl');
+      }
+
+      _paymentWebViewOpen = true;
+
+      // Navigate to payment WebView and await result
+      final result = await Navigator.of(context).push<Map<String, dynamic>>(
+        MaterialPageRoute(
+          builder: (context) => PaymentWebviewPageWidget(
+            url: authUrl,
+            expectedReference: expectedReference,
+          ),
+          fullscreenDialog: true,
+        ),
+      );
+
+      _paymentWebViewOpen = false;
+
+      if (!mounted) return;
+
+      if (_kDebugMode) {
+        debugPrint('MessageClient: WebView returned result: $result');
+      }
+
+      // Check if payment was successful
+      final success = result?['success'] ?? false;
+
+      if (success) {
+        final returnedReference = result?['reference']?.toString();
+        if (returnedReference != null && returnedReference.isNotEmpty) {
+          _lastPaymentReference = returnedReference;
+        }
+
+        final referenceToVerify = _lastPaymentReference ?? expectedReference;
+        if (referenceToVerify != null && referenceToVerify.isNotEmpty) {
+          final verified = await _verifyPaymentReference(referenceToVerify);
+          if (verified) {
+            if (mounted) {
+              setState(() {
+                _paymentConfirmedBySocket = true;
+                _waitingForPaymentConfirmation = false;
+              });
+            }
+            AppNotification.showSuccess(context, 'Payment verified!');
             await Future.delayed(const Duration(milliseconds: 200));
-            // Mark the booking as complete after socket confirmation
+            // Now mark the booking as complete after payment is verified
             if (mounted) {
               final token = await TokenStorage.getToken();
               if (token != null && token.isNotEmpty) {
@@ -2863,180 +3419,200 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
             }
             return;
           }
-
-          AppNotification.showSuccess(context, 'Payment processing...');
-          await _waitForPaymentConfirmation();
-       } else {
-         AppNotification.showError(context, 'Payment was cancelled or failed');
-         if (mounted) {
-           setState(() {
-             _waitingForPaymentConfirmation = false;
-           });
-         }
-       }
-     } catch (e) {
-       _paymentWebViewOpen = false;
-       if (_kDebugMode) debugPrint('Error handling payment WebView: $e');
-       AppNotification.showError(context, 'Error processing payment: $e');
-       if (mounted) {
-         setState(() {
-           _waitingForPaymentConfirmation = false;
-         });
-       }
-     }
-   }
-
-   /// Wait for payment confirmation from backend via socket
-   /// Shows a loading indicator while waiting (max 60 seconds)
-   /// Falls back to API verification if socket doesn't respond
-   Future<void> _waitForPaymentConfirmation() async {
-     try {
-       if (!mounted) return;
+        }
 
         if (_paymentConfirmedBySocket) {
+          AppNotification.showSuccess(context, 'Payment confirmed');
           await Future.delayed(const Duration(milliseconds: 200));
-          if (mounted && !_submittingReview) {
-            // Mark booking as complete after socket confirmed payment
+          // Mark the booking as complete after socket confirmation
+          if (mounted) {
             final token = await TokenStorage.getToken();
             if (token != null && token.isNotEmpty) {
               await _completeBookingAndShowRating(token);
             } else {
-              await _showRatingBottomSheet();
+              if (mounted) await _showRatingBottomSheet();
             }
           }
           return;
         }
 
-       setState(() {
-         _waitingForPaymentConfirmation = true;
-       });
+        AppNotification.showSuccess(context, 'Payment processing...');
+        await _waitForPaymentConfirmation();
+      } else {
+        AppNotification.showError(context, 'Payment was cancelled or failed');
+        if (mounted) {
+          setState(() {
+            _waitingForPaymentConfirmation = false;
+          });
+        }
+      }
+    } catch (e) {
+      _paymentWebViewOpen = false;
+      if (_kDebugMode) debugPrint('Error handling payment WebView: $e');
+      AppNotification.showError(context, 'Error processing payment: $e');
+      if (mounted) {
+        setState(() {
+          _waitingForPaymentConfirmation = false;
+        });
+      }
+    }
+  }
 
-       if (_kDebugMode) {
-         debugPrint('MessageClient: Waiting for payment confirmation from socket...');
-       }
+  /// Wait for payment confirmation from backend via socket
+  /// Shows a loading indicator while waiting (max 60 seconds)
+  /// Falls back to API verification if socket doesn't respond
+  Future<void> _waitForPaymentConfirmation() async {
+    try {
+      if (!mounted) return;
 
-       // Show loading dialog while waiting
-       showDialog(
-         context: context,
-         barrierDismissible: false,
-         builder: (ctx) => WillPopScope(
-           onWillPop: () async => false,
-           child: Dialog(
-             backgroundColor: Colors.transparent,
-             elevation: 0,
-             child: Center(
-               child: Column(
-                 mainAxisSize: MainAxisSize.min,
-                 children: [
-                   CircularProgressIndicator(
-                     valueColor: AlwaysStoppedAnimation<Color>(
-                       FlutterFlowTheme.of(context).primary,
-                     ),
-                   ),
-                   const SizedBox(height: 16),
-                   Text(
-                     'Verifying payment...',
-                     style: FlutterFlowTheme.of(context).bodyMedium,
-                   ),
-                 ],
-               ),
-             ),
-           ),
-         ),
-       );
-       _paymentConfirmationDialogOpen = true;
+      if (_paymentConfirmedBySocket) {
+        await Future.delayed(const Duration(milliseconds: 200));
+        if (mounted && !_submittingReview) {
+          // Mark booking as complete after socket confirmed payment
+          final token = await TokenStorage.getToken();
+          if (token != null && token.isNotEmpty) {
+            await _completeBookingAndShowRating(token);
+          } else {
+            await _showRatingBottomSheet();
+          }
+        }
+        return;
+      }
 
-       // Set up timeout for socket confirmation (60 seconds max)
-       _paymentConfirmationTimeout = Timer(const Duration(seconds: 60), () {
-         if (!_paymentConfirmedBySocket && mounted) {
-           if (_kDebugMode) {
-             debugPrint('MessageClient: Payment confirmation timeout - falling back to API verification');
-           }
-           _verifyPaymentViaAPI();
-         }
-       });
+      setState(() {
+        _waitingForPaymentConfirmation = true;
+      });
 
-       // Wait for either:
-       // 1. Socket confirmation via _handlePaymentConfirmed()
-       // 2. Timeout after 60 seconds (triggers API verification)
-       // _paymentConfirmedBySocket will be set to true when socket event arrives
-     } catch (e) {
-       if (_kDebugMode) debugPrint('Error waiting for payment confirmation: $e');
-       if (mounted) {
-         _closePaymentConfirmationDialogIfOpen();
-         AppNotification.showError(context, 'Error verifying payment: $e');
-       }
-     }
-   }
+      if (_kDebugMode) {
+        debugPrint(
+            'MessageClient: Waiting for payment confirmation from socket...');
+      }
 
-   /// Verify payment status via API call
-   /// Called if socket confirmation doesn't arrive within 60 seconds
-   Future<void> _verifyPaymentViaAPI() async {
-     try {
-       final token = await TokenStorage.getToken();
-       if (token == null || token.isEmpty) {
-         if (mounted) _closePaymentConfirmationDialogIfOpen();
-         AppNotification.showError(context, 'Session expired');
-         return;
-       }
+      // Show loading dialog while waiting
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => WillPopScope(
+          onWillPop: () async => false,
+          child: Dialog(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      FlutterFlowTheme.of(context).primary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Verifying payment...',
+                    style: FlutterFlowTheme.of(context).bodyMedium,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      _paymentConfirmationDialogOpen = true;
 
-       final headers = <String, String>{
-         'Authorization': 'Bearer $token'
-       };
+      // Set up timeout for socket confirmation (60 seconds max)
+      _paymentConfirmationTimeout = Timer(const Duration(seconds: 60), () {
+        if (!_paymentConfirmedBySocket && mounted) {
+          if (_kDebugMode) {
+            debugPrint(
+                'MessageClient: Payment confirmation timeout - falling back to API verification');
+          }
+          _verifyPaymentViaAPI();
+        }
+      });
 
-       final uri = Uri.parse('$API_BASE_URL/api/bookings/${widget.bookingId}');
-       final response = await http.get(uri, headers: headers).timeout(const Duration(seconds: 10));
+      // Wait for either:
+      // 1. Socket confirmation via _handlePaymentConfirmed()
+      // 2. Timeout after 60 seconds (triggers API verification)
+      // _paymentConfirmedBySocket will be set to true when socket event arrives
+    } catch (e) {
+      if (_kDebugMode) debugPrint('Error waiting for payment confirmation: $e');
+      if (mounted) {
+        _closePaymentConfirmationDialogIfOpen();
+        AppNotification.showError(context, 'Error verifying payment: $e');
+      }
+    }
+  }
 
-       if (response.statusCode >= 200 && response.statusCode < 300) {
-         try {
-           final parsed = jsonDecode(response.body);
-           final data = parsed is Map ? (parsed['data'] ?? parsed) : parsed;
-           final booking = data is Map ? data['booking'] ?? data : null;
+  /// Verify payment status via API call
+  /// Called if socket confirmation doesn't arrive within 60 seconds
+  Future<void> _verifyPaymentViaAPI() async {
+    try {
+      final token = await TokenStorage.getToken();
+      if (token == null || token.isEmpty) {
+        if (mounted) _closePaymentConfirmationDialogIfOpen();
+        AppNotification.showError(context, 'Session expired');
+        return;
+      }
 
-           final paymentStatus = booking is Map ? booking['paymentStatus']?.toString() : null;
+      final headers = <String, String>{'Authorization': 'Bearer $token'};
 
-           if (_kDebugMode) {
-             debugPrint('MessageClient: API verification - payment status: $paymentStatus');
-           }
+      final uri = Uri.parse('$API_BASE_URL/api/bookings/${widget.bookingId}');
+      final response = await http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 10));
 
-            if (paymentStatus == 'paid') {
-              // Payment is confirmed via API
-              if (mounted) {
-                _closePaymentConfirmationDialogIfOpen();
-                setState(() {
-                  _paymentConfirmedBySocket = true;
-                  _waitingForPaymentConfirmation = false;
-                });
-                AppNotification.showSuccess(context, 'Payment verified!');
-                await Future.delayed(const Duration(milliseconds: 200));
-                // Mark the booking as complete after payment is verified via API
-                await _completeBookingAndShowRating(token);
-              }
-              return;
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        try {
+          final parsed = jsonDecode(response.body);
+          final data = parsed is Map ? (parsed['data'] ?? parsed) : parsed;
+          final booking = data is Map ? data['booking'] ?? data : null;
+
+          final paymentStatus =
+              booking is Map ? booking['paymentStatus']?.toString() : null;
+
+          if (_kDebugMode) {
+            debugPrint(
+                'MessageClient: API verification - payment status: $paymentStatus');
+          }
+
+          if (paymentStatus == 'paid') {
+            // Payment is confirmed via API
+            if (mounted) {
+              _closePaymentConfirmationDialogIfOpen();
+              setState(() {
+                _paymentConfirmedBySocket = true;
+                _waitingForPaymentConfirmation = false;
+              });
+              AppNotification.showSuccess(context, 'Payment verified!');
+              await Future.delayed(const Duration(milliseconds: 200));
+              // Mark the booking as complete after payment is verified via API
+              await _completeBookingAndShowRating(token);
             }
-         } catch (e) {
-           if (_kDebugMode) debugPrint('Error parsing booking data: $e');
-         }
-       }
+            return;
+          }
+        } catch (e) {
+          if (_kDebugMode) debugPrint('Error parsing booking data: $e');
+        }
+      }
 
-       // If we get here, payment status is still unclear
-       if (mounted) {
-         _closePaymentConfirmationDialogIfOpen();
-         AppNotification.showError(
-           context,
-           'Payment verification pending. Please check your account or try again in a moment.',
-         );
-         setState(() => _waitingForPaymentConfirmation = false);
-       }
-     } catch (e) {
-       if (_kDebugMode) debugPrint('Error verifying payment via API: $e');
-       if (mounted) {
-         _closePaymentConfirmationDialogIfOpen();
-         AppNotification.showError(context, 'Error verifying payment: $e');
-         setState(() => _waitingForPaymentConfirmation = false);
-       }
-     }
-   }
+      // If we get here, payment status is still unclear
+      if (mounted) {
+        _closePaymentConfirmationDialogIfOpen();
+        AppNotification.showError(
+          context,
+          'Payment verification pending. Please check your account or try again in a moment.',
+        );
+        setState(() => _waitingForPaymentConfirmation = false);
+      }
+    } catch (e) {
+      if (_kDebugMode) debugPrint('Error verifying payment via API: $e');
+      if (mounted) {
+        _closePaymentConfirmationDialogIfOpen();
+        AppNotification.showError(context, 'Error verifying payment: $e');
+        setState(() => _waitingForPaymentConfirmation = false);
+      }
+    }
+  }
 
   // Show a bottom sheet allowing the user to rate (1-5) and leave a comment for the artisan.
   Future<void> _showRatingBottomSheet() async {
@@ -3072,10 +3648,9 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
           builder: (ctx, setState) {
             return Container(
               decoration: BoxDecoration(
-                color: isDark
-                    ? const Color(0xFF1F2937)
-                    : Colors.white,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24.0)),
+                color: isDark ? const Color(0xFF1F2937) : Colors.white,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(24.0)),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(isDark ? 0.4 : 0.2),
@@ -3086,7 +3661,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
               ),
               child: Padding(
                 padding: EdgeInsets.only(
-                  bottom: MediaQuery.of(ctx).viewInsets.bottom + (isSmallScreen ? 16 : 20),
+                  bottom: MediaQuery.of(ctx).viewInsets.bottom +
+                      (isSmallScreen ? 16 : 20),
                   left: isSmallScreen ? 16 : 24,
                   right: isSmallScreen ? 16 : 24,
                   top: 20,
@@ -3128,20 +3704,21 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                             ),
                             child: CircleAvatar(
                               radius: isSmallScreen ? 26 : 30,
-                              backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty)
-                                  ? NetworkImage(avatarUrl) as ImageProvider
-                                  : null,
+                              backgroundImage:
+                                  (avatarUrl != null && avatarUrl.isNotEmpty)
+                                      ? NetworkImage(avatarUrl) as ImageProvider
+                                      : null,
                               backgroundColor: isDark
                                   ? const Color(0xFF374151)
                                   : const Color(0xFFF3F4F6),
                               child: (avatarUrl == null || avatarUrl.isEmpty)
                                   ? Icon(
-                                Icons.person,
-                                size: isSmallScreen ? 28 : 32,
-                                color: isDark
-                                    ? const Color(0xFF9CA3AF)
-                                    : const Color(0xFF6B7280),
-                              )
+                                      Icons.person,
+                                      size: isSmallScreen ? 28 : 32,
+                                      color: isDark
+                                          ? const Color(0xFF9CA3AF)
+                                          : const Color(0xFF6B7280),
+                                    )
                                   : null,
                             ),
                           ),
@@ -3158,15 +3735,19 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                                         displayName,
                                         style: isSmallScreen
                                             ? theme.titleMedium.override(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                          color: isDark ? Colors.white : const Color(0xFF111827),
-                                        )
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w600,
+                                                color: isDark
+                                                    ? Colors.white
+                                                    : const Color(0xFF111827),
+                                              )
                                             : theme.titleLarge.override(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w600,
-                                          color: isDark ? Colors.white : const Color(0xFF111827),
-                                        ),
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.w600,
+                                                color: isDark
+                                                    ? Colors.white
+                                                    : const Color(0xFF111827),
+                                              ),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
@@ -3240,7 +3821,9 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                             style: theme.titleLarge.override(
                               fontSize: isSmallScreen ? 18 : 20,
                               fontWeight: FontWeight.w600,
-                              color: isDark ? Colors.white : const Color(0xFF111827),
+                              color: isDark
+                                  ? Colors.white
+                                  : const Color(0xFF111827),
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -3298,10 +3881,13 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                                   fontSize: isSmallScreen ? 32 : 40,
                                   fontWeight: FontWeight.w700,
                                   color: selectedRating >= 4
-                                      ? const Color(0xFF10B981) // Green for good ratings
+                                      ? const Color(
+                                          0xFF10B981) // Green for good ratings
                                       : selectedRating >= 3
-                                      ? const Color(0xFFF59E0B) // Amber for average ratings
-                                      : const Color(0xFFEF4444), // Red for poor ratings
+                                          ? const Color(
+                                              0xFFF59E0B) // Amber for average ratings
+                                          : const Color(
+                                              0xFFEF4444), // Red for poor ratings
                                 ),
                               ),
                               const SizedBox(height: 8),
@@ -3309,8 +3895,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                                 selectedRating >= 4
                                     ? 'Excellent'
                                     : selectedRating >= 3
-                                    ? 'Good'
-                                    : 'Needs improvement',
+                                        ? 'Good'
+                                        : 'Needs improvement',
                                 style: theme.bodyMedium.override(
                                   color: isDark
                                       ? const Color(0xFF9CA3AF)
@@ -3325,16 +3911,20 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                                 children: List.generate(5, (i) {
                                   final idx = i + 1;
                                   return IconButton(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                                    onPressed: () => setState(() => selectedRating = idx),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 4),
+                                    onPressed: () =>
+                                        setState(() => selectedRating = idx),
                                     iconSize: isSmallScreen ? 32 : 38,
                                     icon: Icon(
-                                      idx <= selectedRating ? Icons.star_rounded : Icons.star_border_rounded,
+                                      idx <= selectedRating
+                                          ? Icons.star_rounded
+                                          : Icons.star_border_rounded,
                                       color: idx <= selectedRating
                                           ? Colors.amber
                                           : (isDark
-                                          ? const Color(0xFF4B5563)
-                                          : const Color(0xFFD1D5DB)),
+                                              ? const Color(0xFF4B5563)
+                                              : const Color(0xFFD1D5DB)),
                                     ),
                                   );
                                 }),
@@ -3353,7 +3943,9 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                             'Add a review (optional)',
                             style: theme.bodyMedium.override(
                               fontWeight: FontWeight.w600,
-                              color: isDark ? Colors.white : const Color(0xFF111827),
+                              color: isDark
+                                  ? Colors.white
+                                  : const Color(0xFF111827),
                               fontSize: isSmallScreen ? 14 : 15,
                             ),
                           ),
@@ -3376,11 +3968,14 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                               maxLines: 4,
                               minLines: 3,
                               style: theme.bodyMedium.override(
-                                color: isDark ? Colors.white : const Color(0xFF111827),
+                                color: isDark
+                                    ? Colors.white
+                                    : const Color(0xFF111827),
                                 fontSize: isSmallScreen ? 14 : 15,
                               ),
                               decoration: InputDecoration(
-                                hintText: 'Share your experience with this artisan...',
+                                hintText:
+                                    'Share your experience with this artisan...',
                                 hintStyle: theme.bodyMedium.override(
                                   color: isDark
                                       ? const Color(0xFF6B7280)
@@ -3397,20 +3992,35 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                       const SizedBox(height: 24),
 
                       // Inline conflict message when server responds with 409 (already reviewed)
-                      if (_reviewAlreadySubmitted && _reviewConflictMessage != null) ...[
+                      if (_reviewAlreadySubmitted &&
+                          _reviewConflictMessage != null) ...[
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
                           margin: const EdgeInsets.only(bottom: 12),
                           decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF4B2113) : const Color(0xFFFEEAE6),
+                            color: isDark
+                                ? const Color(0xFF4B2113)
+                                : const Color(0xFFFEEAE6),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: isDark ? const Color(0xFF7F1D1D) : const Color(0xFFF5C2BD)),
+                            border: Border.all(
+                                color: isDark
+                                    ? const Color(0xFF7F1D1D)
+                                    : const Color(0xFFF5C2BD)),
                           ),
                           child: Row(
                             children: [
-                              Icon(Icons.info_outline, color: isDark ? const Color(0xFFFFD2CE) : const Color(0xFFB45309)),
+                              Icon(Icons.info_outline,
+                                  color: isDark
+                                      ? const Color(0xFFFFD2CE)
+                                      : const Color(0xFFB45309)),
                               const SizedBox(width: 8),
-                              Expanded(child: Text(_reviewConflictMessage!, style: theme.bodyMedium.copyWith(color: isDark ? const Color(0xFFFFD2CE) : const Color(0xFF92400E)))),
+                              Expanded(
+                                  child: Text(_reviewConflictMessage!,
+                                      style: theme.bodyMedium.copyWith(
+                                          color: isDark
+                                              ? const Color(0xFFFFD2CE)
+                                              : const Color(0xFF92400E)))),
                             ],
                           ),
                         ),
@@ -3424,10 +4034,10 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                               onPressed: submitting
                                   ? null
                                   : () {
-                                if (Navigator.of(sheetContext).canPop()) {
-                                  Navigator.of(sheetContext).pop();
-                                }
-                              },
+                                      if (Navigator.of(sheetContext).canPop()) {
+                                        Navigator.of(sheetContext).pop();
+                                      }
+                                    },
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: isDark
                                     ? const Color(0xFF9CA3AF)
@@ -3459,13 +4069,16 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                               onPressed: (submitting || _reviewAlreadySubmitted)
                                   ? null
                                   : () async {
-                                 setState(() => submitting = true);
-                                 final ok = await _submitReview(selectedRating, _reviewCtrl.text.trim());
-                                 setState(() => submitting = false);
-                                 if (ok && Navigator.of(sheetContext).canPop()) {
-                                   Navigator.of(sheetContext).pop();
-                                 }
-                               },
+                                      setState(() => submitting = true);
+                                      final ok = await _submitReview(
+                                          selectedRating,
+                                          _reviewCtrl.text.trim());
+                                      setState(() => submitting = false);
+                                      if (ok &&
+                                          Navigator.of(sheetContext).canPop()) {
+                                        Navigator.of(sheetContext).pop();
+                                      }
+                                    },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: theme.primary,
                                 foregroundColor: Colors.white,
@@ -3478,21 +4091,23 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
                               ),
                               child: submitting
                                   ? SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.0,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                ),
-                              )
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.0,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                                Colors.white),
+                                      ),
+                                    )
                                   : Text(
-                                'Submit Review',
-                                style: theme.bodyMedium.override(
-                                  fontSize: isSmallScreen ? 14 : 15,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
+                                      'Submit Review',
+                                      style: theme.bodyMedium.override(
+                                        fontSize: isSmallScreen ? 14 : 15,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    ),
                             ),
                           ),
                         ],
@@ -3534,10 +4149,13 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       };
 
       if (comment.isNotEmpty) body['comment'] = comment;
-      if (widget.bookingId != null && widget.bookingId!.isNotEmpty) body['bookingId'] = widget.bookingId;
+      if (widget.bookingId != null && widget.bookingId!.isNotEmpty)
+        body['bookingId'] = widget.bookingId;
 
       final uri = Uri.parse('$API_BASE_URL/api/reviews');
-      final response = await http.post(uri, headers: headers, body: jsonEncode(body)).timeout(const Duration(seconds: 15));
+      final response = await http
+          .post(uri, headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         AppNotification.showSuccess(context, 'Review submitted. Thank you!');
@@ -3547,12 +4165,14 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
           _reviewConflictMessage = null;
         });
         return true;
-       } else if (response.statusCode == 409) {
-         // Conflict — user already submitted a review for this target
-         String serverMsg = 'You have already reviewed this artisan.';
+      } else if (response.statusCode == 409) {
+        // Conflict — user already submitted a review for this target
+        String serverMsg = 'You have already reviewed this artisan.';
         try {
-          final parsed = response.body.isNotEmpty ? jsonDecode(response.body) : null;
-          if (parsed is Map && (parsed['message'] != null || parsed['error'] != null)) {
+          final parsed =
+              response.body.isNotEmpty ? jsonDecode(response.body) : null;
+          if (parsed is Map &&
+              (parsed['message'] != null || parsed['error'] != null)) {
             serverMsg = (parsed['message'] ?? parsed['error']).toString();
           }
         } catch (_) {}
@@ -3567,8 +4187,10 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       } else {
         String serverMsg = 'Failed to submit review';
         try {
-          final parsed = response.body.isNotEmpty ? jsonDecode(response.body) : null;
-          if (parsed is Map && (parsed['message'] != null || parsed['error'] != null)) {
+          final parsed =
+              response.body.isNotEmpty ? jsonDecode(response.body) : null;
+          if (parsed is Map &&
+              (parsed['message'] != null || parsed['error'] != null)) {
             serverMsg = (parsed['message'] ?? parsed['error']).toString();
           } else if (response.body.isNotEmpty) {
             serverMsg = response.body;
@@ -3585,7 +4207,8 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
   }
 
   Widget _buildMarkCompleteChild() {
-    if (_bookingCompleted) return const Text('Completed', style: TextStyle(fontSize: 13));
+    if (_bookingCompleted)
+      return const Text('Completed', style: TextStyle(fontSize: 13));
     if (_completing) {
       return const SizedBox(
         width: 16,

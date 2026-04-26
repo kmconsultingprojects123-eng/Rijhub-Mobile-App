@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'api_error_handler.dart';
 import '../api_config.dart';
 import 'artist_service.dart';
+import '../utils/status_mapper.dart';
 
 class MyServiceService {
   // Use JobCategory and JobSubCategory endpoints as documented in API docs
@@ -21,9 +22,11 @@ class MyServiceService {
   // POST /api/artisan-services — create or update artisan offerings for a category
   static final String createEndpoint = '$_base/api/artisan-services';
   // PUT /api/artisan-services/:id — update an ArtisanService entry
-  static final String updateEndpoint = '$_base/api/artisan-services'; // PUT to /:id
+  static final String updateEndpoint =
+      '$_base/api/artisan-services'; // PUT to /:id
   // DELETE /api/artisan-services/:id — remove (soft-delete)
-  static final String deleteEndpoint = '$_base/api/artisan-services'; // DELETE to /:id
+  static final String deleteEndpoint =
+      '$_base/api/artisan-services'; // DELETE to /:id
 
   // Official category endpoints per docs
   static final String categoriesEndpoint = '$_base/api/job-categories';
@@ -33,21 +36,26 @@ class MyServiceService {
 
   Future<ApiResponse> fetchMyServices({BuildContext? context}) async {
     if (!endpointsEnabled) {
-      return ApiResponse(ok: false, message: 'Service endpoints not configured', data: null);
+      return ApiResponse(
+          ok: false, message: 'Service endpoints not configured', data: null);
     }
     return await _client.safeGet(listEndpoint, context: context);
   }
 
-  Future<ApiResponse> createService(Map<String, dynamic> body, {BuildContext? context}) async {
+  Future<ApiResponse> createService(Map<String, dynamic> body,
+      {BuildContext? context}) async {
     if (!endpointsEnabled) {
-      return ApiResponse(ok: false, message: 'Service endpoints not configured', data: null);
+      return ApiResponse(
+          ok: false, message: 'Service endpoints not configured', data: null);
     }
     return await _client.safePost(createEndpoint, body: body, context: context);
   }
 
-  Future<ApiResponse> updateService(String id, Map<String, dynamic> body, {BuildContext? context}) async {
+  Future<ApiResponse> updateService(String id, Map<String, dynamic> body,
+      {BuildContext? context}) async {
     if (!endpointsEnabled) {
-      return ApiResponse(ok: false, message: 'Service endpoints not configured', data: null);
+      return ApiResponse(
+          ok: false, message: 'Service endpoints not configured', data: null);
     }
     final url = '$updateEndpoint/$id';
     return await _client.safePut(url, body: body, context: context);
@@ -55,7 +63,8 @@ class MyServiceService {
 
   Future<ApiResponse> deleteService(String id, {BuildContext? context}) async {
     if (!endpointsEnabled) {
-      return ApiResponse(ok: false, message: 'Service endpoints not configured', data: null);
+      return ApiResponse(
+          ok: false, message: 'Service endpoints not configured', data: null);
     }
     // Backend expects the ArtisanService document id; callers sometimes pass a
     // composite id like '<artisanServiceId>_<subCategoryId>'. Normalize by
@@ -66,13 +75,17 @@ class MyServiceService {
   }
 
   /// Fetch job categories. Pass includeSubcategories=true to receive nested children.
-  Future<ApiResponse> fetchCategories({BuildContext? context, bool includeSubcategories = true}) async {
-    final url = includeSubcategories ? '$categoriesEndpoint?includeSubcategories=true' : categoriesEndpoint;
+  Future<ApiResponse> fetchCategories(
+      {BuildContext? context, bool includeSubcategories = true}) async {
+    final url = includeSubcategories
+        ? '$categoriesEndpoint?includeSubcategories=true'
+        : categoriesEndpoint;
     return await _client.safeGet(url, context: context);
   }
 
   /// Fetch job subcategories directly (optionally filter by categoryId)
-  Future<ApiResponse> fetchSubcategories({BuildContext? context, String? categoryId}) async {
+  Future<ApiResponse> fetchSubcategories(
+      {BuildContext? context, String? categoryId}) async {
     var url = jobSubcategoriesEndpoint;
     if (categoryId != null && categoryId.isNotEmpty) {
       url = '$jobSubcategoriesEndpoint?categoryId=$categoryId';
@@ -85,13 +98,18 @@ class MyServiceService {
     try {
       // Delegate to ArtistService which already contains a robust fetch implementation
       final list = await ArtistService.fetchArtisanServices(artisanId);
-      return ApiResponse(ok: true, statusCode: 200, data: list, message: 'OK');
+      return ApiResponse(
+        ok: true,
+        statusCode: 200,
+        data: list,
+        message: StatusMapper.getLabel(200),
+      );
     } catch (e) {
       return ApiErrorHandler.fromException(e);
     }
   }
 
-  /// Normalize various API shapes into a flat List<Map<String,dynamic>> where each
+  /// Normalize various API shapes into a flat `List<Map<String, dynamic>>` where each
   /// entry represents a single sub-service (with price, currency, category/subcategory ids).
   static List<Map<String, dynamic>> flattenArtisanServices(dynamic data) {
     final List<Map<String, dynamic>> flattened = [];
@@ -115,37 +133,51 @@ class MyServiceService {
         final artisanServiceId = (doc['_id'] ?? doc['id'])?.toString();
 
         // Normalize category which may be an id or an object
-        final dynamic categoryRaw = doc['categoryId'] ?? doc['mainCategory'] ?? doc['category'];
+        final dynamic categoryRaw =
+            doc['categoryId'] ?? doc['mainCategory'] ?? doc['category'];
         String? categoryId;
         String? categoryName = doc['categoryName'] ?? doc['name'];
         if (categoryRaw is Map) {
           categoryId = (categoryRaw['_id'] ?? categoryRaw['id'])?.toString();
-          categoryName = categoryName ?? (categoryRaw['name'] ?? categoryRaw['title'])?.toString();
+          categoryName = categoryName ??
+              (categoryRaw['name'] ?? categoryRaw['title'])?.toString();
         } else {
           categoryId = categoryRaw?.toString();
         }
 
-        final servicesArr = doc['services'] ?? doc['serviceList'] ?? doc['items'];
+        final servicesArr =
+            doc['services'] ?? doc['serviceList'] ?? doc['items'];
         if (servicesArr is List && servicesArr.isNotEmpty) {
           for (final s in servicesArr) {
             if (s == null || s is! Map) continue;
             final sub = Map<String, dynamic>.from(s.cast<String, dynamic>());
 
-            final dynamic subRaw = sub['subCategoryId'] ?? sub['sub_category_id'] ?? sub['_id'] ?? sub['id'];
+            final dynamic subRaw = sub['subCategoryId'] ??
+                sub['sub_category_id'] ??
+                sub['_id'] ??
+                sub['id'];
             String? subId;
-            String? subName = (sub['name'] ?? sub['title'] ?? sub['label'])?.toString();
+            String? subName =
+                (sub['name'] ?? sub['title'] ?? sub['label'])?.toString();
             if (subRaw is Map) {
               subId = (subRaw['_id'] ?? subRaw['id'])?.toString();
-              subName = subName ?? (subRaw['name'] ?? subRaw['title'])?.toString();
+              subName =
+                  subName ?? (subRaw['name'] ?? subRaw['title'])?.toString();
             } else {
               subId = subRaw?.toString();
             }
 
             // Parse price
             num price = 0;
-            final priceValue = sub['price'] ?? sub['amount'] ?? sub['unitPrice'] ?? sub['rate'] ?? 0;
-            if (priceValue is num) price = priceValue;
-            else if (priceValue is String) price = num.tryParse(priceValue) ?? 0;
+            final priceValue = sub['price'] ??
+                sub['amount'] ??
+                sub['unitPrice'] ??
+                sub['rate'] ??
+                0;
+            if (priceValue is num)
+              price = priceValue;
+            else if (priceValue is String)
+              price = num.tryParse(priceValue) ?? 0;
 
             flattened.add({
               'id': '${artisanServiceId ?? ''}_${subId ?? ''}',

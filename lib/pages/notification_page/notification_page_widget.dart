@@ -108,7 +108,8 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
       final resp = await ServiceNotif.NotificationService.fetchNotifications(
           page: nextPage, perPage: _perPage);
 
-      final notificationResponse = NotificationResponse.fromJson(resp, nextPage, _perPage);
+      final notificationResponse =
+          NotificationResponse.fromJson(resp, nextPage, _perPage);
 
       if (!mounted) return;
       setState(() {
@@ -204,6 +205,14 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
       default:
         return theme.colorScheme.onSurface.withAlpha((0.6 * 255).round());
     }
+  }
+
+  String _normalizeCurrencyText(String text) {
+    if (text.isEmpty) return text;
+    return text.replaceAllMapped(
+      RegExp(r'([?�])(?=\s*\d)'),
+      (_) => '₦',
+    );
   }
 
   @override
@@ -334,39 +343,35 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
-                children: _getAvailableFilters()
-                    .map((filter) {
-                      final isSelected = _selectedFilter == filter;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: FilterChip(
-                          label: Text(
-                            filter == 'all'
-                                ? 'All'
-                                : filter.replaceAll('_', ' '),
-                          ),
-                          selected: isSelected,
-                          onSelected: (selected) {
-                            setState(() => _selectedFilter = filter);
-                          },
-                          backgroundColor: colorScheme.surface,
-                          selectedColor: colorScheme.primary.withOpacity(0.2),
-                          side: BorderSide(
-                            color: isSelected
-                                ? colorScheme.primary
-                                : colorScheme.onSurface.withOpacity(0.2),
-                          ),
-                          labelStyle: theme.textTheme.labelSmall?.copyWith(
-                            color: isSelected
-                                ? colorScheme.primary
-                                : colorScheme.onSurface.withOpacity(0.7),
-                            fontWeight:
-                                isSelected ? FontWeight.w600 : FontWeight.w500,
-                          ),
-                        ),
-                      );
-                    })
-                    .toList(),
+                children: _getAvailableFilters().map((filter) {
+                  final isSelected = _selectedFilter == filter;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: FilterChip(
+                      label: Text(
+                        filter == 'all' ? 'All' : filter.replaceAll('_', ' '),
+                      ),
+                      selected: isSelected,
+                      onSelected: (selected) {
+                        setState(() => _selectedFilter = filter);
+                      },
+                      backgroundColor: colorScheme.surface,
+                      selectedColor: colorScheme.primary.withOpacity(0.2),
+                      side: BorderSide(
+                        color: isSelected
+                            ? colorScheme.primary
+                            : colorScheme.onSurface.withOpacity(0.2),
+                      ),
+                      labelStyle: theme.textTheme.labelSmall?.copyWith(
+                        color: isSelected
+                            ? colorScheme.primary
+                            : colorScheme.onSurface.withOpacity(0.7),
+                        fontWeight:
+                            isSelected ? FontWeight.w600 : FontWeight.w500,
+                      ),
+                    ),
+                  );
+                }).toList(),
               ),
             ),
             const SizedBox(height: 12),
@@ -484,8 +489,7 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
                                           setState(() => _searchQuery = '');
                                         },
                                         style: ElevatedButton.styleFrom(
-                                          backgroundColor:
-                                              colorScheme.primary,
+                                          backgroundColor: colorScheme.primary,
                                           foregroundColor:
                                               colorScheme.onPrimary,
                                           padding: const EdgeInsets.symmetric(
@@ -514,18 +518,17 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
                               color: colorScheme.primary,
                               child: ListView.builder(
                                 controller: _scrollController,
-                                padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                                padding:
+                                    const EdgeInsets.fromLTRB(20, 8, 20, 20),
                                 itemCount: filteredNotifications.length +
                                     (_hasMore ? 1 : 0),
                                 itemBuilder: (context, index) {
                                   if (index >= filteredNotifications.length) {
                                     return _loadingMore
                                         ? Padding(
-                                            padding:
-                                                const EdgeInsets.all(16.0),
+                                            padding: const EdgeInsets.all(16.0),
                                             child: Center(
-                                              child:
-                                                  CircularProgressIndicator(
+                                              child: CircularProgressIndicator(
                                                 color: colorScheme.primary,
                                               ),
                                             ),
@@ -677,7 +680,8 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
                   onTap: () {
                     Navigator.pop(context);
                     setState(() {
-                      _notifications.removeWhere((n) => n.id == notification.id);
+                      _notifications
+                          .removeWhere((n) => n.id == notification.id);
                     });
                     AppNotification.showSuccess(
                       context,
@@ -756,7 +760,7 @@ class _NotificationPageWidgetState extends State<NotificationPageWidget> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      notification.message,
+                      _normalizeCurrencyText(notification.message),
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: colorScheme.onSurface.withOpacity(0.7),
                       ),

@@ -22,6 +22,15 @@ class _JobPublishpageWidgetState extends State<JobPublishpageWidget> {
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
+  Color _getTextSecondary(BuildContext context) =>
+      Theme.of(context).disabledColor;
+  Color _getBorderColor(BuildContext context) =>
+      Theme.of(context).colorScheme.outline;
+  Color _getSurfaceColor(BuildContext context) =>
+      Theme.of(context).scaffoldBackgroundColor;
+  Color _getMutedSurface(BuildContext context) =>
+      Theme.of(context).colorScheme.surface;
+
   @override
   void initState() {
     super.initState();
@@ -47,7 +56,7 @@ class _JobPublishpageWidgetState extends State<JobPublishpageWidget> {
       },
       child: Scaffold(
         key: scaffoldKey,
-        backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
+        backgroundColor: _getSurfaceColor(context),
         appBar: null,
         body: SafeArea(
           top: true,
@@ -89,14 +98,14 @@ class _JobPublishpageWidgetState extends State<JobPublishpageWidget> {
                                 ),
                         enabledBorder: OutlineInputBorder(
                           borderSide: BorderSide(
-                            color: FlutterFlowTheme.of(context).alternate,
+                            color: _getBorderColor(context),
                             width: 1.0,
                           ),
                           borderRadius: BorderRadius.circular(12.0),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderSide: BorderSide(
-                            color: FlutterFlowTheme.of(context).primary,
+                            color: Theme.of(context).colorScheme.primary,
                             width: 1.0,
                           ),
                           borderRadius: BorderRadius.circular(12.0),
@@ -116,18 +125,17 @@ class _JobPublishpageWidgetState extends State<JobPublishpageWidget> {
                           borderRadius: BorderRadius.circular(12.0),
                         ),
                         filled: true,
-                        fillColor:
-                            FlutterFlowTheme.of(context).secondaryBackground,
+                        fillColor: _getMutedSurface(context),
                         contentPadding: EdgeInsetsDirectional.fromSTEB(
                             16.0, 12.0, 16.0, 12.0),
                         prefixIcon: Icon(
                           Icons.search_rounded,
-                          color: FlutterFlowTheme.of(context).secondaryText,
+                          color: _getTextSecondary(context),
                           size: 20.0,
                         ),
                         suffixIcon: Icon(
                           Icons.tune_rounded,
-                          color: FlutterFlowTheme.of(context).secondaryText,
+                          color: _getTextSecondary(context),
                           size: 20.0,
                         ),
                       ),
