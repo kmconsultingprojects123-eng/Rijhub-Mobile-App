@@ -155,6 +155,52 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
 
   Map<String, dynamic> get _artisan => _artisanData ?? widget.artisan;
 
+  Map<String, dynamic> _mergeArtisanPayload(Map<String, dynamic> incoming) {
+    final base = <String, dynamic>{};
+
+    try {
+      final widgetMap = _coerceToMap(widget.artisan);
+      if (widgetMap != null) {
+        base.addAll(Map<String, dynamic>.from(widgetMap));
+      }
+    } catch (_) {}
+
+    try {
+      if (_artisanData != null) {
+        base.addAll(Map<String, dynamic>.from(_artisanData!));
+      }
+    } catch (_) {}
+
+    final previousImage = _extractProfileImage(base);
+    final merged = <String, dynamic>{...base, ...incoming};
+    final mergedImage = _extractProfileImage(merged);
+
+    if (mergedImage == null && previousImage != null) {
+      merged['profileImage'] ??= base['profileImage'];
+      merged['profilePicture'] ??= base['profilePicture'];
+      merged['avatar'] ??= base['avatar'];
+      merged['image'] ??= base['image'];
+
+      if (base['user'] is Map) {
+        final existingUser = Map<String, dynamic>.from(
+          (base['user'] as Map).cast<String, dynamic>(),
+        );
+        final currentUser = merged['user'] is Map
+            ? Map<String, dynamic>.from(
+                (merged['user'] as Map).cast<String, dynamic>(),
+              )
+            : <String, dynamic>{};
+        currentUser['profileImage'] ??= existingUser['profileImage'];
+        currentUser['profilePicture'] ??= existingUser['profilePicture'];
+        currentUser['avatar'] ??= existingUser['avatar'];
+        currentUser['image'] ??= existingUser['image'];
+        merged['user'] = currentUser;
+      }
+    }
+
+    return merged;
+  }
+
   String? _artisanIdFromWidget() {
     try {
       final m = _coerceToMap(widget.artisan);
@@ -197,8 +243,9 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
           if (data is Map) {
             if (!mounted) return;
             setState(() {
-              _artisanData =
-                  Map<String, dynamic>.from(data.cast<String, dynamic>());
+              _artisanData = _mergeArtisanPayload(
+                Map<String, dynamic>.from(data.cast<String, dynamic>()),
+              );
             });
 
             // Ensure we pass a Map<String, dynamic> (decoded JSON may be Map<dynamic,dynamic>)
@@ -1055,8 +1102,63 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
   }
 
   // MARK: - UI Build Methods
+  Widget _buildSectionEmptyState({
+    required IconData icon,
+    required String title,
+    required String message,
+    EdgeInsetsGeometry? padding,
+  }) {
+    final theme = FlutterFlowTheme.of(context);
+
+    return Container(
+      width: double.infinity,
+      padding: padding ?? const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: _surfaceColor(),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _borderColor(), width: 1.5),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: primaryColor.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: primaryColor, size: 22),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: theme.bodyLarge.copyWith(
+              fontWeight: FontWeight.w600,
+              color: _textColor(0.9),
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            message,
+            style: theme.bodyMedium.copyWith(
+              color: _secondaryTextColor(),
+              height: 1.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildInfoItem(dynamic icon, String title, String value) {
     final theme = FlutterFlowTheme.of(context);
+    final normalizedValue = value.trim();
+    final isEmptyValue = normalizedValue.isEmpty ||
+        normalizedValue.toLowerCase() == 'not specified' ||
+        normalizedValue.toLowerCase() == 'unknown';
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
@@ -1087,9 +1189,15 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                     style:
                         theme.bodySmall.copyWith(color: theme.secondaryText)),
                 const SizedBox(height: 4),
-                Text(value,
-                    style:
-                        theme.bodyMedium.copyWith(fontWeight: FontWeight.w500)),
+                Text(
+                  isEmptyValue ? 'Not added yet' : value,
+                  style: theme.bodyMedium.copyWith(
+                    fontWeight: FontWeight.w500,
+                    color: isEmptyValue ? _secondaryTextColor() : null,
+                    fontStyle:
+                        isEmptyValue ? FontStyle.italic : FontStyle.normal,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1195,11 +1303,6 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
     required double mediumSpacing,
     required double bodyFontSize,
   }) {
-    if (images.isEmpty) return const SizedBox.shrink();
-
-    final thumbWidth = isSmallScreen ? 144.0 : 176.0;
-    final thumbHeight = isSmallScreen ? 112.0 : 136.0;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1225,82 +1328,117 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Tap any image to view and swipe through the artisan portfolio.',
-                style: theme.bodyMedium.copyWith(
-                  color: _secondaryTextColor(),
-                  fontSize: bodyFontSize - 1,
-                ),
-              ),
-              SizedBox(height: mediumSpacing),
-              SizedBox(
-                height: thumbHeight,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: images.length,
-                  separatorBuilder: (_, __) => SizedBox(width: smallSpacing),
-                  itemBuilder: (context, index) {
-                    return GestureDetector(
-                      onTap: () =>
-                          _showPortfolioViewer(images, initialIndex: index),
-                      child: Container(
-                        width: thumbWidth,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: primaryColor.withOpacity(0.12),
+              if (images.isEmpty)
+                _buildSectionEmptyState(
+                  icon: Icons.photo_library_outlined,
+                  title: 'No portfolio yet',
+                  message:
+                      'This artisan has not added any proof of work or gallery images yet.',
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 12,
+                  ),
+                )
+              else ...[
+                Builder(
+                  builder: (_) {
+                    final thumbWidth = isSmallScreen ? 144.0 : 176.0;
+                    final thumbHeight = isSmallScreen ? 112.0 : 136.0;
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Tap any image to view and swipe through the artisan portfolio.',
+                          style: theme.bodyMedium.copyWith(
+                            color: _secondaryTextColor(),
+                            fontSize: bodyFontSize - 1,
                           ),
                         ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(14),
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              CachedNetworkImage(
-                                imageUrl: images[index],
-                                fit: BoxFit.cover,
-                                placeholder: (context, url) => Container(
-                                  color: primaryColor.withOpacity(0.08),
-                                  child: Center(
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: primaryColor,
+                        SizedBox(height: mediumSpacing),
+                        SizedBox(
+                          height: thumbHeight,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: images.length,
+                            separatorBuilder: (_, __) =>
+                                SizedBox(width: smallSpacing),
+                            itemBuilder: (context, index) {
+                              return GestureDetector(
+                                onTap: () => _showPortfolioViewer(
+                                  images,
+                                  initialIndex: index,
+                                ),
+                                child: Container(
+                                  width: thumbWidth,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: primaryColor.withOpacity(0.12),
+                                    ),
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(14),
+                                    child: Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        CachedNetworkImage(
+                                          imageUrl: images[index],
+                                          fit: BoxFit.cover,
+                                          placeholder: (context, url) =>
+                                              Container(
+                                            color:
+                                                primaryColor.withOpacity(0.08),
+                                            child: Center(
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: primaryColor,
+                                              ),
+                                            ),
+                                          ),
+                                          errorWidget:
+                                              (context, url, error) =>
+                                                  Container(
+                                            color:
+                                                primaryColor.withOpacity(0.08),
+                                            child: Icon(
+                                              Icons.broken_image_outlined,
+                                              color:
+                                                  primaryColor.withOpacity(0.7),
+                                              size: 28,
+                                            ),
+                                          ),
+                                        ),
+                                        Positioned(
+                                          right: 10,
+                                          bottom: 10,
+                                          child: Container(
+                                            padding: const EdgeInsets.all(6),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black
+                                                  .withOpacity(0.5),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(
+                                              Icons.open_in_full,
+                                              color: Colors.white,
+                                              size: 16,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
-                                errorWidget: (context, url, error) => Container(
-                                  color: primaryColor.withOpacity(0.08),
-                                  child: Icon(
-                                    Icons.broken_image_outlined,
-                                    color: primaryColor.withOpacity(0.7),
-                                    size: 28,
-                                  ),
-                                ),
-                              ),
-                              Positioned(
-                                right: 10,
-                                bottom: 10,
-                                child: Container(
-                                  padding: const EdgeInsets.all(6),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.5),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.open_in_full,
-                                    color: Colors.white,
-                                    size: 16,
-                                  ),
-                                ),
-                              ),
-                            ],
+                              );
+                            },
                           ),
                         ),
-                      ),
+                      ],
                     );
                   },
                 ),
-              ),
+              ],
             ],
           ),
         ),
@@ -3849,15 +3987,39 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                             BorderRadius.circular(isSmallScreen ? 12 : 16),
                         border: Border.all(color: _borderColor(), width: 1.5),
                       ),
-                      child: Text(
-                        safeGetString('bio',
-                            defaultValue:
-                                'No bio available. This artisan hasn\'t added a description yet.'),
-                        style: theme.bodyLarge?.copyWith(
-                          color: _textColor(0.85),
-                          height: 1.6,
-                          fontSize: bodyFontSize,
-                        ),
+                      child: Builder(
+                        builder: (_) {
+                          final bio = safeGetString(
+                            'bio',
+                            defaultValue: safeGetString(
+                              'description',
+                              defaultValue: '',
+                            ),
+                          ).trim();
+
+                          if (bio.isEmpty ||
+                              bio.toLowerCase() == 'not specified') {
+                            return _buildSectionEmptyState(
+                              icon: Icons.notes_outlined,
+                              title: 'No description yet',
+                              message:
+                                  'This artisan has not added an about section yet.',
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 12,
+                              ),
+                            );
+                          }
+
+                          return Text(
+                            bio,
+                            style: theme.bodyLarge?.copyWith(
+                              color: _textColor(0.85),
+                              height: 1.6,
+                              fontSize: bodyFontSize,
+                            ),
+                          );
+                        },
                       ),
                     ),
 
@@ -3876,25 +4038,62 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                         ),
                       ),
                     ),
-                    Column(
-                      children: [
-                        _buildInfoItem(
-                          Icons.location_on_outlined,
-                          'Location',
-                          _displayLocation(),
-                        ),
-                        SizedBox(height: smallSpacing),
-                        _buildInfoItem(
-                          Icons.work_outline,
-                          'Experience',
-                          safeGetString('experience',
-                              defaultValue: safeGetString('yearsOfExperience',
-                                  defaultValue: 'Not specified')),
-                        ),
-                        SizedBox(height: smallSpacing),
-                        _buildAvailabilityPills(artisan, theme, primaryColor,
-                            smallSpacing, mediumSpacing, smallFontSize),
-                      ],
+                    Builder(
+                      builder: (_) {
+                        final location = _displayLocation().trim();
+                        final experience = safeGetString(
+                          'experience',
+                          defaultValue: safeGetString(
+                            'yearsOfExperience',
+                            defaultValue: 'Not specified',
+                          ),
+                        ).trim();
+                        final hasLocation = location.isNotEmpty &&
+                            location.toLowerCase() != 'not specified';
+                        final hasExperience = experience.isNotEmpty &&
+                            experience.toLowerCase() != 'not specified';
+                        final rawAvailability = artisan['availability'];
+                        final hasAvailability = rawAvailability is List &&
+                            rawAvailability.any(
+                              (item) => item.toString().trim().isNotEmpty,
+                            );
+
+                        if (!hasLocation &&
+                            !hasExperience &&
+                            !hasAvailability) {
+                          return _buildSectionEmptyState(
+                            icon: Icons.info_outline,
+                            title: 'No profile details yet',
+                            message:
+                                'This artisan has not added location, experience, or availability details yet.',
+                          );
+                        }
+
+                        return Column(
+                          children: [
+                            _buildInfoItem(
+                              Icons.location_on_outlined,
+                              'Location',
+                              location,
+                            ),
+                            SizedBox(height: smallSpacing),
+                            _buildInfoItem(
+                              Icons.work_outline,
+                              'Experience',
+                              experience,
+                            ),
+                            SizedBox(height: smallSpacing),
+                            _buildAvailabilityPills(
+                              artisan,
+                              theme,
+                              primaryColor,
+                              smallSpacing,
+                              mediumSpacing,
+                              smallFontSize,
+                            ),
+                          ],
+                        );
+                      },
                     ),
 
                     SizedBox(height: largeSpacing),
@@ -3908,7 +4107,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                       bodyFontSize: bodyFontSize,
                     ),
 
-                    if (portfolioImages.isNotEmpty) SizedBox(height: largeSpacing),
+                    SizedBox(height: largeSpacing),
 
                     // Reviews Section
                     Padding(
@@ -3937,18 +4136,11 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                             ),
                           ),
                         ] else if (_reviews.isEmpty) ...[
-                          Padding(
-                            padding:
-                                EdgeInsets.symmetric(vertical: mediumSpacing),
-                            child: Center(
-                              child: Text(
-                                'No reviews yet',
-                                style: theme.bodyLarge?.copyWith(
-                                  color: _secondaryTextColor(),
-                                  fontSize: bodyFontSize,
-                                ),
-                              ),
-                            ),
+                          _buildSectionEmptyState(
+                            icon: Icons.rate_review_outlined,
+                            title: 'No reviews yet',
+                            message:
+                                'This artisan has not received any customer reviews yet.',
                           ),
                         ] else ...[
                           ..._reviews.map((review) {
