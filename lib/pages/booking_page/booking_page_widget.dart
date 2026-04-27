@@ -2270,13 +2270,14 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
     try {
       // If we already have a threadId, just navigate
       if (effectiveThreadId != null && effectiveThreadId.isNotEmpty) {
-        Navigator.of(context).push(MaterialPageRoute(
+        await Navigator.of(context).push(MaterialPageRoute(
             builder: (_) => MessageClientWidget(
                 bookingId: effectiveBookingId,
                 threadId: effectiveThreadId,
                 jobTitle: jobTitleParam,
                 bookingPrice: priceParam,
                 bookingDateTime: dateParam)));
+        await _refreshBookingAfterChat(effectiveBookingId);
         return;
       }
       // Avoid duplicate fetches for same booking
@@ -2290,13 +2291,14 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               content: Text('Chat is being prepared — opening messages.')));
       }
-      Navigator.of(context).push(MaterialPageRoute(
+      await Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => MessageClientWidget(
               bookingId: effectiveBookingId,
               threadId: fetched,
               jobTitle: jobTitleParam,
               bookingPrice: priceParam,
               bookingDateTime: dateParam)));
+      await _refreshBookingAfterChat(effectiveBookingId);
     } catch (e) {
       if (kDebugMode) debugPrint('handleMessageTap error: $e');
       _setFetchingThread(effectiveBookingId, false);
@@ -2305,14 +2307,38 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
             .showSnackBar(SnackBar(content: Text('Unable to open chat.')));
       // Fallback: navigate without thread id so MessageClient can try its own logic
       try {
-        Navigator.of(context).push(MaterialPageRoute(
+        await Navigator.of(context).push(MaterialPageRoute(
             builder: (_) => MessageClientWidget(
                 bookingId: effectiveBookingId,
                 threadId: null,
                 jobTitle: jobTitleParam,
                 bookingPrice: priceParam,
                 bookingDateTime: dateParam)));
+        await _refreshBookingAfterChat(effectiveBookingId);
       } catch (_) {}
+    }
+  }
+
+  /// Re-fetches a single booking after the chat screen is popped, so changes
+  /// made there (payment + completion) are reflected without needing a manual
+  /// pull-to-refresh. Falls back to the socket-driven refresh if the targeted
+  /// fetch fails — this matters because realtime sockets can be down on the
+  /// device (the chat flow itself stops depending on the socket once payment
+  /// verification + booking-status polling lands locally).
+  Future<void> _refreshBookingAfterChat(String bookingId) async {
+    if (!mounted || bookingId.isEmpty) return;
+    try {
+      final fresh = await _fetchBookingById(bookingId);
+      if (!mounted) return;
+      if (fresh != null) {
+        _updateBookingState(bookingId, fresh);
+      } else {
+        await _fetchBookings(reset: true, preserveVisibleData: true);
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Refresh booking after chat error: $e');
+      }
     }
   }
 }

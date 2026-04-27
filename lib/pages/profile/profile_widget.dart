@@ -1087,17 +1087,19 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                             ensureSignedInForAction(context).then((ok) async {
                               if (!ok) return;
                               try {
-                                GoRouter.of(context)
-                                    .pushNamed(ProfileSpecialRequestsWidget.routeName);
+                                GoRouter.of(context).pushNamed(
+                                    ProfileSpecialRequestsWidget.routeName);
                                 return;
                               } catch (e) {
                                 try {
-                                  NavigationUtils.safePush(
-                                      context, const ProfileSpecialRequestsWidget());
+                                  NavigationUtils.safePush(context,
+                                      const ProfileSpecialRequestsWidget());
                                   return;
                                 } catch (_) {
                                   try {
-                                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfileSpecialRequestsWidget()));
+                                    Navigator.of(context).push(MaterialPageRoute(
+                                        builder: (_) =>
+                                            const ProfileSpecialRequestsWidget()));
                                     return;
                                   } catch (_) {}
                                 }

@@ -3094,7 +3094,13 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
     try {
       // If booking is already marked completed (e.g., UI completed it before payment),
       // skip the API call and directly show the rating sheet.
-      if (_bookingCompleted) {
+      if (_bookingCompleted ||
+          _isCompletedBookingStatus(_bookingStatusFromThread)) {
+        if (mounted) {
+          setState(() {
+            _bookingCompleted = true;
+          });
+        }
         try {
           if (mounted) await Future.delayed(const Duration(milliseconds: 200));
           if (mounted) await _showRatingBottomSheet();
@@ -3109,9 +3115,19 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
       final uri =
           Uri.parse('$API_BASE_URL/api/bookings/${widget.bookingId}/complete');
       final payload = jsonEncode({'sendEmail': true});
+
+      if (_kDebugMode) {
+        debugPrint('MessageClient: completing booking POST $uri');
+      }
+
       final response = await http
           .post(uri, headers: headers, body: payload)
           .timeout(const Duration(seconds: 15));
+
+      if (_kDebugMode) {
+        debugPrint(
+            'MessageClient: complete booking response ${response.statusCode} ${response.body}');
+      }
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         AppNotification.showSuccess(context, 'Booking marked as completed');
@@ -3126,24 +3142,61 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
           if (mounted) await Future.delayed(const Duration(milliseconds: 200));
           if (mounted) await _showRatingBottomSheet();
         } catch (_) {}
-      } else {
-        // Try to extract error message from response
-        String serverMsg = 'Failed to mark booking as complete';
-        try {
-          final parsed =
-              response.body.isNotEmpty ? jsonDecode(response.body) : null;
-          if (parsed is Map &&
-              (parsed['message'] != null || parsed['error'] != null)) {
-            serverMsg = (parsed['message'] ?? parsed['error']).toString();
-          } else if (response.body.isNotEmpty) {
-            serverMsg = response.body;
-          }
-        } catch (_) {}
-        AppNotification.showError(context, serverMsg);
+        return;
       }
+
+      // Non-2xx — most often the verify/webhook race: backend's DB hasn't
+      // recorded the payment yet, so /complete rejects. Poll the booking
+      // status; if the webhook (or a delayed verify-side update) has marked
+      // it complete by the time we look, treat as success and update the UI.
+      final completedViaPoll = await _waitForBookingCompletedStatus(
+        token,
+        maxAttempts: 6,
+        delay: const Duration(milliseconds: 600),
+      );
+      if (completedViaPoll) {
+        AppNotification.showSuccess(context, 'Booking marked as completed');
+        try {
+          if (mounted) await Future.delayed(const Duration(milliseconds: 200));
+          if (mounted) await _showRatingBottomSheet();
+        } catch (_) {}
+        return;
+      }
+
+      // Genuine failure — surface the server message.
+      String serverMsg = 'Failed to mark booking as complete';
+      try {
+        final parsed =
+            response.body.isNotEmpty ? jsonDecode(response.body) : null;
+        if (parsed is Map &&
+            (parsed['message'] != null || parsed['error'] != null)) {
+          serverMsg = (parsed['message'] ?? parsed['error']).toString();
+        } else if (response.body.isNotEmpty) {
+          serverMsg = response.body;
+        }
+      } catch (_) {}
+      AppNotification.showError(context, serverMsg);
     } catch (e) {
       if (_kDebugMode) debugPrint('Error completing booking: $e');
-      AppNotification.showError(context, 'Error marking booking complete: $e');
+      // Network/timeout errors can also coincide with the webhook running on
+      // the backend — re-check status before declaring failure.
+      try {
+        final completedViaPoll = await _waitForBookingCompletedStatus(
+          token,
+          maxAttempts: 4,
+          delay: const Duration(milliseconds: 500),
+        );
+        if (completedViaPoll && mounted) {
+          AppNotification.showSuccess(context, 'Booking marked as completed');
+          await Future.delayed(const Duration(milliseconds: 200));
+          if (mounted) await _showRatingBottomSheet();
+          return;
+        }
+      } catch (_) {}
+      if (mounted) {
+        AppNotification.showError(
+            context, 'Error marking booking complete: $e');
+      }
     }
   }
 
@@ -3373,6 +3426,7 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
         MaterialPageRoute(
           builder: (context) => PaymentWebviewPageWidget(
             url: authUrl,
+            successUrlContains: expectedReference,
             expectedReference: expectedReference,
           ),
           fullscreenDialog: true,
@@ -3387,44 +3441,28 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
         debugPrint('MessageClient: WebView returned result: $result');
       }
 
-      // Check if payment was successful
-      final success = result?['success'] ?? false;
+      final webViewSuccess = result?['success'] == true;
+      final returnedReference = result?['reference']?.toString();
+      if (returnedReference != null && returnedReference.isNotEmpty) {
+        _lastPaymentReference = returnedReference;
+      }
+      final referenceToVerify = _lastPaymentReference ?? expectedReference;
 
-      if (success) {
-        final returnedReference = result?['reference']?.toString();
-        if (returnedReference != null && returnedReference.isNotEmpty) {
-          _lastPaymentReference = returnedReference;
-        }
-
-        final referenceToVerify = _lastPaymentReference ?? expectedReference;
-        if (referenceToVerify != null && referenceToVerify.isNotEmpty) {
-          final verified = await _verifyPaymentReference(referenceToVerify);
-          if (verified) {
-            if (mounted) {
-              setState(() {
-                _paymentConfirmedBySocket = true;
-                _waitingForPaymentConfirmation = false;
-              });
-            }
-            AppNotification.showSuccess(context, 'Payment verified!');
-            await Future.delayed(const Duration(milliseconds: 200));
-            // Now mark the booking as complete after payment is verified
-            if (mounted) {
-              final token = await TokenStorage.getToken();
-              if (token != null && token.isNotEmpty) {
-                await _completeBookingAndShowRating(token);
-              } else {
-                if (mounted) await _showRatingBottomSheet();
-              }
-            }
-            return;
+      // Always check with the backend if we have a reference — Paystack often
+      // stays on its own checkout domain after success, so the WebView's URL
+      // heuristics may report `success: false` even when the user actually paid.
+      // The backend is the source of truth.
+      if (referenceToVerify != null && referenceToVerify.isNotEmpty) {
+        final verified = await _verifyPaymentReference(referenceToVerify);
+        if (verified) {
+          if (mounted) {
+            setState(() {
+              _paymentConfirmedBySocket = true;
+              _waitingForPaymentConfirmation = false;
+            });
           }
-        }
-
-        if (_paymentConfirmedBySocket) {
-          AppNotification.showSuccess(context, 'Payment confirmed');
+          AppNotification.showSuccess(context, 'Payment verified!');
           await Future.delayed(const Duration(milliseconds: 200));
-          // Mark the booking as complete after socket confirmation
           if (mounted) {
             final token = await TokenStorage.getToken();
             if (token != null && token.isNotEmpty) {
@@ -3435,7 +3473,25 @@ class _MessageClientWidgetState extends State<MessageClientWidget> {
           }
           return;
         }
+      }
 
+      if (_paymentConfirmedBySocket) {
+        AppNotification.showSuccess(context, 'Payment confirmed');
+        await Future.delayed(const Duration(milliseconds: 200));
+        if (mounted) {
+          final token = await TokenStorage.getToken();
+          if (token != null && token.isNotEmpty) {
+            await _completeBookingAndShowRating(token);
+          } else {
+            if (mounted) await _showRatingBottomSheet();
+          }
+        }
+        return;
+      }
+
+      if (webViewSuccess) {
+        // WebView signalled success but backend hasn't confirmed yet — wait
+        // for the socket event / fall back to API polling.
         AppNotification.showSuccess(context, 'Payment processing...');
         await _waitForPaymentConfirmation();
       } else {

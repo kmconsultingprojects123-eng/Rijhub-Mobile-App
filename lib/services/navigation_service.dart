@@ -246,9 +246,9 @@ class NavigationService with WidgetsBindingObserver {
         try {
           final root = appNavigatorKey.currentState;
           if (root != null) {
-            // try named route (strip query)
-            final name = path;
-            await _imperativeRetry(() async => root.pushNamedAndRemoveUntil(name, (r) => false));
+            // Fire-and-forget: future resolves on pop, must not be awaited
+            // inside _enqueue or the chain locks for the page lifetime.
+            root.pushNamedAndRemoveUntil(path, (r) => false);
             return null;
           }
         } catch (e2) {
@@ -273,7 +273,9 @@ class NavigationService with WidgetsBindingObserver {
         final ns = _navigatorForContext(context);
         await _waitForNavigatorUnlocked(ns, consecutiveChecks: consecutiveUnlockChecks);
         try {
-          await _imperativeRetry(() async => ns!.push(MaterialPageRoute(builder: (_) => _fakeWidgetForPath(path, extra))));
+          // Fire-and-forget: ns.push's future resolves on pop, must not be
+          // awaited inside _enqueue or the chain locks for the page lifetime.
+          ns!.push(MaterialPageRoute(builder: (_) => _fakeWidgetForPath(path, extra)));
           return null;
         } catch (e2) {
           _log('pushRoute imperative fallback also failed: $e2');
@@ -284,38 +286,55 @@ class NavigationService with WidgetsBindingObserver {
   }
 
   /// Replace current route with the provided widget (widget fallback).
-  Future<T?> pushReplacementWidget<T extends Object?, TO extends Object?>(BuildContext context, Widget page, {TO? result}) {
-    return _enqueue<T?>(() async {
-      if (!context.mounted) return null;
+  ///
+  /// IMPORTANT: `Navigator.pushReplacement` returns a Future that only
+  /// completes when the new route is itself popped. We must NOT await that
+  /// future inside `_enqueue`, or the navigation chain would be blocked for
+  /// the entire lifetime of the pushed page, deadlocking every subsequent
+  /// navigation call. We capture the future and return it to the caller.
+  Future<T?> pushReplacementWidget<T extends Object?, TO extends Object?>(BuildContext context, Widget page, {TO? result}) async {
+    Future<T?>? popResult;
+    await _enqueue<void>(() async {
+      if (!context.mounted) return;
       final ns = _navigatorForContext(context);
       await _waitForNavigatorUnlocked(ns, consecutiveChecks: consecutiveUnlockChecks);
       try {
-        final res = await _imperativeRetry(() async => ns!.pushReplacement<T, TO>(MaterialPageRoute(builder: (_) => page), result: result));
-        return res;
+        popResult = ns!.pushReplacement<T, TO>(MaterialPageRoute(builder: (_) => page), result: result);
       } catch (e) {
         _log('pushReplacementWidget failed: $e');
         try {
           final root = appNavigatorKey.currentState;
-          if (root != null) return await _imperativeRetry(() async => root.pushReplacement<T, TO>(MaterialPageRoute(builder: (_) => page), result: result));
+          if (root != null) {
+            popResult = root.pushReplacement<T, TO>(MaterialPageRoute(builder: (_) => page), result: result);
+            return;
+          }
         } catch (e2) {
           _log('pushReplacementWidget fallback failed: $e2');
         }
         rethrow;
       }
     });
+    return popResult;
   }
 
   /// Push a widget onto the stack (kept for backward-compat).
-  Future<T?> pushWidget<T extends Object?>(BuildContext context, Widget page, {bool waitForSettlement = true}) {
-    return _enqueue<T?>(() async {
-      if (!context.mounted) return null;
+  ///
+  /// IMPORTANT: see comment on `pushReplacementWidget`. `Navigator.push`
+  /// returns a Future that only completes when the pushed route is popped.
+  /// Awaiting it inside `_enqueue` would lock the navigation chain for the
+  /// entire page lifetime — every later push would queue behind it and
+  /// silently hang. We capture the popped-result future here and return it
+  /// to the caller without blocking the queue.
+  Future<T?> pushWidget<T extends Object?>(BuildContext context, Widget page, {bool waitForSettlement = true}) async {
+    Future<T?>? popResult;
+    await _enqueue<void>(() async {
+      if (!context.mounted) return;
       final ns = _navigatorForContext(context);
       await _waitForNavigatorUnlocked(ns, consecutiveChecks: consecutiveUnlockChecks);
       try {
         final route = MaterialPageRoute<T>(builder: (_) => page);
-        final res = await _imperativeRetry(() async => ns!.push<T>(route));
-        if (waitForSettlement) await Future.delayed(const Duration(milliseconds: 250));
-        return res;
+        popResult = ns!.push<T>(route);
+        if (waitForSettlement) await Future.delayed(const Duration(milliseconds: 50));
       } catch (e) {
         _log('pushWidget failed: $e — attempting GoRouter fallback if mapped');
         if (_navigatorUsesPages(ns) || isUsingPagesAPI(context)) {
@@ -323,7 +342,8 @@ class NavigationService with WidgetsBindingObserver {
           if (path != null) {
             try {
               GoRouter.of(context).go(path);
-              return null;
+              popResult = Future<T?>.value(null);
+              return;
             } catch (e2) {
               _log('GoRouter.go fallback in pushWidget failed: $e2');
             }
@@ -331,13 +351,17 @@ class NavigationService with WidgetsBindingObserver {
         }
         try {
           final root = appNavigatorKey.currentState;
-          if (root != null) return await _imperativeRetry(() async => root.push<T>(MaterialPageRoute<T>(builder: (_) => page)));
+          if (root != null) {
+            popResult = root.push<T>(MaterialPageRoute<T>(builder: (_) => page));
+            return;
+          }
         } catch (e2) {
           _log('pushWidget root fallback failed: $e2');
         }
         rethrow;
       }
     });
+    return popResult;
   }
 
   /// Pop the current route.
@@ -363,9 +387,14 @@ class NavigationService with WidgetsBindingObserver {
   }
 
   /// Push and remove until predicate — widget-aware and GoRouter-friendly.
-  Future<void> pushAndRemoveWidgetUntil(BuildContext context, Widget page, RoutePredicate predicate) {
-    return _enqueue<void>(() async {
-      if (!context.mounted) return null;
+  ///
+  /// Like `pushWidget`, the imperative `pushAndRemoveUntil` call returns a
+  /// Future that only completes when the new route pops. We must not await
+  /// that future inside `_enqueue` or the queue stays locked for the page's
+  /// lifetime. We fire the call and let the queue advance immediately.
+  Future<void> pushAndRemoveWidgetUntil(BuildContext context, Widget page, RoutePredicate predicate) async {
+    await _enqueue<void>(() async {
+      if (!context.mounted) return;
       final ns = _navigatorForContext(context);
       await _waitForNavigatorUnlocked(ns, consecutiveChecks: consecutiveUnlockChecks);
 
@@ -380,16 +409,16 @@ class NavigationService with WidgetsBindingObserver {
             try {
               _log('Declarative fallback: going to $mapped');
               GoRouter.of(context).go(mapped);
-              return null;
+              return;
             } catch (e) {
               _log('GoRouter.go fallback for mapped widget failed: $e');
-              // Try named-route imperative fallback using the mapped path/name.
               try {
                 final root = appNavigatorKey.currentState;
                 if (root != null) {
                   _log('Attempting root.pushNamedAndRemoveUntil for $mapped');
-                  await _imperativeRetry(() async => root.pushNamedAndRemoveUntil(mapped, predicate));
-                  return null;
+                  // Fire-and-forget: don't await pop lifetime.
+                  root.pushNamedAndRemoveUntil(mapped, predicate);
+                  return;
                 }
               } catch (e2) {
                 _log('Root pushNamedAndRemoveUntil fallback failed: $e2');
@@ -397,35 +426,30 @@ class NavigationService with WidgetsBindingObserver {
             }
           }
 
-          // If we couldn't map (or named fallback failed), attempt root imperative fallback
-          // using a widget route. Note: this will fail on page-based Navigators and is
-          // therefore a last-resort path; keep the informative error if it does fail.
           try {
             final root = appNavigatorKey.currentState;
             if (root != null) {
-              await _imperativeRetry(() async => root.pushAndRemoveUntil(MaterialPageRoute(builder: (_) => page), predicate));
-              return null;
+              root.pushAndRemoveUntil(MaterialPageRoute(builder: (_) => page), predicate);
+              return;
             }
           } catch (e) {
             _log('Root navigator pushAndRemoveUntil fallback failed: $e');
           }
 
-          // Final: raise informative error to encourage using a route path.
           final err = Exception('Cannot perform pushAndRemoveUntil on a page-based Navigator; provide a router path or use a mapped route.');
           _log(err.toString());
           throw err;
         }
 
-        // Non page-based navigator: safe to call imperative API.
-        await _imperativeRetry(() async => ns!.pushAndRemoveUntil(MaterialPageRoute(builder: (_) => page), predicate));
-        return null;
+        // Non page-based navigator: safe to call imperative API. Fire-and-forget.
+        ns!.pushAndRemoveUntil(MaterialPageRoute(builder: (_) => page), predicate);
       } catch (e) {
         _log('pushAndRemoveWidgetUntil failed: $e');
         try {
           final root = appNavigatorKey.currentState;
           if (root != null) {
-            await _imperativeRetry(() async => root.pushAndRemoveUntil(MaterialPageRoute(builder: (_) => page), predicate));
-            return null;
+            root.pushAndRemoveUntil(MaterialPageRoute(builder: (_) => page), predicate);
+            return;
           }
         } catch (e2) {
           _log('pushAndRemoveWidgetUntil fallback failed: $e2');
@@ -436,25 +460,33 @@ class NavigationService with WidgetsBindingObserver {
   }
 
   /// pushNamedAndRemoveUntil — uses Navigator if possible (kept for compatibility)
-  Future<T?> pushNamedAndRemoveUntil<T extends Object?>(BuildContext context, String newRouteName, RoutePredicate predicate, {Object? arguments}) {
-    return _enqueue<T?>(() async {
-      if (!context.mounted) return null;
+  ///
+  /// Same caveat as the other push helpers: the returned future from
+  /// `Navigator.pushNamedAndRemoveUntil` only completes when the new route
+  /// pops. We capture it and return without blocking the chain.
+  Future<T?> pushNamedAndRemoveUntil<T extends Object?>(BuildContext context, String newRouteName, RoutePredicate predicate, {Object? arguments}) async {
+    Future<T?>? popResult;
+    await _enqueue<void>(() async {
+      if (!context.mounted) return;
       final ns = _navigatorForContext(context);
       await _waitForNavigatorUnlocked(ns, consecutiveChecks: consecutiveUnlockChecks);
       try {
-        final res = await _imperativeRetry(() async => ns!.pushNamedAndRemoveUntil<T>(newRouteName, predicate, arguments: arguments));
-        return res;
+        popResult = ns!.pushNamedAndRemoveUntil<T>(newRouteName, predicate, arguments: arguments);
       } catch (e) {
         _log('pushNamedAndRemoveUntil failed: $e');
         try {
           final root = appNavigatorKey.currentState;
-          if (root != null) return await _imperativeRetry(() async => root.pushNamedAndRemoveUntil<T>(newRouteName, predicate, arguments: arguments));
+          if (root != null) {
+            popResult = root.pushNamedAndRemoveUntil<T>(newRouteName, predicate, arguments: arguments);
+            return;
+          }
         } catch (e2) {
           _log('pushNamedAndRemoveUntil fallback failed: $e2');
         }
         rethrow;
       }
     });
+    return popResult;
   }
 
   /// Clear internal queue to recover from catastrophic errors.

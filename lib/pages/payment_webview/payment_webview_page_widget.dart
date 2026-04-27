@@ -1,4 +1,5 @@
 import '/flutter_flow/flutter_flow_theme.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -118,17 +119,27 @@ class _PaymentWebviewPageWidgetState extends State<PaymentWebviewPageWidget> {
           ..setNavigationDelegate(
             NavigationDelegate(
               onPageStarted: (url) {
+                if (kDebugMode) {
+                  debugPrint('PaymentWebView[onPageStarted]: $url');
+                }
                 if (!mounted || _completed) return;
                 _lastUrl = url;
                 setState(() => _loading = true);
               },
               onPageFinished: (url) {
+                if (kDebugMode) {
+                  debugPrint('PaymentWebView[onPageFinished]: $url');
+                }
                 if (!mounted || _completed) return;
                 _lastUrl = url;
                 setState(() => _loading = false);
 
                 final reference = _resolvedReference(url);
                 if (_isSuccessUrl(url)) {
+                  if (kDebugMode) {
+                    debugPrint(
+                        'PaymentWebView[match=success on onPageFinished] reference=$reference url=$url');
+                  }
                   _completePayment(
                     success: true,
                     url: url,
@@ -138,6 +149,10 @@ class _PaymentWebviewPageWidgetState extends State<PaymentWebviewPageWidget> {
                 }
 
                 if (_isFailureUrl(url)) {
+                  if (kDebugMode) {
+                    debugPrint(
+                        'PaymentWebView[match=failure on onPageFinished] reference=$reference url=$url');
+                  }
                   _completePayment(
                     success: false,
                     url: url,
@@ -146,6 +161,10 @@ class _PaymentWebviewPageWidgetState extends State<PaymentWebviewPageWidget> {
                 }
               },
               onNavigationRequest: (req) {
+                if (kDebugMode) {
+                  debugPrint(
+                      'PaymentWebView[onNavigationRequest]: ${req.url} (mainFrame=${req.isMainFrame})');
+                }
                 _lastUrl = req.url;
                 final uri = Uri.tryParse(req.url);
                 if (uri != null &&
@@ -155,6 +174,10 @@ class _PaymentWebviewPageWidgetState extends State<PaymentWebviewPageWidget> {
                 }
                 final reference = _resolvedReference(req.url);
                 if (_isSuccessUrl(req.url)) {
+                  if (kDebugMode) {
+                    debugPrint(
+                        'PaymentWebView[match=success on onNavigationRequest] reference=$reference url=${req.url}');
+                  }
                   _completePayment(
                     success: true,
                     url: req.url,
@@ -163,6 +186,10 @@ class _PaymentWebviewPageWidgetState extends State<PaymentWebviewPageWidget> {
                   return NavigationDecision.prevent;
                 }
                 if (_isFailureUrl(req.url)) {
+                  if (kDebugMode) {
+                    debugPrint(
+                        'PaymentWebView[match=failure on onNavigationRequest] reference=$reference url=${req.url}');
+                  }
                   _completePayment(
                     success: false,
                     url: req.url,
