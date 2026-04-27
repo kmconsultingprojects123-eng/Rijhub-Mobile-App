@@ -7,10 +7,6 @@ import '../state/app_state_notifier.dart';
 import '../api_config.dart';
 import '../services/token_storage.dart';
 
-// Allow optional socket path override via dart-define: --dart-define=SOCKET_PATH=/socket.io
-const _socketPathKey = 'SOCKET_PATH';
-final String SOCKET_PATH = const String.fromEnvironment(_socketPathKey);
-
 /// Re-introduces socket.io-based realtime notifications with controlled debug-only logging
 /// and improved error handling; preserves public API (instance/init/connect/disconnect).
 class RealtimeNotifications {
@@ -162,11 +158,7 @@ class RealtimeNotifications {
         'randomizationFactor': 0.5,
       };
 
-      // If a specific socket path is provided via dart-define, include it
-      if (SOCKET_PATH.isNotEmpty) options['path'] = SOCKET_PATH;
-
-      _log(
-          'socket options: auth present, query token included${SOCKET_PATH.isNotEmpty ? ', path=$SOCKET_PATH' : ''}');
+      _log('socket options: auth present, query token included');
       _socket = io.io(socketUrl, options);
 
       // onConnect: join per-user rooms and notify listeners that we're connected

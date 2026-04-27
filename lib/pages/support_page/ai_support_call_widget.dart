@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_pcm_sound/flutter_pcm_sound.dart';
 import 'package:flutter_sound/flutter_sound.dart';
@@ -71,7 +72,7 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
   bool _silenceWarningSent = false;
   bool _endCallPending = false;
 
-  static const _geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
+  static String get _geminiApiKey => dotenv.env['GEMINI_API_KEY'] ?? '';
 
   // ---------------------------------------------------------------
   // Lifecycle

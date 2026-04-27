@@ -53,3 +53,8 @@ app.*.map.json
 /android/key.properties
 /android/*.jks
 *.keystore
+
+# Environment files - contain secrets, never commit
+.env
+.env.local
+.env.*.local

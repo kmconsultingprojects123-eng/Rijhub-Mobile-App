@@ -3,13 +3,6 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../api_config.dart';
 
-class UnsignedUploadNotConfigured implements Exception {
-  final String message;
-  UnsignedUploadNotConfigured([this.message = 'Unsigned Cloudinary upload not configured']);
-  @override
-  String toString() => 'UnsignedUploadNotConfigured: $message';
-}
-
 /// Upload helper that requests an upload signature from the backend and
 /// uploads a file directly to Cloudinary. The backend must implement
 /// POST /api/uploads/sign which returns JSON with at least: { signature, timestamp, api_key, upload_url?, public_id? }
@@ -111,38 +104,4 @@ class UploadService {
     throw Exception('Cloud upload failed: unexpected error. Last response: ${finalResp.statusCode} ${finalResp.body}');
   }
 
-  /// Upload a file using an unsigned upload preset (no backend signature).
-  /// Requires CLOUDINARY_CLOUD_NAME and CLOUDINARY_UPLOAD_PRESET to be set.
-  static Future<Map<String, dynamic>> uploadFileUnsigned({
-    required File file,
-    required String uploadPreset,
-    required String cloudName,
-  }) async {
-    if (cloudName.isEmpty || uploadPreset.isEmpty) {
-      throw UnsignedUploadNotConfigured();
-    }
-
-    if (!file.existsSync()) {
-      throw Exception('Upload failed: file not found at ${file.path}');
-    }
-
-    final uri = Uri.parse('https://api.cloudinary.com/v1_1/$cloudName/auto/upload');
-    final req = http.MultipartRequest('POST', uri);
-    req.fields['upload_preset'] = uploadPreset;
-
-    final mf = await http.MultipartFile.fromPath('file', file.path);
-    req.files.add(mf);
-
-    final streamed = await req.send().timeout(const Duration(seconds: 60));
-    final resp = await http.Response.fromStream(streamed);
-    if (resp.statusCode >= 200 && resp.statusCode < 300) {
-      final body = jsonDecode(resp.body);
-      return {
-        'url': body['secure_url'] ?? body['url'],
-        'public_id': body['public_id'],
-        'raw': body,
-      };
-    }
-    throw Exception('Unsigned cloud upload failed: ${resp.statusCode} ${resp.body}');
-  }
 }
