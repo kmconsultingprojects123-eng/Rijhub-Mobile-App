@@ -1,4 +1,5 @@
 import '/flutter_flow/flutter_flow_util.dart';
+import '/flutter_flow/flutter_flow_theme.dart';
 import 'search_page_model.dart';
 export 'search_page_model.dart';
 import 'package:flutter/material.dart';
@@ -38,16 +39,17 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
   String? _errorMessage;
 
   // Minimalist color scheme
-  final Color _primaryColor = const Color(0xFFA20025);
-  final Color _surfaceColor = const Color(0xFFF9FAFB);
-  final Color _textPrimary = const Color(0xFF111827);
-  final Color _textSecondary = const Color(0xFF6B7280);
-  final Color _borderColor = const Color(0xFFE5E7EB);
+  Color get _primaryColor => Theme.of(context).colorScheme.primary;
+  Color get _textPrimary => Theme.of(context).colorScheme.onSurface;
+  Color get _textSecondary =>
+      Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.62);
+  Color get _borderColor => Theme.of(context).colorScheme.outline;
 
   // Service and subcategory management
   List<Map<String, dynamic>> _allMainServices = [];
   List<Map<String, dynamic>> _popularServices = [];
   List<Map<String, dynamic>> _currentSubservices = [];
+  final Map<String, List<Map<String, dynamic>>> _mainServiceSubservices = {};
   String? _currentMainCategory;
   String? _currentMainCategoryId;
   bool _isMainService = false;
@@ -56,6 +58,95 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
   // Cache for service data
   final Map<String, List<Map<String, dynamic>>> _subcategoryCache = {};
   final Map<String, List<String>> _serviceCache = {};
+
+  static const Map<String, List<String>> _serviceKeywordAliases = {
+    'mechanic': [
+      'mechanic',
+      'mechanics',
+      'auto',
+      'automobile',
+      'car',
+      'cars',
+      'vehicle',
+      'vehicles',
+      'engine',
+      'tyre',
+      'tire',
+      'battery',
+      'brake'
+    ],
+    'plumbing': [
+      'plumb',
+      'plumber',
+      'plumbing',
+      'pipe',
+      'drain',
+      'leak',
+      'water'
+    ],
+    'electrical': [
+      'electric',
+      'electrician',
+      'electrical',
+      'wiring',
+      'light',
+      'generator',
+      'inverter'
+    ],
+    'cleaning': [
+      'clean',
+      'cleaner',
+      'cleaning',
+      'janitor',
+      'laundry',
+      'wash',
+      'housekeeping'
+    ],
+    'carpentry': [
+      'carpentry',
+      'carpenter',
+      'wood',
+      'furniture',
+      'cabinet',
+      'wardrobe'
+    ],
+    'painting': [
+      'paint',
+      'painter',
+      'painting',
+      'screeding',
+      'interior finish'
+    ],
+    'gardening': ['garden', 'gardener', 'lawn', 'landscape', 'flowers'],
+    'tailoring': [
+      'tailor',
+      'tailoring',
+      'fashion',
+      'sew',
+      'sewing',
+      'dressmaker'
+    ],
+    'beauty': ['beauty', 'salon', 'hair', 'barber', 'makeup', 'spa'],
+    'catering': [
+      'cater',
+      'catering',
+      'chef',
+      'food',
+      'cook',
+      'pastry',
+      'baker'
+    ],
+    'moving': [
+      'moving',
+      'movers',
+      'delivery',
+      'dispatch',
+      'logistics',
+      'truck'
+    ],
+    'maintenance': ['maintenance', 'handyman', 'repair', 'fix', 'install'],
+    'it': ['it', 'tech', 'computer', 'laptop', 'software', 'network'],
+  };
 
   // Search tracking
   Timer? _searchDebounceTimer;
@@ -95,6 +186,283 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
     }
 
     return _model.textController?.text.trim() ?? '';
+  }
+
+  String? _artisanIdentityKey(Map<String, dynamic> artisan) {
+    String? readId(dynamic value) {
+      if (value == null) return null;
+      final text = value.toString().trim();
+      return text.isEmpty ? null : text;
+    }
+
+    try {
+      for (final key in ['_id', 'id', 'artisanId', 'userId', 'user_id']) {
+        final direct = readId(artisan[key]);
+        if (direct != null) return '${key == 'userId' || key == 'user_id' ? 'user' : 'artisan'}:$direct';
+      }
+
+      for (final key in [
+        'user',
+        'owner',
+        'artisan',
+        'artisanUser',
+        'artisanProfile',
+        'artisanAuthDetails',
+        'artisanAuthdDetails',
+        'artisanAuthdetails',
+      ]) {
+        final nested = artisan[key];
+        if (nested is Map) {
+          final nestedId =
+              readId(nested['_id']) ?? readId(nested['id']) ?? readId(nested['userId']);
+          if (nestedId != null) return 'user:$nestedId';
+        }
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  String _artisanSearchBlob(Map<String, dynamic> artisan) {
+    final buffer = StringBuffer();
+
+    void appendValue(dynamic value) {
+      if (value == null) return;
+      if (value is String) {
+        final text = value.trim().toLowerCase();
+        if (text.isNotEmpty) buffer.write(' $text');
+        return;
+      }
+      if (value is num) {
+        buffer.write(' ${value.toString().toLowerCase()}');
+        return;
+      }
+      if (value is List) {
+        for (final item in value) {
+          appendValue(item);
+        }
+        return;
+      }
+      if (value is Map) {
+        for (final entry in value.entries) {
+          if (entry.key.toString().toLowerCase().contains('image')) continue;
+          appendValue(entry.value);
+        }
+      }
+    }
+
+    appendValue(artisan['name']);
+    appendValue(artisan['trade']);
+    appendValue(artisan['occupation']);
+    appendValue(artisan['bio']);
+    appendValue(artisan['description']);
+    appendValue(artisan['location']);
+    appendValue(artisan['city']);
+    appendValue(artisan['state']);
+    appendValue(artisan['serviceArea']);
+    appendValue(artisan['user']);
+    appendValue(artisan['artisanProfile']);
+    appendValue(artisan['artisanAuthDetails']);
+    appendValue(artisan['services']);
+    appendValue(artisan['skills']);
+    appendValue(artisan['categories']);
+    appendValue(artisan['subcategories']);
+
+    return buffer.toString();
+  }
+
+  int _searchRelevanceScore(Map<String, dynamic> artisan, String query) {
+    final normalizedQuery = query.trim().toLowerCase();
+    if (normalizedQuery.isEmpty) return 0;
+
+    final name = [
+      artisan['name'],
+      if (artisan['user'] is Map) (artisan['user'] as Map)['name'],
+      if (artisan['artisanAuthDetails'] is Map)
+        (artisan['artisanAuthDetails'] as Map)['name'],
+    ].whereType<Object>().map((e) => e.toString().trim().toLowerCase()).join(' ');
+
+    final blob = _artisanSearchBlob(artisan);
+    final tokens = _tokenizeQuery(normalizedQuery);
+
+    var score = 0;
+    if (name == normalizedQuery) score += 200;
+    if (name.startsWith(normalizedQuery) && normalizedQuery.isNotEmpty) {
+      score += 120;
+    }
+    if (name.contains(normalizedQuery) && normalizedQuery.isNotEmpty) {
+      score += 80;
+    }
+    if (blob.contains(normalizedQuery) && normalizedQuery.isNotEmpty) {
+      score += 40;
+    }
+
+    for (final token in tokens) {
+      if (name.contains(token)) score += 20;
+      if (blob.contains(token)) score += 8;
+    }
+
+    return score;
+  }
+
+  List<Map<String, dynamic>> _mergeUniqueArtisans(
+    List<Map<String, dynamic>> existing,
+    List<Map<String, dynamic>> incoming, {
+    String? query,
+  }) {
+    final merged = <Map<String, dynamic>>[];
+    final seen = <String>{};
+
+    void addArtisan(Map<String, dynamic> artisan) {
+      final key = _artisanIdentityKey(artisan);
+      if (key != null) {
+        if (!seen.add(key)) return;
+      }
+      merged.add(artisan);
+    }
+
+    for (final artisan in existing) {
+      addArtisan(artisan);
+    }
+    for (final artisan in incoming) {
+      addArtisan(artisan);
+    }
+
+    final normalizedQuery = query?.trim() ?? '';
+    if (!_isMainService && normalizedQuery.isNotEmpty) {
+      merged.sort((a, b) {
+        final scoreDiff = _searchRelevanceScore(b, normalizedQuery) -
+            _searchRelevanceScore(a, normalizedQuery);
+        if (scoreDiff != 0) return scoreDiff;
+        final nameA = (a['name'] ?? '').toString().toLowerCase();
+        final nameB = (b['name'] ?? '').toString().toLowerCase();
+        return nameA.compareTo(nameB);
+      });
+    }
+
+    return merged;
+  }
+
+  List<String> _tokenizeQuery(String value) {
+    return value
+        .toLowerCase()
+        .split(RegExp(r'[^a-z0-9]+'))
+        .where((token) => token.isNotEmpty)
+        .toList();
+  }
+
+  Set<String> _keywordsForService(String name,
+      {String? slug, List<Map<String, dynamic>>? subservices}) {
+    final keywords = <String>{};
+
+    void addText(String? text) {
+      if (text == null || text.trim().isEmpty) return;
+      final normalized = text.toLowerCase().trim();
+      keywords.add(normalized);
+      keywords.addAll(_tokenizeQuery(normalized));
+      for (final entry in _serviceKeywordAliases.entries) {
+        if (normalized.contains(entry.key) ||
+            entry.value.any(normalized.contains)) {
+          keywords.addAll(entry.value);
+        }
+      }
+    }
+
+    addText(name);
+    addText(slug);
+    for (final subservice in subservices ?? const <Map<String, dynamic>>[]) {
+      addText(subservice['name']?.toString());
+      addText(subservice['slug']?.toString());
+    }
+
+    return keywords;
+  }
+
+  Map<String, dynamic>? _inferServiceContextFromQuery(String query) {
+    final normalizedQuery = query.trim().toLowerCase();
+    if (normalizedQuery.isEmpty) return null;
+
+    final queryTokens = _tokenizeQuery(normalizedQuery).toSet();
+    Map<String, dynamic>? bestMatch;
+    double bestScore = 0;
+
+    for (final service in _allMainServices) {
+      final serviceId = service['id']?.toString() ?? '';
+      final subservices =
+          _mainServiceSubservices[serviceId] ?? const <Map<String, dynamic>>[];
+      final keywords = _keywordsForService(
+        service['name']?.toString() ?? '',
+        slug: service['slug']?.toString(),
+        subservices: subservices,
+      );
+
+      double score = 0;
+      String? matchedSubserviceId;
+
+      for (final keyword in keywords) {
+        if (keyword == normalizedQuery) {
+          score = 1.0;
+          break;
+        }
+        if (keyword.contains(normalizedQuery) ||
+            normalizedQuery.contains(keyword)) {
+          score = score < 0.88 ? 0.88 : score;
+        }
+      }
+
+      if (score < 1.0 && queryTokens.isNotEmpty) {
+        final keywordTokens = keywords.expand(_tokenizeQuery).toSet();
+        final overlap = queryTokens.intersection(keywordTokens).length;
+        if (overlap > 0) {
+          final tokenScore = overlap / queryTokens.length;
+          score = tokenScore > score ? tokenScore : score;
+        }
+      }
+
+      if (score < 0.88) {
+        final similarity = _calculateSimilarity(
+            normalizedQuery, service['name']?.toString() ?? '');
+        score = similarity > score ? similarity : score;
+      }
+
+      for (final subservice in subservices) {
+        final subName = subservice['name']?.toString() ?? '';
+        final subSlug = subservice['slug']?.toString() ?? '';
+        final subKeywords = _keywordsForService(subName, slug: subSlug);
+        for (final keyword in subKeywords) {
+          if (keyword == normalizedQuery) {
+            score = 0.97;
+            matchedSubserviceId = subservice['id']?.toString();
+            break;
+          }
+          if (keyword.contains(normalizedQuery) ||
+              normalizedQuery.contains(keyword)) {
+            if (score < 0.9) {
+              score = 0.9;
+              matchedSubserviceId = subservice['id']?.toString();
+            }
+          }
+        }
+        if (matchedSubserviceId == null && score < 0.9) {
+          final similarity = _calculateSimilarity(normalizedQuery, subName);
+          if (similarity >= 0.62 && similarity > score) {
+            score = similarity;
+            matchedSubserviceId = subservice['id']?.toString();
+          }
+        }
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = {
+          'service': service,
+          'subservices': subservices,
+          'matchedSubserviceId': matchedSubserviceId,
+        };
+      }
+    }
+
+    return bestScore >= 0.45 ? bestMatch : null;
   }
 
   @override
@@ -147,7 +515,8 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
   /// Load all main services/categories from the API
   Future<void> _loadMainServices() async {
     try {
-      final uri = Uri.parse('$API_BASE_URL/api/job-categories?limit=100');
+      final uri = Uri.parse(
+          '$API_BASE_URL/api/job-categories?limit=100&includeSubcategories=true');
       final response = await http.get(uri).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
@@ -161,12 +530,21 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
         }
 
         if (items != null && items.isNotEmpty) {
+          final subserviceMap = <String, List<Map<String, dynamic>>>{};
           final mainServices = items
               .map((e) {
                 if (e is! Map) return null;
                 final m = Map<String, dynamic>.from(e.cast<String, dynamic>());
+                final id = (m['_id'] ?? m['id'])?.toString();
+                final nestedSubservices = _extractSubservices(
+                  m['subcategories'] ?? m['children'] ?? m['items'],
+                  categoryId: id,
+                );
+                if (id != null && id.isNotEmpty) {
+                  subserviceMap[id] = nestedSubservices;
+                }
                 return {
-                  'id': m['_id'] ?? m['id'],
+                  'id': id,
                   'name': m['name'] ?? 'Service',
                   'slug': m['slug'] ?? '',
                   'type': 'main',
@@ -178,6 +556,9 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
           if (mounted) {
             setState(() {
               _allMainServices = mainServices;
+              _mainServiceSubservices
+                ..clear()
+                ..addAll(subserviceMap);
               _updatePopularServices();
             });
           }
@@ -186,6 +567,27 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
     } catch (e) {
       debugPrint('Error loading main services: $e');
     }
+  }
+
+  List<Map<String, dynamic>> _extractSubservices(dynamic rawItems,
+      {String? categoryId}) {
+    if (rawItems is! List) return <Map<String, dynamic>>[];
+
+    final subservices = <Map<String, dynamic>>[];
+    for (final item in rawItems) {
+      if (item is! Map) continue;
+      final map = Map<String, dynamic>.from(item.cast<String, dynamic>());
+      final subId = (map['_id'] ?? map['id'])?.toString() ?? '';
+      final name = map['name']?.toString().trim() ?? '';
+      if (subId.isEmpty || name.isEmpty) continue;
+      subservices.add({
+        'id': subId,
+        'name': name,
+        'slug': map['slug']?.toString() ?? '',
+        'categoryId': categoryId,
+      });
+    }
+    return subservices;
   }
 
   /// Update popular services based on search frequency
@@ -225,56 +627,6 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
     return union > 0 ? intersection / union : 0.0;
   }
 
-  /// Intelligently match query to a main service using multiple strategies
-  Map<String, dynamic>? _findBestServiceMatch(String query) {
-    final normalizedQuery = query.trim().toLowerCase();
-    if (normalizedQuery.isEmpty) return null;
-
-    // Strategy 1: Exact match
-    try {
-      return _allMainServices.firstWhere(
-        (service) =>
-            service['name'].toString().toLowerCase() == normalizedQuery,
-        orElse: () => <String, dynamic>{},
-      );
-    } catch (_) {}
-
-    // Strategy 2: Query is contained in service name
-    try {
-      return _allMainServices.firstWhere(
-        (service) =>
-            service['name'].toString().toLowerCase().contains(normalizedQuery),
-        orElse: () => <String, dynamic>{},
-      );
-    } catch (_) {}
-
-    // Strategy 3: Service name is contained in query
-    try {
-      return _allMainServices.firstWhere(
-        (service) =>
-            normalizedQuery.contains(service['name'].toString().toLowerCase()),
-        orElse: () => <String, dynamic>{},
-      );
-    } catch (_) {}
-
-    // Strategy 4: Fuzzy matching by similarity score
-    Map<String, dynamic>? bestMatch;
-    double bestScore = 0.0;
-
-    for (final service in _allMainServices) {
-      final serviceName = service['name'].toString();
-      final score = _calculateSimilarity(normalizedQuery, serviceName);
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestMatch = service;
-      }
-    }
-
-    // Return match only if similarity exceeds threshold (45%)
-    return (bestScore >= 0.45) ? bestMatch : null;
-  }
-
   /// Process search query with intelligent Main Service mapping
   Future<void> _processSearchQuery(String query) async {
     final normalizedQuery = query.trim();
@@ -290,13 +642,18 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
     if (kDebugMode)
       debugPrint('SearchPage: Processing query: "$normalizedQuery"');
 
-    // Try to find best matching main service
-    final matchedService = _findBestServiceMatch(normalizedQuery);
+    final matchedContext = _inferServiceContextFromQuery(normalizedQuery);
+    final matchedService = matchedContext?['service'] as Map<String, dynamic>?;
 
     if (matchedService != null && matchedService.isNotEmpty) {
       // Found a matching main service - map to it
-      final serviceId = matchedService['id'];
-      final serviceName = matchedService['name'];
+      final serviceId = matchedService['id']?.toString() ?? '';
+      final serviceName = matchedService['name']?.toString() ?? normalizedQuery;
+      final inferredSubservices =
+          (matchedContext?['subservices'] as List<Map<String, dynamic>>?) ??
+              const <Map<String, dynamic>>[];
+      final matchedSubserviceId =
+          matchedContext?['matchedSubserviceId']?.toString();
 
       if (kDebugMode) {
         debugPrint(
@@ -308,11 +665,14 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
         _currentMainCategoryId = serviceId;
         _isMainService = true;
         _selectedTrade = serviceName;
-        _selectedSubservice = null;
+        _selectedSubservice = matchedSubserviceId;
+        _currentSubservices = inferredSubservices;
       });
 
       // Load sub-services for this main service
-      await _loadSubservicesForMainService(serviceId);
+      if (serviceId.isNotEmpty) {
+        await _loadSubservicesForMainService(serviceId);
+      }
     } else {
       // No main service match found - perform generic search
       if (kDebugMode)
@@ -337,6 +697,17 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
       if (mounted) {
         setState(() {
           _currentSubservices = _subcategoryCache[categoryId] ?? [];
+        });
+      }
+      return;
+    }
+
+    if (_mainServiceSubservices.containsKey(categoryId)) {
+      final knownSubservices = _mainServiceSubservices[categoryId] ?? [];
+      _subcategoryCache[categoryId] = knownSubservices;
+      if (mounted) {
+        setState(() {
+          _currentSubservices = knownSubservices;
         });
       }
       return;
@@ -374,6 +745,7 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
 
           // Cache the result
           _subcategoryCache[categoryId] = subservices;
+          _mainServiceSubservices[categoryId] = subservices;
 
           if (mounted) {
             setState(() {
@@ -480,7 +852,14 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
 
       if (results.isNotEmpty) {
         setState(() {
-          _artisans.addAll(results);
+          final merged = _mergeUniqueArtisans(
+            reset ? <Map<String, dynamic>>[] : _artisans,
+            results,
+            query: q,
+          );
+          _artisans
+            ..clear()
+            ..addAll(merged);
           _hasMore = results.length == _limit;
           if (_hasMore) _page++;
         });
@@ -721,6 +1100,8 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
   /// Build the tabs section based on current search context
   Widget _buildTabsSection(bool isDark, double horizontalPadding,
       double filterChipHeight, bool isSmallScreen) {
+    final typedQuery = _model.textController?.text.trim() ?? '';
+
     if (_isMainService && _currentMainCategory != null) {
       // Show main service and its subservices
       return Column(
@@ -809,8 +1190,10 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
         ],
       );
     } else {
-      // Show popular services for random/browsing mode
-      return _popularServices.isEmpty
+      final hasActiveQuery = typedQuery.isNotEmpty;
+
+      // Show search-context chip for free-text mode, otherwise popular services
+      return (!hasActiveQuery && _popularServices.isEmpty)
           ? const SizedBox.shrink()
           : Column(
               mainAxisSize: MainAxisSize.min,
@@ -823,7 +1206,7 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
                     bottom: 8,
                   ),
                   child: Text(
-                    'Popular Services',
+                    hasActiveQuery ? 'Search Filter' : 'Popular Services',
                     style: TextStyle(
                       fontSize: isSmallScreen ? 12 : 13,
                       fontWeight: FontWeight.w600,
@@ -836,36 +1219,45 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
                   padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
-                    children: List.generate(
-                      _popularServices.length,
-                      (index) {
-                        final service = _popularServices[index];
-                        final serviceName = service['name'] ?? 'Service';
-                        final selected = _selectedTrade == serviceName;
+                    children: hasActiveQuery
+                        ? [
+                            _buildEnhancedFilterChip(
+                              label: typedQuery,
+                              selected: true,
+                              onTap: () {},
+                              isDark: isDark,
+                            ),
+                          ]
+                        : List.generate(
+                            _popularServices.length,
+                            (index) {
+                              final service = _popularServices[index];
+                              final serviceName = service['name'] ?? 'Service';
+                              final selected = _selectedTrade == serviceName;
 
-                        return _buildEnhancedFilterChip(
-                          label: serviceName,
-                          selected: selected,
-                          onTap: () {
-                            if (!selected) {
-                              setState(() {
-                                _selectedTrade = serviceName;
-                                _model.textController?.text = serviceName;
-                              });
-                              // When tapping a popular service, treat it as a main service search
-                              _processSearchQuery(serviceName);
-                            } else {
-                              setState(() {
-                                _resetSearchContext(
-                                    clearQuery: true, clearLastQuery: true);
-                              });
-                              _startSearch();
-                            }
-                          },
-                          isDark: isDark,
-                        );
-                      },
-                    ),
+                              return _buildEnhancedFilterChip(
+                                label: serviceName,
+                                selected: selected,
+                                onTap: () {
+                                  if (!selected) {
+                                    setState(() {
+                                      _selectedTrade = serviceName;
+                                      _model.textController?.text = serviceName;
+                                    });
+                                    _processSearchQuery(serviceName);
+                                  } else {
+                                    setState(() {
+                                      _resetSearchContext(
+                                          clearQuery: true,
+                                          clearLastQuery: true);
+                                    });
+                                    _startSearch();
+                                  }
+                                },
+                                isDark: isDark,
+                              );
+                            },
+                          ),
                   ),
                 ),
               ],
@@ -1048,10 +1440,15 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
     required int reviewCount,
   }) {
     String _getInitials(String s) {
-      final parts = s.trim().split(' ');
+      final parts = s
+          .trim()
+          .split(RegExp(r'\s+'))
+          .where((part) => part.isNotEmpty)
+          .toList();
       if (parts.isEmpty) return 'A';
-      if (parts.length == 1) return parts[0].substring(0, 1).toUpperCase();
-      return (parts[0].substring(0, 1) + parts[1].substring(0, 1))
+      if (parts.first.isEmpty) return 'A';
+      if (parts.length == 1) return parts.first.characters.first.toUpperCase();
+      return (parts[0].characters.first + parts[1].characters.first)
           .toUpperCase();
     }
 
@@ -1408,6 +1805,8 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final ffTheme = FlutterFlowTheme.of(context);
+    final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final mq = MediaQuery.of(context);
     final screenWidth = mq.size.width;
@@ -1431,360 +1830,349 @@ class _SearchPageWidgetState extends State<SearchPageWidget> {
 
     final emptySubSpacing = screenHeight < 600 ? 6.0 : 8.0;
 
-    return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
-      child: Scaffold(
-        key: scaffoldKey,
-        backgroundColor: isDark ? Colors.black : Colors.white,
-        appBar: AppBar(
-          backgroundColor: isDark ? Colors.black : Colors.white,
-          elevation: 0,
-          leading: IconButton(
-            icon: Icon(
-              Icons.arrow_back_rounded,
-              color: isDark ? Colors.white : _textPrimary,
-              size: 24,
-            ),
-            onPressed: () => Navigator.of(context).maybePop(),
+    return Scaffold(
+      key: scaffoldKey,
+      backgroundColor: ffTheme.primaryBackground,
+      appBar: AppBar(
+        backgroundColor: ffTheme.primaryBackground,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        leading: IconButton(
+          icon: Icon(
+            Icons.arrow_back_rounded,
+            color: ffTheme.primaryText,
+            size: 24,
           ),
-          title: Text(
-            'Search',
-            style: TextStyle(
-              fontSize: isSmallScreen ? 18 : 20,
-              fontWeight: FontWeight.w500,
-              color: isDark ? Colors.white : _textPrimary,
-              letterSpacing: -0.5,
-            ),
-          ),
-          centerTitle: false,
+          onPressed: () => Navigator.of(context).maybePop(),
         ),
-        body: SafeArea(
-          child: Column(
-            children: [
-              // Search Bar
-              Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: horizontalPadding,
-                  vertical: isSmallScreen ? 12 : 16,
+        title: Text(
+          'Search',
+          style: TextStyle(
+            fontSize: isSmallScreen ? 18 : 20,
+            fontWeight: FontWeight.w500,
+            color: ffTheme.primaryText,
+            letterSpacing: -0.5,
+          ),
+        ),
+        centerTitle: false,
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Search Bar
+            Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: horizontalPadding,
+                vertical: isSmallScreen ? 12 : 16,
+              ),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? colorScheme.surfaceContainerHighest
+                      : ffTheme.secondaryBackground,
+                  borderRadius: BorderRadius.circular(isSmallScreen ? 10 : 12),
+                  boxShadow: isDark
+                      ? null
+                      : [
+                          BoxShadow(
+                            color: Colors.black.withAlpha((0.02 * 255).round()),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                 ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1F2937) : _surfaceColor,
-                    borderRadius:
-                        BorderRadius.circular(isSmallScreen ? 10 : 12),
-                    boxShadow: isDark
-                        ? null
-                        : [
-                            BoxShadow(
-                              color:
-                                  Colors.black.withAlpha((0.02 * 255).round()),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
+                child: TextFormField(
+                  controller: _model.textController,
+                  focusNode: _model.textFieldFocusNode,
+                  onTapOutside: (_) =>
+                      FocusManager.instance.primaryFocus?.unfocus(),
+                  onChanged: _handleSearchInput,
+                  textInputAction: TextInputAction.search,
+                  onFieldSubmitted: (value) => _processSearchQuery(value),
+                  style: TextStyle(
+                    fontSize: isSmallScreen ? 14 : 15,
+                    color: ffTheme.primaryText,
+                    height: 1.4,
                   ),
-                  child: TextFormField(
-                    controller: _model.textController,
-                    focusNode: _model.textFieldFocusNode,
-                    onTap: () {
-                      if (!mounted) return;
-                      setState(() {
-                        if (_model.textController!.text.trim().isNotEmpty ||
-                            _isMainService) {
-                          _resetSearchContext(clearLastQuery: true);
-                        }
-                      });
-                    },
-                    onChanged: _handleSearchInput,
-                    textInputAction: TextInputAction.search,
-                    onFieldSubmitted: (value) => _processSearchQuery(value),
-                    style: TextStyle(
+                  decoration: InputDecoration(
+                    hintText: 'Search artisans or services...',
+                    hintStyle: TextStyle(
+                      color: isDark
+                          ? const Color(0xFF9CA3AF)
+                          : ffTheme.secondaryText,
                       fontSize: isSmallScreen ? 14 : 15,
-                      color: isDark ? Colors.white : _textPrimary,
-                      height: 1.4,
                     ),
-                    decoration: InputDecoration(
-                      hintText: 'Search artisans or services...',
-                      hintStyle: TextStyle(
-                        color:
-                            isDark ? const Color(0xFF9CA3AF) : _textSecondary,
-                        fontSize: isSmallScreen ? 14 : 15,
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: isSmallScreen ? 16 : 20,
-                        vertical: isSmallScreen ? 16 : 18,
-                      ),
-                      prefixIcon: Icon(
-                        Icons.search_rounded,
-                        color:
-                            isDark ? const Color(0xFF9CA3AF) : _textSecondary,
-                        size: isSmallScreen ? 18 : 20,
-                      ),
-                      suffixIcon: _model.textController!.text.isNotEmpty
-                          ? IconButton(
-                              icon: Icon(
-                                Icons.clear_rounded,
-                                size: isSmallScreen ? 16 : 18,
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: isSmallScreen ? 16 : 20,
+                      vertical: isSmallScreen ? 16 : 18,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.search_rounded,
+                      color: isDark
+                          ? const Color(0xFF9CA3AF)
+                          : ffTheme.secondaryText,
+                      size: isSmallScreen ? 18 : 20,
+                    ),
+                    suffixIcon: _model.textController!.text.isNotEmpty
+                        ? IconButton(
+                            icon: Icon(
+                              Icons.clear_rounded,
+                              size: isSmallScreen ? 16 : 18,
+                              color: isDark
+                                  ? const Color(0xFF9CA3AF)
+                                  : ffTheme.secondaryText,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _resetSearchContext(
+                                    clearQuery: true, clearLastQuery: true);
+                              });
+                              _startSearch();
+                            },
+                          )
+                        : null,
+                  ),
+                ),
+              ),
+            ),
+
+            // Dynamic Tabs Section
+            _buildTabsSection(
+                isDark, horizontalPadding, filterChipHeight, isSmallScreen),
+
+            // Divider with responsive height
+            Container(
+              height: 1,
+              margin: EdgeInsets.symmetric(
+                  horizontal: horizontalPadding, vertical: 8),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: isDark ? const Color(0xFF374151) : _borderColor,
+                    width: 1,
+                  ),
+                ),
+              ),
+            ),
+
+            // Results Section
+            Expanded(
+              child: _hasSearched
+                  ? _isLoading
+                      ? ListView.builder(
+                          padding: EdgeInsets.all(horizontalPadding),
+                          itemCount: 3,
+                          itemBuilder: (context, index) => _buildSkeletonCard(),
+                        )
+                      : _errorMessage != null
+                          ? Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(horizontalPadding),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.error_outline_rounded,
+                                      size: emptyIconSize,
+                                      color: isDark
+                                          ? const Color(0xFF6B7280)
+                                          : _textSecondary,
+                                    ),
+                                    SizedBox(height: emptyTitleSpacing),
+                                    Text(
+                                      _errorMessage!,
+                                      style: TextStyle(
+                                        fontSize: isSmallScreen ? 14 : 16,
+                                        color: isDark
+                                            ? Colors.white
+                                            : _textPrimary,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    SizedBox(height: emptySubSpacing * 2),
+                                    ElevatedButton(
+                                      onPressed: _startSearch,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: _primaryColor,
+                                        foregroundColor: Colors.white,
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: 24,
+                                          vertical: 12,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                        ),
+                                      ),
+                                      child: const Text('Retry'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          : _artisans.isEmpty
+                              ? Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(horizontalPadding),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.search_off_rounded,
+                                          size: emptyIconSize,
+                                          color: isDark
+                                              ? const Color(0xFF6B7280)
+                                              : _textSecondary,
+                                        ),
+                                        SizedBox(height: emptyTitleSpacing),
+                                        Text(
+                                          _activeSearchTerm().isEmpty
+                                              ? 'No artisans available'
+                                              : 'No artisans found',
+                                          style: TextStyle(
+                                            fontSize: isSmallScreen ? 16 : 18,
+                                            fontWeight: FontWeight.w500,
+                                            color: isDark
+                                                ? Colors.white
+                                                : _textPrimary,
+                                          ),
+                                        ),
+                                        SizedBox(height: emptySubSpacing),
+                                        Text(
+                                          _activeSearchTerm().isEmpty
+                                              ? 'Try browsing another service category.'
+                                              : 'No results for "${_activeSearchTerm()}". Try a different keyword or filter.',
+                                          style: TextStyle(
+                                            fontSize: isSmallScreen ? 13 : 14,
+                                            color: isDark
+                                                ? const Color(0xFF9CA3AF)
+                                                : _textSecondary,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                        SizedBox(height: emptySubSpacing * 2),
+                                        if (_activeSearchTerm().isNotEmpty)
+                                          OutlinedButton(
+                                            onPressed: () {
+                                              setState(() {
+                                                _resetSearchContext(
+                                                    clearQuery: true,
+                                                    clearLastQuery: true);
+                                              });
+                                              _startSearch();
+                                            },
+                                            style: OutlinedButton.styleFrom(
+                                              side: BorderSide(
+                                                color: isDark
+                                                    ? const Color(0xFF4B5563)
+                                                    : _borderColor,
+                                              ),
+                                              foregroundColor: isDark
+                                                  ? Colors.white
+                                                  : _textPrimary,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 18,
+                                                vertical: 12,
+                                              ),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
+                                            ),
+                                            child: const Text('Clear search'),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                              : RefreshIndicator(
+                                  onRefresh: () async {
+                                    await _startSearch();
+                                  },
+                                  color: _primaryColor,
+                                  child: ListView.builder(
+                                    controller: _scrollController,
+                                    padding: EdgeInsets.all(horizontalPadding),
+                                    itemCount: _artisans.length +
+                                        (_isLoadingMore ? 1 : 0),
+                                    itemBuilder: (context, index) {
+                                      if (index < _artisans.length) {
+                                        return _buildArtisanCard(
+                                            context, _artisans[index]);
+                                      } else {
+                                        return Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 24),
+                                          child: Center(
+                                            child: SizedBox(
+                                              width: 24,
+                                              height: 24,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                valueColor:
+                                                    AlwaysStoppedAnimation(
+                                                        _primaryColor),
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                  ),
+                                )
+                  : Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(horizontalPadding),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.search_rounded,
+                              size: emptyIconSize,
+                              color: isDark
+                                  ? const Color(0xFF6B7280)
+                                  : _textSecondary,
+                            ),
+                            SizedBox(height: emptyTitleSpacing),
+                            Text(
+                              'Find Artisans',
+                              style: TextStyle(
+                                fontSize: isSmallScreen ? 18 : 20,
+                                fontWeight: FontWeight.w500,
+                                color: isDark ? Colors.white : _textPrimary,
+                                letterSpacing: -0.5,
+                              ),
+                            ),
+                            SizedBox(height: emptySubSpacing),
+                            Text(
+                              'Search for skilled professionals',
+                              style: TextStyle(
+                                fontSize: isSmallScreen ? 13 : 14,
                                 color: isDark
                                     ? const Color(0xFF9CA3AF)
                                     : _textSecondary,
                               ),
-                              onPressed: () {
-                                setState(() {
-                                  _resetSearchContext(
-                                      clearQuery: true, clearLastQuery: true);
-                                });
-                                _startSearch();
-                              },
-                            )
-                          : null,
-                    ),
-                  ),
-                ),
-              ),
-
-              // Dynamic Tabs Section
-              _buildTabsSection(
-                  isDark, horizontalPadding, filterChipHeight, isSmallScreen),
-
-              // Divider with responsive height
-              Container(
-                height: 1,
-                margin: EdgeInsets.symmetric(
-                    horizontal: horizontalPadding, vertical: 8),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(
-                      color: isDark ? const Color(0xFF374151) : _borderColor,
-                      width: 1,
-                    ),
-                  ),
-                ),
-              ),
-
-              // Results Section
-              Expanded(
-                child: _hasSearched
-                    ? _isLoading
-                        ? ListView.builder(
-                            padding: EdgeInsets.all(horizontalPadding),
-                            itemCount: 3,
-                            itemBuilder: (context, index) =>
-                                _buildSkeletonCard(),
-                          )
-                        : _errorMessage != null
-                            ? Center(
-                                child: Padding(
-                                  padding: EdgeInsets.all(horizontalPadding),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.error_outline_rounded,
-                                        size: emptyIconSize,
-                                        color: isDark
-                                            ? const Color(0xFF6B7280)
-                                            : _textSecondary,
-                                      ),
-                                      SizedBox(height: emptyTitleSpacing),
-                                      Text(
-                                        _errorMessage!,
-                                        style: TextStyle(
-                                          fontSize: isSmallScreen ? 14 : 16,
-                                          color: isDark
-                                              ? Colors.white
-                                              : _textPrimary,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                      SizedBox(height: emptySubSpacing * 2),
-                                      ElevatedButton(
-                                        onPressed: _startSearch,
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: _primaryColor,
-                                          foregroundColor: Colors.white,
-                                          padding: EdgeInsets.symmetric(
-                                            horizontal: 24,
-                                            vertical: 12,
-                                          ),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                          ),
-                                        ),
-                                        child: const Text('Retry'),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              )
-                            : _artisans.isEmpty
-                                ? Center(
-                                    child: Padding(
-                                      padding:
-                                          EdgeInsets.all(horizontalPadding),
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.search_off_rounded,
-                                            size: emptyIconSize,
-                                            color: isDark
-                                                ? const Color(0xFF6B7280)
-                                                : _textSecondary,
-                                          ),
-                                          SizedBox(height: emptyTitleSpacing),
-                                          Text(
-                                            _activeSearchTerm().isEmpty
-                                                ? 'No artisans available'
-                                                : 'No artisans found',
-                                            style: TextStyle(
-                                              fontSize: isSmallScreen ? 16 : 18,
-                                              fontWeight: FontWeight.w500,
-                                              color: isDark
-                                                  ? Colors.white
-                                                  : _textPrimary,
-                                            ),
-                                          ),
-                                          SizedBox(height: emptySubSpacing),
-                                          Text(
-                                            _activeSearchTerm().isEmpty
-                                                ? 'Try browsing another service category.'
-                                                : 'No results for "${_activeSearchTerm()}". Try a different keyword or filter.',
-                                            style: TextStyle(
-                                              fontSize: isSmallScreen ? 13 : 14,
-                                              color: isDark
-                                                  ? const Color(0xFF9CA3AF)
-                                                  : _textSecondary,
-                                            ),
-                                            textAlign: TextAlign.center,
-                                          ),
-                                          SizedBox(height: emptySubSpacing * 2),
-                                          if (_activeSearchTerm().isNotEmpty)
-                                            OutlinedButton(
-                                              onPressed: () {
-                                                setState(() {
-                                                  _resetSearchContext(
-                                                      clearQuery: true,
-                                                      clearLastQuery: true);
-                                                });
-                                                _startSearch();
-                                              },
-                                              style: OutlinedButton.styleFrom(
-                                                side: BorderSide(
-                                                  color: isDark
-                                                      ? const Color(0xFF4B5563)
-                                                      : _borderColor,
-                                                ),
-                                                foregroundColor: isDark
-                                                    ? Colors.white
-                                                    : _textPrimary,
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 18,
-                                                  vertical: 12,
-                                                ),
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(12),
-                                                ),
-                                              ),
-                                              child: const Text('Clear search'),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                  )
-                                : RefreshIndicator(
-                                    onRefresh: () async {
-                                      await _startSearch();
-                                    },
-                                    color: _primaryColor,
-                                    child: ListView.builder(
-                                      controller: _scrollController,
-                                      padding:
-                                          EdgeInsets.all(horizontalPadding),
-                                      itemCount: _artisans.length +
-                                          (_isLoadingMore ? 1 : 0),
-                                      itemBuilder: (context, index) {
-                                        if (index < _artisans.length) {
-                                          return _buildArtisanCard(
-                                              context, _artisans[index]);
-                                        } else {
-                                          return Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                                vertical: 24),
-                                            child: Center(
-                                              child: SizedBox(
-                                                width: 24,
-                                                height: 24,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                  strokeWidth: 2,
-                                                  valueColor:
-                                                      AlwaysStoppedAnimation(
-                                                          _primaryColor),
-                                                ),
-                                              ),
-                                            ),
-                                          );
-                                        }
-                                      },
-                                    ),
-                                  )
-                    : Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(horizontalPadding),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.search_rounded,
-                                size: emptyIconSize,
+                              textAlign: TextAlign.center,
+                            ),
+                            SizedBox(height: emptySubSpacing / 2),
+                            Text(
+                              'Use filters or type a keyword',
+                              style: TextStyle(
+                                fontSize: isSmallScreen ? 12 : 13,
                                 color: isDark
-                                    ? const Color(0xFF6B7280)
+                                    ? const Color(0xFF9CA3AF)
                                     : _textSecondary,
                               ),
-                              SizedBox(height: emptyTitleSpacing),
-                              Text(
-                                'Find Artisans',
-                                style: TextStyle(
-                                  fontSize: isSmallScreen ? 18 : 20,
-                                  fontWeight: FontWeight.w500,
-                                  color: isDark ? Colors.white : _textPrimary,
-                                  letterSpacing: -0.5,
-                                ),
-                              ),
-                              SizedBox(height: emptySubSpacing),
-                              Text(
-                                'Search for skilled professionals',
-                                style: TextStyle(
-                                  fontSize: isSmallScreen ? 13 : 14,
-                                  color: isDark
-                                      ? const Color(0xFF9CA3AF)
-                                      : _textSecondary,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                              SizedBox(height: emptySubSpacing / 2),
-                              Text(
-                                'Use filters or type a keyword',
-                                style: TextStyle(
-                                  fontSize: isSmallScreen ? 12 : 13,
-                                  color: isDark
-                                      ? const Color(0xFF9CA3AF)
-                                      : _textSecondary,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
                         ),
                       ),
-              ),
-            ],
-          ),
+                    ),
+            ),
+          ],
         ),
       ),
     );

@@ -101,14 +101,9 @@ class _UpdateProfilepageWidgetState extends State<UpdateProfilepageWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        FocusScope.of(context).unfocus();
-        FocusManager.instance.primaryFocus?.unfocus();
-      },
-      child: Scaffold(
-        key: scaffoldKey,
-        backgroundColor: FlutterFlowTheme.of(context).secondaryBackground,
+    return Scaffold(
+      key: scaffoldKey,
+      backgroundColor: FlutterFlowTheme.of(context).secondaryBackground,
         appBar: AppBar(
           toolbarHeight: 0,
           backgroundColor: appBarBackgroundColor(context),
@@ -119,6 +114,7 @@ class _UpdateProfilepageWidgetState extends State<UpdateProfilepageWidget> {
         body: SafeArea(
           top: true,
           child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             child: Column(
               mainAxisSize: MainAxisSize.max,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1436,7 +1432,6 @@ class _UpdateProfilepageWidgetState extends State<UpdateProfilepageWidget> {
                   ),
             ),
           ),
-        ),
       ),
     );
   }

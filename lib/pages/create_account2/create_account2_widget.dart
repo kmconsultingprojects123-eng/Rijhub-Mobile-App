@@ -29,7 +29,6 @@ class AuthConstants {
 
   static const String termsUrl = 'https://www.rijhub.com/terms-and-conditions';
   static const String privacyUrl = 'https://www.rijhub.com/privacy-policy';
-  static const Color primaryColor = Color(0xFFA20025);
 }
 
 // ========== Role Utilities ==========
@@ -642,7 +641,7 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
   void _navigateBack() => Navigator.of(context).maybePop();
 
   // ========== UI Helpers ==========
-  Color get _primaryColor => AuthConstants.primaryColor;
+  Color get _primaryColor => Theme.of(context).colorScheme.primary;
   Color _getSurfaceAlpha(double opacity) =>
       Theme.of(context).colorScheme.onSurface.withOpacity(opacity);
   bool get _isButtonDisabled => _isCreatingAccount;
@@ -651,14 +650,14 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       key: scaffoldKey,
-      backgroundColor: isDark ? Colors.black : Colors.white,
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: SafeArea(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.symmetric(horizontal: 32.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -666,7 +665,7 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
               _buildHeader(),
               if (_effectiveRole != null) _buildRoleIndicator(),
               const SizedBox(height: 40.0),
-              _buildForm(theme, isDark),
+              _buildForm(theme),
             ],
           ),
         ),
@@ -757,19 +756,19 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
     );
   }
 
-  Widget _buildForm(ThemeData theme, bool isDark) {
+  Widget _buildForm(ThemeData theme) {
     return Form(
       key: _formKey,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildNameField(theme, isDark),
+          _buildNameField(theme),
           const SizedBox(height: 20.0),
-          _buildEmailField(theme, isDark),
+          _buildEmailField(theme),
           const SizedBox(height: 20.0),
-          _buildPhoneField(theme, isDark),
+          _buildPhoneField(theme),
           const SizedBox(height: 20.0),
-          _buildPasswordField(theme, isDark),
+          _buildPasswordField(theme),
           const SizedBox(height: 32.0),
           _buildTermsCheckbox(),
           _buildCreateAccountButton(),
@@ -801,7 +800,7 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
     );
   }
 
-  Widget _buildNameField(ThemeData theme, bool isDark) {
+  Widget _buildNameField(ThemeData theme) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -811,7 +810,7 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
           controller: _model.fullNameTextController,
           focusNode: _model.fullNameFocusNode,
           autofillHints: const [AutofillHints.name],
-          decoration: _buildInputDecoration(theme, isDark, 'John Doe'),
+          decoration: _buildInputDecoration(theme, 'John Doe'),
           style: const TextStyle(fontSize: 16),
           textInputAction: TextInputAction.next,
           validator: Validators.validateName,
@@ -822,7 +821,7 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
     );
   }
 
-  Widget _buildEmailField(ThemeData theme, bool isDark) {
+  Widget _buildEmailField(ThemeData theme) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -833,7 +832,7 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
           focusNode: _model.emailAddressFocusNode,
           autofillHints: const [AutofillHints.email],
           keyboardType: TextInputType.emailAddress,
-          decoration: _buildInputDecoration(theme, isDark, 'your@email.com'),
+          decoration: _buildInputDecoration(theme, 'your@email.com'),
           style: const TextStyle(fontSize: 16),
           textInputAction: TextInputAction.next,
           validator: Validators.validateEmail,
@@ -844,7 +843,7 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
     );
   }
 
-  Widget _buildPhoneField(ThemeData theme, bool isDark) {
+  Widget _buildPhoneField(ThemeData theme) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -855,7 +854,7 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
           focusNode: _phoneFocusNode,
           autofillHints: const [AutofillHints.telephoneNumber],
           keyboardType: TextInputType.phone,
-          decoration: _buildInputDecoration(theme, isDark, '8012345678')
+          decoration: _buildInputDecoration(theme, '8012345678')
               .copyWith(
             prefixIcon: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12.0),
@@ -894,7 +893,7 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
     );
   }
 
-  Widget _buildPasswordField(ThemeData theme, bool isDark) {
+  Widget _buildPasswordField(ThemeData theme) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -906,7 +905,6 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
           obscureText: !_passwordVisible,
           decoration: _buildInputDecoration(
             theme,
-            isDark,
             '••••••••',
             suffixIcon: IconButton(
               icon: Icon(
@@ -931,7 +929,6 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
 
   InputDecoration _buildInputDecoration(
     ThemeData theme,
-    bool isDark,
     String hintText, {
     Widget? suffixIcon,
   }) {
@@ -939,7 +936,7 @@ class _CreateAccount2WidgetState extends State<CreateAccount2Widget> {
       hintText: hintText,
       hintStyle: TextStyle(color: _getSurfaceAlpha(0.3)),
       filled: true,
-      fillColor: isDark ? Colors.grey[900] : Colors.grey[50],
+      fillColor: theme.colorScheme.surfaceContainerHighest,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12.0),
         borderSide: BorderSide.none,

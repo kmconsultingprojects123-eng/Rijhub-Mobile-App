@@ -51,14 +51,9 @@ class _ContactUsPageWidgetState extends State<ContactUsPageWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        FocusScope.of(context).unfocus();
-        FocusManager.instance.primaryFocus?.unfocus();
-      },
-      child: Scaffold(
-        key: scaffoldKey,
-        backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
+    return Scaffold(
+      key: scaffoldKey,
+      backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
         floatingActionButton: FloatingActionButton(
           onPressed: () {
             if (kDebugMode) debugPrint('FloatingActionButton pressed ...');
@@ -121,6 +116,7 @@ class _ContactUsPageWidgetState extends State<ContactUsPageWidget> {
           child: Padding(
             padding: EdgeInsetsDirectional.fromSTEB(16.0, 0.0, 16.0, 0.0),
             child: SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               child: Column(
                 mainAxisSize: MainAxisSize.max,
                 children: [
@@ -1428,7 +1424,6 @@ class _ContactUsPageWidgetState extends State<ContactUsPageWidget> {
               ),
             ),
           ),
-        ),
       ),
     );
   }

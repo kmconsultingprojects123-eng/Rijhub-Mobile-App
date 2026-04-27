@@ -861,22 +861,19 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
+    final primaryColor = colorScheme.primary;
 
-    // Update the primary color to #a20025
-    final Color primaryColor = const Color(0xFFA20025);
-
-    return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
-      child: Scaffold(
-        backgroundColor: isDark ? Colors.black : Colors.white,
-        body: SafeArea(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
+    return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
                   // Top Spacing
                   const SizedBox(height: 80.0),
 
@@ -944,8 +941,7 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                                   .withAlpha((0.3 * 255).toInt()),
                             ),
                             filled: true,
-                            fillColor:
-                                isDark ? Colors.grey[900] : Colors.grey[50],
+                            fillColor: colorScheme.surfaceContainerHighest,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12.0),
                               borderSide: BorderSide.none,
@@ -1005,8 +1001,7 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                                   .withAlpha((0.3 * 255).toInt()),
                             ),
                             filled: true,
-                            fillColor:
-                                isDark ? Colors.grey[900] : Colors.grey[50],
+                            fillColor: colorScheme.surfaceContainerHighest,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12.0),
                               borderSide: BorderSide.none,
@@ -1249,8 +1244,13 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                     OutlinedButton(
                       style: OutlinedButton.styleFrom(
                         side: BorderSide(
-                            color: isDark ? Colors.white : Colors.black),
-                        backgroundColor: isDark ? Colors.white : Colors.black,
+                          color: isDark
+                              ? colorScheme.onSurface
+                              : colorScheme.surface,
+                        ),
+                        backgroundColor: isDark
+                            ? colorScheme.onSurface
+                            : colorScheme.surface,
                         padding: const EdgeInsets.symmetric(
                             vertical: 14.0, horizontal: 12.0),
                         shape: RoundedRectangleBorder(
@@ -1265,7 +1265,10 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
                                 valueColor: AlwaysStoppedAnimation(
-                                    isDark ? Colors.black : Colors.white),
+                                  isDark
+                                      ? colorScheme.surface
+                                      : colorScheme.onSurface,
+                                ),
                               ),
                             )
                           : Row(
@@ -1273,14 +1276,18 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
                               children: [
                                 Icon(
                                   Icons.apple,
-                                  color: isDark ? Colors.black : Colors.white,
+                                  color: isDark
+                                      ? colorScheme.surface
+                                      : colorScheme.onSurface,
                                   size: 24,
                                 ),
                                 const SizedBox(width: 12),
                                 Text(
                                   'Continue with Apple',
                                   style: TextStyle(
-                                    color: isDark ? Colors.black : Colors.white,
+                                    color: isDark
+                                        ? colorScheme.surface
+                                        : colorScheme.onSurface,
                                     fontSize: 15,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -1324,8 +1331,7 @@ class _LoginAccountWidgetState extends State<LoginAccountWidget> {
 
                   // Bottom Spacing
                   const SizedBox(height: 60.0),
-                ],
-              ),
+              ],
             ),
           ),
         ),

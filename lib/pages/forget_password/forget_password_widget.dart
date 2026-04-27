@@ -50,14 +50,9 @@ class _ForgetPasswordWidgetState extends State<ForgetPasswordWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        FocusScope.of(context).unfocus();
-        FocusManager.instance.primaryFocus?.unfocus();
-      },
-      child: Scaffold(
-        key: scaffoldKey,
-        backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
+    return Scaffold(
+      key: scaffoldKey,
+      backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
         appBar: AppBar(
           // Use theme colors so AppBar adapts to light/dark mode and
           // matches other screens in the app.
@@ -99,6 +94,7 @@ class _ForgetPasswordWidgetState extends State<ForgetPasswordWidget> {
         body: SafeArea(
           top: true,
           child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: EdgeInsetsDirectional.fromSTEB(24.0, 16.0, 24.0, 24.0),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -311,7 +307,6 @@ class _ForgetPasswordWidgetState extends State<ForgetPasswordWidget> {
               ],
             ),
           ),
-        ),
       ),
     );
   }
