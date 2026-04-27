@@ -671,6 +671,22 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
         }
       }
 
+      for (final key in [
+        'artisanUser',
+        'artisanProfile',
+        'artisanAuthDetails',
+        'artisanAuthdDetails',
+        'artisanAuthdetails',
+      ]) {
+        final nested = src[key];
+        if (nested is Map) {
+          for (final imageKey in directKeys) {
+            final url = _toAbsoluteImageUrl(nested[imageKey]);
+            if (url != null) return url;
+          }
+        }
+      }
+
       if (src['profileImage'] is Map) {
         final profileImage = src['profileImage'];
         for (final k in ['url', 'src', 'path', 'imageUrl']) {
@@ -678,20 +694,96 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
           if (url != null) return url;
         }
       }
-
-      if (src['portfolio'] is List && (src['portfolio'] as List).isNotEmpty) {
-        final firstPortfolio = src['portfolio'][0];
-        if (firstPortfolio is Map &&
-            firstPortfolio['images'] is List &&
-            (firstPortfolio['images'] as List).isNotEmpty) {
-          final firstImage = (firstPortfolio['images'] as List)[0];
-          return _toAbsoluteImageUrl(firstImage);
-        }
-      }
     } catch (e) {
       debugPrint('Error extracting profile image: $e');
     }
     return null;
+  }
+
+  List<String> _extractPortfolioImages(Map<String, dynamic> src) {
+    final images = <String>{};
+
+    void collect(dynamic value) {
+      if (value == null) return;
+
+      if (value is String) {
+        final url = _toAbsoluteImageUrl(value);
+        if (url != null) images.add(url);
+        return;
+      }
+
+      if (value is List) {
+        for (final item in value) {
+          collect(item);
+        }
+        return;
+      }
+
+      if (value is Map) {
+        for (final key in [
+          'images',
+          'portfolio',
+          'portfolioImages',
+          'gallery',
+          'photos',
+          'media',
+          'items'
+        ]) {
+          if (value[key] != null) {
+            collect(value[key]);
+          }
+        }
+
+        for (final key in [
+          'url',
+          'src',
+          'path',
+          'image',
+          'imageUrl',
+          'image_url',
+          'secure_url',
+          'secureUrl'
+        ]) {
+          final url = _toAbsoluteImageUrl(value[key]);
+          if (url != null) images.add(url);
+        }
+      }
+    }
+
+    try {
+      for (final candidate in [
+        src['portfolio'],
+        src['portfolioImages'],
+        src['images'],
+        src['photos'],
+        src['media'],
+        src['gallery'],
+        src['workImages'],
+        src['portfolio_items'],
+        src['portfolioItems'],
+      ]) {
+        collect(candidate);
+      }
+
+      if (src['user'] is Map) {
+        final user = src['user'] as Map<String, dynamic>;
+        for (final candidate in [
+          user['portfolio'],
+          user['portfolioImages'],
+          user['images'],
+          user['photos'],
+          user['media'],
+          user['gallery'],
+          user['workImages'],
+        ]) {
+          collect(candidate);
+        }
+      }
+    } catch (e) {
+      debugPrint('extractPortfolioImages error: $e');
+    }
+
+    return images.toList();
   }
 
   String _displayLocation() {
@@ -1003,6 +1095,216 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showPortfolioViewer(List<String> images, {int initialIndex = 0}) {
+    if (images.isEmpty) return;
+
+    var currentIndex = initialIndex.clamp(0, images.length - 1);
+    final controller = PageController(initialPage: currentIndex);
+
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.92),
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Scaffold(
+              backgroundColor: Colors.transparent,
+              body: SafeArea(
+                child: Stack(
+                  children: [
+                    PageView.builder(
+                      controller: controller,
+                      itemCount: images.length,
+                      onPageChanged: (index) {
+                        setModalState(() => currentIndex = index);
+                      },
+                      itemBuilder: (context, index) {
+                        return InteractiveViewer(
+                          minScale: 1,
+                          maxScale: 4,
+                          child: Center(
+                            child: CachedNetworkImage(
+                              imageUrl: images[index],
+                              fit: BoxFit.contain,
+                              placeholder: (context, url) => const Center(
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                ),
+                              ),
+                              errorWidget: (context, url, error) => const Center(
+                                child: Icon(
+                                  Icons.broken_image_outlined,
+                                  color: Colors.white70,
+                                  size: 56,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    Positioned(
+                      top: 12,
+                      left: 16,
+                      right: 16,
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.45),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              '${currentIndex + 1} / ${images.length}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                            icon: const Icon(Icons.close, color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    ).then((_) => controller.dispose());
+  }
+
+  Widget _buildPortfolioSection({
+    required List<String> images,
+    required FlutterFlowTheme theme,
+    required bool isSmallScreen,
+    required double smallSpacing,
+    required double mediumSpacing,
+    required double bodyFontSize,
+  }) {
+    if (images.isEmpty) return const SizedBox.shrink();
+
+    final thumbWidth = isSmallScreen ? 144.0 : 176.0;
+    final thumbHeight = isSmallScreen ? 112.0 : 136.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(left: 8.0, bottom: smallSpacing),
+          child: Text(
+            'PROOF OF WORK',
+            style: TextStyle(
+              fontSize: isSmallScreen ? 10 : 11,
+              fontWeight: FontWeight.w600,
+              color: _secondaryTextColor(),
+              letterSpacing: 1.0,
+            ),
+          ),
+        ),
+        Container(
+          padding: EdgeInsets.all(mediumSpacing),
+          decoration: BoxDecoration(
+            color: _surfaceColor(),
+            borderRadius: BorderRadius.circular(isSmallScreen ? 12 : 16),
+            border: Border.all(color: _borderColor(), width: 1.5),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Tap any image to view and swipe through the artisan portfolio.',
+                style: theme.bodyMedium.copyWith(
+                  color: _secondaryTextColor(),
+                  fontSize: bodyFontSize - 1,
+                ),
+              ),
+              SizedBox(height: mediumSpacing),
+              SizedBox(
+                height: thumbHeight,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: images.length,
+                  separatorBuilder: (_, __) => SizedBox(width: smallSpacing),
+                  itemBuilder: (context, index) {
+                    return GestureDetector(
+                      onTap: () =>
+                          _showPortfolioViewer(images, initialIndex: index),
+                      child: Container(
+                        width: thumbWidth,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: primaryColor.withOpacity(0.12),
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(14),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              CachedNetworkImage(
+                                imageUrl: images[index],
+                                fit: BoxFit.cover,
+                                placeholder: (context, url) => Container(
+                                  color: primaryColor.withOpacity(0.08),
+                                  child: Center(
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: primaryColor,
+                                    ),
+                                  ),
+                                ),
+                                errorWidget: (context, url, error) => Container(
+                                  color: primaryColor.withOpacity(0.08),
+                                  child: Icon(
+                                    Icons.broken_image_outlined,
+                                    color: primaryColor.withOpacity(0.7),
+                                    size: 28,
+                                  ),
+                                ),
+                              ),
+                              Positioned(
+                                right: 10,
+                                bottom: 10,
+                                child: Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.5),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.open_in_full,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -3011,6 +3313,7 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
     final theme = FlutterFlowTheme.of(context);
     final artisan = _artisan;
     final profileImage = _extractProfileImage(artisan);
+    final portfolioImages = _extractPortfolioImages(artisan);
 
     // Responsive sizing
     final screenWidth = MediaQuery.of(context).size.width;
@@ -3595,6 +3898,17 @@ class _ArtisanDetailPageWidgetState extends State<ArtisanDetailPageWidget> {
                     ),
 
                     SizedBox(height: largeSpacing),
+
+                    _buildPortfolioSection(
+                      images: portfolioImages,
+                      theme: theme,
+                      isSmallScreen: isSmallScreen,
+                      smallSpacing: smallSpacing,
+                      mediumSpacing: mediumSpacing,
+                      bodyFontSize: bodyFontSize,
+                    ),
+
+                    if (portfolioImages.isNotEmpty) SizedBox(height: largeSpacing),
 
                     // Reviews Section
                     Padding(
