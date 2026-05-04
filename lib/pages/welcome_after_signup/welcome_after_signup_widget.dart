@@ -117,8 +117,12 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
     await _waitForAuthReady();
     if (!mounted) return;
 
+    // Artisans go through the new Get Set Up onboarding (trade/services/prices,
+    // location/photo, NIN+selfie KYC). The onboarding screen self-skips to the
+    // dashboard for users who are already set up, so this is safe for both
+    // first-time signups and returning OAuth sign-ins.
     final targetPath = _role == 'artisan'
-        ? ArtisanDashboardPageWidget.routePath
+        ? ArtisanOnboardingWidget.routePath
         : HomePageWidget.routePath;
 
     try {
@@ -132,10 +136,10 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
 
     // Fallback to imperative navigation if router is unavailable.
     try {
-      final target = _role == 'artisan'
-          ? NavBarPage(initialPage: 'homePage', showDiscover: false)
-          : NavBarPage(initialPage: 'homePage');
       if (!mounted) return;
+      final Widget target = _role == 'artisan'
+          ? const ArtisanOnboardingWidget()
+          : NavBarPage(initialPage: 'homePage');
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => target),
         (route) => false,

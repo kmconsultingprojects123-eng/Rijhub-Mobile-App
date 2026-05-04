@@ -43,8 +43,9 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
 
   // New local state: artisan-specific profile and kyc status and computed completion
   Map<String, dynamic>? _artisanProfile;
+  // ignore: unused_field
   bool _hasArtisanProfile =
-      false; // NEW: whether the artisan profile document exists
+      false; // Set in load logic; previously read by the removed PROFILE SETUP card.
   bool _kycVerifiedLocal = false;
   String? _kycStatus;
   double _profileCompletion = 0.0;
@@ -318,18 +319,21 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
     unawaited(_loadDashboardData(profile: profile));
     unawaited(_fetchAuthoritativeKycStatus());
 
-    // Schedule a gentle reminder a short while after the page has initialised
-    // so new artisans who've not completed key setup steps get prompted.
-    Future.delayed(const Duration(seconds: 3), () {
-      try {
-        _maybeShowOnboardReminder();
-      } catch (_) {}
-    });
+    // Legacy onboard reminder popup. Replaced by the dedicated
+    // ArtisanOnboardingWidget post-OTP flow + just-in-time action prompts;
+    // the dashboard no longer nags. Kept commented for reference.
+    // Future.delayed(const Duration(seconds: 3), () {
+    //   try {
+    //     _maybeShowOnboardReminder();
+    //   } catch (_) {}
+    // });
   }
 
-  // Show a one-time (or until dismissed) reminder to new artisans who
+  // Legacy: show a one-time (or until dismissed) reminder to new artisans who
   // haven't set location, completed profile, or done KYC. The dialog offers
   // direct actions to open the location bottom sheet, profile page, or KYC flow.
+  // Replaced by ArtisanOnboardingWidget; kept here for reference/rollback.
+  // ignore: unused_element
   Future<void> _maybeShowOnboardReminder() async {
     if (!mounted) return;
     try {
@@ -1334,6 +1338,34 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
     );
   }
 
+  /// Single benefit row used inside the onboarding progress card.
+  Widget _buildOnboardBenefit({
+    required ThemeData theme,
+    required Color successColor,
+    required String text,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(Icons.check_circle_rounded, size: 18, color: successColor),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 13,
+              color: theme.colorScheme.onSurface.withOpacity(0.85),
+              height: 1.4,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Legacy menu item used by the removed PROFILE SETUP card. Kept for
+  // rollback per the project's "comment, don't remove" preference.
+  // ignore: unused_element
   Widget _buildMenuItem({
     required BuildContext context,
     required IconData icon,
@@ -2185,196 +2217,162 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
 
                         const SizedBox(height: 24),
 
-                        // Profile Completion Section
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4.0, bottom: 12),
-                          child: Text(
-                            'PROFILE SETUP',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: colorScheme.onSurface.withOpacity(0.6),
-                              letterSpacing: 1.0,
+                        // Onboarding progress card — replaces the old multi-item
+                        // PROFILE SETUP section. Hidden once the artisan is fully
+                        // set up. Tapping "Continue setup" opens the new
+                        // ArtisanOnboardingWidget which handles trade/services,
+                        // location/photo, and NIN+selfie KYC in one flow.
+                        if (_profileCompletion < 1.0)
+                          Container(
+                            decoration: BoxDecoration(
+                              color: theme.cardColor,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: colorScheme.onSurface.withOpacity(0.1),
+                                width: 1,
+                              ),
                             ),
-                          ),
-                        ),
-                        Card(
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            side: BorderSide(
-                              color: colorScheme.onSurface.withOpacity(0.1),
-                              width: 1,
-                            ),
-                          ),
-                          child: Padding(
                             padding: const EdgeInsets.all(20),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Text(
-                                      'Profile Completion',
-                                      style:
-                                          theme.textTheme.titleMedium?.copyWith(
-                                        fontWeight: FontWeight.w600,
+                                    Container(
+                                      width: 44,
+                                      height: 44,
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.primary
+                                            .withOpacity(0.12),
+                                        borderRadius: BorderRadius.circular(12),
                                       ),
+                                      child: Icon(Icons.bolt_rounded,
+                                          color: colorScheme.primary, size: 24),
                                     ),
-                                    Text(
-                                      '${(_profileCompletion * 100).toInt()}%',
-                                      style:
-                                          theme.textTheme.titleMedium?.copyWith(
-                                        fontWeight: FontWeight.w700,
-                                        color: colorScheme.primary,
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Almost there!',
+                                            style: theme.textTheme.titleMedium
+                                                ?.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            '${(_profileCompletion * 100).toInt()}% complete',
+                                            style: theme.textTheme.bodySmall
+                                                ?.copyWith(
+                                              color: colorScheme.primary,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 12),
-                                LinearProgressIndicator(
-                                  value: _profileCompletion,
-                                  minHeight: 6,
-                                  backgroundColor:
-                                      colorScheme.onSurface.withOpacity(0.1),
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      colorScheme.primary),
-                                  borderRadius: BorderRadius.circular(3),
-                                ),
-                                const SizedBox(height: 16),
-                                _buildMenuItem(
-                                  context: context,
-                                  icon: Icons.person_outline,
-                                  // If the artisan does not yet have an artisan profile document,
-                                  // route the user to the complete-profile flow. Otherwise show
-                                  // that the profile is present and offer an Edit action
-                                  title: !_hasArtisanProfile
-                                      ? 'Create Artisan Profile'
-                                      : 'Edit Profile',
-                                  subtitle: !_hasArtisanProfile
-                                      ? 'Set up your artisan profile to start getting jobs'
-                                      : 'Completed',
-                                  onTap: () async {
-                                    try {
-                                      // Navigate to profile create/edit and capture the result.
-                                      final res = await context.pushNamed(
-                                          ArtisanProfileupdateWidget.routeName);
-
-                                      // If the create/edit flow returned `true` (success), try to apply
-                                      // the cached dashboard profile that the flow writes so the UI
-                                      // can immediately show the Completed / Edit state.
-                                      try {
-                                        if (res == true) {
-                                          final cached = await TokenStorage
-                                              .getDashboardProfile();
-                                          if (cached != null && mounted) {
-                                            setState(() {
-                                              _artisanProfile =
-                                                  Map<String, dynamic>.from(
-                                                      cached);
-                                              _hasArtisanProfile = true;
-                                            });
-                                            try {
-                                              _computeProfileCompletion();
-                                            } catch (_) {}
-                                          }
-                                        }
-                                      } catch (_) {}
-
-                                      // Still refresh authoritative data in background
-                                      await _refreshData();
-                                    } catch (_) {}
-                                  },
-                                  iconColor: !_hasArtisanProfile
-                                      ? colorScheme.primary
-                                      : ff.success,
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 12),
-                                  child: Divider(
-                                    height: 1,
-                                    color:
-                                        colorScheme.onSurface.withOpacity(0.1),
+                                const SizedBox(height: 14),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: LinearProgressIndicator(
+                                    value: _profileCompletion,
+                                    minHeight: 6,
+                                    backgroundColor: colorScheme.primary
+                                        .withOpacity(0.12),
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                        colorScheme.primary),
                                   ),
                                 ),
-                                _buildMenuItem(
-                                  context: context,
-                                  icon: _model.isVerified == true
-                                      ? Icons.verified_outlined
-                                      : Icons.verified_outlined,
-                                  title: 'KYC Verification',
-                                  subtitle: _model.isVerified == true
-                                      ? 'Verified'
-                                      : (_kycStatus == 'pending'
-                                          ? 'Request pending — awaiting admin approval'
-                                          : 'Get verified to attract more clients'),
-                                  onTap: () async {
-                                    try {
-                                      final status = _kycStatus ??
-                                          await TokenStorage.getKycStatus();
-                                      if (status == 'pending') {
-                                        // Show awaiting dialog and do not navigate
-                                        await showDialog<void>(
-                                          context: context,
-                                          builder: (ctx) => AlertDialog(
-                                            title: const Text(
-                                                'Awaiting KYC approval'),
-                                            content: const Text(
-                                                'Your KYC request has been submitted and is awaiting approval from an administrator.'),
-                                            actions: [
-                                              TextButton(
-                                                  onPressed: () =>
-                                                      Navigator.of(ctx).pop(),
-                                                  child: const Text('OK')),
-                                            ],
-                                          ),
-                                        );
-                                        return;
-                                      }
-
-                                      if (!_model.isVerified) {
-                                        await Navigator.of(context).push(
-                                            MaterialPageRoute(
-                                                builder: (_) =>
-                                                    ArtisanKycWidget()));
-                                        await _refreshData();
-                                        final s =
-                                            await TokenStorage.getKycStatus();
-                                        if (s != _kycStatus && mounted)
-                                          setState(() => _kycStatus = s);
-                                      }
-                                    } catch (_) {}
-                                  },
-                                  iconColor: _model.isVerified == true
-                                      ? ff.success
-                                      : ff.warning,
-                                  enabled: !_model.isVerified &&
-                                      _kycStatus != 'pending',
+                                const SizedBox(height: 14),
+                                Text(
+                                  "Finish setting up so clients can start finding and booking you. It's quick and seamless — most artisans wrap it up in under 3 minutes.",
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: colorScheme.onSurface
+                                        .withOpacity(0.78),
+                                    height: 1.45,
+                                    fontSize: 13.5,
+                                  ),
                                 ),
-
-                                // Simple placeholder for TODOs to keep layout stable (original detailed TODO removed to fix syntax)
-                                const SizedBox(height: 12),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 4.0),
-                                  child: Text(
-                                    'To-dos coming soon',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: colorScheme.onSurface
-                                          .withOpacity(0.6),
-                                      fontWeight: FontWeight.w600,
+                                const SizedBox(height: 14),
+                                _buildOnboardBenefit(
+                                  theme: theme,
+                                  successColor: ff.success,
+                                  text: 'Get found by clients in your area',
+                                ),
+                                const SizedBox(height: 8),
+                                _buildOnboardBenefit(
+                                  theme: theme,
+                                  successColor: ff.success,
+                                  text: 'Start receiving booking requests',
+                                ),
+                                const SizedBox(height: 8),
+                                _buildOnboardBenefit(
+                                  theme: theme,
+                                  successColor: ff.success,
+                                  text: 'Build trust with a verified badge',
+                                ),
+                                const SizedBox(height: 18),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: colorScheme.primary,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 14),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      elevation: 0,
+                                    ),
+                                    onPressed: () async {
+                                      try {
+                                        await context.push(
+                                            ArtisanOnboardingWidget.routePath);
+                                      } catch (_) {
+                                        if (!mounted) return;
+                                        try {
+                                          await Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  const ArtisanOnboardingWidget(),
+                                            ),
+                                          );
+                                        } catch (_) {}
+                                      }
+                                      if (!mounted) return;
+                                      // Refresh dashboard so completion %
+                                      // and KYC status update on return.
+                                      try {
+                                        await _refreshData();
+                                      } catch (_) {}
+                                    },
+                                    child: const Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          'Continue setup',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        SizedBox(width: 6),
+                                        Icon(Icons.arrow_forward_rounded,
+                                            size: 18),
+                                      ],
                                     ),
                                   ),
                                 ),
-
-                                const SizedBox(height: 12),
-                              ], // end Column children for Profile Completion Card
-                            ), // end Column
-                          ), // end Padding
-                        ), // end Card
+                              ],
+                            ),
+                          ),
 
                         // Recent Bookings Section
                         if (_model.recentBookings != null &&

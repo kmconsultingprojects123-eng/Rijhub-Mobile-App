@@ -48,6 +48,7 @@ export '/pages/splash_screen_page2/splash_screen_page2_widget.dart' show SplashS
 export '/pages/welcome_after_signup/welcome_after_signup_widget.dart' show WelcomeAfterSignupWidget;
 export '/pages/artisan_complete_profile/artisan_complete_profile_widget.dart' show ArtisanCompleteProfileWidget;
 export '/pages/artisan_kyc_page/artisan_kyc_route_wrapper.dart' show ArtisanKycWidget;
+export '/pages/artisan_onboarding/artisan_onboarding_widget.dart' show ArtisanOnboardingWidget;
 export '/pages/all_servicepage/all_servicepage_widget.dart' show AllServicepageWidget;
 export '/pages/special_service_request_page/special_service_request_page_widget.dart' show SpecialServiceRequestPageWidget;
 export '/pages/profile/profile_special_requests_widget.dart' show ProfileSpecialRequestsWidget;

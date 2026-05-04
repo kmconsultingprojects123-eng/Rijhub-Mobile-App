@@ -445,7 +445,10 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
     try {
       final router = GoRouter.of(context);
       if (role.contains('artisan')) {
-        router.go(ArtisanDashboardPageWidget.routePath);
+        // New flow: artisans land on the Get Set Up onboarding screen first.
+        // It walks them through trade/services/prices, location/photo, and KYC,
+        // then forwards them to the dashboard once those three are done.
+        router.go(ArtisanOnboardingWidget.routePath);
       } else {
         router.go(HomePageWidget.routePath);
       }
@@ -453,7 +456,7 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
       try {
         if (role.contains('artisan')) {
           await NavigationUtils.safeReplaceAllWith(
-              context, ArtisanDashboardPageWidget());
+              context, const ArtisanOnboardingWidget());
         } else {
           await NavigationUtils.safeReplaceAllWith(context, HomePageWidget());
         }

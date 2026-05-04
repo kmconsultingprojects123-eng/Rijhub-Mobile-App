@@ -274,6 +274,12 @@ GoRouter createRouter(AuthNotifier auth) {
           builder: (context, params) => ArtisanCompleteProfileWidget(),
         ),
         FFRoute(
+          name: ArtisanOnboardingWidget.routeName,
+          path: ArtisanOnboardingWidget.routePath,
+          requireAuth: true,
+          builder: (context, params) => const ArtisanOnboardingWidget(),
+        ),
+        FFRoute(
           name: UserWalletpageWidget.routeName,
           path: UserWalletpageWidget.routePath,
           builder: (context, params) => UserWalletpageWidget(),

@@ -255,4 +255,135 @@ class KycService {
   }) async {
     return submitKyc(fields, filesByFieldName, token: token, timeout: timeout);
   }
+
+  /// Dojah NIN + selfie verification.
+  /// POST /api/kyc/dojah/nin-selfie (multipart)
+  /// Returns the parsed JSON body with shape:
+  /// { success, message, data: { status, match, confidenceValue, threshold, user, artisan } }
+  /// Possible statuses: 'approved' | 'rejected' | 'pending_review'
+  static Future<Map<String, dynamic>> submitDojahNinSelfie({
+    required String nin,
+    required File selfie,
+    String? firstName,
+    String? lastName,
+    required String token,
+    Duration timeout = const Duration(seconds: 60),
+  }) async {
+    final uri = Uri.parse('$API_BASE_URL/api/kyc/dojah/nin-selfie');
+    final req = http.MultipartRequest('POST', uri);
+    req.headers['Authorization'] = 'Bearer $token';
+
+    req.fields['nin'] = nin;
+    if (firstName != null && firstName.isNotEmpty) {
+      req.fields['firstName'] = firstName;
+    }
+    if (lastName != null && lastName.isNotEmpty) {
+      req.fields['lastName'] = lastName;
+    }
+
+    try {
+      req.files.add(await http.MultipartFile.fromPath('selfie', selfie.path));
+    } catch (e, st) {
+      developer.log('Failed to attach selfie',
+          error: e, stackTrace: st, name: 'KycService.submitDojahNinSelfie');
+      throw UserFriendlyException(
+          'Failed to attach selfie. Please try again.');
+    }
+
+    try {
+      final streamed = await req.send().timeout(timeout);
+      final resp = await http.Response.fromStream(streamed).timeout(timeout);
+
+      developer.log(
+          'Dojah NIN-selfie response: status=${resp.statusCode} body=${resp.body}',
+          name: 'KycService.submitDojahNinSelfie');
+
+      Map<String, dynamic>? body;
+      try {
+        if (resp.body.isNotEmpty) body = jsonDecode(resp.body);
+      } catch (_) {}
+
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        return body ?? {};
+      }
+
+      // Server returned an error envelope; surface the message if present
+      final serverMsg = body?['message']?.toString();
+      throw UserFriendlyException(
+        serverMsg ?? ErrorMapper.messageForResponse(resp),
+        developerMessage:
+            'Dojah verification failed: status=${resp.statusCode} body=${resp.body}',
+      );
+    } on UserFriendlyException {
+      rethrow;
+    } on SocketException catch (e) {
+      throw UserFriendlyException(ErrorMapper.messageForException(e),
+          developerMessage: e.toString());
+    } on TimeoutException catch (e) {
+      throw UserFriendlyException(ErrorMapper.messageForException(e),
+          developerMessage: e.toString());
+    } catch (e, st) {
+      developer.log('Unexpected error in submitDojahNinSelfie',
+          error: e, stackTrace: st, name: 'KycService.submitDojahNinSelfie');
+      throw UserFriendlyException('Something went wrong. Please try again.');
+    }
+  }
+
+  /// GET /api/kyc/status — returns the latest KYC state for the authenticated user.
+  /// Possible statuses: 'pending' | 'pending_review' | 'approved' | 'rejected'
+  /// Returns the unwrapped `data` object, or an empty map if the body is empty.
+  static Future<Map<String, dynamic>> getKycStatus({
+    required String token,
+    Duration timeout = const Duration(seconds: 20),
+  }) async {
+    final uri = Uri.parse('$API_BASE_URL/api/kyc/status');
+    try {
+      final resp = await http.get(uri, headers: {
+        'Authorization': 'Bearer $token',
+      }).timeout(timeout);
+
+      developer.log(
+          'getKycStatus response: status=${resp.statusCode} body=${resp.body}',
+          name: 'KycService.getKycStatus');
+
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        if (resp.body.isEmpty) return {};
+        try {
+          final body = jsonDecode(resp.body);
+          if (body is Map && body['data'] is Map) {
+            return Map<String, dynamic>.from(body['data']);
+          }
+          if (body is Map) return Map<String, dynamic>.from(body);
+        } catch (e, st) {
+          developer.log('Failed to parse getKycStatus body',
+              error: e, stackTrace: st, name: 'KycService.getKycStatus');
+          throw UserFriendlyException(
+              'Could not read verification status. Please try again.',
+              developerMessage: 'JSON parse failed: ${resp.body}');
+        }
+        return {};
+      }
+
+      throw UserFriendlyException(ErrorMapper.messageForResponse(resp),
+          developerMessage:
+              'getKycStatus failed: status=${resp.statusCode} body=${resp.body}');
+    } on UserFriendlyException {
+      rethrow;
+    } on SocketException catch (e, st) {
+      developer.log('Network error in getKycStatus',
+          error: e, stackTrace: st, name: 'KycService.getKycStatus');
+      throw UserFriendlyException(ErrorMapper.messageForException(e),
+          developerMessage: e.toString());
+    } on TimeoutException catch (e, st) {
+      developer.log('Timeout in getKycStatus',
+          error: e, stackTrace: st, name: 'KycService.getKycStatus');
+      throw UserFriendlyException(ErrorMapper.messageForException(e),
+          developerMessage: e.toString());
+    } catch (e, st) {
+      developer.log('Unexpected error in getKycStatus',
+          error: e, stackTrace: st, name: 'KycService.getKycStatus');
+      throw UserFriendlyException('Something went wrong. Please try again.',
+          developerMessage: e.toString());
+    }
+  }
 }
