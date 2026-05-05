@@ -329,6 +329,89 @@ class KycService {
     }
   }
 
+  /// POST /api/kyc/dojah/verify-reference — sends a Dojah reference returned
+  /// by the native Flutter SDK so the backend can call Dojah's "Get
+  /// Verification Details" API server-side and persist the authoritative
+  /// status.
+  ///
+  /// Returns a map with at least `{ 'status': 'approved' | 'rejected' |
+  /// 'pending' | 'pending_review' }` plus optional `failureReason` etc.,
+  /// matching the envelope of `submitDojahNinSelfie`. If the backend
+  /// endpoint hasn't shipped yet (404), returns
+  /// `{ 'status': 'pending_review', 'failureReason': 'endpoint_not_ready' }`
+  /// so the client can surface a graceful "verification submitted" message
+  /// without breaking; the existing GET /api/kyc/status polling will pick
+  /// up the real result once the backend ships.
+  static Future<Map<String, dynamic>> verifyDojahReference({
+    required String referenceId,
+    required String token,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final uri = Uri.parse('$API_BASE_URL/api/kyc/dojah/verify-reference');
+    try {
+      final resp = await http.post(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({'referenceId': referenceId}),
+      ).timeout(timeout);
+
+      developer.log(
+          'verifyDojahReference response: status=${resp.statusCode} body=${resp.body}',
+          name: 'KycService.verifyDojahReference');
+
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        if (resp.body.isEmpty) return {'status': 'pending'};
+        try {
+          final body = jsonDecode(resp.body);
+          if (body is Map && body['data'] is Map) {
+            return Map<String, dynamic>.from(body['data']);
+          }
+          if (body is Map) return Map<String, dynamic>.from(body);
+        } catch (e, st) {
+          developer.log('Failed to parse verifyDojahReference body',
+              error: e,
+              stackTrace: st,
+              name: 'KycService.verifyDojahReference');
+        }
+        return {'status': 'pending'};
+      }
+
+      // Backend hasn't shipped the endpoint yet — degrade gracefully.
+      // The artisan dashboard's GET /api/kyc/status polling will catch up
+      // once the backend is wired.
+      if (resp.statusCode == 404) {
+        return {
+          'status': 'pending_review',
+          'failureReason': 'endpoint_not_ready',
+        };
+      }
+
+      throw UserFriendlyException(ErrorMapper.messageForResponse(resp),
+          developerMessage:
+              'verifyDojahReference failed: status=${resp.statusCode} body=${resp.body}');
+    } on UserFriendlyException {
+      rethrow;
+    } on SocketException catch (e, st) {
+      developer.log('Network error in verifyDojahReference',
+          error: e, stackTrace: st, name: 'KycService.verifyDojahReference');
+      throw UserFriendlyException(ErrorMapper.messageForException(e),
+          developerMessage: e.toString());
+    } on TimeoutException catch (e, st) {
+      developer.log('Timeout in verifyDojahReference',
+          error: e, stackTrace: st, name: 'KycService.verifyDojahReference');
+      throw UserFriendlyException(ErrorMapper.messageForException(e),
+          developerMessage: e.toString());
+    } catch (e, st) {
+      developer.log('Unexpected error in verifyDojahReference',
+          error: e, stackTrace: st, name: 'KycService.verifyDojahReference');
+      throw UserFriendlyException('Something went wrong. Please try again.',
+          developerMessage: e.toString());
+    }
+  }
+
   /// GET /api/kyc/status — returns the latest KYC state for the authenticated user.
   /// Possible statuses: 'pending' | 'pending_review' | 'approved' | 'rejected'
   /// Returns the unwrapped `data` object, or an empty map if the body is empty.

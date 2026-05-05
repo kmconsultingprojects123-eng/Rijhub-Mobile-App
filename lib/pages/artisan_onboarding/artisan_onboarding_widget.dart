@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:dojah_kyc_sdk_flutter/dojah_extra_flutter_data.dart';
+import 'package:dojah_kyc_sdk_flutter/dojah_kyc_sdk_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -10,15 +12,16 @@ import 'package:image_picker/image_picker.dart';
 
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
+import '../../dojah_config.dart';
 import '../../google_maps_config.dart';
 import '../../services/artist_service.dart';
 import '../../services/job_service.dart';
+import '../../services/kyc_service.dart';
 import '../../services/my_service_service.dart';
 import '../../services/token_storage.dart';
 import '../../state/auth_notifier.dart';
 import '../../utils/location_permission.dart';
 import 'artisan_onboarding_model.dart';
-import 'liveness_check_widget.dart';
 
 export 'artisan_onboarding_model.dart';
 
@@ -182,8 +185,19 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
   void initState() {
     super.initState();
     _model = createModel(context, () => ArtisanOnboardingModel());
-    _loadCategories();
     _hydrateFromStorage();
+    // Categories must load BEFORE hydrating from server, because the
+    // hydration maps the artisan's saved trade name back to a category id.
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    await _loadCategories();
+    if (!mounted) return;
+    await Future.wait([
+      _hydrateFromServer(),
+      _refreshProfileProgress(),
+    ]);
   }
 
   @override
@@ -265,6 +279,165 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
       if (mounted) setState(() => _serverProgress = value);
     } catch (e) {
       if (kDebugMode) debugPrint('refreshProfileProgress error: $e');
+    }
+  }
+
+  /// Pulls the artisan's saved data from the backend and pre-fills every
+  /// section so returning users see what they already entered. Runs after
+  /// `_loadCategories` so we can map the saved `trade` name back to a
+  /// category id. Sections that come back already filled are marked
+  /// completed and collapsed; the first incomplete one is auto-expanded.
+  Future<void> _hydrateFromServer() async {
+    try {
+      final profileFuture = ArtistService.getMyProfile();
+      final servicesFuture = MyServiceService().fetchMyServices();
+      final kycFuture = TokenStorage.getToken().then((t) {
+        if (t != null && t.isNotEmpty) {
+          return KycService.getKycStatus(token: t).catchError(
+              (_) => <String, dynamic>{});
+        }
+        return <String, dynamic>{};
+      });
+
+      final results = await Future.wait<dynamic>([
+        profileFuture,
+        servicesFuture,
+        kycFuture,
+      ]);
+      if (!mounted) return;
+
+      final profile = results[0] as Map<String, dynamic>?;
+      final servicesResp = results[1];
+      final kycStatus = results[2] as Map<String, dynamic>;
+
+      // ---- Section 1: trade category + experience -----------------------
+      String? matchedCategoryId;
+      if (profile != null) {
+        final trade = profile['trade'];
+        String? tradeName;
+        if (trade is List && trade.isNotEmpty) {
+          tradeName = trade.first?.toString();
+        } else if (trade is String) {
+          tradeName = trade;
+        }
+        if (tradeName != null && tradeName.trim().isNotEmpty) {
+          final lookup = tradeName.trim().toLowerCase();
+          final found = _categories.firstWhere(
+            (c) =>
+                (c['name'] ?? c['title'] ?? '')
+                    .toString()
+                    .toLowerCase() ==
+                lookup,
+            orElse: () => {},
+          );
+          if (found.isNotEmpty) {
+            matchedCategoryId = (found['_id'] ?? found['id']).toString();
+          }
+        }
+        // Experience years
+        final exp = profile['experience'];
+        if (exp != null &&
+            (_model.experienceController?.text.trim().isEmpty ?? true)) {
+          _model.experienceController?.text = exp.toString();
+        }
+
+        // ---- Section 2: location + photo --------------------------------
+        final sa = profile['serviceArea'];
+        if (sa is Map) {
+          final addr = sa['address']?.toString();
+          final coords = sa['coordinates'];
+          final radius = sa['radius'];
+          double? lat;
+          double? lng;
+          if (coords is List && coords.length >= 2) {
+            // serviceArea is stored [lon, lat] per the legacy convention.
+            lng = (coords[0] as num?)?.toDouble();
+            lat = (coords[1] as num?)?.toDouble();
+          }
+          if (mounted) {
+            setState(() {
+              if (lat != null && lng != null) {
+                _lat = lat;
+                _lng = lng;
+              }
+              if (addr != null && addr.isNotEmpty) {
+                _addressLabel = addr;
+                if (_locationSearchCtrl.text.isEmpty) {
+                  _locationSearchCtrl.text = addr;
+                }
+              }
+              if (radius is num) _radiusKm = radius.toDouble();
+            });
+          }
+        }
+
+        final img = (profile['profileImage'] ??
+                profile['avatar'] ??
+                profile['photo'])
+            ?.toString();
+        if (img != null && img.isNotEmpty) {
+          if (mounted) setState(() => _photoUrl = img);
+        }
+      }
+
+      // Subcategories must be loaded before we can populate selected services.
+      if (matchedCategoryId != null) {
+        if (mounted) setState(() => _selectedCategoryId = matchedCategoryId);
+        await _loadSubcategories(matchedCategoryId);
+        if (!mounted) return;
+      }
+
+      // ---- Section 1: services + prices ---------------------------------
+      if (servicesResp != null && servicesResp.ok == true &&
+          servicesResp.data != null) {
+        final flat = MyServiceService.flattenArtisanServices(servicesResp.data);
+        if (mounted && flat.isNotEmpty) {
+          setState(() {
+            for (final s in flat) {
+              final subId =
+                  (s['subCategoryId'] ?? s['_id'] ?? s['id'])?.toString();
+              if (subId == null || subId.isEmpty) continue;
+              final name =
+                  (s['subCategoryName'] ?? s['name'] ?? 'Service').toString();
+              final priceStr = s['price']?.toString() ?? '';
+              _selectedServices[subId]?.priceCtrl.dispose();
+              _selectedServices[subId] = _ServiceRow(
+                name: name,
+                priceCtrl: TextEditingController(text: priceStr),
+              );
+            }
+          });
+        }
+      }
+
+      // ---- Section 3: KYC status ----------------------------------------
+      final kycSt = kycStatus['status']?.toString();
+      final kycDone = kycSt == 'approved' ||
+          kycSt == 'pending' ||
+          kycSt == 'pending_review';
+
+      // ---- Mark sections completed + auto-expand the first incomplete one
+      if (!mounted) return;
+      setState(() {
+        // Section 1: has a category, services, and experience.
+        _completed[0] = _selectedCategoryId != null &&
+            _selectedServices.isNotEmpty &&
+            (_model.experienceController?.text.trim().isNotEmpty ?? false);
+        // Section 2: has lat/lng (location is the only hard requirement;
+        // photo is encouraged but optional).
+        _completed[1] = _lat != null && _lng != null;
+        // Section 3: KYC submitted (approved or under review).
+        _completed[2] = kycDone;
+
+        // Re-derive expansion: collapse what's done, expand the first
+        // incomplete section.
+        final firstIncomplete = _completed.indexOf(false);
+        for (int i = 0; i < _expanded.length; i++) {
+          _expanded[i] = i == firstIncomplete;
+        }
+      });
+    } catch (e) {
+      if (kDebugMode) debugPrint('hydrateFromServer error: $e');
     }
   }
 
@@ -418,6 +591,7 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         });
         _advanceTo(1);
         _toast('Services saved');
+        unawaited(_refreshProfileProgress());
       } else {
         _toast(resp.message);
       }
@@ -702,6 +876,7 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         });
         _advanceTo(2);
         _toast('Profile saved');
+        unawaited(_refreshProfileProgress());
       } else {
         _toast('Could not save profile. Please try again.');
       }
@@ -721,6 +896,17 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
       _toast('Enter a valid 11-digit NIN');
       return;
     }
+    if (DOJAH_WIDGET_ID.isEmpty) {
+      _toast('Identity verification is not configured. Please try again later.');
+      if (kDebugMode) {
+        debugPrint('startVerification: DOJAH_WIDGET_ID is empty');
+      }
+      return;
+    }
+
+    // Pre-fill what we can so the user skips redundant entry inside the
+    // Dojah widget. The widget handles the NIN entry, liveness, and selfie
+    // match itself; first/last name come from the auth profile.
     final profile = AuthNotifier.instance.profile;
     String firstName = '';
     String lastName = '';
@@ -730,17 +916,90 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
       firstName = parts.first;
       if (parts.length > 1) lastName = parts.sublist(1).join(' ');
     }
+    final email = profile?['email']?.toString();
+    final userId = (profile?['_id'] ?? profile?['id'])?.toString();
 
-    final result = await Navigator.of(context).push<Map<String, dynamic>>(
-      MaterialPageRoute(
-        builder: (_) => LivenessCheckWidget(
-          nin: nin,
-          firstName: firstName,
-          lastName: lastName,
+    // Generate a client-side reference so we can correlate the SDK launch
+    // with the verification record on our backend. The backend
+    // `/api/kyc/dojah/verify-reference` endpoint will use Dojah's reference
+    // (returned by the SDK) for the actual lookup; this string is only for
+    // our own logs.
+    final localRef = 'rij_kyc_'
+        '${DateTime.now().millisecondsSinceEpoch}'
+        '${userId != null ? '_$userId' : ''}';
+
+    String dojahReferenceId = '';
+    try {
+      dojahReferenceId = await DojahKyc.launch(
+        DOJAH_WIDGET_ID,
+        referenceId: localRef,
+        email: email,
+        extraUserData: ExtraUserData(
+          userData: UserData(
+            firstName: firstName,
+            lastName: lastName,
+            email: email,
+          ),
+          // Pre-fill the NIN so the user skips typing it again inside the
+          // Dojah widget. Whichever step the dashboard widget is configured
+          // for (NIN entry / NIN match) reads this value.
+          govData: GovData(nin: nin),
+          metadata: {
+            if (userId != null) 'rijhub_user_id': userId,
+            'rijhub_local_ref': localRef,
+          },
         ),
-      ),
-    );
-    if (result == null || !mounted) return;
+      );
+    } catch (e, st) {
+      if (kDebugMode) {
+        debugPrint('DojahKyc.launch failed: $e\n$st');
+      }
+      _toast('Could not start identity verification. Please try again.');
+      return;
+    }
+
+    if (!mounted) return;
+    if (kDebugMode) {
+      debugPrint('DojahKyc.launch returned: "$dojahReferenceId"');
+    }
+    if (dojahReferenceId.isEmpty) {
+      // User closed the widget without finishing, or the SDK returned no ref.
+      return;
+    }
+
+    // The dojah_kyc_sdk_flutter package returns the literal string
+    // 'Verification Completed' when the platform layer doesn't surface a
+    // Dojah reference. In that case fall back to our locally-generated
+    // reference (which we passed into `DojahKyc.launch` as `referenceId`)
+    // so the backend has a stable id to look up in Dojah.
+    final referenceForBackend =
+        dojahReferenceId.toLowerCase().contains('completed')
+            ? localRef
+            : dojahReferenceId;
+
+    // Send the reference to the backend for authoritative verification.
+    Map<String, dynamic> result = {};
+    try {
+      final token = await TokenStorage.getToken() ?? '';
+      result = await KycService.verifyDojahReference(
+        referenceId: referenceForBackend,
+        token: token,
+      );
+    } on UserFriendlyException catch (e) {
+      if (kDebugMode) {
+        debugPrint('verifyDojahReference: ${e.developerMessage ?? e.userMessage}');
+      }
+      _toast(e.userMessage);
+      return;
+    } catch (e) {
+      if (kDebugMode) debugPrint('verifyDojahReference unexpected: $e');
+      _toast('Could not confirm verification. We\'ll keep checking.');
+      // Treat as pending so the section doesn't stay open forever; the
+      // dashboard's KYC status pill will catch up via /api/kyc/status.
+      result = {'status': 'pending_review'};
+    }
+
+    if (!mounted) return;
     final status = result['status']?.toString();
     if (status == 'approved' ||
         status == 'pending' ||
@@ -752,6 +1011,7 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
       _toast(status == 'approved'
           ? 'Identity verified'
           : 'Verification submitted — we\'ll let you know once it\'s approved');
+      unawaited(_refreshProfileProgress());
       _maybeFinish();
     } else if (status == 'rejected') {
       _toast(
@@ -766,6 +1026,7 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
       _expanded[2] = false;
     });
     _toast('You can verify later from your profile');
+    unawaited(_refreshProfileProgress());
     _maybeFinish();
   }
 

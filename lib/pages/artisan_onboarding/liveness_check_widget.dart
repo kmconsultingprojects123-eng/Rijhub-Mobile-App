@@ -7,9 +7,21 @@ import 'package:image_picker/image_picker.dart';
 import '../../services/kyc_service.dart';
 import '../../services/token_storage.dart';
 
-/// Liveness selfie capture screen. Posts the selfie + NIN to
-/// POST /api/kyc/dojah/nin-selfie and pops with the result map:
+/// **LEGACY — kept for rollback.**
+///
+/// Original camera-based liveness selfie capture. Posts the selfie + NIN to
+/// `POST /api/kyc/dojah/nin-selfie` and pops with a result map:
 ///   { status: 'approved' | 'rejected' | 'pending_review', failureReason?, ... }
+///
+/// Replaced by the official `dojah_kyc_sdk_flutter` SDK which is launched
+/// directly from `_startVerification` in `artisan_onboarding_widget.dart`.
+/// The SDK runs Dojah's full active-liveness flow (smile/blink) inside a
+/// native widget and returns a reference ID, which the client then sends to
+/// `POST /api/kyc/dojah/verify-reference` (see KYC_DOJAH_SDK_BACKEND_SPEC.md).
+///
+/// This file is intentionally retained — the `/nin-selfie` endpoint is still
+/// supported by the backend as a fallback, so this widget can be re-wired
+/// quickly if the SDK path is unavailable on a given device.
 class LivenessCheckWidget extends StatefulWidget {
   final String nin;
   final String? firstName;

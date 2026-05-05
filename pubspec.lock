@@ -233,6 +233,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.7.12"
+  dojah_kyc_sdk_flutter:
+    dependency: "direct main"
+    description:
+      name: dojah_kyc_sdk_flutter
+      sha256: f47b1f37e9ea81f73448a48c9e49593f25a02920e5e9975c77e4bd51e123da87
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.7"
   dropdown_button2:
     dependency: "direct main"
     description:
@@ -1373,6 +1381,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.0"
+  rename:
+    dependency: transitive
+    description:
+      name: rename
+      sha256: da5f4d67f8c68f066ad04edfd6585495dbe595f2baf3b1999eb6af1805d79539
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.1.0"
   rfc_6901:
     dependency: transitive
     description:
