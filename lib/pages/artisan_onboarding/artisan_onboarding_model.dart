@@ -10,12 +10,17 @@ class ArtisanOnboardingModel
   TextEditingController? experienceController;
   FocusNode? experienceFocus;
 
+  TextEditingController? businessNameController;
+  FocusNode? businessNameFocus;
+
   @override
   void initState(BuildContext context) {
     ninController = TextEditingController();
     ninFocus = FocusNode();
     experienceController = TextEditingController();
     experienceFocus = FocusNode();
+    businessNameController = TextEditingController();
+    businessNameFocus = FocusNode();
   }
 
   @override
@@ -24,5 +29,7 @@ class ArtisanOnboardingModel
     ninFocus?.dispose();
     experienceController?.dispose();
     experienceFocus?.dispose();
+    businessNameController?.dispose();
+    businessNameFocus?.dispose();
   }
 }

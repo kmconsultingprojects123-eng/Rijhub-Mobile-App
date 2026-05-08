@@ -476,6 +476,17 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
               ..addAll(hydrated);
           });
         }
+
+        // Business name (optional) — pre-fill if the artisan saved one
+        // previously. Only set when the field is currently empty so we
+        // don't clobber a value the user is mid-typing.
+        final bn = profile['businessName']?.toString();
+        if (bn != null && bn.isNotEmpty && mounted) {
+          if ((_model.businessNameController?.text.trim().isEmpty ??
+              true)) {
+            _model.businessNameController?.text = bn;
+          }
+        }
       }
 
       // Subcategories must be loaded before we can populate selected services.
@@ -928,6 +939,77 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
     return r * c;
   }
 
+  /// Last-chance fallback when the user typed an address but never tapped a
+  /// suggestion. Hits Google's Geocoding API directly with the raw text and,
+  /// if anything resolves, returns the first match's lat/lng/address/radius.
+  /// Returns null on any failure — the caller then keeps the raw text as a
+  /// free-form address with no coordinates.
+  Future<Map<String, dynamic>?> _geocodeTypedAddress(String text) async {
+    try {
+      final key = GOOGLE_MAPS_API_KEY;
+      if (key.isEmpty) return null;
+      final url = Uri.parse(
+          'https://maps.googleapis.com/maps/api/geocode/json'
+          '?address=${Uri.encodeQueryComponent(text)}'
+          '&components=country:NG'
+          '&key=$key');
+      final resp =
+          await http.get(url).timeout(const Duration(seconds: 10));
+      if (resp.statusCode != 200 || resp.body.isEmpty) return null;
+      final body = jsonDecode(resp.body);
+      if (body is! Map ||
+          body['results'] is! List ||
+          (body['results'] as List).isEmpty) {
+        return null;
+      }
+      final first = (body['results'] as List).first as Map;
+      final geometry = first['geometry'] as Map?;
+      final loc = geometry?['location'] as Map?;
+      final viewport = geometry?['viewport'] as Map?;
+      final lat = (loc?['lat'] as num?)?.toDouble();
+      final lng = (loc?['lng'] as num?)?.toDouble();
+      if (lat == null || lng == null) return null;
+      final address = first['formatted_address']?.toString() ?? text;
+
+      double radiusKm = 10.0;
+      if (viewport is Map) {
+        final ne = viewport['northeast'] as Map?;
+        final sw = viewport['southwest'] as Map?;
+        final neLat = (ne?['lat'] as num?)?.toDouble();
+        final neLng = (ne?['lng'] as num?)?.toDouble();
+        final swLat = (sw?['lat'] as num?)?.toDouble();
+        final swLng = (sw?['lng'] as num?)?.toDouble();
+        if (neLat != null &&
+            neLng != null &&
+            swLat != null &&
+            swLng != null) {
+          final diag = _haversineDistance(swLat, swLng, neLat, neLng);
+          radiusKm = diag / 2;
+          if (radiusKm < 5) radiusKm = 5;
+          if (radiusKm > 50) radiusKm = 50;
+        }
+      }
+
+      try {
+        await TokenStorage.saveLocation(
+          address: address,
+          latitude: lat,
+          longitude: lng,
+        );
+      } catch (_) {}
+
+      return {
+        'lat': lat,
+        'lng': lng,
+        'address': address,
+        'radiusKm': radiusKm,
+      };
+    } catch (e) {
+      if (kDebugMode) debugPrint('geocodeTypedAddress error: $e');
+      return null;
+    }
+  }
+
   Future<void> _pickPhoto() async {
     try {
       final picker = ImagePicker();
@@ -944,18 +1026,51 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
   }
 
   Future<void> _saveWorkProfile() async {
+    // Three accepted shapes for "location set":
+    //   1. _lat + _lng populated (the user tapped a suggestion or used GPS).
+    //   2. Search text typed but no suggestion picked — try Google Geocoding
+    //      as a one-shot resolve. If it succeeds, we get coords for free.
+    //   3. Geocoding fails too — accept the typed text as a free-form
+    //      address with no coordinates rather than block the user.
     if (_lat == null || _lng == null) {
-      _toast('Set your service base location');
-      return;
+      final typed = _locationSearchCtrl.text.trim();
+      if (typed.isEmpty) {
+        _toast('Set your service base location');
+        return;
+      }
+      // Try to resolve coordinates from the typed text. If Google returns
+      // something we use it; if not we keep the typed string as the address.
+      setState(() => _savingProfile = true);
+      final resolved = await _geocodeTypedAddress(typed);
+      if (resolved != null) {
+        setState(() {
+          _lat = resolved['lat'] as double?;
+          _lng = resolved['lng'] as double?;
+          _addressLabel =
+              (resolved['address'] as String?) ?? typed;
+          final r = resolved['radiusKm'] as double?;
+          if (r != null) _radiusKm = r;
+        });
+      } else {
+        setState(() {
+          _addressLabel = typed;
+        });
+      }
     }
+
     setState(() => _savingProfile = true);
     try {
+      final serviceArea = <String, dynamic>{
+        'address': _addressLabel ?? _locationSearchCtrl.text.trim(),
+        'radius': _radiusKm.round(),
+      };
+      // Only include coordinates when we actually have them — sending
+      // [null, null] would corrupt the geo index on the backend.
+      if (_lat != null && _lng != null) {
+        serviceArea['coordinates'] = [_lng, _lat];
+      }
       final payload = <String, dynamic>{
-        'serviceArea': {
-          'address': _addressLabel ?? '',
-          'coordinates': [_lng, _lat],
-          'radius': _radiusKm.round(),
-        },
+        'serviceArea': serviceArea,
       };
       Map<String, List<String>>? fileMap;
       if (_photoFile != null) {
@@ -994,196 +1109,33 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
 
   // ---- Section 3: Showcase Your Work (portfolio + certifications) -------
 
-  /// Opens a small dialog to capture a portfolio item: title + image.
-  /// Adds the item to `_portfolioItems` on confirm.
+  /// Pick one or more images from the gallery and append them to the
+  /// portfolio. Matches the legacy onboarding flow which only collected
+  /// images — no title. (The data model still carries an optional `title`
+  /// for backwards compatibility with anything previously saved by the
+  /// old flow.) `pickMultiImage` lets the artisan multi-select in the
+  /// system picker, so they can drop several work samples in one go.
   Future<void> _addPortfolioItem() async {
-    final titleCtrl = TextEditingController();
-    File? pickedImage;
-    final theme = Theme.of(context);
-    final onSurface = theme.colorScheme.onSurface;
-    final inputFill = _inputFillColor(theme);
-    final result = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: theme.cardColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetCtx) {
-        return StatefulBuilder(builder: (sheetCtx, setSheetState) {
-          return Padding(
-            padding: EdgeInsets.only(
-              left: 20,
-              right: 20,
-              top: 20,
-              bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 20,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Add work sample',
-                  style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                      color: onSurface),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Title',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: onSurface),
-                ),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: titleCtrl,
-                  style: TextStyle(color: onSurface),
-                  decoration: InputDecoration(
-                    hintText: 'e.g. Lekki kitchen renovation',
-                    hintStyle:
-                        TextStyle(color: onSurface.withOpacity(0.5)),
-                    filled: true,
-                    fillColor: inputFill,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 14),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  'Image',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: onSurface),
-                ),
-                const SizedBox(height: 6),
-                InkWell(
-                  onTap: () async {
-                    try {
-                      final picker = ImagePicker();
-                      final picked = await picker.pickImage(
-                        source: ImageSource.gallery,
-                        imageQuality: 80,
-                        maxWidth: 1600,
-                      );
-                      if (picked != null) {
-                        setSheetState(() => pickedImage = File(picked.path));
-                      }
-                    } catch (_) {}
-                  },
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    height: 130,
-                    decoration: BoxDecoration(
-                      color: inputFill,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: pickedImage != null
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.file(pickedImage!,
-                                fit: BoxFit.cover,
-                                width: double.infinity),
-                          )
-                        : Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.image_outlined,
-                                    size: 32, color: primaryColor),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Tap to choose an image',
-                                  style: TextStyle(
-                                      fontSize: 13,
-                                      color: primaryColor,
-                                      fontWeight: FontWeight.w600),
-                                ),
-                              ],
-                            ),
-                          ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () =>
-                            Navigator.of(sheetCtx).pop(false),
-                        child: Text(
-                          'Cancel',
-                          style: TextStyle(
-                              color: onSurface.withOpacity(0.65),
-                              fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryColor,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          elevation: 0,
-                        ),
-                        onPressed: () {
-                          if (titleCtrl.text.trim().isEmpty) {
-                            ScaffoldMessenger.of(sheetCtx).showSnackBar(
-                              const SnackBar(
-                                content: Text('Please add a title'),
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                            return;
-                          }
-                          if (pickedImage == null) {
-                            ScaffoldMessenger.of(sheetCtx).showSnackBar(
-                              const SnackBar(
-                                content: Text('Please pick an image'),
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                            return;
-                          }
-                          Navigator.of(sheetCtx).pop(true);
-                        },
-                        child: const Text(
-                          'Add',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 14),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          );
-        });
-      },
-    );
-    if (result == true && pickedImage != null && mounted) {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickMultiImage(
+        imageQuality: 80,
+        maxWidth: 1600,
+      );
+      if (picked.isEmpty || !mounted) return;
       setState(() {
-        _portfolioItems.add({
-          'title': titleCtrl.text.trim(),
-          'imagePath': pickedImage!.path,
-          'imageUrl': null,
-        });
+        for (final file in picked) {
+          _portfolioItems.add({
+            'title': '',
+            'imagePath': file.path,
+            'imageUrl': null,
+          });
+        }
       });
+    } catch (e) {
+      if (kDebugMode) debugPrint('addPortfolioItem error: $e');
+      _toast('Could not add the images. Please try again.');
     }
-    titleCtrl.dispose();
   }
 
   /// Opens a small inline dialog to capture a certification name.
@@ -1248,15 +1200,20 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         );
       },
     );
-    if (added == true && mounted) {
+    // Read the value before scheduling dispose, then defer dispose to the
+    // next frame so the AlertDialog's exit animation can finish without the
+    // TextField rebuilding against an already-disposed controller (which
+    // crashes with `A TextEditingController was used after being disposed`).
+    final entered = ctrl.text.trim();
+    WidgetsBinding.instance.addPostFrameCallback((_) => ctrl.dispose());
+    if (added == true && entered.isNotEmpty && mounted) {
       setState(() {
         _certifications.add({
-          'name': ctrl.text.trim(),
+          'name': entered,
           'fileUrl': null,
         });
       });
     }
-    ctrl.dispose();
   }
 
   /// Persists portfolio + certifications to the artisan profile via
@@ -1314,9 +1271,15 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
           .where((s) => s.isNotEmpty)
           .toList();
 
+      final businessName =
+          _model.businessNameController?.text.trim() ?? '';
+
       final payload = <String, dynamic>{
         'portfolio': portfolioJson,
         'certifications': certNames,
+        // Business name is optional — only sent when filled, so the
+        // server doesn't overwrite a previously-saved value with empty.
+        if (businessName.isNotEmpty) 'businessName': businessName,
       };
 
       final res = await ArtistService.updateMyProfile(
@@ -1506,6 +1469,12 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
     }
     final referenceForBackend = capturedReference!;
 
+    // Show a non-dismissable overlay while we round-trip to the backend so
+    // the user gets immediate feedback after Dojah closes (the API call can
+    // take a couple of seconds; without this they see a stale onboarding
+    // screen and assume nothing's happening).
+    _showVerifyingKycOverlay();
+
     // Send the reference to the backend for authoritative verification.
     Map<String, dynamic> result = {};
     try {
@@ -1518,17 +1487,58 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
       if (kDebugMode) {
         debugPrint('verifyDojahReference: ${e.developerMessage ?? e.userMessage}');
       }
+      _dismissVerifyingKycOverlay();
       _toast(e.userMessage);
       return;
     } catch (e) {
       if (kDebugMode) debugPrint('verifyDojahReference unexpected: $e');
-      _toast('Could not confirm verification. We\'ll keep checking.');
       // Treat as pending so the section doesn't stay open forever; the
       // dashboard's KYC status pill will catch up via /api/kyc/status.
       result = {'status': 'pending_review'};
     }
 
+    // While the loader dialog is still up, fetch the authoritative KYC
+    // status from the backend and persist it to TokenStorage. The dashboard
+    // reads `TokenStorage.getKycStatus()` synchronously in its `initState`
+    // (`_initKycStatus`), so by the time we navigate it already knows KYC
+    // is verified — no stale "Almost there" Continue Setup card flash.
+    final tentativeStatus = result['status']?.toString() ?? '';
+    if (tentativeStatus == 'approved' ||
+        tentativeStatus == 'pending' ||
+        tentativeStatus == 'pending_review' ||
+        tentativeStatus == 'rejected' ||
+        tentativeStatus == 'failed') {
+      try {
+        final token = await TokenStorage.getToken() ?? '';
+        if (token.isNotEmpty) {
+          final fresh = await KycService.getKycStatus(token: token);
+          final freshStatus = fresh['status']?.toString();
+          if (freshStatus != null && freshStatus.isNotEmpty) {
+            await TokenStorage.saveKycStatus(freshStatus);
+            // Update local result so downstream UI logic (toast wording,
+            // section completion) uses the freshest server-confirmed value.
+            result['status'] = freshStatus;
+          } else {
+            await TokenStorage.saveKycStatus(tentativeStatus);
+          }
+        } else {
+          await TokenStorage.saveKycStatus(tentativeStatus);
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('post-verify getKycStatus failed: $e');
+        }
+        // Best-effort fallback: save the verify-reference status so the
+        // dashboard at least knows verification was submitted.
+        try {
+          await TokenStorage.saveKycStatus(tentativeStatus);
+        } catch (_) {}
+      }
+    }
+
+    _dismissVerifyingKycOverlay();
     if (!mounted) return;
+
     final status = result['status']?.toString();
     if (status == 'approved' ||
         status == 'pending' ||
@@ -1541,12 +1551,85 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
           ? 'Identity verified'
           : 'Verification submitted — we\'ll let you know once it\'s approved');
       unawaited(_refreshProfileProgress());
-      _maybeFinish();
+      // KYC is the last hard gate — push the artisan to the dashboard
+      // even if Showcase Your Work was skipped. They can come back to add
+      // showcase items from the dashboard's Continue Setup prompt later.
+      Future.delayed(const Duration(milliseconds: 700), () {
+        if (!mounted) return;
+        _exitToDashboard();
+      });
     } else if (status == 'rejected') {
       _toast(
           (result['failureReason'] ?? 'Verification didn\'t match — try again')
               .toString());
     }
+  }
+
+  /// Tracks whether the verifying-KYC overlay is currently shown so
+  /// `_dismissVerifyingKycOverlay` can avoid popping the wrong route.
+  bool _kycOverlayOpen = false;
+
+  void _showVerifyingKycOverlay() {
+    if (!mounted || _kycOverlayOpen) return;
+    _kycOverlayOpen = true;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return PopScope(
+          canPop: false,
+          child: Dialog(
+            backgroundColor: theme.cardColor,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16)),
+            insetPadding: const EdgeInsets.symmetric(horizontal: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 24, vertical: 28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 36,
+                    height: 36,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2.8, color: primaryColor),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    'Verifying your identity…',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'This usually takes a few seconds.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: theme.colorScheme.onSurface.withOpacity(0.65),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _dismissVerifyingKycOverlay() {
+    if (!_kycOverlayOpen) return;
+    _kycOverlayOpen = false;
+    if (!mounted) return;
+    try {
+      Navigator.of(context, rootNavigator: true).pop();
+    } catch (_) {}
   }
 
   void _skipVerification() {
@@ -1869,6 +1952,25 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
     );
   }
 
+  /// Sequential gate: a section can only be expanded if its prerequisite
+  /// is complete. The optional Showcase section (index 2) is always
+  /// expandable, and KYC (index 3) skips over Showcase to depend on Work
+  /// (index 1) so an artisan who didn't fill out Showcase can still verify.
+  bool _canExpand(int index) {
+    switch (index) {
+      case 0:
+        return true; // Trade is always the first available step
+      case 1:
+        return _completed[0]; // Work needs Trade done
+      case 2:
+        return true; // Showcase is optional, always available
+      case 3:
+        return _completed[1]; // KYC needs Work done (skips over Showcase)
+      default:
+        return true;
+    }
+  }
+
   Widget _buildSectionCard({
     required int index,
     required IconData icon,
@@ -1879,9 +1981,12 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
   }) {
     final expanded = _expanded[index];
     final completed = _completed[index];
+    final canExpand = _canExpand(index);
     final theme = Theme.of(context);
     final onSurface = theme.colorScheme.onSurface;
-    return Container(
+    return Opacity(
+      opacity: canExpand ? 1.0 : 0.55,
+      child: Container(
       decoration: BoxDecoration(
         color: theme.cardColor,
         borderRadius: BorderRadius.circular(14),
@@ -1891,7 +1996,13 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         children: [
           InkWell(
             borderRadius: BorderRadius.circular(14),
-            onTap: () => setState(() => _expanded[index] = !expanded),
+            onTap: () {
+              if (!canExpand) {
+                _toast('Complete the previous step first');
+                return;
+              }
+              setState(() => _expanded[index] = !expanded);
+            },
             child: Padding(
               padding: const EdgeInsets.all(14),
               child: Row(
@@ -1954,6 +2065,7 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
               child: child,
             ),
         ],
+      ),
       ),
     );
   }
@@ -2704,6 +2816,38 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         ),
         const SizedBox(height: 18),
 
+        // ----- Business name (optional) -----
+        Text('Business name',
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: onSurface)),
+        const SizedBox(height: 6),
+        TextField(
+          controller: _model.businessNameController,
+          focusNode: _model.businessNameFocus,
+          textInputAction: TextInputAction.next,
+          style: TextStyle(color: onSurface),
+          decoration: InputDecoration(
+            hintText: 'e.g. Smart Hands Plumbing',
+            hintStyle: TextStyle(color: onSurface.withOpacity(0.5)),
+            filled: true,
+            fillColor: inputFill,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide.none,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12, vertical: 14),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Optional — leave blank if you don\'t have one.',
+          style: TextStyle(fontSize: 11.5, color: softTextColor),
+        ),
+        const SizedBox(height: 18),
+
         // ----- Portfolio -----
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2736,69 +2880,61 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
             ),
           )
         else
-          Column(
+          // Thumbnail grid — no title row; the image speaks for itself.
+          // Each tile has a small ✕ overlay to remove it.
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: List.generate(_portfolioItems.length, (i) {
               final item = _portfolioItems[i];
-              final title = (item['title'] ?? '').toString();
               final imagePath = item['imagePath']?.toString();
               final imageUrl = item['imageUrl']?.toString();
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: theme.cardColor,
+              return Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: emptyBoxBorder),
+                    child: Container(
+                      width: 92,
+                      height: 92,
+                      color: inputFill,
+                      child: imagePath != null && imagePath.isNotEmpty
+                          ? Image.file(File(imagePath), fit: BoxFit.cover)
+                          : (imageUrl != null && imageUrl.isNotEmpty)
+                              ? Image.network(imageUrl, fit: BoxFit.cover)
+                              : Icon(Icons.image_outlined,
+                                  color: primaryColor),
+                    ),
                   ),
-                  padding: const EdgeInsets.all(8),
-                  child: Row(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: SizedBox(
-                          width: 56,
-                          height: 56,
-                          child: imagePath != null && imagePath.isNotEmpty
-                              ? Image.file(File(imagePath),
-                                  fit: BoxFit.cover)
-                              : (imageUrl != null && imageUrl.isNotEmpty)
-                                  ? Image.network(imageUrl,
-                                      fit: BoxFit.cover)
-                                  : Container(
-                                      color: inputFill,
-                                      child: Icon(Icons.image_outlined,
-                                          color: primaryColor),
-                                    ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          title.isNotEmpty ? title : 'Untitled',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w600,
-                            color: onSurface,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: 'Remove',
-                        onPressed: () {
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () {
                           setState(() => _portfolioItems.removeAt(i));
                         },
-                        icon: Icon(Icons.close,
-                            size: 18, color: softTextColor),
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.55),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.close,
+                              size: 14, color: Colors.white),
+                        ),
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                ],
               );
             }),
           ),
         const SizedBox(height: 6),
+        // Once at least one image is in the list, the button reads
+        // "Add more" so it doesn't repeat the section's call-to-action.
         OutlinedButton.icon(
           style: OutlinedButton.styleFrom(
             foregroundColor: primaryColor,
@@ -2810,9 +2946,11 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
           ),
           onPressed: _addPortfolioItem,
           icon: const Icon(Icons.add, size: 18),
-          label: const Text('Add work sample',
-              style:
-                  TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          label: Text(
+            _portfolioItems.isEmpty ? 'Add work sample' : 'Add more',
+            style: const TextStyle(
+                fontWeight: FontWeight.w600, fontSize: 13),
+          ),
         ),
 
         const SizedBox(height: 22),
@@ -2883,9 +3021,11 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
           ),
           onPressed: _addCertification,
           icon: const Icon(Icons.add, size: 18),
-          label: const Text('Add certification',
-              style:
-                  TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          label: Text(
+            _certifications.isEmpty ? 'Add certification' : 'Add more',
+            style: const TextStyle(
+                fontWeight: FontWeight.w600, fontSize: 13),
+          ),
         ),
 
         const SizedBox(height: 18),

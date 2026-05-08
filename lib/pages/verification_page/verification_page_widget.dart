@@ -181,6 +181,51 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
     }
   }
 
+  Future<void> _pasteFromClipboard() async {
+    try {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      final text = data?.text ?? '';
+      if (text.isEmpty) {
+        _setError('Clipboard is empty');
+        return;
+      }
+
+      // Prefer an isolated 6-digit run so we ignore phone/tracking numbers
+      // that happen to share the message.
+      String? code;
+      final exact = RegExp(r'(?<!\d)\d{' + _otpLength.toString() + r'}(?!\d)')
+          .firstMatch(text);
+      if (exact != null) {
+        code = exact.group(0);
+      } else {
+        // Handle spaced codes (e.g. "1 2 3 4 5 6") by collecting all digits.
+        final digits = text.replaceAll(RegExp(r'[^0-9]'), '');
+        if (digits.length >= _otpLength) {
+          code = digits.substring(0, _otpLength);
+        }
+      }
+
+      if (code == null) {
+        _setError('No $_otpLength-digit code found in clipboard');
+        return;
+      }
+
+      setState(() {
+        for (int i = 0; i < _otpLength; i++) {
+          _otpControllers[i].text = code![i];
+        }
+      });
+
+      _setError(null);
+      for (final f in _focusNodes) {
+        f.unfocus();
+      }
+      if (_isOtpComplete) _submitOtp();
+    } catch (_) {
+      _setError('Could not read clipboard');
+    }
+  }
+
   // MARK: - OTP Verification
   Future<void> _submitOtp() async {
     if (_otpExpired) {
@@ -720,6 +765,36 @@ class _VerificationPageWidgetState extends State<VerificationPageWidget> {
                     ),
                   );
                 }),
+              ),
+
+              const SizedBox(height: 12),
+
+              // Paste code button — pulls a 6-digit code from the clipboard
+              // (e.g. an SMS/email the user just copied) and auto-submits.
+              Center(
+                child: TextButton.icon(
+                  onPressed: _pasteFromClipboard,
+                  icon: Icon(
+                    Icons.content_paste_rounded,
+                    size: 16,
+                    color: ffTheme.primary,
+                  ),
+                  label: Text(
+                    'Paste code',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: ffTheme.primary,
+                      height: 1.68,
+                    ),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 4),
+                    minimumSize: const Size(50, 30),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
               ),
 
               // Error message

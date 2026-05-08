@@ -50,6 +50,14 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
   String? _kycStatus;
   double _profileCompletion = 0.0;
 
+  // Set true once `_initKycStatus()` (which reads the persisted status from
+  // TokenStorage) has run for the first time. While false we suppress the
+  // KYC-status card so the dashboard doesn't briefly render the "Continue
+  // setup" variant on a freshly-mounted instance whose `_kycStatus` hasn't
+  // been read yet — the cause of the previously-reported "card flashes
+  // with 0%" issue right after the artisan finishes onboarding.
+  bool _kycChecked = false;
+
   // Notification badge state (kept in dashboard to mirror Home behavior)
   int _unreadNotifications = 0;
   AnimationController? _notifAnimController;
@@ -301,9 +309,15 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
       if (!mounted) return;
       setState(() {
         _kycStatus = s;
+        _kycChecked = true;
       });
     } catch (e) {
       if (kDebugMode) debugPrint('Failed to read saved kyc status: $e');
+      if (mounted) {
+        setState(() {
+          _kycChecked = true;
+        });
+      }
     }
   }
 
@@ -1383,9 +1397,19 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
   Future<void> _openAvailabilitySheet() async {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final onSurface = colorScheme.onSurface;
+    final isDark = theme.brightness == Brightness.dark;
+    // Sheet sits on top of the screen, so use cardColor (auto-adapts:
+    // white in light, dark surface in dark).
+    final sheetBg = theme.cardColor;
+    // Preset tiles need a slight contrast against the sheet background.
+    // In light mode the sheet is white so tiles can stay cardColor with
+    // a 1px border. In dark mode tiles share cardColor too — the border
+    // alone gives enough separation.
+    final tileBorder = onSurface.withOpacity(0.12);
     final picked = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: sheetBg,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -1402,23 +1426,25 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE0E0E0),
+                    color: onSurface.withOpacity(isDark ? 0.18 : 0.15),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 'Set your availability',
-                style:
-                    TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: onSurface),
               ),
               const SizedBox(height: 6),
               Text(
                 'Pick the option that fits you best. You can change it anytime.',
                 style: TextStyle(
                     fontSize: 13,
-                    color: colorScheme.onSurface.withOpacity(0.65),
+                    color: onSurface.withOpacity(0.65),
                     height: 1.4),
               ),
               const SizedBox(height: 18),
@@ -1434,7 +1460,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                         color: theme.cardColor,
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: colorScheme.onSurface.withOpacity(0.1),
+                          color: tileBorder,
                           width: 1,
                         ),
                       ),
@@ -1457,25 +1483,24 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                               children: [
                                 Text(
                                   entry.key,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                       fontSize: 15,
-                                      fontWeight: FontWeight.w700),
+                                      fontWeight: FontWeight.w700,
+                                      color: onSurface),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
                                   '${entry.value.length} day${entry.value.length == 1 ? '' : 's'} per week',
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: colorScheme.onSurface
-                                        .withOpacity(0.65),
+                                    color: onSurface.withOpacity(0.65),
                                   ),
                                 ),
                               ],
                             ),
                           ),
                           Icon(Icons.arrow_forward_rounded,
-                              color: colorScheme.onSurface.withOpacity(0.45),
-                              size: 18),
+                              color: onSurface.withOpacity(0.45), size: 18),
                         ],
                       ),
                     ),
@@ -1556,6 +1581,374 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
           ),
         ),
       ],
+    );
+  }
+
+  /// State-aware card sitting under the wallet on the dashboard. Shape
+  /// switches on KYC status so the artisan always sees the right next step:
+  ///   - pending / pending_review  -> "We're reviewing it" reassurance card
+  ///   - rejected / failed / rejected_by_admin -> "Couldn't verify" card with retry CTA
+  ///   - approved                  -> hidden (artisan is functionally set)
+  ///   - null + incomplete setup   -> existing progress / "Continue setup" card
+  /// Returns `SizedBox.shrink()` (rendering nothing) until `_kycChecked` is
+  /// true so we don't briefly render the 0%-progress variant before the
+  /// persisted status has been read from storage. The card was previously
+  /// flashing right after the artisan finished onboarding because the server
+  /// fetch hadn't returned yet on a fresh dashboard mount.
+  Widget _buildKycStatusCard(
+      ThemeData theme, ColorScheme colorScheme, FlutterFlowTheme ff) {
+    if (!_kycChecked) return const SizedBox.shrink();
+
+    final s = _kycStatus?.toLowerCase();
+    final isApproved = s == 'approved' ||
+        s == 'verified' ||
+        s == 'success' ||
+        s == 'approved_by_admin';
+    if (isApproved) return const SizedBox.shrink();
+
+    final isPending = s == 'pending' ||
+        s == 'pending_review' ||
+        s == 'in_review' ||
+        s == 'submitted';
+    final isRejected = s == 'rejected' ||
+        s == 'failed' ||
+        s == 'rejected_by_admin' ||
+        s == 'declined';
+
+    if (isPending) return _buildKycPendingCard(theme, colorScheme);
+    if (isRejected) return _buildKycRejectedCard(theme, colorScheme);
+
+    // No KYC submitted yet — show the existing onboarding progress card so
+    // long as the artisan still has setup to finish. Once everything is done
+    // (including KYC) `_isKycSectionComplete()` flips and the card hides.
+    if (_profileCompletion < 1.0 && !_isKycSectionComplete()) {
+      return _buildContinueSetupCard(theme, colorScheme, ff);
+    }
+    return const SizedBox.shrink();
+  }
+
+  /// Reassurance card for artisans whose KYC submission is awaiting review.
+  /// No CTA — they've done their part; the wait is on us. We push a notification
+  /// when status flips so they don't need to keep refreshing.
+  Widget _buildKycPendingCard(ThemeData theme, ColorScheme colorScheme) {
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: colorScheme.onSurface.withOpacity(0.1),
+          width: 1,
+        ),
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.hourglass_top_rounded,
+                    color: colorScheme.primary, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Verification pending',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      "We'll notify you once it's done",
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            "Thanks for submitting your details, our team is reviewing them now. This usually takes a few minutes, occasionally longer during peak periods. You can keep using the app; we'll send a notification the moment your verification is complete.",
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurface.withOpacity(0.78),
+              height: 1.45,
+              fontSize: 13.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Failure-state card. KYC came back rejected — we tell the artisan plainly
+  /// and offer a one-tap retry that drops them back into the onboarding flow's
+  /// identity-verification section.
+  Widget _buildKycRejectedCard(ThemeData theme, ColorScheme colorScheme) {
+    final errorColor = theme.colorScheme.error;
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: errorColor.withOpacity(0.35),
+          width: 1,
+        ),
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: errorColor.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.error_outline_rounded,
+                    color: errorColor, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Verification didn't match",
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Please try again',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: errorColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            "We couldn't verify your identity with the details you submitted. This usually means the NIN didn't match or the selfie was unclear. Make sure your face is well-lit and your NIN is correct, then try again.",
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurface.withOpacity(0.78),
+              height: 1.45,
+              fontSize: 13.5,
+            ),
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: errorColor,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+              onPressed: () async {
+                try {
+                  await context.push(ArtisanOnboardingWidget.routePath);
+                } catch (_) {
+                  if (!mounted) return;
+                  try {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ArtisanOnboardingWidget(),
+                      ),
+                    );
+                  } catch (_) {}
+                }
+                if (!mounted) return;
+                try {
+                  await _refreshData();
+                } catch (_) {}
+              },
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Redo verification',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  SizedBox(width: 6),
+                  Icon(Icons.refresh_rounded, size: 18),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Pre-KYC progress card. Only shown when there's no KYC record yet AND the
+  /// artisan still has setup steps left. Tapping "Continue setup" reopens the
+  /// onboarding flow (it knows how to resume from wherever they stopped).
+  Widget _buildContinueSetupCard(
+      ThemeData theme, ColorScheme colorScheme, FlutterFlowTheme ff) {
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: colorScheme.onSurface.withOpacity(0.1),
+          width: 1,
+        ),
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.bolt_rounded,
+                    color: colorScheme.primary, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Almost there!',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${(_profileCompletion * 100).toInt()}% complete',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: _profileCompletion,
+              minHeight: 6,
+              backgroundColor: colorScheme.primary.withOpacity(0.12),
+              valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            "Finish setting up so clients can start finding and booking you. It's quick and seamless — most artisans wrap it up in under 3 minutes.",
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurface.withOpacity(0.78),
+              height: 1.45,
+              fontSize: 13.5,
+            ),
+          ),
+          const SizedBox(height: 14),
+          _buildOnboardBenefit(
+            theme: theme,
+            successColor: ff.success,
+            text: 'Get found by clients in your area',
+          ),
+          const SizedBox(height: 8),
+          _buildOnboardBenefit(
+            theme: theme,
+            successColor: ff.success,
+            text: 'Start receiving booking requests',
+          ),
+          const SizedBox(height: 8),
+          _buildOnboardBenefit(
+            theme: theme,
+            successColor: ff.success,
+            text: 'Build trust with a verified badge',
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colorScheme.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+              onPressed: () async {
+                try {
+                  await context.push(ArtisanOnboardingWidget.routePath);
+                } catch (_) {
+                  if (!mounted) return;
+                  try {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ArtisanOnboardingWidget(),
+                      ),
+                    );
+                  } catch (_) {}
+                }
+                if (!mounted) return;
+                try {
+                  await _refreshData();
+                } catch (_) {}
+              },
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Continue setup',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  SizedBox(width: 6),
+                  Icon(Icons.arrow_forward_rounded, size: 18),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -2413,162 +2806,16 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
 
                         const SizedBox(height: 24),
 
-                        // Onboarding progress card — replaces the old multi-item
-                        // PROFILE SETUP section. Hidden once the artisan is fully
-                        // set up. Tapping "Continue setup" opens the new
-                        // ArtisanOnboardingWidget which handles trade/services,
-                        // location/photo, and NIN+selfie KYC in one flow.
-                        if (_profileCompletion < 1.0)
-                          Container(
-                            decoration: BoxDecoration(
-                              color: theme.cardColor,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: colorScheme.onSurface.withOpacity(0.1),
-                                width: 1,
-                              ),
-                            ),
-                            padding: const EdgeInsets.all(20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      width: 44,
-                                      height: 44,
-                                      decoration: BoxDecoration(
-                                        color: colorScheme.primary
-                                            .withOpacity(0.12),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Icon(Icons.bolt_rounded,
-                                          color: colorScheme.primary, size: 24),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'Almost there!',
-                                            style: theme.textTheme.titleMedium
-                                                ?.copyWith(
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            '${(_profileCompletion * 100).toInt()}% complete',
-                                            style: theme.textTheme.bodySmall
-                                                ?.copyWith(
-                                              color: colorScheme.primary,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 14),
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: LinearProgressIndicator(
-                                    value: _profileCompletion,
-                                    minHeight: 6,
-                                    backgroundColor: colorScheme.primary
-                                        .withOpacity(0.12),
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                        colorScheme.primary),
-                                  ),
-                                ),
-                                const SizedBox(height: 14),
-                                Text(
-                                  "Finish setting up so clients can start finding and booking you. It's quick and seamless — most artisans wrap it up in under 3 minutes.",
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: colorScheme.onSurface
-                                        .withOpacity(0.78),
-                                    height: 1.45,
-                                    fontSize: 13.5,
-                                  ),
-                                ),
-                                const SizedBox(height: 14),
-                                _buildOnboardBenefit(
-                                  theme: theme,
-                                  successColor: ff.success,
-                                  text: 'Get found by clients in your area',
-                                ),
-                                const SizedBox(height: 8),
-                                _buildOnboardBenefit(
-                                  theme: theme,
-                                  successColor: ff.success,
-                                  text: 'Start receiving booking requests',
-                                ),
-                                const SizedBox(height: 8),
-                                _buildOnboardBenefit(
-                                  theme: theme,
-                                  successColor: ff.success,
-                                  text: 'Build trust with a verified badge',
-                                ),
-                                const SizedBox(height: 18),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: colorScheme.primary,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 14),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      elevation: 0,
-                                    ),
-                                    onPressed: () async {
-                                      try {
-                                        await context.push(
-                                            ArtisanOnboardingWidget.routePath);
-                                      } catch (_) {
-                                        if (!mounted) return;
-                                        try {
-                                          await Navigator.of(context).push(
-                                            MaterialPageRoute(
-                                              builder: (_) =>
-                                                  const ArtisanOnboardingWidget(),
-                                            ),
-                                          );
-                                        } catch (_) {}
-                                      }
-                                      if (!mounted) return;
-                                      // Refresh dashboard so completion %
-                                      // and KYC status update on return.
-                                      try {
-                                        await _refreshData();
-                                      } catch (_) {}
-                                    },
-                                    child: const Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          'Continue setup',
-                                          style: TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                        SizedBox(width: 6),
-                                        Icon(Icons.arrow_forward_rounded,
-                                            size: 18),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                        // KYC-aware status card. Replaces the old multi-item
+                        // PROFILE SETUP section. The card variant depends on
+                        // KYC status (read from TokenStorage on init, then
+                        // refreshed from the server):
+                        //   - pending / pending_review  -> "Verification pending" card
+                        //   - rejected / failed         -> "Verification didn't match" card with retry CTA
+                        //   - approved                  -> nothing (artisan is set)
+                        //   - null + setup incomplete   -> existing "Continue setup" progress card
+                        //   - !_kycChecked              -> nothing (avoid 0%-flash before status loads)
+                        _buildKycStatusCard(theme, colorScheme, ff),
 
                         // Availability prompt card — shown when the artisan
                         // hasn't set their weekly availability yet. Quick
@@ -2633,8 +2880,8 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                 Text(
                                   "Let clients know when you're available so bookings land at the right times.",
                                   style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: colorScheme.onSurface
-                                        .withOpacity(0.78),
+                                    color:
+                                        colorScheme.onSurface.withOpacity(0.78),
                                     height: 1.45,
                                     fontSize: 13.5,
                                   ),
@@ -3413,29 +3660,94 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
     );
   }
 
-  // Compute profile completion using server-provided `profileProgress` when available,
-  // otherwise compute using rules from artisan_profile_progress.md:
-  // - KYC completed = 40%
-  // - Profile fields (name, phone, bio, avatar, categories) = 40%
-  // When no artisan profile exists, compute a partial score from user-level fields
+  // Compute profile completion as the max of:
+  //   (a) the server-reported `profileCompletion`/`profileProgress` from
+  //       GET /api/artisans/me, and
+  //   (b) a local fraction derived from the same 4 onboarding sections the
+  //       artisan_onboarding_widget tracks. This mirrors the onboarding
+  //       screen's `_completionFraction` getter so both surfaces converge
+  //       on the same percentage even when the server hasn't yet processed
+  //       the latest save.
   void _computeProfileCompletion() {
     try {
-      double completion = 0.0;
-      final serverValue = _artisanProfile?['profileCompletion'] ??
+      double serverValue = 0.0;
+      final raw = _artisanProfile?['profileCompletion'] ??
           _artisanProfile?['profileProgress'];
-      if (serverValue != null) {
-        if (serverValue is num) {
-          completion = serverValue.toDouble();
+      if (raw != null) {
+        if (raw is num) {
+          serverValue = raw.toDouble();
         } else {
-          completion = double.tryParse(serverValue.toString()) ?? 0.0;
+          serverValue = double.tryParse(raw.toString()) ?? 0.0;
         }
-        if (completion > 1.0) completion = completion / 100.0;
-        completion = completion.clamp(0.0, 1.0);
+        if (serverValue > 1.0) serverValue = serverValue / 100.0;
+        serverValue = serverValue.clamp(0.0, 1.0);
       }
+
+      // Local section completion — mirrors what artisan_onboarding's
+      // `_hydrateFromServer` writes into its `_completed` array.
+      final sections = <bool>[
+        _isTradeSectionComplete(),
+        _isWorkSectionComplete(),
+        _isShowcaseSectionComplete(),
+        _isKycSectionComplete(),
+      ];
+      final localFraction = sections.where((c) => c).length / sections.length;
+
+      // Take whichever is higher, clamp to 0..1.
+      final completion =
+          (localFraction > serverValue ? localFraction : serverValue)
+              .clamp(0.0, 1.0);
       if (mounted) setState(() => _profileCompletion = completion);
     } catch (e) {
       if (kDebugMode) debugPrint('Error computing profile completion: $e');
       if (mounted) setState(() => _profileCompletion = 0.0);
     }
+  }
+
+  // ---- Per-section completion helpers ------------------------------------
+  // Each maps to one of the 4 onboarding sections so the dashboard's progress
+  // bar matches what the onboarding screen shows. The matching logic in
+  // artisan_onboarding_widget.dart's `_hydrateFromServer` is the source of
+  // truth — keep these in sync if those rules change.
+
+  /// Section 1: Trade, Services & Prices.
+  /// Onboarding requires category + services + experience. Dashboard
+  /// approximates with `trade` + `experience` (services aren't fetched
+  /// here, but in practice they're saved together so the result tallies).
+  bool _isTradeSectionComplete() {
+    final p = _artisanProfile;
+    if (p == null) return false;
+    final trade = p['trade'];
+    final hasTrade = (trade is List && trade.isNotEmpty) ||
+        (trade is String && trade.trim().isNotEmpty);
+    return hasTrade && p['experience'] != null;
+  }
+
+  /// Section 2: Work Radius & Profile.
+  bool _isWorkSectionComplete() {
+    final sa = _artisanProfile?['serviceArea'];
+    if (sa is! Map) return false;
+    final coords = sa['coordinates'];
+    return coords is List &&
+        coords.length >= 2 &&
+        coords[0] != null &&
+        coords[1] != null;
+  }
+
+  /// Section 3: Showcase Your Work (optional but counts when populated).
+  bool _isShowcaseSectionComplete() {
+    final p = _artisanProfile;
+    if (p == null) return false;
+    final port = p['portfolio'];
+    if (port is List && port.isNotEmpty) return true;
+    final certs = p['certifications'];
+    if (certs is List && certs.isNotEmpty) return true;
+    return false;
+  }
+
+  /// Section 4: Identity Verification — submitted (any non-rejected status).
+  bool _isKycSectionComplete() {
+    final s = _kycStatus;
+    return s == 'approved' || s == 'pending' || s == 'pending_review';
   }
 }
