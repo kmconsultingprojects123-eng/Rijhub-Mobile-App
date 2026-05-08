@@ -56,6 +56,12 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
   // same endpoint the artisan dashboard uses, so the two stay in sync.
   double _serverProgress = 0.0;
 
+  // True while the screen is performing its initial fetch of categories +
+  // existing artisan data. The form is hidden behind a centered loader
+  // during this window so returning users don't see a stale empty form
+  // for a beat before their saved data populates.
+  bool _hydrating = true;
+
   final ScrollController _scrollController = ScrollController();
   final List<GlobalKey> _sectionKeys = [
     GlobalKey(),
@@ -208,12 +214,34 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
   }
 
   Future<void> _bootstrap() async {
-    await _loadCategories();
-    if (!mounted) return;
-    await Future.wait([
-      _hydrateFromServer(),
-      _refreshProfileProgress(),
-    ]);
+    try {
+      await _loadCategories();
+      if (!mounted) return;
+      await Future.wait([
+        _hydrateFromServer(),
+        _refreshProfileProgress(),
+      ]);
+    } finally {
+      if (mounted) setState(() => _hydrating = false);
+    }
+  }
+
+  // ---- Theme helpers ----------------------------------------------------
+  // The original light-mode design used soft pink fills (e.g. 0xFFFFF1F4)
+  // and a black text palette. These helpers return the equivalent colour
+  // for the current brightness so the screen reads cleanly in dark mode.
+
+  /// Soft pink in light mode; subtle dark surface in dark mode. Used as the
+  /// fill colour for input fields, dropdowns, and price-row containers.
+  Color _inputFillColor(ThemeData theme) {
+    return theme.brightness == Brightness.dark
+        ? theme.colorScheme.onSurface.withOpacity(0.06)
+        : const Color(0xFFFFF1F4);
+  }
+
+  /// Subtle border colour that adapts to the brightness.
+  Color _subtleBorder(ThemeData theme) {
+    return theme.colorScheme.onSurface.withOpacity(0.08);
   }
 
   @override
@@ -971,10 +999,13 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
   Future<void> _addPortfolioItem() async {
     final titleCtrl = TextEditingController();
     File? pickedImage;
+    final theme = Theme.of(context);
+    final onSurface = theme.colorScheme.onSurface;
+    final inputFill = _inputFillColor(theme);
     final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: theme.cardColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -991,24 +1022,31 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Add work sample',
                   style: TextStyle(
-                      fontSize: 17, fontWeight: FontWeight.w700),
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      color: onSurface),
                 ),
                 const SizedBox(height: 12),
-                const Text(
+                Text(
                   'Title',
-                  style:
-                      TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: onSurface),
                 ),
                 const SizedBox(height: 6),
                 TextField(
                   controller: titleCtrl,
+                  style: TextStyle(color: onSurface),
                   decoration: InputDecoration(
                     hintText: 'e.g. Lekki kitchen renovation',
+                    hintStyle:
+                        TextStyle(color: onSurface.withOpacity(0.5)),
                     filled: true,
-                    fillColor: const Color(0xFFFFF1F4),
+                    fillColor: inputFill,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                       borderSide: BorderSide.none,
@@ -1018,10 +1056,12 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                   ),
                 ),
                 const SizedBox(height: 14),
-                const Text(
+                Text(
                   'Image',
-                  style:
-                      TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: onSurface),
                 ),
                 const SizedBox(height: 6),
                 InkWell(
@@ -1042,7 +1082,7 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                   child: Container(
                     height: 130,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFFF1F4),
+                      color: inputFill,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: pickedImage != null
@@ -1078,10 +1118,10 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                       child: TextButton(
                         onPressed: () =>
                             Navigator.of(sheetCtx).pop(false),
-                        child: const Text(
+                        child: Text(
                           'Cancel',
                           style: TextStyle(
-                              color: Colors.black54,
+                              color: onSurface.withOpacity(0.65),
                               fontWeight: FontWeight.w600),
                         ),
                       ),
@@ -1149,23 +1189,30 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
   /// Opens a small inline dialog to capture a certification name.
   Future<void> _addCertification() async {
     final ctrl = TextEditingController();
+    final theme = Theme.of(context);
+    final onSurface = theme.colorScheme.onSurface;
+    final inputFill = _inputFillColor(theme);
     final added = await showDialog<bool>(
       context: context,
       builder: (ctx) {
         return AlertDialog(
-          backgroundColor: Colors.white,
+          backgroundColor: theme.cardColor,
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16)),
-          title: const Text('Add certification',
-              style:
-                  TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          title: Text('Add certification',
+              style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: onSurface)),
           content: TextField(
             controller: ctrl,
             autofocus: true,
+            style: TextStyle(color: onSurface),
             decoration: InputDecoration(
               hintText: 'e.g. NABTEB Plumbing Cert',
+              hintStyle: TextStyle(color: onSurface.withOpacity(0.5)),
               filled: true,
-              fillColor: const Color(0xFFFFF1F4),
+              fillColor: inputFill,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide.none,
@@ -1177,9 +1224,9 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel',
+              child: Text('Cancel',
                   style: TextStyle(
-                      color: Colors.black54,
+                      color: onSurface.withOpacity(0.65),
                       fontWeight: FontWeight.w600)),
             ),
             ElevatedButton(
@@ -1538,6 +1585,12 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final scaffoldBg = isDark
+        ? theme.scaffoldBackgroundColor
+        : Colors.white;
+    final appBarFg = colorScheme.onSurface;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
@@ -1546,11 +1599,11 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         if (shouldLeave && mounted) _exitToDashboard();
       },
       child: Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: scaffoldBg,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: scaffoldBg,
         elevation: 0,
-        foregroundColor: Colors.black,
+        foregroundColor: appBarFg,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () async {
@@ -1558,12 +1611,36 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
             if (shouldLeave && mounted) _exitToDashboard();
           },
         ),
-        title: const Text(
+        title: Text(
           'Get Set Up',
-          style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black),
+          style: TextStyle(fontWeight: FontWeight.w700, color: appBarFg),
         ),
       ),
-      body: ListView(
+      body: _hydrating
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: primaryColor,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Loading your saved progress…',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: colorScheme.onSurface.withOpacity(0.65),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : ListView(
         controller: _scrollController,
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
         children: [
@@ -1637,11 +1714,13 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
     // Everything's done — no point asking, just let them out.
     if (_completed.every((c) => c)) return true;
 
+    final theme = Theme.of(context);
+    final onSurface = theme.colorScheme.onSurface;
     final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => Dialog(
-        backgroundColor: Colors.white,
+        backgroundColor: theme.cardColor,
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20)),
         insetPadding: const EdgeInsets.symmetric(horizontal: 24),
@@ -1655,28 +1734,28 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFCE4EC),
+                  color: primaryColor.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Icon(Icons.bolt_rounded,
                     color: primaryColor, size: 30),
               ),
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 'Almost there — finish setting up',
                 style: TextStyle(
                   fontSize: 19,
                   fontWeight: FontWeight.w700,
-                  color: Colors.black87,
+                  color: onSurface,
                   height: 1.25,
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 "Most artisans complete this in under 3 minutes. Until you finish, your profile won't appear in client searches and you can't receive bookings.",
                 style: TextStyle(
                   fontSize: 13.5,
-                  color: Colors.black54,
+                  color: onSurface.withOpacity(0.65),
                   height: 1.45,
                 ),
               ),
@@ -1685,18 +1764,21 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                 color: primaryColor,
                 icon: Icons.search_rounded,
                 text: 'Get found by clients in your area',
+                onSurface: onSurface,
               ),
               const SizedBox(height: 10),
               _DialogBenefit(
                 color: primaryColor,
                 icon: Icons.event_available_rounded,
                 text: 'Start receiving booking requests',
+                onSurface: onSurface,
               ),
               const SizedBox(height: 10),
               _DialogBenefit(
                 color: primaryColor,
                 icon: Icons.timer_outlined,
                 text: 'Takes about 3 minutes',
+                onSurface: onSurface,
               ),
               const SizedBox(height: 22),
               SizedBox(
@@ -1721,10 +1803,10 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                 width: double.infinity,
                 child: TextButton(
                   onPressed: () => Navigator.of(ctx).pop(true),
-                  child: const Text(
+                  child: Text(
                     'Exit anyway',
                     style: TextStyle(
-                      color: Colors.black54,
+                      color: onSurface.withOpacity(0.65),
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
                     ),
@@ -1740,18 +1822,19 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
   }
 
   Widget _buildProgressHeader(ThemeData theme) {
+    final onSurface = theme.colorScheme.onSurface;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
+            Text(
               'Profile Completion',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: Colors.black87,
+                color: onSurface,
               ),
             ),
             Text(
@@ -1770,14 +1853,17 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
           child: LinearProgressIndicator(
             value: _completionFraction,
             minHeight: 6,
-            backgroundColor: const Color(0xFFFCE4EC),
+            backgroundColor: primaryColor.withOpacity(0.15),
             valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
           ),
         ),
         const SizedBox(height: 12),
-        const Text(
-          'Complete these 3 steps to start receiving booking requests from customers in your area.',
-          style: TextStyle(fontSize: 13, color: Colors.black54, height: 1.4),
+        Text(
+          'Complete these 4 steps to start receiving booking requests from customers in your area.',
+          style: TextStyle(
+              fontSize: 13,
+              color: onSurface.withOpacity(0.65),
+              height: 1.4),
         ),
       ],
     );
@@ -1793,11 +1879,13 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
   }) {
     final expanded = _expanded[index];
     final completed = _completed[index];
+    final theme = Theme.of(context);
+    final onSurface = theme.colorScheme.onSurface;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFEFEFEF)),
+        border: Border.all(color: onSurface.withOpacity(0.08)),
       ),
       child: Column(
         children: [
@@ -1812,7 +1900,7 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: iconBg,
+                      color: primaryColor.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(icon, color: primaryColor, size: 22),
@@ -1827,10 +1915,10 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                             Flexible(
                               child: Text(
                                 title,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.w700,
-                                  color: Colors.black87,
+                                  color: onSurface,
                                 ),
                               ),
                             ),
@@ -1844,9 +1932,9 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                         const SizedBox(height: 2),
                         Text(
                           subtitle,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: Colors.black54,
+                            color: onSurface.withOpacity(0.65),
                           ),
                         ),
                       ],
@@ -1854,7 +1942,7 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                   ),
                   Icon(
                     expanded ? Icons.expand_less : Icons.expand_more,
-                    color: Colors.black54,
+                    color: onSurface.withOpacity(0.65),
                   ),
                 ],
               ),
@@ -1873,6 +1961,8 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
   // ---- Section 1 UI ------------------------------------------------------
 
   Widget _buildTradeSection(ThemeData theme) {
+    final onSurface = theme.colorScheme.onSurface;
+    final inputFill = _inputFillColor(theme);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1886,9 +1976,11 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Trade Category',
+                  Text('Trade Category',
                       style: TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w600)),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: onSurface)),
                   const SizedBox(height: 6),
                   _loadingCategories
                       ? const Padding(
@@ -1900,14 +1992,22 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                           padding:
                               const EdgeInsets.symmetric(horizontal: 12),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFFFF1F4),
+                            color: inputFill,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<String>(
                               isExpanded: true,
                               value: _selectedCategoryId,
-                              hint: const Text('Select'),
+                              hint: Text('Select',
+                                  style: TextStyle(
+                                      color:
+                                          onSurface.withOpacity(0.5))),
+                              dropdownColor: theme.cardColor,
+                              style: TextStyle(
+                                  fontSize: 15, color: onSurface),
+                              iconEnabledColor:
+                                  onSurface.withOpacity(0.6),
                               items: _categories.map((c) {
                                 final id = (c['_id'] ?? c['id']).toString();
                                 final name = (c['name'] ??
@@ -1937,14 +2037,16 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Years',
+                  Text('Years',
                       style: TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w600)),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: onSurface)),
                   const SizedBox(height: 6),
                   Container(
                     height: 48,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFFF1F4),
+                      color: inputFill,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: TextField(
@@ -1953,15 +2055,19 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                       keyboardType: TextInputType.number,
                       textAlign: TextAlign.center,
                       maxLength: 2,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         counterText: '',
                         hintText: '0',
+                        hintStyle:
+                            TextStyle(color: onSurface.withOpacity(0.4)),
                         border: InputBorder.none,
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 14),
                       ),
-                      style: const TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: onSurface),
                     ),
                   ),
                 ],
@@ -1973,20 +2079,22 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         Text(
           'How many years have you been doing this work?',
           style: TextStyle(
-              fontSize: 11.5, color: Colors.black.withOpacity(0.5)),
+              fontSize: 11.5, color: onSurface.withOpacity(0.5)),
         ),
         const SizedBox(height: 16),
-        const Text('Services Offered',
-            style:
-                TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        Text('Services Offered',
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: onSurface)),
         const SizedBox(height: 8),
-        _buildServicesChips(),
+        _buildServicesChips(theme),
         if (_selectedServices.isNotEmpty) ...[
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFF1F4),
+              color: inputFill,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(
@@ -1994,10 +2102,10 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
               children: [
                 RichText(
                   text: TextSpan(
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: Colors.black87,
+                      color: onSurface,
                     ),
                     children: [
                       const TextSpan(text: 'Service Pricing '),
@@ -2013,7 +2121,7 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                 ),
                 const SizedBox(height: 10),
                 ..._selectedServices.entries.map((e) => _buildPriceRow(
-                    e.value.name, e.value.priceCtrl)),
+                    theme, e.value.name, e.value.priceCtrl)),
               ],
             ),
           ),
@@ -2046,11 +2154,14 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
     );
   }
 
-  Widget _buildServicesChips() {
+  Widget _buildServicesChips(ThemeData theme) {
+    final onSurface = theme.colorScheme.onSurface;
+    final mutedTextStyle = TextStyle(
+        fontSize: 12, color: onSurface.withOpacity(0.6));
     if (_selectedCategoryId == null) {
-      return const Text(
+      return Text(
         'Pick a category to see services you can offer.',
-        style: TextStyle(fontSize: 12, color: Colors.black54),
+        style: mutedTextStyle,
       );
     }
     if (_loadingSubs) {
@@ -2060,11 +2171,14 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
       );
     }
     if (_subcategories.isEmpty) {
-      return const Text(
+      return Text(
         'No services found for this category yet.',
-        style: TextStyle(fontSize: 12, color: Colors.black54),
+        style: mutedTextStyle,
       );
     }
+    final unselectedChipBg = theme.cardColor;
+    final selectedChipBg = primaryColor.withOpacity(0.12);
+    final unselectedBorder = onSurface.withOpacity(0.15);
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -2079,10 +2193,10 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: selected ? const Color(0xFFFFF1F4) : Colors.white,
+                color: selected ? selectedChipBg : unselectedChipBg,
                 borderRadius: BorderRadius.circular(40),
                 border: Border.all(
-                    color: selected ? primaryColor : const Color(0xFFE0E0E0)),
+                    color: selected ? primaryColor : unselectedBorder),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -2091,7 +2205,7 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                     name,
                     style: TextStyle(
                       fontSize: 13,
-                      color: selected ? primaryColor : Colors.black87,
+                      color: selected ? primaryColor : onSurface,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -2112,17 +2226,20 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
             color: Colors.transparent,
             borderRadius: BorderRadius.circular(40),
             border: Border.all(
-              color: const Color(0xFFE0E0E0),
+              color: unselectedBorder,
               style: BorderStyle.solid,
             ),
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.add, size: 14, color: Colors.black54),
-              SizedBox(width: 4),
+              Icon(Icons.add,
+                  size: 14, color: onSurface.withOpacity(0.6)),
+              const SizedBox(width: 4),
               Text('Add Service',
-                  style: TextStyle(fontSize: 13, color: Colors.black54)),
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: onSurface.withOpacity(0.6))),
             ],
           ),
         ),
@@ -2130,7 +2247,10 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
     );
   }
 
-  Widget _buildPriceRow(String name, TextEditingController ctrl) {
+  Widget _buildPriceRow(
+      ThemeData theme, String name, TextEditingController ctrl) {
+    final onSurface = theme.colorScheme.onSurface;
+    final borderSide = BorderSide(color: onSurface.withOpacity(0.15));
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -2138,7 +2258,7 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
           Expanded(
             child: Text(
               name,
-              style: const TextStyle(fontSize: 14, color: Colors.black87),
+              style: TextStyle(fontSize: 14, color: onSurface),
             ),
           ),
           SizedBox(
@@ -2147,29 +2267,30 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
               controller: ctrl,
               keyboardType: TextInputType.number,
               textAlign: TextAlign.right,
+              style: TextStyle(color: onSurface),
               decoration: InputDecoration(
                 isDense: true,
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
                 filled: true,
-                fillColor: Colors.white,
-                prefixIcon: const Padding(
-                  padding: EdgeInsets.only(left: 8, right: 4),
+                fillColor: theme.cardColor,
+                prefixIcon: Padding(
+                  padding: const EdgeInsets.only(left: 8, right: 4),
                   child: Text('₦',
                       style: TextStyle(
                           fontSize: 14,
-                          color: Colors.black54,
+                          color: onSurface.withOpacity(0.65),
                           fontWeight: FontWeight.w600)),
                 ),
                 prefixIconConstraints:
                     const BoxConstraints(minWidth: 0, minHeight: 0),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+                  borderSide: borderSide,
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+                  borderSide: borderSide,
                 ),
               ),
             ),
@@ -2182,19 +2303,24 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
   // ---- Section 2 UI ------------------------------------------------------
 
   Widget _buildWorkProfileSection(ThemeData theme) {
+    final onSurface = theme.colorScheme.onSurface;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 4),
-        const Text('Service Base Location',
-            style:
-                TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        Text('Service Base Location',
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: onSurface)),
         const SizedBox(height: 6),
-        _buildLocationSearch(),
+        _buildLocationSearch(theme),
         const SizedBox(height: 18),
-        const Text('Professional Profile Photo',
-            style:
-                TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        Text('Professional Profile Photo',
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: onSurface)),
         const SizedBox(height: 10),
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -2224,10 +2350,11 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'A clear, professional photo helps build trust with potential clients.',
-                    style:
-                        TextStyle(fontSize: 12, color: Colors.black54),
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: onSurface.withOpacity(0.65)),
                   ),
                   const SizedBox(height: 8),
                   OutlinedButton(
@@ -2281,8 +2408,22 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
   /// On selection, derives `_radiusKm` from the place's viewport via Haversine
   /// (same approach the legacy artisan_profileupdate flow used) so the artisan
   /// never has to set a slider.
-  Widget _buildLocationSearch() {
+  Widget _buildLocationSearch(ThemeData theme) {
     final hasSelected = _lat != null && _lng != null;
+    final onSurface = theme.colorScheme.onSurface;
+    final isDark = theme.brightness == Brightness.dark;
+    final inputFill = _inputFillColor(theme);
+    // Soft green for the success card — adapt to dark.
+    final successBg = isDark
+        ? Colors.green.withOpacity(0.15)
+        : const Color(0xFFE8F5E9);
+    final successBorder = isDark
+        ? Colors.green.withOpacity(0.3)
+        : const Color(0xFFC8E6C9);
+    final successPrimary =
+        isDark ? Colors.green.shade300 : Colors.green.shade700;
+    final successSecondary =
+        isDark ? Colors.green.shade200 : Colors.green.shade900;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2290,7 +2431,7 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         // Search field
         Container(
           decoration: BoxDecoration(
-            color: const Color(0xFFFFF1F4),
+            color: inputFill,
             borderRadius: BorderRadius.circular(12),
           ),
           child: TextField(
@@ -2298,10 +2439,11 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
             focusNode: _locationSearchFocus,
             onChanged: _onSearchChanged,
             textInputAction: TextInputAction.search,
+            style: TextStyle(color: onSurface),
             decoration: InputDecoration(
               hintText: 'Search address (e.g. Lekki Phase 1, Lagos)',
-              hintStyle: const TextStyle(
-                  fontSize: 13.5, color: Colors.black45),
+              hintStyle: TextStyle(
+                  fontSize: 13.5, color: onSurface.withOpacity(0.5)),
               border: InputBorder.none,
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
@@ -2319,8 +2461,9 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                   : (_locationSearchCtrl.text.isNotEmpty
                       ? IconButton(
                           tooltip: 'Clear',
-                          icon: const Icon(Icons.close,
-                              color: Colors.black45, size: 18),
+                          icon: Icon(Icons.close,
+                              color: onSurface.withOpacity(0.5),
+                              size: 18),
                           onPressed: _clearSelectedAddress,
                         )
                       : IconButton(
@@ -2347,8 +2490,10 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                     strokeWidth: 2, color: primaryColor),
               ),
               const SizedBox(width: 8),
-              const Text('Detecting your location…',
-                  style: TextStyle(fontSize: 12, color: Colors.black54)),
+              Text('Detecting your location…',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: onSurface.withOpacity(0.65))),
             ],
           ),
         ],
@@ -2358,9 +2503,9 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
           const SizedBox(height: 6),
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: theme.cardColor,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFEEEEEE)),
+              border: Border.all(color: _subtleBorder(theme)),
             ),
             child: Column(
               children: List.generate(_placeSuggestions.length, (i) {
@@ -2395,19 +2540,20 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                                     main,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                         fontSize: 13.5,
                                         fontWeight: FontWeight.w600,
-                                        color: Colors.black87),
+                                        color: onSurface),
                                   ),
                                   if (secondary.isNotEmpty)
                                     Text(
                                       secondary,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           fontSize: 12,
-                                          color: Colors.black54),
+                                          color: onSurface
+                                              .withOpacity(0.65)),
                                     ),
                                 ],
                               ),
@@ -2417,7 +2563,8 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                       ),
                     ),
                     if (i < _placeSuggestions.length - 1)
-                      const Divider(height: 1, color: Color(0xFFF0F0F0)),
+                      Divider(
+                          height: 1, color: onSurface.withOpacity(0.06)),
                   ],
                 );
               }),
@@ -2431,15 +2578,15 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFFE8F5E9),
+              color: successBg,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFC8E6C9)),
+              border: Border.all(color: successBorder),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(Icons.check_circle,
-                    color: Colors.green.shade700, size: 18),
+                    color: successPrimary, size: 18),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -2447,17 +2594,17 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                     children: [
                       Text(
                         _addressLabel ?? '',
-                        style: const TextStyle(
+                        style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: Colors.black87),
+                            color: onSurface),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         'Service area: ~${_radiusKm.round()} km radius (auto)',
                         style: TextStyle(
                             fontSize: 11.5,
-                            color: Colors.green.shade900,
+                            color: successSecondary,
                             fontWeight: FontWeight.w500),
                       ),
                     ],
@@ -2522,6 +2669,10 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
   // ---- Section 3 UI: Showcase Your Work ---------------------------------
 
   Widget _buildShowcaseSection(ThemeData theme) {
+    final onSurface = theme.colorScheme.onSurface;
+    final inputFill = _inputFillColor(theme);
+    final softTextColor = onSurface.withOpacity(0.65);
+    final emptyBoxBorder = _subtleBorder(theme);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2529,7 +2680,7 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFFFFF1F4),
+            color: inputFill,
             borderRadius: BorderRadius.circular(10),
           ),
           child: Row(
@@ -2543,7 +2694,7 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                   "Add a few past jobs and any certifications you have. It's optional, but artisans with portfolios get booked more often.",
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.black.withOpacity(0.75),
+                    color: onSurface.withOpacity(0.75),
                     height: 1.4,
                   ),
                 ),
@@ -2557,13 +2708,14 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Portfolio',
-                style:
-                    TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+            Text('Portfolio',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: onSurface)),
             Text(
               '${_portfolioItems.length} item${_portfolioItems.length == 1 ? '' : 's'}',
-              style: const TextStyle(
-                  fontSize: 12, color: Colors.black54),
+              style: TextStyle(fontSize: 12, color: softTextColor),
             ),
           ],
         ),
@@ -2573,14 +2725,14 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: theme.cardColor,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFEEEEEE)),
+              border: Border.all(color: emptyBoxBorder),
             ),
-            child: const Text(
+            child: Text(
               'No work samples yet. Tap "Add work sample" to add one.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: Colors.black54),
+              style: TextStyle(fontSize: 12, color: softTextColor),
             ),
           )
         else
@@ -2594,9 +2746,9 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: theme.cardColor,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFEEEEEE)),
+                    border: Border.all(color: emptyBoxBorder),
                   ),
                   padding: const EdgeInsets.all(8),
                   child: Row(
@@ -2613,7 +2765,7 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                                   ? Image.network(imageUrl,
                                       fit: BoxFit.cover)
                                   : Container(
-                                      color: const Color(0xFFFFF1F4),
+                                      color: inputFill,
                                       child: Icon(Icons.image_outlined,
                                           color: primaryColor),
                                     ),
@@ -2625,10 +2777,10 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                           title.isNotEmpty ? title : 'Untitled',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13.5,
                             fontWeight: FontWeight.w600,
-                            color: Colors.black87,
+                            color: onSurface,
                           ),
                         ),
                       ),
@@ -2637,8 +2789,8 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                         onPressed: () {
                           setState(() => _portfolioItems.removeAt(i));
                         },
-                        icon: const Icon(Icons.close,
-                            size: 18, color: Colors.black54),
+                        icon: Icon(Icons.close,
+                            size: 18, color: softTextColor),
                       ),
                     ],
                   ),
@@ -2669,13 +2821,14 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Certifications',
-                style:
-                    TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+            Text('Certifications',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: onSurface)),
             Text(
               '${_certifications.length} item${_certifications.length == 1 ? '' : 's'}',
-              style: const TextStyle(
-                  fontSize: 12, color: Colors.black54),
+              style: TextStyle(fontSize: 12, color: softTextColor),
             ),
           ],
         ),
@@ -2690,7 +2843,7 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
                 padding: const EdgeInsets.symmetric(
                     horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFF1F4),
+                  color: inputFill,
                   borderRadius: BorderRadius.circular(40),
                   border: Border.all(color: primaryColor.withOpacity(0.4)),
                 ),
@@ -2785,6 +2938,19 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
   // ---- Section 4 UI: Identity Verification ------------------------------
 
   Widget _buildKycSection(ThemeData theme) {
+    final onSurface = theme.colorScheme.onSurface;
+    final isDark = theme.brightness == Brightness.dark;
+    final infoBg = isDark
+        ? Colors.green.withOpacity(0.15)
+        : const Color(0xFFE8F5E9);
+    final infoBorder = isDark
+        ? Colors.green.withOpacity(0.3)
+        : const Color(0xFFC8E6C9);
+    final infoIconColor =
+        isDark ? Colors.green.shade300 : const Color(0xFF2E7D32);
+    final infoTextColor =
+        isDark ? Colors.green.shade200 : Colors.green.shade900;
+    final inputBorder = BorderSide(color: onSurface.withOpacity(0.15));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2792,22 +2958,21 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFFE8F5E9),
+            color: infoBg,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFFC8E6C9)),
+            border: Border.all(color: infoBorder),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.info_outline,
-                  color: Color(0xFF2E7D32), size: 18),
+              Icon(Icons.info_outline, color: infoIconColor, size: 18),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   'Verification usually takes less than 24 hours. Verified artisans get 3x more bookings.',
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.green.shade900,
+                    color: infoTextColor,
                     height: 1.4,
                   ),
                 ),
@@ -2816,21 +2981,26 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
           ),
         ),
         const SizedBox(height: 14),
-        const Text('Document Type',
-            style:
-                TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        Text('Document Type',
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: onSurface)),
         const SizedBox(height: 6),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: theme.cardColor,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFFE0E0E0)),
+            border: Border.all(color: onSurface.withOpacity(0.15)),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               isExpanded: true,
               value: _documentType,
+              dropdownColor: theme.cardColor,
+              style: TextStyle(fontSize: 15, color: onSurface),
+              iconEnabledColor: onSurface.withOpacity(0.6),
               items: const [
                 DropdownMenuItem(value: 'NIN', child: Text('NIN')),
               ],
@@ -2841,29 +3011,33 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
           ),
         ),
         const SizedBox(height: 14),
-        const Text('ID Number',
-            style:
-                TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        Text('ID Number',
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: onSurface)),
         const SizedBox(height: 6),
         TextField(
           controller: _model.ninController,
           focusNode: _model.ninFocus,
           keyboardType: TextInputType.number,
           maxLength: 11,
+          style: TextStyle(color: onSurface),
           decoration: InputDecoration(
             counterText: '',
             hintText: 'Enter ID Number',
+            hintStyle: TextStyle(color: onSurface.withOpacity(0.5)),
             filled: true,
-            fillColor: Colors.white,
+            fillColor: theme.cardColor,
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+              borderSide: inputBorder,
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+              borderSide: inputBorder,
             ),
           ),
         ),
@@ -2915,15 +3089,21 @@ class _DialogBenefit extends StatelessWidget {
   final IconData icon;
   final String text;
   final Color color;
+  // Optional theme-aware text colour. When null we fall back to the
+  // ambient onSurface, which keeps the row readable in both light and
+  // dark modes.
+  final Color? onSurface;
 
   const _DialogBenefit({
     required this.icon,
     required this.text,
     required this.color,
+    this.onSurface,
   });
 
   @override
   Widget build(BuildContext context) {
+    final textColor = onSurface ?? Theme.of(context).colorScheme.onSurface;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2931,7 +3111,7 @@ class _DialogBenefit extends StatelessWidget {
           width: 26,
           height: 26,
           decoration: BoxDecoration(
-            color: const Color(0xFFFCE4EC),
+            color: color.withOpacity(0.12),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, size: 16, color: color),
@@ -2940,9 +3120,9 @@ class _DialogBenefit extends StatelessWidget {
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13.5,
-              color: Colors.black87,
+              color: textColor,
               height: 1.4,
             ),
           ),
