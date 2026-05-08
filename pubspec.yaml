@@ -110,9 +110,15 @@ dependencies:
   google_maps_flutter: ^2.4.0
   flutter_image_compress: ^2.4.0
   image_picker: ^0.8.7+5
-  # Dojah KYC SDK (native) — used by the artisan onboarding for liveness +
-  # NIN + selfie verification. Replaces the camera-based selfie capture.
-  dojah_kyc_sdk_flutter: ^0.1.7
+  # Dojah KYC SDK — used by the artisan onboarding for liveness + NIN + selfie
+  # verification. Currently using the WebView-based variant
+  # (`flutter_dojah_kyc`) because the native SDK (`dojah_kyc_sdk_flutter`
+  # 0.1.7) has a fragment lifecycle bug that crashes during selfie capture
+  # (`CaptureSelfieFragment.onFacesDetected` after view destroyed).
+  # The native SDK line is kept commented for quick rollback once Dojah ships
+  # a fixed version (>0.1.7).
+  # dojah_kyc_sdk_flutter: ^0.1.7
+  flutter_dojah_kyc: ^0.6.8
 
 dependency_overrides:
   # kept empty - avoid forcing older http/uuid versions which break packages

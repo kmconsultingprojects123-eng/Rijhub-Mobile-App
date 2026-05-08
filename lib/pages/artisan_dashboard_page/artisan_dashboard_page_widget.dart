@@ -1338,6 +1338,202 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
     );
   }
 
+  // ---- Availability prompt helpers ---------------------------------------
+
+  /// Returns true when the artisan profile has no availability set yet.
+  /// Drives the visibility of the dashboard's availability prompt card.
+  bool _artisanIsAvailabilityEmpty() {
+    final av = _artisanProfile?['availability'];
+    if (av == null) return true;
+    if (av is List) return av.isEmpty;
+    if (av is String) return av.trim().isEmpty;
+    return true;
+  }
+
+  /// Hour-range presets that translate one tap into a complete weekly
+  /// availability list. Format matches what the legacy profile-update flow
+  /// stored: `Mon 09:00-17:00` etc. — readable AND parseable.
+  static const Map<String, List<String>> _availabilityPresets = {
+    'Weekdays 9–5': [
+      'Mon 09:00-17:00',
+      'Tue 09:00-17:00',
+      'Wed 09:00-17:00',
+      'Thu 09:00-17:00',
+      'Fri 09:00-17:00',
+    ],
+    'Mon–Sat 8–6': [
+      'Mon 08:00-18:00',
+      'Tue 08:00-18:00',
+      'Wed 08:00-18:00',
+      'Thu 08:00-18:00',
+      'Fri 08:00-18:00',
+      'Sat 08:00-18:00',
+    ],
+    'Available 24/7': [
+      'Mon 00:00-23:59',
+      'Tue 00:00-23:59',
+      'Wed 00:00-23:59',
+      'Thu 00:00-23:59',
+      'Fri 00:00-23:59',
+      'Sat 00:00-23:59',
+      'Sun 00:00-23:59',
+    ],
+  };
+
+  Future<void> _openAvailabilitySheet() async {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE0E0E0),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Set your availability',
+                style:
+                    TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Pick the option that fits you best. You can change it anytime.',
+                style: TextStyle(
+                    fontSize: 13,
+                    color: colorScheme.onSurface.withOpacity(0.65),
+                    height: 1.4),
+              ),
+              const SizedBox(height: 18),
+              ..._availabilityPresets.entries.map((entry) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: InkWell(
+                    onTap: () => Navigator.of(sheetCtx).pop(entry.key),
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: theme.cardColor,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: colorScheme.onSurface.withOpacity(0.1),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: colorScheme.primary.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(Icons.check_rounded,
+                                color: colorScheme.primary, size: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  entry.key,
+                                  style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${entry.value.length} day${entry.value.length == 1 ? '' : 's'} per week',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: colorScheme.onSurface
+                                        .withOpacity(0.65),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.arrow_forward_rounded,
+                              color: colorScheme.onSurface.withOpacity(0.45),
+                              size: 18),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ),
+        );
+      },
+    );
+    if (picked == null) return;
+    final list = _availabilityPresets[picked];
+    if (list == null) return;
+    await _saveAvailability(list);
+  }
+
+  Future<void> _saveAvailability(List<String> availability) async {
+    try {
+      final res = await ArtistService.updateMyProfile({
+        'availability': availability,
+      });
+      if (!mounted) return;
+      if (res != null) {
+        setState(() {
+          _artisanProfile ??= <String, dynamic>{};
+          _artisanProfile!['availability'] = availability;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Availability saved'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        try {
+          _computeProfileCompletion();
+        } catch (_) {}
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Couldn't save availability. Please try again."),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('saveAvailability error: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Couldn't save availability. Please try again."),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   /// Single benefit row used inside the onboarding progress card.
   Widget _buildOnboardBenefit({
     required ThemeData theme,
@@ -2373,6 +2569,113 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                               ],
                             ),
                           ),
+
+                        // Availability prompt card — shown when the artisan
+                        // hasn't set their weekly availability yet. Quick
+                        // bottom-sheet flow with one-tap presets so the
+                        // setup is seamless.
+                        if (_artisanIsAvailabilityEmpty()) ...[
+                          const SizedBox(height: 16),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: theme.cardColor,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: colorScheme.onSurface.withOpacity(0.1),
+                                width: 1,
+                              ),
+                            ),
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 44,
+                                      height: 44,
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.primary
+                                            .withOpacity(0.12),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Icon(Icons.schedule_rounded,
+                                          color: colorScheme.primary, size: 24),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Set your availability',
+                                            style: theme.textTheme.titleMedium
+                                                ?.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            'Quick — takes about 10 seconds',
+                                            style: theme.textTheme.bodySmall
+                                                ?.copyWith(
+                                              color: colorScheme.primary,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  "Let clients know when you're available so bookings land at the right times.",
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: colorScheme.onSurface
+                                        .withOpacity(0.78),
+                                    height: 1.45,
+                                    fontSize: 13.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: colorScheme.primary,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 14),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      elevation: 0,
+                                    ),
+                                    onPressed: _openAvailabilitySheet,
+                                    child: const Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          'Set availability',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        SizedBox(width: 6),
+                                        Icon(Icons.arrow_forward_rounded,
+                                            size: 18),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
 
                         // Recent Bookings Section
                         if (_model.recentBookings != null &&

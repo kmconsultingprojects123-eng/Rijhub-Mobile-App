@@ -2,8 +2,13 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:dojah_kyc_sdk_flutter/dojah_extra_flutter_data.dart';
-import 'package:dojah_kyc_sdk_flutter/dojah_kyc_sdk_flutter.dart';
+// Switched from native `dojah_kyc_sdk_flutter` to the WebView-based
+// `flutter_dojah_kyc` because the native SDK 0.1.7 has a fragment lifecycle
+// crash during selfie capture. Re-enable the lines below to flip back once
+// Dojah ships a fixed native SDK (>0.1.7).
+// import 'package:dojah_kyc_sdk_flutter/dojah_extra_flutter_data.dart';
+// import 'package:dojah_kyc_sdk_flutter/dojah_kyc_sdk_flutter.dart';
+import 'package:flutter_dojah_kyc/flutter_dojah_kyc.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -41,9 +46,10 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
   final Color primaryColor = const Color(0xFFA20025);
 
   // Section expansion state — first section opens by default.
-  final List<bool> _expanded = [true, false, false];
+  // Index 0=Trade, 1=Work, 2=Showcase, 3=Identity.
+  final List<bool> _expanded = [true, false, false, false];
   // Section completion state (local) — used for stepper checkmarks.
-  final List<bool> _completed = [false, false, false];
+  final List<bool> _completed = [false, false, false, false];
 
   // Server-reported profile progress (0.0–1.0). Refetched from
   // GET /api/artisans/me on init and after every onboarding step succeeds —
@@ -52,6 +58,7 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
 
   final ScrollController _scrollController = ScrollController();
   final List<GlobalKey> _sectionKeys = [
+    GlobalKey(),
     GlobalKey(),
     GlobalKey(),
     GlobalKey(),
@@ -178,7 +185,16 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
   List<Map<String, dynamic>> _placeSuggestions = [];
   bool _searchingPlaces = false;
 
-  // Section 3: Identity Verification
+  // Section 3: Showcase Your Work (portfolio + certifications)
+  // Each portfolio entry: {title: String, imagePath: String?, imageUrl: String?}
+  // - imagePath is set for newly-picked local files (uploaded on save).
+  // - imageUrl is set for entries hydrated from the backend.
+  final List<Map<String, dynamic>> _portfolioItems = [];
+  // Each cert entry: {name: String, fileUrl: String?}
+  final List<Map<String, dynamic>> _certifications = [];
+  bool _savingShowcase = false;
+
+  // Section 4: Identity Verification
   String _documentType = 'NIN';
 
   @override
@@ -378,6 +394,60 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         if (img != null && img.isNotEmpty) {
           if (mounted) setState(() => _photoUrl = img);
         }
+
+        // ---- Section 3: portfolio + certifications ----------------------
+        final port = profile['portfolio'];
+        if (port is List && mounted) {
+          final hydrated = <Map<String, dynamic>>[];
+          for (final p in port) {
+            if (p is! Map) continue;
+            final title = (p['title'] ?? '').toString();
+            String? imageUrl;
+            final imgs = p['images'];
+            if (imgs is List && imgs.isNotEmpty) {
+              final first = imgs.first;
+              if (first is String) {
+                imageUrl = first;
+              } else if (first is Map) {
+                imageUrl = (first['url'] ?? first['secure_url'])?.toString();
+              }
+            }
+            hydrated.add({
+              'title': title,
+              'imagePath': null,
+              'imageUrl': imageUrl,
+            });
+          }
+          setState(() {
+            _portfolioItems
+              ..clear()
+              ..addAll(hydrated);
+          });
+        }
+
+        final certs = profile['certifications'];
+        if (certs is List && mounted) {
+          final hydrated = <Map<String, dynamic>>[];
+          for (final c in certs) {
+            if (c is String && c.isNotEmpty) {
+              hydrated.add({'name': c, 'fileUrl': null});
+            } else if (c is Map) {
+              final name = (c['name'] ?? c['title'] ?? '').toString();
+              final url = (c['fileUrl'] ?? c['url'])?.toString();
+              if (name.isNotEmpty || (url != null && url.isNotEmpty)) {
+                hydrated.add({
+                  'name': name.isNotEmpty ? name : (url ?? ''),
+                  'fileUrl': url,
+                });
+              }
+            }
+          }
+          setState(() {
+            _certifications
+              ..clear()
+              ..addAll(hydrated);
+          });
+        }
       }
 
       // Subcategories must be loaded before we can populate selected services.
@@ -426,8 +496,14 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         // Section 2: has lat/lng (location is the only hard requirement;
         // photo is encouraged but optional).
         _completed[1] = _lat != null && _lng != null;
-        // Section 3: KYC submitted (approved or under review).
-        _completed[2] = kycDone;
+        // Section 3 (Showcase Your Work): optional — mark complete if the
+        // artisan already has any portfolio item or certification on file.
+        // If both are empty, the section stays open so they can either
+        // add content or explicitly skip it.
+        _completed[2] =
+            _portfolioItems.isNotEmpty || _certifications.isNotEmpty;
+        // Section 4: KYC submitted (approved or under review).
+        _completed[3] = kycDone;
 
         // Re-derive expansion: collapse what's done, expand the first
         // incomplete section.
@@ -888,7 +964,370 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
     }
   }
 
-  // ---- Section 3: KYC ----------------------------------------------------
+  // ---- Section 3: Showcase Your Work (portfolio + certifications) -------
+
+  /// Opens a small dialog to capture a portfolio item: title + image.
+  /// Adds the item to `_portfolioItems` on confirm.
+  Future<void> _addPortfolioItem() async {
+    final titleCtrl = TextEditingController();
+    File? pickedImage;
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) {
+        return StatefulBuilder(builder: (sheetCtx, setSheetState) {
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 20,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Add work sample',
+                  style: TextStyle(
+                      fontSize: 17, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Title',
+                  style:
+                      TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: titleCtrl,
+                  decoration: InputDecoration(
+                    hintText: 'e.g. Lekki kitchen renovation',
+                    filled: true,
+                    fillColor: const Color(0xFFFFF1F4),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 14),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Image',
+                  style:
+                      TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 6),
+                InkWell(
+                  onTap: () async {
+                    try {
+                      final picker = ImagePicker();
+                      final picked = await picker.pickImage(
+                        source: ImageSource.gallery,
+                        imageQuality: 80,
+                        maxWidth: 1600,
+                      );
+                      if (picked != null) {
+                        setSheetState(() => pickedImage = File(picked.path));
+                      }
+                    } catch (_) {}
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    height: 130,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF1F4),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: pickedImage != null
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.file(pickedImage!,
+                                fit: BoxFit.cover,
+                                width: double.infinity),
+                          )
+                        : Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.image_outlined,
+                                    size: 32, color: primaryColor),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Tap to choose an image',
+                                  style: TextStyle(
+                                      fontSize: 13,
+                                      color: primaryColor,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () =>
+                            Navigator.of(sheetCtx).pop(false),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(
+                              color: Colors.black54,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          elevation: 0,
+                        ),
+                        onPressed: () {
+                          if (titleCtrl.text.trim().isEmpty) {
+                            ScaffoldMessenger.of(sheetCtx).showSnackBar(
+                              const SnackBar(
+                                content: Text('Please add a title'),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                            return;
+                          }
+                          if (pickedImage == null) {
+                            ScaffoldMessenger.of(sheetCtx).showSnackBar(
+                              const SnackBar(
+                                content: Text('Please pick an image'),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                            return;
+                          }
+                          Navigator.of(sheetCtx).pop(true);
+                        },
+                        child: const Text(
+                          'Add',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 14),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        });
+      },
+    );
+    if (result == true && pickedImage != null && mounted) {
+      setState(() {
+        _portfolioItems.add({
+          'title': titleCtrl.text.trim(),
+          'imagePath': pickedImage!.path,
+          'imageUrl': null,
+        });
+      });
+    }
+    titleCtrl.dispose();
+  }
+
+  /// Opens a small inline dialog to capture a certification name.
+  Future<void> _addCertification() async {
+    final ctrl = TextEditingController();
+    final added = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16)),
+          title: const Text('Add certification',
+              style:
+                  TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            decoration: InputDecoration(
+              hintText: 'e.g. NABTEB Plumbing Cert',
+              filled: true,
+              fillColor: const Color(0xFFFFF1F4),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 14),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel',
+                  style: TextStyle(
+                      color: Colors.black54,
+                      fontWeight: FontWeight.w600)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryColor,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+                elevation: 0,
+              ),
+              onPressed: () {
+                if (ctrl.text.trim().isEmpty) return;
+                Navigator.of(ctx).pop(true);
+              },
+              child: const Text('Add',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+            ),
+          ],
+        );
+      },
+    );
+    if (added == true && mounted) {
+      setState(() {
+        _certifications.add({
+          'name': ctrl.text.trim(),
+          'fileUrl': null,
+        });
+      });
+    }
+    ctrl.dispose();
+  }
+
+  /// Persists portfolio + certifications to the artisan profile via
+  /// PUT /api/artisans/me. New local images are uploaded as multipart files
+  /// (`portfolioImage<n>`); existing items already-uploaded URLs are sent in
+  /// the JSON `portfolio` array. Certifications go up as plain string names.
+  Future<void> _saveShowcase() async {
+    setState(() => _savingShowcase = true);
+    try {
+      // Build the multipart map for newly-picked local images so the
+      // server can stream them to Cloudinary alongside the JSON payload.
+      final localPaths = <String>[];
+      final preExistingUrls = <String>[];
+      final titles = <String>[];
+      for (final it in _portfolioItems) {
+        final title = (it['title'] ?? '').toString();
+        titles.add(title);
+        final path = it['imagePath']?.toString();
+        final url = it['imageUrl']?.toString();
+        if (path != null && path.isNotEmpty) {
+          localPaths.add(path);
+          preExistingUrls.add(''); // placeholder — filled by upload
+        } else if (url != null && url.isNotEmpty) {
+          localPaths.add('');
+          preExistingUrls.add(url);
+        }
+      }
+
+      Map<String, List<String>>? fileMap;
+      if (localPaths.any((p) => p.isNotEmpty)) {
+        fileMap = <String, List<String>>{};
+        for (var i = 0; i < localPaths.length; i++) {
+          if (localPaths[i].isNotEmpty) {
+            fileMap['portfolioImage${i + 1}'] = [localPaths[i]];
+          }
+        }
+      }
+
+      // Pre-existing items go in the JSON payload as-is. New items will
+      // be filled in by the server's multipart handler — we still include
+      // the titles array so the server can pair titles with the uploaded
+      // images by index.
+      final portfolioJson = <Map<String, dynamic>>[];
+      for (var i = 0; i < _portfolioItems.length; i++) {
+        final url = preExistingUrls[i];
+        portfolioJson.add({
+          'title': titles[i],
+          'images': url.isNotEmpty ? [url] : <String>[],
+          'beforeAfter': false,
+        });
+      }
+
+      final certNames = _certifications
+          .map((c) => (c['name'] ?? '').toString())
+          .where((s) => s.isNotEmpty)
+          .toList();
+
+      final payload = <String, dynamic>{
+        'portfolio': portfolioJson,
+        'certifications': certNames,
+      };
+
+      final res = await ArtistService.updateMyProfile(
+        payload,
+        fileMap: fileMap,
+      );
+      if (!mounted) return;
+      if (res != null) {
+        // If the server returned a finalised portfolio (with uploaded URLs),
+        // mirror it into local state so subsequent re-saves don't re-upload.
+        try {
+          if (res['portfolio'] is List) {
+            final returned = (res['portfolio'] as List)
+                .whereType<Map>()
+                .toList();
+            _portfolioItems
+              ..clear()
+              ..addAll(returned.map((p) {
+                final imgs = (p['images'] is List)
+                    ? (p['images'] as List).map((e) => e.toString()).toList()
+                    : <String>[];
+                return {
+                  'title': p['title']?.toString() ?? '',
+                  'imagePath': null,
+                  'imageUrl': imgs.isNotEmpty ? imgs.first : null,
+                };
+              }));
+          }
+        } catch (_) {}
+        setState(() {
+          _completed[2] = true;
+          _expanded[2] = false;
+          if (!_completed[3]) _expanded[3] = true;
+        });
+        _advanceTo(3);
+        _toast('Showcase saved');
+        unawaited(_refreshProfileProgress());
+      } else {
+        _toast('Could not save showcase. Please try again.');
+      }
+    } catch (e) {
+      _toast('Could not save showcase. Please try again.');
+      if (kDebugMode) debugPrint('saveShowcase error: $e');
+    } finally {
+      if (mounted) setState(() => _savingShowcase = false);
+    }
+  }
+
+  void _skipShowcase() {
+    setState(() {
+      _completed[2] = true;
+      _expanded[2] = false;
+      if (!_completed[3]) _expanded[3] = true;
+    });
+    _advanceTo(3);
+  }
+
+  // ---- Section 4: KYC ----------------------------------------------------
 
   Future<void> _startVerification() async {
     final nin = _model.ninController?.text.trim() ?? '';
@@ -928,54 +1367,97 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         '${DateTime.now().millisecondsSinceEpoch}'
         '${userId != null ? '_$userId' : ''}';
 
-    String dojahReferenceId = '';
+    // Launch the Dojah WebView KYC widget. The widget runs the configured
+    // verification flow (NIN entry / liveness / selfie match) inside a
+    // WebView and reports back via callbacks. `open()` returns once the
+    // user dismisses the WebView (whether by completing, closing, or
+    // erroring), at which point `wasSuccess` / `capturedReference` /
+    // `errorMsg` reflect the final state.
+    String? capturedReference;
+    String? errorMsg;
+    bool wasSuccess = false;
+
     try {
-      dojahReferenceId = await DojahKyc.launch(
-        DOJAH_WIDGET_ID,
+      final dojah = DojahKYC(
+        appId: DOJAH_APP_ID,
+        publicKey: DOJAH_PUBLIC_KEY,
+        type: 'custom',
         referenceId: localRef,
-        email: email,
-        extraUserData: ExtraUserData(
-          userData: UserData(
-            firstName: firstName,
-            lastName: lastName,
-            email: email,
-          ),
-          // Pre-fill the NIN so the user skips typing it again inside the
-          // Dojah widget. Whichever step the dashboard widget is configured
-          // for (NIN entry / NIN match) reads this value.
-          govData: GovData(nin: nin),
-          metadata: {
-            if (userId != null) 'rijhub_user_id': userId,
-            'rijhub_local_ref': localRef,
-          },
-        ),
+        config: {
+          'widget_id': DOJAH_WIDGET_ID,
+        },
+        userData: {
+          if (firstName.isNotEmpty) 'first_name': firstName,
+          if (lastName.isNotEmpty) 'last_name': lastName,
+          if (email != null && email.isNotEmpty) 'email': email,
+        },
+        // Pre-fill NIN so the user skips re-typing it inside the widget.
+        govData: {'nin': nin},
+        metaData: {
+          if (userId != null) 'rijhub_user_id': userId,
+          'rijhub_local_ref': localRef,
+        },
+      );
+
+      await dojah.open(
+        context,
+        onSuccess: (result) {
+          if (kDebugMode) debugPrint('DojahKYC.onSuccess: $result');
+          wasSuccess = true;
+          // Result shape varies — try to find a Dojah reference on it,
+          // otherwise fall back to our local reference (which Dojah ties
+          // to the verification on its side via `referenceId:` above).
+          String? ref;
+          if (result is Map) {
+            ref = (result['referenceId'] ??
+                    result['reference_id'] ??
+                    result['data']?['referenceId'] ??
+                    result['data']?['reference_id'])
+                ?.toString();
+          } else if (result is String && result.isNotEmpty) {
+            ref = result;
+          }
+          capturedReference = ref ?? localRef;
+          // The Dojah hosted page doesn't close itself after the success
+          // screen — it just calls this handler and goes blank. Pop the
+          // WebView so the user returns to the onboarding screen and the
+          // continuation below (verify-reference, status mapping) runs
+          // immediately instead of waiting for a manual back-out.
+          if (mounted && Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          }
+        },
+        onClose: (close) {
+          if (kDebugMode) debugPrint('DojahKYC.onClose: $close');
+          // User-initiated close already pops the route, so don't double-pop.
+        },
+        onError: (err) {
+          if (kDebugMode) debugPrint('DojahKYC.onError: $err');
+          errorMsg = err?.toString();
+          if (mounted && Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          }
+        },
       );
     } catch (e, st) {
       if (kDebugMode) {
-        debugPrint('DojahKyc.launch failed: $e\n$st');
+        debugPrint('DojahKYC.open failed: $e\n$st');
       }
       _toast('Could not start identity verification. Please try again.');
       return;
     }
 
     if (!mounted) return;
-    if (kDebugMode) {
-      debugPrint('DojahKyc.launch returned: "$dojahReferenceId"');
-    }
-    if (dojahReferenceId.isEmpty) {
-      // User closed the widget without finishing, or the SDK returned no ref.
+
+    if (errorMsg != null) {
+      _toast(errorMsg!);
       return;
     }
-
-    // The dojah_kyc_sdk_flutter package returns the literal string
-    // 'Verification Completed' when the platform layer doesn't surface a
-    // Dojah reference. In that case fall back to our locally-generated
-    // reference (which we passed into `DojahKyc.launch` as `referenceId`)
-    // so the backend has a stable id to look up in Dojah.
-    final referenceForBackend =
-        dojahReferenceId.toLowerCase().contains('completed')
-            ? localRef
-            : dojahReferenceId;
+    if (!wasSuccess || capturedReference == null || capturedReference!.isEmpty) {
+      // User closed the widget without completing the flow.
+      return;
+    }
+    final referenceForBackend = capturedReference!;
 
     // Send the reference to the backend for authoritative verification.
     Map<String, dynamic> result = {};
@@ -1005,8 +1487,8 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         status == 'pending' ||
         status == 'pending_review') {
       setState(() {
-        _completed[2] = true;
-        _expanded[2] = false;
+        _completed[3] = true;
+        _expanded[3] = false;
       });
       _toast(status == 'approved'
           ? 'Identity verified'
@@ -1022,8 +1504,8 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
 
   void _skipVerification() {
     setState(() {
-      _completed[2] = true;
-      _expanded[2] = false;
+      _completed[3] = true;
+      _expanded[3] = false;
     });
     _toast('You can verify later from your profile');
     unawaited(_refreshProfileProgress());
@@ -1115,6 +1597,18 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
             key: _sectionKeys[2],
             child: _buildSectionCard(
               index: 2,
+              icon: Icons.collections_outlined,
+              iconBg: const Color(0xFFFCE4EC),
+              title: 'Showcase Your Work',
+              subtitle: 'Optional — but verified portfolios get more jobs',
+              child: _buildShowcaseSection(theme),
+            ),
+          ),
+          const SizedBox(height: 16),
+          KeyedSubtree(
+            key: _sectionKeys[3],
+            child: _buildSectionCard(
+              index: 3,
               icon: Icons.verified_user_outlined,
               iconBg: const Color(0xFFFCE4EC),
               title: 'Identity Verification',
@@ -2025,7 +2519,270 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
   //   );
   // }
 
-  // ---- Section 3 UI ------------------------------------------------------
+  // ---- Section 3 UI: Showcase Your Work ---------------------------------
+
+  Widget _buildShowcaseSection(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 4),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF1F4),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.tips_and_updates_outlined,
+                  size: 18, color: primaryColor),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  "Add a few past jobs and any certifications you have. It's optional, but artisans with portfolios get booked more often.",
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.black.withOpacity(0.75),
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+
+        // ----- Portfolio -----
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Portfolio',
+                style:
+                    TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+            Text(
+              '${_portfolioItems.length} item${_portfolioItems.length == 1 ? '' : 's'}',
+              style: const TextStyle(
+                  fontSize: 12, color: Colors.black54),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_portfolioItems.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFEEEEEE)),
+            ),
+            child: const Text(
+              'No work samples yet. Tap "Add work sample" to add one.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: Colors.black54),
+            ),
+          )
+        else
+          Column(
+            children: List.generate(_portfolioItems.length, (i) {
+              final item = _portfolioItems[i];
+              final title = (item['title'] ?? '').toString();
+              final imagePath = item['imagePath']?.toString();
+              final imageUrl = item['imageUrl']?.toString();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFEEEEEE)),
+                  ),
+                  padding: const EdgeInsets.all(8),
+                  child: Row(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: SizedBox(
+                          width: 56,
+                          height: 56,
+                          child: imagePath != null && imagePath.isNotEmpty
+                              ? Image.file(File(imagePath),
+                                  fit: BoxFit.cover)
+                              : (imageUrl != null && imageUrl.isNotEmpty)
+                                  ? Image.network(imageUrl,
+                                      fit: BoxFit.cover)
+                                  : Container(
+                                      color: const Color(0xFFFFF1F4),
+                                      child: Icon(Icons.image_outlined,
+                                          color: primaryColor),
+                                    ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          title.isNotEmpty ? title : 'Untitled',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Remove',
+                        onPressed: () {
+                          setState(() => _portfolioItems.removeAt(i));
+                        },
+                        icon: const Icon(Icons.close,
+                            size: 18, color: Colors.black54),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ),
+        const SizedBox(height: 6),
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: primaryColor,
+            side: BorderSide(color: primaryColor.withOpacity(0.6)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10)),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          ),
+          onPressed: _addPortfolioItem,
+          icon: const Icon(Icons.add, size: 18),
+          label: const Text('Add work sample',
+              style:
+                  TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+        ),
+
+        const SizedBox(height: 22),
+
+        // ----- Certifications -----
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Certifications',
+                style:
+                    TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+            Text(
+              '${_certifications.length} item${_certifications.length == 1 ? '' : 's'}',
+              style: const TextStyle(
+                  fontSize: 12, color: Colors.black54),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_certifications.isNotEmpty)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: List.generate(_certifications.length, (i) {
+              final name = (_certifications[i]['name'] ?? '').toString();
+              return Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF1F4),
+                  borderRadius: BorderRadius.circular(40),
+                  border: Border.all(color: primaryColor.withOpacity(0.4)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      name,
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: primaryColor,
+                          fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(width: 6),
+                    InkWell(
+                      onTap: () {
+                        setState(() => _certifications.removeAt(i));
+                      },
+                      borderRadius: BorderRadius.circular(40),
+                      child: Icon(Icons.close,
+                          size: 14, color: primaryColor),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ),
+        const SizedBox(height: 6),
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: primaryColor,
+            side: BorderSide(color: primaryColor.withOpacity(0.6)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10)),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          ),
+          onPressed: _addCertification,
+          icon: const Icon(Icons.add, size: 18),
+          label: const Text('Add certification',
+              style:
+                  TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+        ),
+
+        const SizedBox(height: 18),
+
+        // ----- Save / Skip -----
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryColor,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              elevation: 0,
+            ),
+            onPressed: _savingShowcase ||
+                    (_portfolioItems.isEmpty && _certifications.isEmpty)
+                ? null
+                : _saveShowcase,
+            child: _savingShowcase
+                ? const SizedBox(
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2))
+                : const Text('Save & Continue',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 15)),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Center(
+          child: TextButton(
+            onPressed: _skipShowcase,
+            child: Text(
+              'Skip for now',
+              style: TextStyle(
+                color: primaryColor,
+                fontWeight: FontWeight.w600,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ---- Section 4 UI: Identity Verification ------------------------------
 
   Widget _buildKycSection(ThemeData theme) {
     return Column(

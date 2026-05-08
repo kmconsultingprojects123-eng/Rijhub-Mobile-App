@@ -13,6 +13,14 @@
 
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+
+    <!-- Camera + storage for the Dojah KYC WebView SDK (selfie + liveness).
+         Without CAMERA declared, permission_handler returns "denied"
+         immediately and the SDK's permission-request loop spins forever
+         on a placeholder spinner. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.front" android:required="false"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
@@ -71,6 +79,18 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!--
+          Google ML Kit dependency hint. The Dojah KYC SDK uses ML Kit's
+          face-detection model for liveness checks. Declaring "face" here
+          tells Google Play Services to download the model when the app is
+          installed (instead of on first use), so the first verification
+          attempt doesn't fail with "Internal error has occurred when
+          executing ML Kit tasks". Multiple models can be comma-separated.
+        -->
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="face" />
 
     </application>
 </manifest>
