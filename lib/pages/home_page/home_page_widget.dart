@@ -15,7 +15,7 @@ import '../../services/user_service.dart';
 import '../../api_config.dart';
 import '../../utils/navigation_utils.dart';
 import '../../utils/auth_guard.dart';
-import '../../widgets/network_error_widget.dart';
+// import '../../widgets/network_error_widget.dart'; // legacy full-page offline screen — restore alongside the commented-out NetworkErrorWidget return in build() to roll back
 import '../../services/token_storage.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
@@ -43,8 +43,27 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
   late HomePageModel _model;
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
-  // Network error/retry state
+  // Network error/retry state.
+  // `_showNetworkError` reflects the most recent connectivity probe result.
+  // We previously gated the entire build on this flag, replacing the home
+  // page with `NetworkErrorWidget` whenever it was true — but Google's
+  // `generate_204` probe can fail spuriously (carrier hiccups, slow cellular,
+  // 8s timeout firing on a working-but-slow link), so the user would see a
+  // full "Connection Lost" screen mid-session even when the network was
+  // actually fine. Now we keep the flag for state tracking but surface
+  // offline status via a snackbar instead, so the home page itself stays
+  // visible and usable.
   bool _showNetworkError = false;
+  // Snackbar key so we can dismiss it the moment connectivity is restored
+  // (or before showing a fresh one on a re-transition). null means no
+  // offline banner is currently visible.
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>?
+      _offlineSnackBar;
+  // Last time we successfully reached our services. Was rendered inside the
+  // legacy NetworkErrorWidget as "Last successful load: <date>"; still
+  // written by `_setLastSuccess` so it's ready if we ever re-enable that
+  // path. Snackbar variant doesn't display it.
+  // ignore: unused_field
   DateTime? _lastSuccessfulLoad;
   Timer? _networkCheckTimer;
 
@@ -164,6 +183,7 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
   }
 
   Future<void> _checkConnectivity() async {
+    final wasOffline = _showNetworkError;
     try {
       final resp = await http.get(
         Uri.parse('https://www.google.com/generate_204'),
@@ -171,14 +191,69 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
       ).timeout(const Duration(seconds: 8));
       if (resp.statusCode >= 200 && resp.statusCode < 400) {
         if (mounted) setState(() => _showNetworkError = false);
+        // Transitioned offline -> online: dismiss the banner and silently
+        // refresh whatever previously failed. No "back online" toast — the
+        // home page just becomes usable again.
+        if (wasOffline) _hideOfflineSnackbar();
         await _retryFailedSections();
         await _setLastSuccess();
       } else {
         if (mounted) setState(() => _showNetworkError = true);
+        // Only surface the banner on the online -> offline edge so we
+        // don't spam the artisan with a fresh snackbar every 30s while
+        // the network stays down.
+        if (!wasOffline) _showOfflineSnackbar();
       }
     } catch (_) {
       if (mounted) setState(() => _showNetworkError = true);
+      if (!wasOffline) _showOfflineSnackbar();
     }
+  }
+
+  /// Show a persistent floating snackbar telling the artisan we can't reach
+  /// our services, with a Retry action. We use a very long duration instead
+  /// of `Duration.zero` because SnackBar doesn't support indefinite display
+  /// — the banner is dismissed proactively in `_hideOfflineSnackbar` once
+  /// connectivity is restored, so the duration is really just a backstop.
+  void _showOfflineSnackbar() {
+    if (!mounted) return;
+    // Belt-and-braces: dismiss anything currently showing before queuing
+    // a new banner, so we don't end up with stacked snackbars.
+    _offlineSnackBar?.close();
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+    _offlineSnackBar = messenger.showSnackBar(
+      SnackBar(
+        content: const Row(
+          children: [
+            Icon(Icons.wifi_off_rounded, color: Colors.white, size: 18),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                "You're offline. Some content may not load.",
+                style: TextStyle(fontSize: 13.5),
+              ),
+            ),
+          ],
+        ),
+        behavior: SnackBarBehavior.floating,
+        // 7 days = effectively persistent; we dismiss it ourselves the
+        // moment the next probe succeeds.
+        duration: const Duration(days: 7),
+        action: SnackBarAction(
+          label: 'Retry',
+          onPressed: () {
+            _hideOfflineSnackbar();
+            unawaited(_retryAll());
+          },
+        ),
+      ),
+    );
+  }
+
+  void _hideOfflineSnackbar() {
+    _offlineSnackBar?.close();
+    _offlineSnackBar = null;
   }
 
   Future<void> _retryFailedSections() async {
@@ -212,6 +287,10 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
     await _setLastSuccess();
   }
 
+  // Wired to the legacy NetworkErrorWidget's "Settings" secondary action
+  // (now commented out in build). Kept for rollback so the legacy path
+  // works if we ever re-enable it.
+  // ignore: unused_element
   void _openNetworkSettings() {
     showDialog(context: context, builder: (ctx) => AlertDialog(
       title: const Text('Open Network Settings'),
@@ -953,17 +1032,23 @@ class _HomePageWidgetState extends State<HomePageWidget> with TickerProviderStat
       });
     }
 
-    // If network error is active, show full-page NetworkErrorWidget
-    if (_showNetworkError) {
-      return NetworkErrorWidget(
-        title: 'Connection Lost',
-        message: 'Unable to reach our services. Please check your internet connection.',
-        primaryAction: RetryButton(onPressed: () async { await _retryAll(); }),
-        secondaryAction: SettingsButton(onPressed: _openNetworkSettings),
-        showOfflineContent: false,
-        lastSuccessfulLoad: _lastSuccessfulLoad,
-      );
-    }
+    // Legacy full-page NetworkErrorWidget — replaced by a floating snackbar
+    // (see `_showOfflineSnackbar`) because the connectivity probe sometimes
+    // false-positives on slow/flaky cellular and replacing the entire home
+    // page mid-session was a worse experience than just letting the artisan
+    // see the cached content with an offline banner. Commented out instead
+    // of deleted so we can flip back to the full-page treatment by
+    // uncommenting if the snackbar approach proves insufficient.
+    // if (_showNetworkError) {
+    //   return NetworkErrorWidget(
+    //     title: 'Connection Lost',
+    //     message: 'Unable to reach our services. Please check your internet connection.',
+    //     primaryAction: RetryButton(onPressed: () async { await _retryAll(); }),
+    //     secondaryAction: SettingsButton(onPressed: _openNetworkSettings),
+    //     showOfflineContent: false,
+    //     lastSuccessfulLoad: _lastSuccessfulLoad,
+    //   );
+    // }
 
     return GestureDetector(
       onTap: () { FocusScope.of(context).unfocus(); },

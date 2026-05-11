@@ -151,6 +151,57 @@ class _ForgotPasswordOtpWidgetState extends State<ForgotPasswordOtpWidget> {
     }
   }
 
+  /// Pulls a 6-digit code from the clipboard and distributes it across the
+  /// OTP fields, then auto-submits. Mirrors the phone-verification widget's
+  /// paste handler so the email reset flow matches its UX.
+  ///
+  /// Matching priority:
+  ///   1. Isolated `\d{6}` run — avoids accidentally picking phone numbers
+  ///      or tracking ids that share the same message.
+  ///   2. Any 6+ digits found anywhere in the clipboard, stripped of
+  ///      non-numeric characters (handles "1 2 3 4 5 6" / "123-456").
+  Future<void> _pasteFromClipboard() async {
+    try {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      final text = data?.text ?? '';
+      if (text.isEmpty) {
+        _setError('Clipboard is empty');
+        return;
+      }
+
+      String? code;
+      final exact = RegExp(r'(?<!\d)\d{' + _otpLength.toString() + r'}(?!\d)')
+          .firstMatch(text);
+      if (exact != null) {
+        code = exact.group(0);
+      } else {
+        final digits = text.replaceAll(RegExp(r'[^0-9]'), '');
+        if (digits.length >= _otpLength) {
+          code = digits.substring(0, _otpLength);
+        }
+      }
+
+      if (code == null) {
+        _setError('No $_otpLength-digit code found in clipboard');
+        return;
+      }
+
+      setState(() {
+        for (int i = 0; i < _otpLength; i++) {
+          _otpControllers[i].text = code![i];
+        }
+      });
+
+      _setError(null);
+      for (final f in _focusNodes) {
+        f.unfocus();
+      }
+      if (_isOtpComplete) _submitOtp();
+    } catch (_) {
+      _setError('Could not read clipboard');
+    }
+  }
+
   // -- Submit OTP --
 
   Future<void> _submitOtp() async {
@@ -416,6 +467,38 @@ class _ForgotPasswordOtpWidgetState extends State<ForgotPasswordOtpWidget> {
                     ),
                   );
                 }),
+              ),
+
+              const SizedBox(height: 12),
+
+              // Paste code button — pulls a 6-digit code from the clipboard
+              // (e.g. an email the user just copied) and auto-submits.
+              // Matches the phone-verification screen's UX so both OTP
+              // flows feel the same.
+              Center(
+                child: TextButton.icon(
+                  onPressed: _pasteFromClipboard,
+                  icon: const Icon(
+                    Icons.content_paste_rounded,
+                    size: 16,
+                    color: _roseColor,
+                  ),
+                  label: const Text(
+                    'Paste code',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: _roseColor,
+                      height: 1.68,
+                    ),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 4),
+                    minimumSize: const Size(50, 30),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
               ),
 
               // Error message

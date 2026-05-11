@@ -25,6 +25,7 @@ import '../../services/kyc_service.dart';
 import '../../services/my_service_service.dart';
 import '../../services/token_storage.dart';
 import '../../services/user_service.dart';
+import '../../utils/image_compress.dart';
 import '../../state/auth_notifier.dart';
 import '../../utils/location_permission.dart';
 import 'artisan_onboarding_model.dart';
@@ -45,6 +46,17 @@ class ArtisanOnboardingWidget extends StatefulWidget {
 class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
   late ArtisanOnboardingModel _model;
   final Color primaryColor = const Color(0xFFA20025);
+
+  // Location-search scope: Abuja / Federal Capital Territory only.
+  // RijHub currently operates in FCT, so suggestions for addresses
+  // outside the territory just add noise. Center is roughly Abuja
+  // city centre; radius=60km covers the entire FCT plus a small
+  // buffer for edge areas (Mararaba/Kuje/etc.). Combined with
+  // `strictbounds=true` this hard-limits Places Autocomplete to
+  // results inside the circle.
+  static const double _abujaLat = 9.0765;
+  static const double _abujaLng = 7.3986;
+  static const int _abujaSearchRadiusMeters = 60000;
 
   // Section expansion state — first section opens by default.
   // Index 0=Trade, 1=Work, 2=Showcase, 3=Identity.
@@ -200,6 +212,14 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
   // Each cert entry: {name: String, fileUrl: String?}
   final List<Map<String, dynamic>> _certifications = [];
   bool _savingShowcase = false;
+  // Progress state for the showcase upload (Section 3). Mirrors the
+  // legacy ArtisanKycWidget UX: compressing -> uploading, with a
+  // percentage and a determinate progress bar so the artisan isn't
+  // staring at a spinner during a long multipart upload.
+  // null label hides the indicator entirely.
+  String? _showcaseProgressLabel;
+  double _showcaseProgress = 0.0;
+  Timer? _showcaseUploadTickTimer;
 
   // Section 4: Identity Verification
   String _documentType = 'NIN';
@@ -252,6 +272,7 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
     }
     _scrollController.dispose();
     _searchDebounce?.cancel();
+    _showcaseUploadTickTimer?.cancel();
     _locationSearchCtrl.dispose();
     _locationSearchFocus.dispose();
     _model.dispose();
@@ -805,11 +826,26 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         if (mounted) setState(() => _searchingPlaces = false);
         return;
       }
+      // No `types=` filter on purpose. `types=geocode` excludes
+      // establishments (churches, businesses, POIs) — searching for
+      // "NKST church Nyanya area c" was returning a generic "Area C
+      // Phase IV" road instead of the actual church because the church
+      // is classified as an establishment. Omitting the filter matches
+      // what the Google Maps app does: addresses + places mixed,
+      // ranked by relevance.
+      //
+      // `location=<lat>,<lng>&radius=<m>&strictbounds=true` hard-limits
+      // results to within a 60km radius of Abuja city centre — the
+      // service area for RijHub. Without strictbounds, Google returns
+      // nearby + globally-popular hits; with it, results outside FCT
+      // are filtered out entirely.
       final url = Uri.parse(
           'https://maps.googleapis.com/maps/api/place/autocomplete/json'
           '?input=${Uri.encodeQueryComponent(query)}'
           '&components=country:ng'
-          '&types=geocode'
+          '&location=$_abujaLat,$_abujaLng'
+          '&radius=$_abujaSearchRadiusMeters'
+          '&strictbounds=true'
           '&key=$key');
       final resp = await http.get(url).timeout(const Duration(seconds: 10));
       if (!mounted) return;
@@ -969,11 +1005,19 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
       if (key.isEmpty) return null;
 
       // Step 1: Places Autocomplete — ranked by Google's index.
+      // No `types=` filter — same reason as `_searchPlaces`: include
+      // establishments (churches, businesses, POIs) so "NKST church
+      // Nyanya" surfaces the church itself, not the surrounding street.
+      // Scoped to Abuja/FCT via location+radius+strictbounds so a
+      // save-without-picking on a vague query can't resolve to e.g.
+      // Lagos or Kano.
       final autoUrl = Uri.parse(
           'https://maps.googleapis.com/maps/api/place/autocomplete/json'
           '?input=${Uri.encodeQueryComponent(text)}'
           '&components=country:ng'
-          '&types=geocode'
+          '&location=$_abujaLat,$_abujaLng'
+          '&radius=$_abujaSearchRadiusMeters'
+          '&strictbounds=true'
           '&key=$key');
       final autoResp =
           await http.get(autoUrl).timeout(const Duration(seconds: 10));
@@ -1294,7 +1338,11 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
   /// (`portfolioImage<n>`); existing items already-uploaded URLs are sent in
   /// the JSON `portfolio` array. Certifications go up as plain string names.
   Future<void> _saveShowcase() async {
-    setState(() => _savingShowcase = true);
+    setState(() {
+      _savingShowcase = true;
+      _showcaseProgress = 0.0;
+      _showcaseProgressLabel = null;
+    });
     try {
       // Build the multipart map for newly-picked local images so the
       // server can stream them to Cloudinary alongside the JSON payload.
@@ -1312,6 +1360,50 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         } else if (url != null && url.isNotEmpty) {
           localPaths.add('');
           preExistingUrls.add(url);
+        }
+      }
+
+      // Compress new images before uploading (smaller payload + faster
+      // upload + Cloudinary doesn't reject huge originals). Matches the
+      // legacy KYC widget's progress UX: the bar fills 0% -> 40% over
+      // compression, then jumps to 50% and ticks slowly toward 90% during
+      // upload (the http package can't surface real upload progress, so
+      // a timer-based estimate is the honest best we can do here).
+      final pendingIndices = <int>[];
+      for (var i = 0; i < localPaths.length; i++) {
+        if (localPaths[i].isNotEmpty) pendingIndices.add(i);
+      }
+
+      if (pendingIndices.isNotEmpty) {
+        setState(() {
+          _showcaseProgressLabel = pendingIndices.length == 1
+              ? 'Compressing image...'
+              : 'Compressing 0 of ${pendingIndices.length}...';
+          _showcaseProgress = 0.0;
+        });
+        try {
+          final paths = pendingIndices.map((i) => localPaths[i]).toList();
+          final compressed = await ImageCompressUtil.compressAll(
+            paths,
+            onProgress: (done, total) {
+              if (!mounted) return;
+              setState(() {
+                _showcaseProgressLabel =
+                    'Compressing $done of $total...';
+                // First 40% of the bar is compression progress.
+                _showcaseProgress = (done / total) * 0.4;
+              });
+            },
+          );
+          // Swap compressed paths back into localPaths so the multipart
+          // upload sends the smaller files.
+          for (var i = 0; i < pendingIndices.length; i++) {
+            localPaths[pendingIndices[i]] = compressed[i];
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('Showcase compress failed (uploading originals): $e');
+          }
         }
       }
 
@@ -1355,10 +1447,43 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         if (businessName.isNotEmpty) 'businessName': businessName,
       };
 
+      // Kick off the simulated upload tick. We jump to 50% (compression
+      // is done, multipart request is about to fly), then tick toward
+      // 90% over ~12 seconds so the bar keeps moving for slow networks
+      // without ever reaching 100% before the server actually responds.
+      if (fileMap != null && fileMap.isNotEmpty) {
+        setState(() {
+          _showcaseProgressLabel = fileMap!.length == 1
+              ? 'Uploading work sample...'
+              : 'Uploading work samples...';
+          _showcaseProgress = 0.5;
+        });
+        _showcaseUploadTickTimer?.cancel();
+        _showcaseUploadTickTimer = Timer.periodic(
+          const Duration(milliseconds: 300),
+          (_) {
+            if (!mounted) return;
+            if (_showcaseProgress >= 0.9) return;
+            setState(() {
+              _showcaseProgress =
+                  math.min(0.9, _showcaseProgress + 0.01);
+            });
+          },
+        );
+      }
+
       final res = await ArtistService.updateMyProfile(
         payload,
         fileMap: fileMap,
       );
+      _showcaseUploadTickTimer?.cancel();
+      _showcaseUploadTickTimer = null;
+      if (mounted) {
+        setState(() {
+          _showcaseProgress = 1.0;
+          _showcaseProgressLabel = 'Finalising...';
+        });
+      }
       if (!mounted) return;
       if (res != null) {
         // If the server returned a finalised portfolio (with uploaded URLs),
@@ -1397,7 +1522,15 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
       _toast('Could not save showcase. Please try again.');
       if (kDebugMode) debugPrint('saveShowcase error: $e');
     } finally {
-      if (mounted) setState(() => _savingShowcase = false);
+      _showcaseUploadTickTimer?.cancel();
+      _showcaseUploadTickTimer = null;
+      if (mounted) {
+        setState(() {
+          _savingShowcase = false;
+          _showcaseProgress = 0.0;
+          _showcaseProgressLabel = null;
+        });
+      }
     }
   }
 
@@ -3166,6 +3299,59 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         ),
 
         const SizedBox(height: 18),
+
+        // ----- Upload progress (visible only while saving + we have a label) -----
+        // Matches the legacy ArtisanKycWidget UX: shows compression then upload
+        // phases with a percentage + determinate bar, so the artisan sees the
+        // upload is progressing on slow networks rather than staring at a
+        // featureless spinner.
+        if (_showcaseProgressLabel != null) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _showcaseProgressLabel!,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface
+                              .withOpacity(0.75),
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '${(_showcaseProgress * 100).toInt()}%',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: primaryColor,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: _showcaseProgress,
+                    minHeight: 6,
+                    backgroundColor:
+                        theme.colorScheme.onSurface.withOpacity(0.08),
+                    valueColor: AlwaysStoppedAnimation(primaryColor),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
 
         // ----- Save / Skip -----
         SizedBox(
