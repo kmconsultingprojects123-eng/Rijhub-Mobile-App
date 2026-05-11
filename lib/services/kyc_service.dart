@@ -412,8 +412,82 @@ class KycService {
     }
   }
 
+  /// GET /api/kyc/artisan/:id/status — returns the latest KYC state for an
+  /// arbitrary artisan (by artisan profile `_id` OR linked `userId`). Used
+  /// by client-facing screens (artisan profile, search results, booking
+  /// detail) to render verified/pending/rejected badges without needing
+  /// the artisan to be the authenticated user.
+  ///
+  /// Optional auth — pass a token if you have one (richer response), but it
+  /// also works for unauthenticated browsing.
+  ///
+  /// Possible statuses: 'approved' | 'pending' | 'pending_review' |
+  /// 'rejected' | 'not_submitted'.
+  /// Returns the unwrapped `data` object, or null if the artisan / endpoint
+  /// returned an error envelope.
+  static Future<Map<String, dynamic>?> getArtisanKycStatus({
+    required String artisanIdOrUserId,
+    String? token,
+    Duration timeout = const Duration(seconds: 20),
+  }) async {
+    final uri = Uri.parse(
+        '$API_BASE_URL/api/kyc/artisan/$artisanIdOrUserId/status');
+    try {
+      final headers = <String, String>{};
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+      final resp = await http.get(uri, headers: headers).timeout(timeout);
+
+      developer.log(
+          'getArtisanKycStatus($artisanIdOrUserId) response: status=${resp.statusCode} body=${resp.body}',
+          name: 'KycService.getArtisanKycStatus');
+
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        if (resp.body.isEmpty) return null;
+        try {
+          final body = jsonDecode(resp.body);
+          if (body is Map && body['data'] is Map) {
+            return Map<String, dynamic>.from(body['data']);
+          }
+          if (body is Map) return Map<String, dynamic>.from(body);
+        } catch (e, st) {
+          developer.log('Failed to parse getArtisanKycStatus body',
+              error: e, stackTrace: st, name: 'KycService.getArtisanKycStatus');
+        }
+        return null;
+      }
+
+      // 404 means artisan not found or invalid id — surface as null rather
+      // than throwing so callers can render a "not verified" badge cleanly.
+      if (resp.statusCode == 404) return null;
+
+      throw UserFriendlyException(ErrorMapper.messageForResponse(resp),
+          developerMessage:
+              'getArtisanKycStatus failed: status=${resp.statusCode} body=${resp.body}');
+    } on UserFriendlyException {
+      rethrow;
+    } on SocketException catch (e, st) {
+      developer.log('Network error in getArtisanKycStatus',
+          error: e, stackTrace: st, name: 'KycService.getArtisanKycStatus');
+      throw UserFriendlyException(ErrorMapper.messageForException(e),
+          developerMessage: e.toString());
+    } on TimeoutException catch (e, st) {
+      developer.log('Timeout in getArtisanKycStatus',
+          error: e, stackTrace: st, name: 'KycService.getArtisanKycStatus');
+      throw UserFriendlyException(ErrorMapper.messageForException(e),
+          developerMessage: e.toString());
+    } catch (e, st) {
+      developer.log('Unexpected error in getArtisanKycStatus',
+          error: e, stackTrace: st, name: 'KycService.getArtisanKycStatus');
+      throw UserFriendlyException('Something went wrong. Please try again.',
+          developerMessage: e.toString());
+    }
+  }
+
   /// GET /api/kyc/status — returns the latest KYC state for the authenticated user.
-  /// Possible statuses: 'pending' | 'pending_review' | 'approved' | 'rejected'
+  /// Possible statuses: 'pending' | 'pending_review' | 'approved' | 'rejected' | 'not_submitted'
+  /// Response also includes `failureReason` (string|null) when status is rejected.
   /// Returns the unwrapped `data` object, or an empty map if the body is empty.
   static Future<Map<String, dynamic>> getKycStatus({
     required String token,

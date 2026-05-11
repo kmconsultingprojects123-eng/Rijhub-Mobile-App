@@ -21,6 +21,7 @@ import '../../services/user_service.dart';
 import '../../services/artist_service.dart';
 import '../../services/token_storage.dart';
 import '../../services/api_client.dart';
+import '../../services/kyc_service.dart';
 import '../../api_config.dart';
 export 'artisan_dashboard_page_model.dart';
 
@@ -48,6 +49,11 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
       false; // Set in load logic; previously read by the removed PROFILE SETUP card.
   bool _kycVerifiedLocal = false;
   String? _kycStatus;
+  // Backend-supplied reason set on the latest rejected KYC submission (e.g.
+  // "Selfie confidence below threshold (41.2/90)"). Read from TokenStorage on
+  // mount and refreshed from `/api/kyc/status`. Surfaced verbatim on the
+  // rejected card so the artisan knows what to fix on retry.
+  String? _kycFailureReason;
   double _profileCompletion = 0.0;
 
   // Set true once `_initKycStatus()` (which reads the persisted status from
@@ -303,12 +309,181 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
     }
   }
 
+  /// Apply `kycDetails` from a `/api/users/me` response as the
+  /// authoritative KYC state. Persists to TokenStorage and updates local
+  /// state so the dashboard's KYC card matches the backend on next build.
+  ///
+  /// Treats `null` profile, missing `kycDetails`, or status == `not_submitted`
+  /// (the doc's explicit "no record yet" value) as "no KYC submitted" —
+  /// status is cleared in storage and local state, so the dashboard falls
+  /// back to the Continue Setup card.
+  ///
+  /// Returns the resolved status string (or null) so callers can short-
+  /// circuit further fetches (e.g. skip `_fetchAuthoritativeKycStatus` when
+  /// we already have authoritative data from profile).
+  Future<String?> _applyKycFromProfile(Map<String, dynamic>? profile) async {
+    if (profile == null) return _kycStatus;
+    final details = profile['kycDetails'];
+    if (details is! Map) {
+      if (kDebugMode) {
+        debugPrint('[Dashboard] profile has no kycDetails block');
+      }
+      return _kycStatus;
+    }
+
+    final rawStatus = details['status']?.toString();
+    final rawReason = details['failureReason']?.toString();
+    final isEmpty = rawStatus == null || rawStatus.isEmpty;
+    final isNotSubmitted = rawStatus?.toLowerCase() == 'not_submitted';
+    final String? status =
+        (isEmpty || isNotSubmitted) ? null : rawStatus;
+    final String? reason =
+        (rawReason == null || rawReason.isEmpty || rawReason.toLowerCase() == 'null')
+            ? null
+            : rawReason;
+    final sl = status?.toLowerCase();
+    final keepReason = sl == 'rejected' || sl == 'failed';
+
+    if (kDebugMode) {
+      debugPrint(
+          '[Dashboard] applyKycFromProfile -> status=$status reason=${keepReason ? reason : null}');
+    }
+
+    try {
+      if (status != null) {
+        await TokenStorage.saveKycStatus(status);
+      } else {
+        await TokenStorage.deleteKycStatus();
+      }
+      await TokenStorage.saveKycFailureReason(keepReason ? reason : null);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[Dashboard] persist kycDetails failed: $e');
+    }
+
+    if (mounted) {
+      setState(() {
+        _kycStatus = status;
+        _kycFailureReason = keepReason ? reason : null;
+        _kycVerifiedLocal = sl == 'approved' ||
+            sl == 'verified' ||
+            sl == 'approved_by_admin' ||
+            sl == 'success';
+        if (_kycVerifiedLocal && !_model.isVerified) {
+          _model.isVerified = true;
+        }
+        // Ensure the card render gate is open so the resolved variant
+        // shows up immediately (no flash of empty/Continue Setup).
+        _kycChecked = true;
+      });
+      try {
+        _computeProfileCompletion();
+      } catch (_) {}
+    }
+    return status;
+  }
+
+  /// Third-line defense for KYC state. Only called when both
+  /// `/api/users/me` (profile.kycDetails) and `/api/kyc/status` failed to
+  /// produce a record — typically when the backend is mid-write and the
+  /// transient 404 race we've seen is in effect.
+  ///
+  /// Scoped intentionally to the LOGGED-IN user's own id (artisan _id when
+  /// available, otherwise userId). This keeps the call safe to make from
+  /// the dashboard (no possibility of leaking another user's status) and
+  /// follows the user's "defense mechanism" framing — it's a self-check,
+  /// not a lookup of other artisans.
+  ///
+  /// Returns the resolved status (and applies it + persists to storage)
+  /// when the endpoint returned a real submitted record. Returns null when
+  /// the endpoint confirms there's no record (`not_submitted` or empty),
+  /// letting the caller proceed with state-clearing.
+  Future<String?> _fetchArtisanKycStatusFallback() async {
+    try {
+      // Prefer the artisan profile _id since it's the doc's canonical id;
+      // fall back to userId (also accepted per the doc).
+      final artisanId = (_artisanProfile?['_id'] ??
+              _artisanProfile?['id'] ??
+              _currentUserId)
+          ?.toString();
+      if (artisanId == null || artisanId.isEmpty) {
+        if (kDebugMode) {
+          debugPrint(
+              '[Dashboard] artisan-status fallback skipped — no artisan/user id available');
+        }
+        return null;
+      }
+      final token = await TokenStorage.getToken();
+      final data = await KycService.getArtisanKycStatus(
+        artisanIdOrUserId: artisanId,
+        token: token,
+      );
+      if (data == null) return null;
+
+      final rawStatus = data['status']?.toString();
+      final rawReason = data['failureReason']?.toString();
+      final isEmpty = rawStatus == null || rawStatus.isEmpty;
+      final isNotSubmitted = rawStatus?.toLowerCase() == 'not_submitted';
+      if (isEmpty || isNotSubmitted) {
+        if (kDebugMode) {
+          debugPrint(
+              '[Dashboard] artisan-status fallback confirms no record (status=$rawStatus)');
+        }
+        return null;
+      }
+      final reason =
+          (rawReason == null || rawReason.isEmpty || rawReason.toLowerCase() == 'null')
+              ? null
+              : rawReason;
+      final sl = rawStatus.toLowerCase();
+      final keepReason = sl == 'rejected' || sl == 'failed';
+      final verified = sl == 'approved' ||
+          sl == 'verified' ||
+          sl == 'approved_by_admin' ||
+          sl == 'success';
+
+      try {
+        await TokenStorage.saveKycStatus(rawStatus);
+        await TokenStorage.saveKycFailureReason(keepReason ? reason : null);
+      } catch (_) {}
+
+      if (mounted) {
+        setState(() {
+          _kycStatus = rawStatus;
+          _kycFailureReason = keepReason ? reason : null;
+          _kycVerifiedLocal = verified;
+          if (verified && !_model.isVerified) _model.isVerified = true;
+          _kycChecked = true;
+        });
+        try {
+          _computeProfileCompletion();
+        } catch (_) {}
+      }
+      return rawStatus;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[Dashboard] artisan-status fallback failed: $e');
+      }
+      // On network/timeout/etc. don't return a fake null — return null but
+      // log so callers know we couldn't confirm. The caller already only
+      // clears state when ALL sources agree there's no record, so a thrown
+      // fallback won't cause an over-eager wipe.
+      return null;
+    }
+  }
+
   Future<void> _initKycStatus() async {
     try {
-      final s = await TokenStorage.getKycStatus();
+      // Read status and reason in parallel — both live in TokenStorage and
+      // are written together by the onboarding flow, so we want them
+      // hydrated as a unit.
+      final results = await Future.wait([
+        TokenStorage.getKycStatus(),
+        TokenStorage.getKycFailureReason(),
+      ]);
       if (!mounted) return;
       setState(() {
-        _kycStatus = s;
+        _kycStatus = results[0];
+        _kycFailureReason = results[1];
         _kycChecked = true;
       });
     } catch (e) {
@@ -580,11 +755,18 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
   }
 
   Future<void> _refreshData() async {
+    // Order matters: profile must finish before kyc/status fires so that
+    // _fetchAuthoritativeKycStatus can read `_currentUserProfile.kycDetails`
+    // and ignore the transient 404 "No KYC record" we've seen from
+    // /api/kyc/status immediately after a fresh submission. Without this
+    // ordering, pull-to-refresh would race and occasionally wipe pending
+    // state, forcing the user to refresh again — the very bug this code
+    // exists to fix.
     await Future.wait([
       _loadProfile(),
       _loadDashboardData(),
-      _fetchAuthoritativeKycStatus(),
     ]);
+    await _fetchAuthoritativeKycStatus();
     // refresh complete
   }
 
@@ -656,6 +838,19 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
       if (kDebugMode)
         debugPrint(
             'Local profile reported kyc verified: $normalizedKyc (waiting for authoritative confirmation)');
+
+      // The backend now ships a `kycDetails` block on `/api/users/me`
+      // (see dojah-kyc-status-updates.md). This is the most reliable
+      // KYC source — `/api/kyc/status` has been observed returning
+      // a transient 404 "No KYC record" right after a fresh submission,
+      // which would otherwise wipe local pending state and force the
+      // user to refresh the dashboard before the pending card appears.
+      // Applying `kycDetails` here makes the dashboard self-healing.
+      try {
+        await _applyKycFromProfile(profile);
+      } catch (e) {
+        if (kDebugMode) debugPrint('applyKycFromProfile failed: $e');
+      }
 
       // Fetch artisan profile (if any) for artisan-specific fields
       try {
@@ -825,7 +1020,15 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
         try {
           final decoded = jsonDecode(body);
 
-          // Clear stale KYC data if user has no KYC record
+          // `/api/kyc/status` has been observed returning 404 / "No KYC
+          // record" right after a fresh submission while `/api/users/me`
+          // correctly reports `kycDetails.status = "pending"`. Per the
+          // backend's dojah-kyc-status-updates doc, `kycDetails` on the
+          // user profile is the authoritative source — so before wiping
+          // local state, check whether the cached profile (just refreshed
+          // by `_loadProfile`) actually has a kycDetails block. If yes,
+          // trust profile and IGNORE the 404. Only clear when both
+          // endpoints agree there's no record.
           if (decoded is Map &&
               (decoded['success'] == false || status >= 400) &&
               (decoded['message']
@@ -833,8 +1036,45 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                       .toLowerCase()
                       .contains('no kyc record') ==
                   true)) {
+            final cachedDetails = _currentUserProfile?['kycDetails'];
+            final cachedStatus = (cachedDetails is Map)
+                ? cachedDetails['status']?.toString()
+                : null;
+            final hasProfileKyc = cachedStatus != null &&
+                cachedStatus.isNotEmpty &&
+                cachedStatus.toLowerCase() != 'not_submitted';
+
+            if (hasProfileKyc) {
+              if (kDebugMode) {
+                debugPrint(
+                    '[Dashboard] /api/kyc/status 404 ignored — profile.kycDetails.status=$cachedStatus is authoritative');
+              }
+              // Don't clear anything. _loadProfile -> _applyKycFromProfile
+              // has already set the right state.
+              return;
+            }
+
+            // Third-line defense: before nuking local state, try the new
+            // `/api/kyc/artisan/:id/status` endpoint with the current user's
+            // id. This endpoint is the doc's dedicated "check artisan KYC"
+            // route — using it as a cross-check guards against the same
+            // backend race we already saw between /api/users/me and
+            // /api/kyc/status. We only trust it when it returns a concrete
+            // submitted status; "not_submitted" or null still falls through
+            // to the clear-state path.
+            final artisanCheckStatus =
+                await _fetchArtisanKycStatusFallback();
+            if (artisanCheckStatus != null) {
+              if (kDebugMode) {
+                debugPrint(
+                    '[Dashboard] /api/kyc/status 404 ignored — /api/kyc/artisan/:id/status returned $artisanCheckStatus');
+              }
+              return;
+            }
+
             if (kDebugMode)
-              debugPrint('No KYC record found. Clearing local KYC status.');
+              debugPrint(
+                  'No KYC record found (all three endpoints agree). Clearing local KYC status.');
             await TokenStorage.deleteKycStatus();
             await TokenStorage.deleteKycVerified();
 
@@ -842,6 +1082,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
               setState(() {
                 _kycVerifiedLocal = false;
                 _kycStatus = null;
+                _kycFailureReason = null;
                 _model.isVerified = false;
               });
               try {
@@ -858,6 +1099,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
           final decoded = jsonDecode(body);
           bool verified = false;
           String? parsedStatus;
+          String? parsedFailureReason;
 
           if (decoded is Map) {
             final data = decoded['data'] ?? decoded;
@@ -866,6 +1108,17 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
             try {
               final s = (data is Map) ? data['status'] : null;
               if (s != null) parsedStatus = s.toString();
+            } catch (_) {}
+
+            // failureReason — populated by the backend on rejected /
+            // failed submissions. Stored alongside the status so the
+            // dashboard's rejected card can show the artisan a specific
+            // reason instead of generic copy.
+            try {
+              final r = (data is Map) ? data['failureReason'] : null;
+              if (r != null && r.toString().isNotEmpty) {
+                parsedFailureReason = r.toString();
+              }
             } catch (_) {}
 
             // 2) If a boolean 'verified' is present, use it
@@ -907,6 +1160,14 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                 if (top != null) parsedStatus = top.toString();
               } catch (_) {}
             }
+            if (parsedFailureReason == null) {
+              try {
+                final r = decoded['failureReason'];
+                if (r != null && r.toString().isNotEmpty) {
+                  parsedFailureReason = r.toString();
+                }
+              } catch (_) {}
+            }
 
             // If we only have a status string (e.g. 'approved'|'pending'), map that to verified boolean
             if (!verified && parsedStatus != null) {
@@ -922,17 +1183,44 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
             }
           }
 
-          // Persist the resolved status string for other parts of the app that read TokenStorage.getKycStatus()
+          // Treat the backend's explicit 'not_submitted' the same as null
+          // locally — it means there's no KYC record yet, and the dashboard
+          // card-routing logic expects a null status for that case.
+          final ps = parsedStatus;
+          if (ps != null && ps.toLowerCase() == 'not_submitted') {
+            parsedStatus = null;
+            parsedFailureReason = null;
+            try {
+              await TokenStorage.deleteKycStatus();
+            } catch (_) {}
+          } else if (ps != null && ps.isNotEmpty) {
+            // Persist the resolved status string for other parts of the app
+            // that read TokenStorage.getKycStatus().
+            try {
+              if (mounted) await TokenStorage.saveKycStatus(ps);
+            } catch (_) {}
+          }
+
+          // Keep the persisted failure reason in lockstep with the status:
+          // populate it on rejected/failed, wipe it otherwise so a stale
+          // reason from an earlier attempt doesn't reappear once the artisan
+          // re-submits.
           try {
-            if (mounted && parsedStatus != null && parsedStatus!.isNotEmpty) {
-              TokenStorage.saveKycStatus(parsedStatus!.toString());
+            final sl = parsedStatus?.toLowerCase();
+            if (sl == 'rejected' || sl == 'failed') {
+              await TokenStorage.saveKycFailureReason(parsedFailureReason);
+            } else {
+              await TokenStorage.saveKycFailureReason(null);
             }
           } catch (_) {}
 
           if (mounted) {
             setState(() {
               _kycVerifiedLocal = verified;
-              if (parsedStatus != null) _kycStatus = parsedStatus;
+              _kycStatus = parsedStatus;
+              final sl = parsedStatus?.toLowerCase();
+              _kycFailureReason =
+                  (sl == 'rejected' || sl == 'failed') ? parsedFailureReason : null;
             });
             if (verified && !_model.isVerified)
               setState(() => _model.isVerified = true);
@@ -1614,6 +1902,10 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
         s == 'failed' ||
         s == 'rejected_by_admin' ||
         s == 'declined';
+    // The backend now returns 'not_submitted' as an explicit string when
+    // the artisan has never started KYC. Treat it the same as a null
+    // status so the Continue Setup branch picks it up.
+    final isNotSubmitted = s == null || s.isEmpty || s == 'not_submitted';
 
     if (isPending) return _buildKycPendingCard(theme, colorScheme);
     if (isRejected) return _buildKycRejectedCard(theme, colorScheme);
@@ -1621,7 +1913,9 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
     // No KYC submitted yet — show the existing onboarding progress card so
     // long as the artisan still has setup to finish. Once everything is done
     // (including KYC) `_isKycSectionComplete()` flips and the card hides.
-    if (_profileCompletion < 1.0 && !_isKycSectionComplete()) {
+    if (isNotSubmitted &&
+        _profileCompletion < 1.0 &&
+        !_isKycSectionComplete()) {
       return _buildContinueSetupCard(theme, colorScheme, ff);
     }
     return const SizedBox.shrink();
@@ -1694,11 +1988,15 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
     );
   }
 
-  /// Failure-state card. KYC came back rejected — we tell the artisan plainly
+  /// Failure-state card. KYC came back rejected — we tell the artisan plainly,
+  /// surface the backend's specific failureReason when available (e.g.
+  /// "Selfie verification failed or confidence below threshold (41.2/90)"),
   /// and offer a one-tap retry that drops them back into the onboarding flow's
   /// identity-verification section.
   Widget _buildKycRejectedCard(ThemeData theme, ColorScheme colorScheme) {
     final errorColor = theme.colorScheme.error;
+    final reason = _kycFailureReason?.trim();
+    final hasReason = reason != null && reason.isNotEmpty;
     return Container(
       decoration: BoxDecoration(
         color: theme.cardColor,
@@ -1750,13 +2048,48 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
           ),
           const SizedBox(height: 14),
           Text(
-            "We couldn't verify your identity with the details you submitted. This usually means the NIN didn't match or the selfie was unclear. Make sure your face is well-lit and your NIN is correct, then try again.",
+            "We couldn't verify your identity with the details you submitted. Make sure your face is well-lit, your NIN is correct, then try again.",
             style: theme.textTheme.bodyMedium?.copyWith(
               color: colorScheme.onSurface.withOpacity(0.78),
               height: 1.45,
               fontSize: 13.5,
             ),
           ),
+          // When the backend returned a specific reason (confidence score,
+          // NIN mismatch, etc.) show it in a tinted callout so it stands
+          // apart from the generic copy and the artisan can act on it.
+          if (hasReason) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: errorColor.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: errorColor.withOpacity(0.2)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline_rounded,
+                      size: 16, color: errorColor),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      reason,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurface.withOpacity(0.85),
+                        fontSize: 12.5,
+                        height: 1.4,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 18),
           SizedBox(
             width: double.infinity,

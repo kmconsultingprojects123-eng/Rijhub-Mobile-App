@@ -24,6 +24,7 @@ import '../../services/job_service.dart';
 import '../../services/kyc_service.dart';
 import '../../services/my_service_service.dart';
 import '../../services/token_storage.dart';
+import '../../services/user_service.dart';
 import '../../state/auth_notifier.dart';
 import '../../utils/location_permission.dart';
 import 'artisan_onboarding_model.dart';
@@ -1502,38 +1503,102 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
     // reads `TokenStorage.getKycStatus()` synchronously in its `initState`
     // (`_initKycStatus`), so by the time we navigate it already knows KYC
     // is verified — no stale "Almost there" Continue Setup card flash.
+    // While the loader dialog is still up, hydrate the authoritative KYC
+    // state from the backend and persist it to TokenStorage. The dashboard
+    // reads from TokenStorage in its `initState`, so by the time we
+    // navigate it already knows the outcome — no stale "Almost there"
+    // Continue Setup card flash, and rejected submissions land with a
+    // backend-supplied reason ready to show.
+    //
+    // Source-of-truth priority (per the backend's `dojah-kyc-status-updates`
+    // doc):
+    //   1) `/api/users/me` -> `data.kycDetails`  — most reliable; the doc
+    //      explicitly added this field so the frontend has a single read
+    //      that always reflects the current verification state.
+    //   2) `/api/kyc/status` (`data.status`) — fallback. We've observed this
+    //      endpoint occasionally returning 404 "No KYC record" right after
+    //      a fresh submission while `/api/users/me` correctly reports
+    //      `kycDetails.status = "pending"`. That's the bug that previously
+    //      forced users to refresh the dashboard to see the "Verification
+    //      pending" card.
+    //   3) `result['status']` from verify-reference — last-resort tentative
+    //      value used when both server reads fail (network/timeout).
     final tentativeStatus = result['status']?.toString() ?? '';
-    if (tentativeStatus == 'approved' ||
-        tentativeStatus == 'pending' ||
-        tentativeStatus == 'pending_review' ||
-        tentativeStatus == 'rejected' ||
-        tentativeStatus == 'failed') {
+    String? resolvedStatus;
+    String? resolvedReason;
+
+    try {
+      final profile = await UserService.getProfile();
+      final details = profile == null ? null : profile['kycDetails'];
+      if (details is Map) {
+        final s = details['status']?.toString();
+        final r = details['failureReason']?.toString();
+        if (s != null && s.isNotEmpty && s.toLowerCase() != 'not_submitted') {
+          resolvedStatus = s;
+        }
+        if (r != null && r.isNotEmpty && r.toLowerCase() != 'null') {
+          resolvedReason = r;
+        }
+        if (kDebugMode) {
+          debugPrint(
+              '[Onboarding] post-verify profile.kycDetails -> status=$resolvedStatus reason=$resolvedReason');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('post-verify getProfile failed: $e');
+    }
+
+    // Fallback 2: /api/kyc/status (only if profile didn't yield a status).
+    if (resolvedStatus == null) {
       try {
         final token = await TokenStorage.getToken() ?? '';
         if (token.isNotEmpty) {
           final fresh = await KycService.getKycStatus(token: token);
           final freshStatus = fresh['status']?.toString();
+          final freshReason = fresh['failureReason']?.toString();
           if (freshStatus != null && freshStatus.isNotEmpty) {
-            await TokenStorage.saveKycStatus(freshStatus);
-            // Update local result so downstream UI logic (toast wording,
-            // section completion) uses the freshest server-confirmed value.
-            result['status'] = freshStatus;
-          } else {
-            await TokenStorage.saveKycStatus(tentativeStatus);
+            resolvedStatus = freshStatus;
+            if (freshReason != null && freshReason.isNotEmpty) {
+              resolvedReason ??= freshReason;
+            }
+            if (kDebugMode) {
+              debugPrint(
+                  '[Onboarding] post-verify /api/kyc/status -> status=$resolvedStatus reason=$resolvedReason');
+            }
           }
-        } else {
-          await TokenStorage.saveKycStatus(tentativeStatus);
         }
       } catch (e) {
-        if (kDebugMode) {
-          debugPrint('post-verify getKycStatus failed: $e');
-        }
-        // Best-effort fallback: save the verify-reference status so the
-        // dashboard at least knows verification was submitted.
-        try {
-          await TokenStorage.saveKycStatus(tentativeStatus);
-        } catch (_) {}
+        if (kDebugMode) debugPrint('post-verify getKycStatus failed: $e');
       }
+    }
+
+    // Fallback 3: verify-reference's tentative status (network/timeout case).
+    resolvedStatus ??= tentativeStatus.isNotEmpty ? tentativeStatus : null;
+    resolvedReason ??= result['failureReason']?.toString();
+
+    // Persist whatever we resolved so the dashboard reads it on mount.
+    if (resolvedStatus != null && resolvedStatus.isNotEmpty) {
+      try {
+        await TokenStorage.saveKycStatus(resolvedStatus);
+      } catch (_) {}
+      // Update local result so the post-loader UI branching below uses the
+      // freshest server-confirmed value.
+      result['status'] = resolvedStatus;
+      if (resolvedReason != null && resolvedReason.isNotEmpty) {
+        result['failureReason'] = resolvedReason;
+      }
+
+      // Persist (or clear) the failure reason in lockstep with the status.
+      // Non-rejection statuses pass null which wipes any stale reason left
+      // over from a prior failed attempt.
+      try {
+        final sl = resolvedStatus.toLowerCase();
+        if (sl == 'rejected' || sl == 'failed') {
+          await TokenStorage.saveKycFailureReason(resolvedReason);
+        } else {
+          await TokenStorage.saveKycFailureReason(null);
+        }
+      } catch (_) {}
     }
 
     _dismissVerifyingKycOverlay();
@@ -1558,7 +1623,7 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         if (!mounted) return;
         _exitToDashboard();
       });
-    } else if (status == 'rejected') {
+    } else if (status == 'rejected' || status == 'failed') {
       _toast(
           (result['failureReason'] ?? 'Verification didn\'t match — try again')
               .toString());

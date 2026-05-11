@@ -15,6 +15,11 @@ class TokenStorage {
   static const _keyKycVerified = 'kyc_verified';
   // New: key to store the KYC status string returned by backend (e.g., 'pending','approved','rejected')
   static const _keyKycStatus = 'kyc_status';
+  // Optional reason returned by the backend when KYC is rejected (e.g.
+  // "Selfie verification failed or confidence below threshold (41.2/90)").
+  // Persisted so the dashboard's rejected card can surface it after a
+  // refresh/reopen, without needing to re-hit /api/kyc/status first.
+  static const _keyKycFailureReason = 'kyc_failure_reason';
   static const _keyRecentName = 'recent_name';
   static const _keyRecentEmail = 'recent_email';
   static const _keyRecentPhone = 'recent_phone';
@@ -983,8 +988,108 @@ class TokenStorage {
           await prefs.remove(_keyKycStatus);
         } catch (_) {}
       }
+      // Status and failure reason are tied together — clearing one without the
+      // other leaves stale state (e.g. status=null but reason='Selfie blurry').
+      try {
+        await deleteKycFailureReason();
+      } catch (_) {}
     } catch (e) {
       debugPrint('TokenStorage: deleteKycStatus failed: $e');
+    }
+  }
+
+  /// Read the saved KYC failure reason text, or null if none saved.
+  /// Used by the dashboard's rejected-status card to show the artisan a
+  /// specific reason ("Selfie confidence below threshold (41.2/90)") instead
+  /// of a generic message.
+  static Future<String?> getKycFailureReason() async {
+    try {
+      if (kIsWeb) {
+        final prefs = await SharedPreferences.getInstance();
+        return prefs.getString(_keyKycFailureReason);
+      } else {
+        final s = await _getSecureStorage();
+        if (s != null) {
+          try {
+            final v = await s.read(key: _keyKycFailureReason);
+            if (v != null && v.isNotEmpty) return v;
+          } catch (e) {
+            debugPrint(
+                'TokenStorage: secure read kyc_failure_reason failed: $e');
+            _secureAvailable = false;
+          }
+        }
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final v = prefs.getString(_keyKycFailureReason);
+          return v;
+        } catch (e) {
+          debugPrint('TokenStorage: getKycFailureReason failed: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('TokenStorage: getKycFailureReason top-level failed: $e');
+    }
+    return null;
+  }
+
+  /// Save (or clear, if null/empty) the KYC failure reason text.
+  /// Pass null when status flips to anything other than rejected/failed so
+  /// stale reasons don't leak across submissions.
+  static Future<void> saveKycFailureReason(String? reason) async {
+    if (reason == null || reason.isEmpty) {
+      await deleteKycFailureReason();
+      return;
+    }
+    try {
+      if (kIsWeb) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_keyKycFailureReason, reason);
+      } else {
+        final s = await _getSecureStorage();
+        if (s != null) {
+          try {
+            await s.write(key: _keyKycFailureReason, value: reason);
+          } catch (e) {
+            debugPrint(
+                'TokenStorage: secure write kyc_failure_reason failed: $e');
+            _secureAvailable = false;
+          }
+        } else {
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString(_keyKycFailureReason, reason);
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      debugPrint('TokenStorage: saveKycFailureReason failed: $e');
+    }
+  }
+
+  static Future<void> deleteKycFailureReason() async {
+    try {
+      if (kIsWeb) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_keyKycFailureReason);
+      } else {
+        final s = await _getSecureStorage();
+        if (s != null) {
+          try {
+            await s.delete(key: _keyKycFailureReason);
+          } catch (e) {
+            debugPrint(
+                'TokenStorage: secure delete kyc_failure_reason failed: $e');
+            _secureAvailable = false;
+          }
+        }
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove(_keyKycFailureReason);
+        } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('TokenStorage: deleteKycFailureReason failed: $e');
     }
   }
 
