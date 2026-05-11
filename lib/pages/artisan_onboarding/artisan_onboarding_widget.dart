@@ -945,32 +945,86 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
   /// if anything resolves, returns the first match's lat/lng/address/radius.
   /// Returns null on any failure — the caller then keeps the raw text as a
   /// free-form address with no coordinates.
+  /// Resolve a user-typed address string to coordinates. Used when the
+  /// artisan presses Save on the work-profile section without first
+  /// tapping a suggestion from the autocomplete dropdown.
+  ///
+  /// We use the **Places Autocomplete + Place Details** pair (NOT the
+  /// Geocoding API). Geocoding is great for "formatted" addresses
+  /// (e.g. "1 Infinite Loop, Cupertino") but loose with partial or
+  /// hyper-local Nigerian text like "PLOT 100 area c NKST church nyanya"
+  /// — it'll return whatever vaguely-matching coordinate comes back
+  /// first, which has produced wildly-wrong resolves in testing (e.g.
+  /// the above query landing on a Plus Code in Ado, FCT). Autocomplete
+  /// is ranked by Google's place index and confidence, so taking the
+  /// top prediction here matches what the artisan would have seen as
+  /// the first dropdown option.
+  ///
+  /// Returns null when there's no good match (caller keeps the typed
+  /// text as a free-form address with no coordinates — better than
+  /// silently substituting the wrong place).
   Future<Map<String, dynamic>?> _geocodeTypedAddress(String text) async {
     try {
       final key = GOOGLE_MAPS_API_KEY;
       if (key.isEmpty) return null;
-      final url = Uri.parse(
-          'https://maps.googleapis.com/maps/api/geocode/json'
-          '?address=${Uri.encodeQueryComponent(text)}'
-          '&components=country:NG'
+
+      // Step 1: Places Autocomplete — ranked by Google's index.
+      final autoUrl = Uri.parse(
+          'https://maps.googleapis.com/maps/api/place/autocomplete/json'
+          '?input=${Uri.encodeQueryComponent(text)}'
+          '&components=country:ng'
+          '&types=geocode'
           '&key=$key');
-      final resp =
-          await http.get(url).timeout(const Duration(seconds: 10));
-      if (resp.statusCode != 200 || resp.body.isEmpty) return null;
-      final body = jsonDecode(resp.body);
-      if (body is! Map ||
-          body['results'] is! List ||
-          (body['results'] as List).isEmpty) {
+      final autoResp =
+          await http.get(autoUrl).timeout(const Duration(seconds: 10));
+      if (autoResp.statusCode != 200 || autoResp.body.isEmpty) {
+        if (kDebugMode) {
+          debugPrint(
+              '[Onboarding] geocodeTypedAddress: autocomplete http=${autoResp.statusCode}');
+        }
         return null;
       }
-      final first = (body['results'] as List).first as Map;
-      final geometry = first['geometry'] as Map?;
+      final autoBody = jsonDecode(autoResp.body);
+      if (autoBody is! Map ||
+          autoBody['predictions'] is! List ||
+          (autoBody['predictions'] as List).isEmpty) {
+        if (kDebugMode) {
+          debugPrint(
+              '[Onboarding] geocodeTypedAddress: no autocomplete predictions for "$text"');
+        }
+        return null;
+      }
+      final top = (autoBody['predictions'] as List).first as Map;
+      final placeId = top['place_id']?.toString();
+      final description = top['description']?.toString() ?? text;
+      if (placeId == null || placeId.isEmpty) return null;
+
+      if (kDebugMode) {
+        debugPrint(
+            '[Onboarding] geocodeTypedAddress: top prediction for "$text" -> "$description" (place_id=$placeId)');
+      }
+
+      // Step 2: Place Details — fetch geometry + formatted_address for the
+      // top prediction. Same shape the user would have got by tapping it.
+      final detailsUrl = Uri.parse(
+          'https://maps.googleapis.com/maps/api/place/details/json'
+          '?place_id=$placeId'
+          '&fields=geometry,formatted_address'
+          '&key=$key');
+      final detResp =
+          await http.get(detailsUrl).timeout(const Duration(seconds: 10));
+      if (detResp.statusCode != 200 || detResp.body.isEmpty) return null;
+      final detBody = jsonDecode(detResp.body);
+      if (detBody is! Map || detBody['result'] is! Map) return null;
+      final result = detBody['result'] as Map;
+      final geometry = result['geometry'] as Map?;
       final loc = geometry?['location'] as Map?;
       final viewport = geometry?['viewport'] as Map?;
       final lat = (loc?['lat'] as num?)?.toDouble();
       final lng = (loc?['lng'] as num?)?.toDouble();
       if (lat == null || lng == null) return null;
-      final address = first['formatted_address']?.toString() ?? text;
+      final address =
+          result['formatted_address']?.toString() ?? description;
 
       double radiusKm = 10.0;
       if (viewport is Map) {
@@ -989,6 +1043,11 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
           if (radiusKm < 5) radiusKm = 5;
           if (radiusKm > 50) radiusKm = 50;
         }
+      }
+
+      if (kDebugMode) {
+        debugPrint(
+            '[Onboarding] geocodeTypedAddress: resolved "$text" -> "$address" ($lat,$lng) radius=${radiusKm.round()}km');
       }
 
       try {
@@ -1044,14 +1103,27 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
       setState(() => _savingProfile = true);
       final resolved = await _geocodeTypedAddress(typed);
       if (resolved != null) {
+        final resolvedAddr = (resolved['address'] as String?) ?? typed;
         setState(() {
           _lat = resolved['lat'] as double?;
           _lng = resolved['lng'] as double?;
-          _addressLabel =
-              (resolved['address'] as String?) ?? typed;
+          _addressLabel = resolvedAddr;
+          // Reflect the resolved label back into the search box so the
+          // artisan sees exactly what we matched. If it's wrong they can
+          // edit and re-save.
+          _locationSearchCtrl.text = resolvedAddr;
           final r = resolved['radiusKm'] as double?;
           if (r != null) _radiusKm = r;
         });
+        // Non-blocking confirmation. The previous flow silently
+        // substituted a (sometimes wildly different) address — that bit
+        // us in testing when "PLOT 100 area c NKST church nyanya"
+        // resolved to a Plus Code in Ado. Showing the resolved string
+        // lets the artisan catch a bad match before continuing.
+        if (resolvedAddr.toLowerCase().trim() !=
+            typed.toLowerCase().trim()) {
+          _toast('Matched to: $resolvedAddr');
+        }
       } else {
         setState(() {
           _addressLabel = typed;

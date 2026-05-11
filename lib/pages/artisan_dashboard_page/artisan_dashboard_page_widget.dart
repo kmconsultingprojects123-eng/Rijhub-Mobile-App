@@ -16,7 +16,7 @@ import '../../google_maps_config.dart';
 import '../../utils/location_permission.dart';
 import 'dart:convert';
 import 'artisan_dashboard_page_model.dart';
-import '../../pages/artisan_kyc_page/artisan_kyc_route_wrapper.dart';
+// import '../../pages/artisan_kyc_page/artisan_kyc_route_wrapper.dart'; // legacy KYC entry — superseded by ArtisanOnboardingWidget; restore this import + revert the reminder-dialog push in this file to roll back
 import '../../services/user_service.dart';
 import '../../services/artist_service.dart';
 import '../../services/token_storage.dart';
@@ -705,10 +705,15 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
                                       ),
                                     );
                                   } else {
+                                    // Legacy reminder dialog (function is
+                                    // currently unreferenced — `// ignore:
+                                    // unused_element`) but keep the route in
+                                    // sync with the new onboarding flow so it
+                                    // works correctly if ever re-enabled.
                                     await Navigator.of(context).push(
                                         MaterialPageRoute(
                                             builder: (_) =>
-                                                ArtisanKycWidget()));
+                                                const ArtisanOnboardingWidget()));
                                     await TokenStorage.saveOnboardReminderShown(
                                         true);
                                   }
@@ -939,9 +944,30 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
       // verification on the artisan document before the user object is
       // updated, so check the artisan document for 'isVerified'/'verified' or
       // 'kycVerified' and update local state accordingly.
+      //
+      // GUARD (added 2026-05-11): per the dojah-kyc-status-updates doc,
+      // `/api/users/me`'s `kycDetails.status` is the authoritative KYC
+      // truth. We've observed cases where the artisan document still
+      // carries `verified: true` (legacy / stale / out-of-sync) even
+      // though kycDetails.status is "pending" or "rejected" — that
+      // would paint a "KYC verified" badge while the card variant shows
+      // pending/rejected, confusing the artisan. Only honor the artisan
+      // flag when kycDetails ALSO agrees (approved) or is missing
+      // entirely (legacy backend with no kycDetails yet).
       try {
+        final details = profile['kycDetails'];
+        final detailsStatus = (details is Map)
+            ? details['status']?.toString().toLowerCase()
+            : null;
+        final kycDetailsContradictsApproved = detailsStatus != null &&
+            detailsStatus.isNotEmpty &&
+            detailsStatus != 'approved' &&
+            detailsStatus != 'verified' &&
+            detailsStatus != 'success' &&
+            detailsStatus != 'approved_by_admin';
+
         final ap = _artisanProfile;
-        if (ap != null) {
+        if (ap != null && !kycDetailsContradictsApproved) {
           bool artisanVerified = false;
           try {
             final cand =
@@ -982,6 +1008,22 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
               await TokenStorage.saveKycStatus('approved');
             } catch (_) {}
           }
+        } else if (ap != null && kycDetailsContradictsApproved) {
+          // Active drift case — log loudly so we can spot stale artisan
+          // docs in the wild without having to dig.
+          if (kDebugMode) {
+            final ac = ap['isVerified'] ?? ap['verified'] ?? ap['kycVerified'];
+            debugPrint(
+                '[Dashboard] ignoring artisan.verified=$ac because kycDetails.status=$detailsStatus is authoritative');
+          }
+          // Belt-and-braces: ensure the AppBar badge isn't lit just
+          // because the artisan doc disagrees with kycDetails.
+          if (_model.isVerified && mounted) {
+            setState(() {
+              _model.isVerified = false;
+              _kycVerifiedLocal = false;
+            });
+          }
         }
       } catch (e) {
         if (kDebugMode) debugPrint('artisan verification detection failed: $e');
@@ -1011,10 +1053,22 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
   Future<void> _fetchAuthoritativeKycStatus() async {
     try {
       final kycUri = Uri.parse('$API_BASE_URL/api/kyc/status');
+      // ApiClient.get doesn't log requests/responses (unlike KycService),
+      // so add an explicit trace here so we can see whether this endpoint
+      // is being called and what it returned. This is the only way to spot
+      // the documented /api/kyc/status 404 race vs the kycDetails block on
+      // /api/users/me — without it the call runs silently.
+      if (kDebugMode) {
+        debugPrint('[Dashboard] _fetchAuthoritativeKycStatus -> GET $kycUri');
+      }
       final resp = await ApiClient.get(kycUri.toString(),
           headers: {'Content-Type': 'application/json'});
       final status = resp['status'] as int? ?? 0;
       final body = resp['body']?.toString() ?? '';
+      if (kDebugMode) {
+        debugPrint(
+            '[Dashboard] _fetchAuthoritativeKycStatus <- status=$status body=$body');
+      }
 
       if (body.isNotEmpty) {
         try {
@@ -1169,17 +1223,26 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
               } catch (_) {}
             }
 
-            // If we only have a status string (e.g. 'approved'|'pending'), map that to verified boolean
-            if (!verified && parsedStatus != null) {
+            // STATUS WINS over `verified`. We've observed the backend
+            // sending `verified: true` alongside `status: "pending"` and
+            // `verifiedAt: null` — i.e. a flat-out contradiction. When
+            // they disagree, status is the truth (matches the
+            // dojah-kyc-status-updates doc's "approved/pending/rejected"
+            // contract). Override `verified` to be derived purely from
+            // status when status is present.
+            if (parsedStatus != null) {
               final sl = parsedStatus.toLowerCase();
-              if (sl == 'approved' ||
+              final statusSaysApproved = sl == 'approved' ||
                   sl == 'verified' ||
                   sl == 'success' ||
-                  sl == 'approved_by_admin') {
-                verified = true;
-              } else {
-                verified = false;
+                  sl == 'approved_by_admin';
+              if (verified && !statusSaysApproved) {
+                if (kDebugMode) {
+                  debugPrint(
+                      '[Dashboard] /api/kyc/status returned verified=true but status=$parsedStatus — trusting status, forcing verified=false');
+                }
               }
+              verified = statusSaysApproved;
             }
           }
 
@@ -1221,9 +1284,13 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
               final sl = parsedStatus?.toLowerCase();
               _kycFailureReason =
                   (sl == 'rejected' || sl == 'failed') ? parsedFailureReason : null;
+              // Sync `_model.isVerified` in BOTH directions. Previously
+              // this only flipped on (verified=true), which let a stale
+              // earlier code path leave the AppBar badge lit even after
+              // status told us we weren't verified. Now it tracks
+              // `verified` exactly, so pending/rejected force the badge off.
+              _model.isVerified = verified;
             });
-            if (verified && !_model.isVerified)
-              setState(() => _model.isVerified = true);
             // Recompute profile completion so UI updates immediately when KYC status changes
             try {
               _computeProfileCompletion();

@@ -12,7 +12,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../utils/app_notification.dart';
 import '../../utils/auth_guard.dart';
-import '../artisan_kyc_page/artisan_kyc_route_wrapper.dart';
+// import '../artisan_kyc_page/artisan_kyc_route_wrapper.dart'; // legacy KYC entry — superseded by ArtisanOnboardingWidget; restore this import + revert the two call sites in this file to roll back
+import '../artisan_onboarding/artisan_onboarding_widget.dart';
 import '../applicants_page/applicants_page_widget.dart';
 import '../submit_quote_page/submit_quote_page_widget.dart';
 
@@ -1423,10 +1424,14 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
                                             ),
                                           );
                                         } else {
+                                          // Route to the new ArtisanOnboardingWidget which
+                                          // handles trade/services + KYC end-to-end. The
+                                          // legacy ArtisanKycWidget is intentionally
+                                          // unreferenced here (kept exported for rollback).
                                           await Navigator.of(context).push(
                                               MaterialPageRoute(
                                                   builder: (_) =>
-                                                      const ArtisanKycWidget()));
+                                                      const ArtisanOnboardingWidget()));
                                           final after = await _hasVerifiedKyc();
                                           if (after) {
                                             _openSubmitQuotePage(context);
@@ -1484,10 +1489,13 @@ class _JobDetailsPageWidgetState extends State<JobDetailsPageWidget> {
                                           ),
                                         );
                                       } else {
+                                        // Same as above: open the new onboarding
+                                        // (trade + services + KYC) instead of the
+                                        // legacy stand-alone KYC screen.
                                         await Navigator.of(context).push(
                                             MaterialPageRoute(
                                                 builder: (_) =>
-                                                    const ArtisanKycWidget()));
+                                                    const ArtisanOnboardingWidget()));
                                       }
                                     } catch (e) {
                                       debugPrint('KYC flow error: $e');
