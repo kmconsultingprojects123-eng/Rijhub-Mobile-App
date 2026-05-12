@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
@@ -1545,6 +1546,96 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
 
   // ---- Section 4: KYC ----------------------------------------------------
 
+  /// Pre-flight camera + microphone permission check before launching the
+  /// Dojah WebView. Returns true when both permissions are granted and the
+  /// SDK is safe to open; false otherwise (with appropriate user feedback
+  /// already shown).
+  ///
+  /// On iOS, the Dojah WebView's `getUserMedia` call requires camera
+  /// permission to be granted at the OS level before the page loads —
+  /// otherwise the SDK silently bails to iOS Settings. Asking up-front means
+  /// either the native iOS prompt fires (first run) or we show a clear
+  /// dialog explaining why Settings is being opened (subsequent runs after
+  /// a deny). Mic is included because Dojah's liveness step uses voice
+  /// prompts on some flows.
+  Future<bool> _ensureKycPermissions() async {
+    // Camera is non-negotiable for selfie + liveness.
+    final cam = await _requestPermission(
+      Permission.camera,
+      friendlyName: 'camera',
+      explanation:
+          "RijHub needs camera access to capture your selfie for identity verification. Please enable it in Settings to continue.",
+    );
+    if (!cam) return false;
+
+    // Mic is best-effort — some Dojah widget configs use voice prompts for
+    // liveness, so we ask, but a denial here shouldn't block the flow.
+    try {
+      final micStatus = await Permission.microphone.status;
+      if (micStatus.isDenied) {
+        await Permission.microphone.request();
+      }
+    } catch (_) {
+      // Some platforms (web/desktop) don't expose mic; ignore.
+    }
+    return true;
+  }
+
+  /// Check + request a single permission, surfacing the right UI for each
+  /// terminal state. Returns true iff the permission is `granted` (or
+  /// `limited`, which iOS treats as a soft-yes).
+  Future<bool> _requestPermission(
+    Permission permission, {
+    required String friendlyName,
+    required String explanation,
+  }) async {
+    var status = await permission.status;
+    if (status.isGranted || status.isLimited) return true;
+
+    if (status.isDenied) {
+      status = await permission.request();
+      if (status.isGranted || status.isLimited) return true;
+    }
+
+    if (!mounted) return false;
+
+    // permanentlyDenied (Android) / restricted (iOS managed devices) /
+    // denied-after-prompt — the OS won't show its own prompt anymore, so
+    // we explain the situation and offer to open Settings ourselves. This
+    // replaces the SDK's silent Settings-open with something the artisan
+    // can actually understand.
+    final goToSettings = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return AlertDialog(
+          title: Text('${friendlyName[0].toUpperCase()}${friendlyName.substring(1)} access needed'),
+          content: Text(
+            explanation,
+            style: theme.textTheme.bodyMedium,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Not now'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Open settings'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (goToSettings == true) {
+      try {
+        await openAppSettings();
+      } catch (_) {}
+    }
+    return false;
+  }
+
   Future<void> _startVerification() async {
     final nin = _model.ninController?.text.trim() ?? '';
     if (nin.length != 11 || int.tryParse(nin) == null) {
@@ -1558,6 +1649,16 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
       }
       return;
     }
+
+    // Pre-flight camera/mic permission. The Dojah WebView calls
+    // `getUserMedia` for the selfie + liveness step; on iOS that requires
+    // OS-level camera permission to already be granted. If it isn't, the
+    // SDK opens iOS Settings without explanation — which is exactly what
+    // the artisan was seeing. By requesting up-front we either get the
+    // native prompt (first run) or show our own dialog when permission
+    // was previously denied, instead of yanking the user to Settings.
+    final permsOk = await _ensureKycPermissions();
+    if (!permsOk) return;
 
     // Pre-fill what we can so the user skips redundant entry inside the
     // Dojah widget. The widget handles the NIN entry, liveness, and selfie

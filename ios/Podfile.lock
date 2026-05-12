@@ -146,6 +146,13 @@ PODS:
     - Mantle
     - SDWebImage
     - SDWebImageWebPCoder
+  - flutter_inappwebview_ios (0.0.1):
+    - Flutter
+    - flutter_inappwebview_ios/Core (= 0.0.1)
+    - OrderedSet (~> 6.0.3)
+  - flutter_inappwebview_ios/Core (0.0.1):
+    - Flutter
+    - OrderedSet (~> 6.0.3)
   - flutter_native_splash (2.4.3):
     - Flutter
   - flutter_pcm_sound (0.0.1):
@@ -260,6 +267,8 @@ PODS:
   - libwebp/sharpyuv (1.5.0)
   - libwebp/webp (1.5.0):
     - libwebp/sharpyuv
+  - location (0.0.1):
+    - Flutter
   - Mantle (2.2.0):
     - Mantle/extobjc (= 2.2.0)
   - Mantle/extobjc (2.2.0)
@@ -268,6 +277,7 @@ PODS:
     - nanopb/encode (= 3.30910.0)
   - nanopb/decode (3.30910.0)
   - nanopb/encode (3.30910.0)
+  - OrderedSet (6.0.3)
   - package_info_plus (0.4.5):
     - Flutter
   - permission_handler_apple (9.3.0):
@@ -311,6 +321,7 @@ DEPENDENCIES:
   - Flutter (from `Flutter`)
   - flutter_foreground_task (from `.symlinks/plugins/flutter_foreground_task/ios`)
   - flutter_image_compress_common (from `.symlinks/plugins/flutter_image_compress_common/ios`)
+  - flutter_inappwebview_ios (from `.symlinks/plugins/flutter_inappwebview_ios/ios`)
   - flutter_native_splash (from `.symlinks/plugins/flutter_native_splash/ios`)
   - flutter_pcm_sound (from `.symlinks/plugins/flutter_pcm_sound/ios`)
   - flutter_secure_storage_darwin (from `.symlinks/plugins/flutter_secure_storage_darwin/darwin`)
@@ -319,6 +330,7 @@ DEPENDENCIES:
   - google_maps_flutter_ios (from `.symlinks/plugins/google_maps_flutter_ios/ios`)
   - google_sign_in_ios (from `.symlinks/plugins/google_sign_in_ios/darwin`)
   - image_picker_ios (from `.symlinks/plugins/image_picker_ios/ios`)
+  - location (from `.symlinks/plugins/location/ios`)
   - package_info_plus (from `.symlinks/plugins/package_info_plus/ios`)
   - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
   - rive_native (from `.symlinks/plugins/rive_native/ios`)
@@ -360,6 +372,7 @@ SPEC REPOS:
     - libwebp
     - Mantle
     - nanopb
+    - OrderedSet
     - PromisesObjC
     - RecaptchaInterop
     - SDWebImage
@@ -389,6 +402,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/flutter_foreground_task/ios"
   flutter_image_compress_common:
     :path: ".symlinks/plugins/flutter_image_compress_common/ios"
+  flutter_inappwebview_ios:
+    :path: ".symlinks/plugins/flutter_inappwebview_ios/ios"
   flutter_native_splash:
     :path: ".symlinks/plugins/flutter_native_splash/ios"
   flutter_pcm_sound:
@@ -405,6 +420,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/google_sign_in_ios/darwin"
   image_picker_ios:
     :path: ".symlinks/plugins/image_picker_ios/ios"
+  location:
+    :path: ".symlinks/plugins/location/ios"
   package_info_plus:
     :path: ".symlinks/plugins/package_info_plus/ios"
   permission_handler_apple:
@@ -451,6 +468,7 @@ SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_foreground_task: a159d2c2173b33699ddb3e6c2a067045d7cebb89
   flutter_image_compress_common: 1697a328fd72bfb335507c6bca1a65fa5ad87df1
+  flutter_inappwebview_ios: b89ba3482b96fb25e00c967aae065701b66e9b99
   flutter_native_splash: c32d145d68aeda5502d5f543ee38c192065986cf
   flutter_pcm_sound: e9c2f6ce580eefcab2af46763f0354484d5c4ac8
   flutter_secure_storage_darwin: acdb3f316ed05a3e68f856e0353b133eec373a23
@@ -471,8 +489,10 @@ SPEC CHECKSUMS:
   image_picker_ios: e0ece4aa2a75771a7de3fa735d26d90817041326
   IosAwnCore: 653786a911089012092ce831f2945cd339855a89
   libwebp: 02b23773aedb6ff1fd38cec7a77b81414c6842a8
+  location: 155caecf9da4f280ab5fe4a55f94ceccfab838f8
   Mantle: c5aa8794a29a022dfbbfc9799af95f477a69b62d
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
+  OrderedSet: e539b66b644ff081c73a262d24ad552a69be3a94
   package_info_plus: af8e2ca6888548050f16fa2f1938db7b5a5df499
   permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
@@ -488,6 +508,6 @@ SPEC CHECKSUMS:
   wakelock_plus: e29112ab3ef0b318e58cfa5c32326458be66b556
   webview_flutter_wkwebview: 8ebf4fded22593026f7dbff1fbff31ea98573c8d
 
-PODFILE CHECKSUM: 0e73f4dd58e71cb2aead8cee366ad1bd4899bb3f
+PODFILE CHECKSUM: 4605430f5daff550a27be4fbaa463a41c0820c8e
 
 COCOAPODS: 1.16.2

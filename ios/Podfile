@@ -40,7 +40,23 @@ post_install do |installer|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|
       config.build_settings.delete 'IPHONEOS_DEPLOYMENT_TARGET'
-      
+
+      # permission_handler iOS plugin gates each permission behind a
+      # compile-time preprocessor macro. Without these flags, calls like
+      # Permission.camera.request() and Permission.microphone.request()
+      # return `denied` immediately and never show the OS prompt — which
+      # is exactly the symptom we saw on real iOS devices for the Dojah
+      # KYC selfie and the AI Support mic. Android isn't affected since
+      # its plugin doesn't gate by macro.
+      # Reference: https://pub.dev/packages/permission_handler#setup
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
+        '$(inherited)',
+        'PERMISSION_CAMERA=1',
+        'PERMISSION_MICROPHONE=1',
+        'PERMISSION_PHOTOS=1',
+        'PERMISSION_LOCATION=1',
+        'PERMISSION_NOTIFICATIONS=1',
+      ]
     end
   end
 

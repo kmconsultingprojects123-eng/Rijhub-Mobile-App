@@ -58,6 +58,12 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
   // ---- UI state ----
   _CallState _callState = _CallState.connecting;
   String _statusText = 'Connecting…';
+  // True when mic permission is denied at the OS level and re-requesting
+  // won't show the native prompt anymore (iOS permanently-denied,
+  // restricted via MDM, or Android "Don't ask again"). When this is set
+  // the Retry button changes label/action to open app settings instead of
+  // looping back into a denied `request()` call.
+  bool _micBlocked = false;
   String _transcriptSnippet = '';
   bool _isMuted = false;
   Duration _elapsed = Duration.zero;
@@ -470,19 +476,39 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
       return;
     }
 
-    // 1. Mic permission.
+    // 1. Mic permission. Check status before requesting so we can tell a
+    //    first-time denial (where iOS will show its prompt) apart from a
+    //    permanently-denied state (where `request()` returns denied
+    //    immediately and the user is stuck unless we open Settings).
     debugPrint('[GeminiLive] requesting mic permission…');
-    final micStatus = await Permission.microphone.request();
-    if (!micStatus.isGranted) {
-      debugPrint('[GeminiLive] mic permission denied');
+    var micStatus = await Permission.microphone.status;
+    if (micStatus.isDenied) {
+      micStatus = await Permission.microphone.request();
+    }
+    if (!(micStatus.isGranted || micStatus.isLimited)) {
+      debugPrint('[GeminiLive] mic permission denied (status=$micStatus)');
+      // permanentlyDenied / restricted / post-prompt denied — `request()`
+      // won't show the native prompt anymore. Flag it so the Retry button
+      // opens app settings instead of looping into another denied request.
+      final blocked = micStatus.isPermanentlyDenied || micStatus.isRestricted;
       if (!mounted) return;
       setState(() {
         _callState = _CallState.error;
-        _statusText = 'Microphone permission denied';
+        _statusText = blocked
+            ? 'Microphone access blocked — open Settings to enable'
+            : 'Microphone permission denied';
+        _micBlocked = blocked;
       });
+      if (blocked) {
+        // Non-blocking offer to take the user to Settings right away.
+        // They can also tap Retry later — that button now also opens
+        // Settings when `_micBlocked` is true.
+        unawaited(_promptOpenMicSettings());
+      }
       return;
     }
     debugPrint('[GeminiLive] mic permission granted');
+    if (_micBlocked && mounted) setState(() => _micBlocked = false);
 
     // 2. Open audio I/O.
     final audioOk = await _initAudio();
@@ -549,9 +575,59 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
 
   void _retryCall() {
     debugPrint('[GeminiLive] retrying…');
+    // If the error was a permanent mic denial, retrying the same flow
+    // would just immediately fail again — iOS won't re-show its prompt.
+    // Open Settings instead so the user can actually unblock it.
+    if (_micBlocked) {
+      unawaited(_promptOpenMicSettings(autoOpen: true));
+      return;
+    }
     _disposeAudio();
     _gemini.disconnect();
     _startCall();
+  }
+
+  /// Show an alert explaining that mic access is blocked and offer to
+  /// open the app's settings page so the user can flip the toggle on.
+  /// When [autoOpen] is true (Retry button path) we skip the dialog and
+  /// just open settings directly, since the dialog will have already
+  /// been shown earlier in the same session.
+  Future<void> _promptOpenMicSettings({bool autoOpen = false}) async {
+    if (autoOpen) {
+      try {
+        await openAppSettings();
+      } catch (_) {}
+      return;
+    }
+    if (!mounted) return;
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return AlertDialog(
+          title: const Text('Microphone access needed'),
+          content: Text(
+            "AI Support needs microphone access so you can speak with our assistant. Open Settings to enable it for RijHub.",
+            style: theme.textTheme.bodyMedium,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Not now'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Open settings'),
+            ),
+          ],
+        );
+      },
+    );
+    if (go == true) {
+      try {
+        await openAppSettings();
+      } catch (_) {}
+    }
   }
 
   void _toggleMute() {
@@ -894,13 +970,23 @@ class _AiSupportCallWidgetState extends State<AiSupportCallWidget>
               ),
             ],
 
-            // ---- Retry button on error ----
+            // ---- Retry / Open Settings button on error ----
+            // When the underlying error is a permanent mic denial the
+            // button labels itself "Open Settings" and routes there, since
+            // a literal retry would just hit the same denied permission
+            // again. Plain network/connection errors still get the
+            // standard Retry behaviour.
             if (_callState == _CallState.error) ...[
               const SizedBox(height: 16),
               ElevatedButton.icon(
                 onPressed: _retryCall,
-                icon: const Icon(Icons.refresh_rounded, size: 18),
-                label: const Text('Retry'),
+                icon: Icon(
+                  _micBlocked
+                      ? Icons.settings_rounded
+                      : Icons.refresh_rounded,
+                  size: 18,
+                ),
+                label: Text(_micBlocked ? 'Open settings' : 'Retry'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: primaryColor,
                   foregroundColor: Colors.white,
