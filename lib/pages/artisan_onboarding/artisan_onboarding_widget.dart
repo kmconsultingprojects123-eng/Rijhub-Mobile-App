@@ -1949,6 +1949,16 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         final isPending = sl == 'pending' || sl == 'pending_review';
         if (!isPending) await TokenStorage.saveKycReferenceId(null);
       } catch (_) {}
+
+      // Push the fresh profile (with new kycDetails) into the global
+      // AppStateNotifier so the dashboard — whose State persists inside
+      // NavBarPage across navigations and therefore won't re-run
+      // initState on return — picks up the change via its
+      // notifyListeners() subscription. Without this, the artisan lands
+      // on a stale dashboard and has to pull-to-refresh.
+      try {
+        unawaited(AppStateNotifier.instance.refreshProfile());
+      } catch (_) {}
     }
 
     _dismissVerifyingKycOverlay();

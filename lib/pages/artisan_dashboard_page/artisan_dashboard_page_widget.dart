@@ -128,6 +128,31 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
         } catch (_) {}
       });
     });
+
+    // The dashboard is hosted inside NavBarPage (lib/main.dart), so its
+    // State PERSISTS across in-app navigations like onboarding -> back.
+    // That means `initState` only runs once — when the artisan finishes
+    // KYC, returns here, the stale `_kycStatus` (read from TokenStorage on
+    // the original mount) sticks until something else triggers a refresh.
+    // Listening to AppStateNotifier closes that loop: whenever the global
+    // profile changes (the onboarding flow calls `refreshProfile()` on
+    // KYC success), we re-apply `kycDetails` against the cached profile
+    // and the card / badge update without the artisan needing to
+    // pull-to-refresh.
+    try {
+      AppStateNotifier.instance.addListener(_onGlobalAppStateChanged);
+    } catch (_) {}
+  }
+
+  void _onGlobalAppStateChanged() {
+    if (!mounted) return;
+    final profile = AppStateNotifier.instance.profile;
+    if (profile == null) return;
+    // _applyKycFromProfile is idempotent and already deduplicates state
+    // updates via setState — calling it on every notify is cheap.
+    try {
+      unawaited(_applyKycFromProfile(Map<String, dynamic>.from(profile)));
+    } catch (_) {}
   }
 
   void _startNotificationPolling() {
@@ -1817,6 +1842,9 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
     _notifAnimController?.dispose();
     _notifTimer?.cancel();
     _kycRetryTimer?.cancel();
+    try {
+      AppStateNotifier.instance.removeListener(_onGlobalAppStateChanged);
+    } catch (_) {}
     _stopReviewsAutoScroll();
     _model.dispose();
     super.dispose();

@@ -72,10 +72,20 @@ class _WelcomeAfterSignupWidgetState extends State<WelcomeAfterSignupWidget> {
 
     // Show notification permission dialog after a brief moment so user sees
     // welcome; navigation does not depend on this dialog finishing.
+    //
+    // IMPORTANT: cancel the 2s hard-fallback timer before opening the
+    // dialog. Otherwise the timer fires mid-dialog (since users usually
+    // take longer than ~1.4s to read + tap "Allow"/"Skip"), navigates the
+    // route away, and the system dismisses the dialog visually — looks
+    // like the dialog flashed and disappeared. The dialog's own
+    // continuation handles navigation when it closes, so the safety net
+    // isn't useful once the dialog has actually opened.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted || _navigated) return;
       await Future.delayed(const Duration(milliseconds: 600));
       if (!mounted || _navigated) return;
+      _autoNavigateTimer?.cancel();
+      _autoNavigateTimer = null;
       await showNotificationPermissionDialog(context, role: _role);
       if (!mounted || _navigated) return;
       _navigateToDashboard();
