@@ -351,6 +351,11 @@ class KycService {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
+        body: jsonEncode({
+          'status': 'pending',
+          'provider': 'dojah_sdk',
+          'providerStatus': 'started',
+        }),
       ).timeout(timeout);
 
       developer.log(
