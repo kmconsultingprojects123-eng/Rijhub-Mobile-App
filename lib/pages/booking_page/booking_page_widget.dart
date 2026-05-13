@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../../services/token_storage.dart';
 import '../../services/user_service.dart';
 import '../../services/artist_service.dart';
+import '../../services/payment_service.dart';
 import '../../api_config.dart';
 import '../../services/notification_service.dart';
 import '../../utils/app_notification.dart';
@@ -63,6 +64,12 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
 
   String? _participantId;
   bool _isArtisan = false;
+  // Platform commission percentage fetched once on mount for artisans
+  // via GET /api/payments/commission. Used to render a per-booking
+  // "Platform fee · You receive" breakdown on the artisan side only —
+  // this is purely display data (the backend recalculates on actual
+  // verified payment), and customers never see it.
+  double? _commissionPct;
   // Optional initial IDs passed when navigating to this page (e.g., from payment flow)
   String? _initialBookingId;
   String? _initialThreadId;
@@ -406,6 +413,29 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
     _initRealtimeUpdates();
   }
 
+  /// Fetch the current platform commission percentage from
+  /// `GET /api/payments/commission` and stash it for per-booking
+  /// breakdown rendering. Silent on failure — the breakdown is purely
+  /// informational, never blocking.
+  Future<void> _loadCommissionPct() async {
+    try {
+      final data = await PaymentService.getCommission();
+      if (data == null) return;
+      final raw = data['percentage'];
+      double? pct;
+      if (raw is num) {
+        pct = raw.toDouble();
+      } else if (raw != null) {
+        pct = double.tryParse(raw.toString());
+      }
+      if (pct == null || pct < 0 || pct > 100) return;
+      if (!mounted) return;
+      setState(() => _commissionPct = pct);
+    } catch (_) {
+      // Already absorbed inside PaymentService; nothing to do.
+    }
+  }
+
   Future<void> _loadProfileAndBookings() async {
     try {
       final profile = await UserService.getProfile();
@@ -416,6 +446,14 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
     } catch (_) {
       _participantId = null;
       _isArtisan = false;
+    }
+
+    // Artisans only: fetch the platform commission percentage once so we
+    // can render a "Platform fee · You receive" breakdown next to each
+    // booking's amount. Fire-and-forget — booking list rendering doesn't
+    // wait on it; if the fetch fails the breakdown just doesn't appear.
+    if (_isArtisan && _commissionPct == null) {
+      unawaited(_loadCommissionPct());
     }
 
     _hydrateBookingsFromCacheIfAvailable();
@@ -2217,6 +2255,12 @@ class _BookingPageWidgetState extends State<BookingPageWidget> {
                                 child: _BookingCard(
                                   booking: booking,
                                   isArtisan: _isArtisan,
+                                  // Display-only commission percentage —
+                                  // null for customers (card hides the
+                                  // breakdown) and during the in-flight
+                                  // window before the fetch returns.
+                                  commissionPct:
+                                      _isArtisan ? _commissionPct : null,
                                   onProfileTap: () =>
                                       _onProfileTap(context, booking),
                                   onAccept: () => _acceptBooking(booking),
@@ -2423,6 +2467,25 @@ String _extractPrice(Map<String, dynamic> booking) {
   return '-';
 }
 
+/// Raw numeric price for a booking (no formatting). Used by the artisan
+/// commission-breakdown row so we can compute the platform fee and net
+/// payout locally without re-parsing the formatted string.
+double? _extractPriceNumber(Map<String, dynamic> booking) {
+  final data = booking['booking'] ?? booking;
+  final keys = ['price', 'amount', 'total'];
+  for (final k in keys) {
+    final v = data[k];
+    if (v == null) continue;
+    if (v is num) return v.toDouble();
+    if (v is String) {
+      final cleaned = v.replaceAll(RegExp(r'[^0-9.-]'), '');
+      final n = double.tryParse(cleaned);
+      if (n != null) return n;
+    }
+  }
+  return null;
+}
+
 String? _extractBookingId(dynamic booking) {
   try {
     if (booking == null) return null;
@@ -2461,6 +2524,11 @@ String? _extractBookingId(dynamic booking) {
 class _BookingCard extends StatelessWidget {
   final Map<String, dynamic> booking;
   final bool isArtisan;
+  // Display-only platform commission percentage. Null for customers and
+  // while the artisan-side fetch is in flight. When present (artisan +
+  // resolved), the card renders a "Platform fee · You receive" breakdown
+  // under the Amount column.
+  final double? commissionPct;
   final VoidCallback onProfileTap;
   final VoidCallback? onAccept;
   final VoidCallback? onReject;
@@ -2481,6 +2549,7 @@ class _BookingCard extends StatelessWidget {
   const _BookingCard(
       {required this.booking,
       required this.isArtisan,
+      this.commissionPct,
       required this.onProfileTap,
       this.onAccept,
       this.onReject,
@@ -2767,6 +2836,44 @@ class _BookingCard extends StatelessWidget {
                           color: colorScheme.primary,
                           fontWeight: FontWeight.w700),
                     ),
+                    // Artisan-only platform-fee breakdown. Shown beneath
+                    // the amount when we have both a numeric booking price
+                    // and a resolved commission percentage from
+                    // GET /api/payments/commission. Customers never see
+                    // this block; the backend recomputes the actual fee
+                    // on verified payment regardless of what we render
+                    // here, per the doc.
+                    if (isArtisan && commissionPct != null) ...(() {
+                      final price = _extractPriceNumber(booking);
+                      if (price == null || price <= 0)
+                        return <Widget>[];
+                      final fee = price * (commissionPct! / 100);
+                      final net = price - fee;
+                      final pctLabel = commissionPct! % 1 == 0
+                          ? commissionPct!.toInt().toString()
+                          : commissionPct!.toStringAsFixed(1);
+                      final feeStr =
+                          '₦${NumberFormat('#,##0', 'en_US').format(fee)}';
+                      final netStr =
+                          '₦${NumberFormat('#,##0', 'en_US').format(net)}';
+                      return <Widget>[
+                        const SizedBox(height: 6),
+                        Text(
+                          'Platform fee ($pctLabel%): −$feeStr',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: colorScheme.onSurface.withAlpha(140),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'You receive: $netStr',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: colorScheme.onSurface,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ];
+                    })(),
                   ],
                 ),
               ],

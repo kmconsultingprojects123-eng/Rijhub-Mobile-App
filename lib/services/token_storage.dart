@@ -20,6 +20,12 @@ class TokenStorage {
   // Persisted so the dashboard's rejected card can surface it after a
   // refresh/reopen, without needing to re-hit /api/kyc/status first.
   static const _keyKycFailureReason = 'kyc_failure_reason';
+  // Dojah session referenceId returned by /api/kyc/dojah/start-session
+  // (or fallback client-generated). Persisted so the dashboard can replay
+  // `verify-reference` calls in the background when an artisan lands on
+  // the dashboard with a still-pending KYC — per the documented retry
+  // loop in `dojah-pending-resolution-mobile.md`.
+  static const _keyKycReferenceId = 'kyc_reference_id';
   static const _keyRecentName = 'recent_name';
   static const _keyRecentEmail = 'recent_email';
   static const _keyRecentPhone = 'recent_phone';
@@ -988,10 +994,15 @@ class TokenStorage {
           await prefs.remove(_keyKycStatus);
         } catch (_) {}
       }
-      // Status and failure reason are tied together — clearing one without the
-      // other leaves stale state (e.g. status=null but reason='Selfie blurry').
+      // Status, failure reason, and reference id are tied together —
+      // clearing one without the others leaves stale state (e.g.
+      // status=null but reason='Selfie blurry', or a referenceId pointing
+      // at a wiped record). Always nuke together.
       try {
         await deleteKycFailureReason();
+      } catch (_) {}
+      try {
+        await deleteKycReferenceId();
       } catch (_) {}
     } catch (e) {
       debugPrint('TokenStorage: deleteKycStatus failed: $e');
@@ -1064,6 +1075,100 @@ class TokenStorage {
       }
     } catch (e) {
       debugPrint('TokenStorage: saveKycFailureReason failed: $e');
+    }
+  }
+
+  /// Read the saved Dojah reference id, or null if none.
+  /// Used by the dashboard's pending-retry loop to replay
+  /// `verify-reference` until the backend's KYC record flips to
+  /// approved/rejected.
+  static Future<String?> getKycReferenceId() async {
+    try {
+      if (kIsWeb) {
+        final prefs = await SharedPreferences.getInstance();
+        return prefs.getString(_keyKycReferenceId);
+      } else {
+        final s = await _getSecureStorage();
+        if (s != null) {
+          try {
+            final v = await s.read(key: _keyKycReferenceId);
+            if (v != null && v.isNotEmpty) return v;
+          } catch (e) {
+            debugPrint(
+                'TokenStorage: secure read kyc_reference_id failed: $e');
+            _secureAvailable = false;
+          }
+        }
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          return prefs.getString(_keyKycReferenceId);
+        } catch (e) {
+          debugPrint('TokenStorage: getKycReferenceId failed: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('TokenStorage: getKycReferenceId top-level failed: $e');
+    }
+    return null;
+  }
+
+  /// Save the Dojah reference id alongside the KYC record. Passing
+  /// null/empty wipes it — typically called when the KYC flips to
+  /// approved/rejected so no further retries happen.
+  static Future<void> saveKycReferenceId(String? referenceId) async {
+    if (referenceId == null || referenceId.isEmpty) {
+      await deleteKycReferenceId();
+      return;
+    }
+    try {
+      if (kIsWeb) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_keyKycReferenceId, referenceId);
+      } else {
+        final s = await _getSecureStorage();
+        if (s != null) {
+          try {
+            await s.write(key: _keyKycReferenceId, value: referenceId);
+          } catch (e) {
+            debugPrint(
+                'TokenStorage: secure write kyc_reference_id failed: $e');
+            _secureAvailable = false;
+          }
+        } else {
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setString(_keyKycReferenceId, referenceId);
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      debugPrint('TokenStorage: saveKycReferenceId failed: $e');
+    }
+  }
+
+  static Future<void> deleteKycReferenceId() async {
+    try {
+      if (kIsWeb) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_keyKycReferenceId);
+      } else {
+        final s = await _getSecureStorage();
+        if (s != null) {
+          try {
+            await s.delete(key: _keyKycReferenceId);
+          } catch (e) {
+            debugPrint(
+                'TokenStorage: secure delete kyc_reference_id failed: $e');
+            _secureAvailable = false;
+          }
+        }
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove(_keyKycReferenceId);
+        } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('TokenStorage: deleteKycReferenceId failed: $e');
     }
   }
 

@@ -1675,14 +1675,48 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
     final email = profile?['email']?.toString();
     final userId = (profile?['_id'] ?? profile?['id'])?.toString();
 
-    // Generate a client-side reference so we can correlate the SDK launch
-    // with the verification record on our backend. The backend
-    // `/api/kyc/dojah/verify-reference` endpoint will use Dojah's reference
-    // (returned by the SDK) for the actual lookup; this string is only for
-    // our own logs.
-    final localRef = 'rij_kyc_'
-        '${DateTime.now().millisecondsSinceEpoch}'
-        '${userId != null ? '_$userId' : ''}';
+    // Ask the backend to start a Dojah session and hand us a canonical
+    // referenceId (see `dojah-pending-resolution-mobile.md`). This both
+    // seeds a `pending` KYC record on our side and gives us the reference
+    // the SDK must pass back to Dojah, ensuring the same id flows through
+    // SDK -> Dojah -> verify-reference for the lookup.
+    //
+    // If start-session fails we abort here rather than fall back to a
+    // client-generated id: the backend wouldn't have a `pending` record
+    // for verify-reference to update, so the artisan would land on the
+    // dashboard with no path to a final status.
+    final token = await TokenStorage.getToken() ?? '';
+    if (token.isEmpty) {
+      _toast('You need to sign in again before verifying your identity.');
+      return;
+    }
+    String? referenceId;
+    try {
+      referenceId = await KycService.startDojahSession(token: token);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[Onboarding] startDojahSession threw: $e');
+    }
+    if (referenceId == null || referenceId.isEmpty) {
+      if (kDebugMode) {
+        debugPrint(
+            '[Onboarding] startDojahSession failed — aborting KYC launch');
+      }
+      _toast(
+          "Couldn't start identity verification. Please check your connection and try again.");
+      return;
+    }
+    if (kDebugMode) {
+      debugPrint(
+          '[Onboarding] startDojahSession -> using server referenceId=$referenceId');
+    }
+
+    // Persist the referenceId so the dashboard's pending-retry loop can
+    // replay verify-reference if the artisan lands there with a
+    // still-pending KYC. Cleared in `_startVerification`'s post-handling
+    // once the status flips to approved/rejected.
+    try {
+      await TokenStorage.saveKycReferenceId(referenceId);
+    } catch (_) {}
 
     // Launch the Dojah WebView KYC widget. The widget runs the configured
     // verification flow (NIN entry / liveness / selfie match) inside a
@@ -1699,7 +1733,7 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         appId: DOJAH_APP_ID,
         publicKey: DOJAH_PUBLIC_KEY,
         type: 'custom',
-        referenceId: localRef,
+        referenceId: referenceId,
         config: {
           'widget_id': DOJAH_WIDGET_ID,
         },
@@ -1712,7 +1746,7 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         govData: {'nin': nin},
         metaData: {
           if (userId != null) 'rijhub_user_id': userId,
-          'rijhub_local_ref': localRef,
+          'rijhub_local_ref': referenceId,
         },
       );
 
@@ -1734,7 +1768,7 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
           } else if (result is String && result.isNotEmpty) {
             ref = result;
           }
-          capturedReference = ref ?? localRef;
+          capturedReference = ref ?? referenceId;
           // The Dojah hosted page doesn't close itself after the success
           // screen — it just calls this handler and goes blank. Pop the
           // WebView so the user returns to the onboarding screen and the
@@ -1904,6 +1938,16 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         } else {
           await TokenStorage.saveKycFailureReason(null);
         }
+      } catch (_) {}
+
+      // Reference id lifecycle: keep it while the KYC is still `pending`
+      // so the dashboard's retry loop can keep polling; wipe it the moment
+      // we hit a terminal state (approved/rejected/failed) so we don't
+      // pointlessly re-verify a finalised record.
+      try {
+        final sl = resolvedStatus.toLowerCase();
+        final isPending = sl == 'pending' || sl == 'pending_review';
+        if (!isPending) await TokenStorage.saveKycReferenceId(null);
       } catch (_) {}
     }
 

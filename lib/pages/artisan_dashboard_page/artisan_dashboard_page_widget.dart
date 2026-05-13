@@ -64,6 +64,23 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
   // with 0%" issue right after the artisan finishes onboarding.
   bool _kycChecked = false;
 
+  // Pending-retry state for the documented Dojah pending-resolution loop.
+  // When an artisan lands on the dashboard with `_kycStatus == 'pending'`
+  // we replay `verify-reference` up to `_kycMaxRetryAttempts` times in the
+  // background, respecting any `retryAfterSeconds` hint from the backend.
+  // This catches the case where the artisan finished onboarding but
+  // Dojah's final result hadn't propagated server-side yet, so the
+  // dashboard would otherwise stay on the "Verification pending" card
+  // even after Dojah actually approved/rejected the record.
+  static const int _kycMaxRetryAttempts = 5;
+  static const Duration _kycRetryDefaultDelay = Duration(seconds: 5);
+  Timer? _kycRetryTimer;
+  int _kycRetryAttempts = 0;
+  // Guards against re-entrancy if `_initKycStatus` runs again (e.g. after
+  // `_fetchAuthoritativeKycStatus` updates state) while a retry chain is
+  // already in flight.
+  bool _kycRetryScheduled = false;
+
   // Notification badge state (kept in dashboard to mirror Home behavior)
   int _unreadNotifications = 0;
   AnimationController? _notifAnimController;
@@ -378,6 +395,19 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
       try {
         _computeProfileCompletion();
       } catch (_) {}
+      // Profile may have moved us off pending (e.g. server processed
+      // Dojah while the app was backgrounded). Cancel any retries that
+      // were targeting a now-stale pending state, and schedule fresh
+      // ones if we're still pending.
+      final statusL = status?.toLowerCase();
+      final stillPending = statusL == 'pending' ||
+          statusL == 'pending_review' ||
+          statusL == 'in_review';
+      if (!stillPending) {
+        _cancelKycPendingRetry();
+      } else if (!_kycRetryScheduled) {
+        _maybeScheduleKycPendingRetry();
+      }
     }
     return status;
   }
@@ -486,6 +516,11 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
         _kycFailureReason = results[1];
         _kycChecked = true;
       });
+      // Kick off the documented pending-retry loop (replay verify-reference
+      // in the background) when we land here with a pending status. Safe
+      // to call unconditionally — the method itself bails when status
+      // isn't pending or when a retry chain is already running.
+      _maybeScheduleKycPendingRetry();
     } catch (e) {
       if (kDebugMode) debugPrint('Failed to read saved kyc status: $e');
       if (mounted) {
@@ -494,6 +529,182 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
         });
       }
     }
+  }
+
+  /// If the dashboard is rendering a pending KYC card AND we have a saved
+  /// Dojah `referenceId` from onboarding, schedule a background replay of
+  /// `POST /api/kyc/dojah/verify-reference` per the documented
+  /// pending-resolution flow. Caps at `_kycMaxRetryAttempts` and respects
+  /// the `retryAfterSeconds` hint that the backend returns on a still-
+  /// pending response. Bails immediately when status flips to
+  /// approved/rejected, when the artisan refreshes (which calls
+  /// `_fetchAuthoritativeKycStatus` directly), or when this widget
+  /// unmounts. Idempotent — re-running while a chain is in flight is a
+  /// no-op.
+  void _maybeScheduleKycPendingRetry({Duration? initialDelay}) {
+    if (!mounted || _kycRetryScheduled) return;
+    final s = _kycStatus?.toLowerCase();
+    final isPending =
+        s == 'pending' || s == 'pending_review' || s == 'in_review';
+    if (!isPending) return;
+
+    _kycRetryScheduled = true;
+    _kycRetryAttempts = 0;
+    final delay = initialDelay ?? _kycRetryDefaultDelay;
+    if (kDebugMode) {
+      debugPrint(
+          '[Dashboard] KYC pending — scheduling verify-reference retry #1 in ${delay.inSeconds}s');
+    }
+    _kycRetryTimer?.cancel();
+    _kycRetryTimer = Timer(delay, _runKycPendingRetry);
+  }
+
+  Future<void> _runKycPendingRetry() async {
+    if (!mounted) {
+      _kycRetryScheduled = false;
+      return;
+    }
+    // Snapshot the status at fire-time. The user may have refreshed or
+    // the auth-status fetch may have already moved us off pending.
+    final s = _kycStatus?.toLowerCase();
+    final isPending =
+        s == 'pending' || s == 'pending_review' || s == 'in_review';
+    if (!isPending) {
+      _cancelKycPendingRetry();
+      return;
+    }
+
+    _kycRetryAttempts++;
+    if (_kycRetryAttempts > _kycMaxRetryAttempts) {
+      if (kDebugMode) {
+        debugPrint(
+            '[Dashboard] KYC pending-retry: hit cap ($_kycMaxRetryAttempts) — backing off. Refresh/reopen will pick up later.');
+      }
+      _cancelKycPendingRetry();
+      return;
+    }
+
+    final referenceId = await TokenStorage.getKycReferenceId();
+    if (referenceId == null || referenceId.isEmpty) {
+      if (kDebugMode) {
+        debugPrint(
+            '[Dashboard] KYC pending-retry: no saved referenceId — nothing to replay');
+      }
+      _cancelKycPendingRetry();
+      return;
+    }
+    final token = await TokenStorage.getToken();
+    if (token == null || token.isEmpty) {
+      _cancelKycPendingRetry();
+      return;
+    }
+
+    if (kDebugMode) {
+      debugPrint(
+          '[Dashboard] KYC pending-retry attempt $_kycRetryAttempts/$_kycMaxRetryAttempts referenceId=$referenceId');
+    }
+
+    Map<String, dynamic>? result;
+    try {
+      result = await KycService.verifyDojahReference(
+        referenceId: referenceId,
+        token: token,
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[Dashboard] KYC pending-retry network error: $e');
+      }
+      // Schedule another attempt — network errors are transient.
+      _scheduleNextKycRetry(_kycRetryDefaultDelay);
+      return;
+    }
+
+    if (!mounted) {
+      _kycRetryScheduled = false;
+      return;
+    }
+
+    final newStatus = result['status']?.toString();
+    final newReason = result['failureReason']?.toString();
+    final sl = newStatus?.toLowerCase();
+    final stillPending = sl == 'pending' || sl == 'pending_review';
+
+    if (kDebugMode) {
+      debugPrint(
+          '[Dashboard] KYC pending-retry result: status=$newStatus reason=$newReason');
+    }
+
+    if (!stillPending && newStatus != null && newStatus.isNotEmpty) {
+      // Terminal — persist + update local state, then stop retrying.
+      try {
+        await TokenStorage.saveKycStatus(newStatus);
+        if (sl == 'rejected' || sl == 'failed') {
+          await TokenStorage.saveKycFailureReason(newReason);
+        } else {
+          await TokenStorage.saveKycFailureReason(null);
+        }
+        // Wipe the referenceId — the KYC record is finalised; no further
+        // verify-reference replays should happen for this submission.
+        await TokenStorage.saveKycReferenceId(null);
+      } catch (_) {}
+      if (mounted) {
+        setState(() {
+          _kycStatus = newStatus;
+          _kycFailureReason =
+              (sl == 'rejected' || sl == 'failed') ? newReason : null;
+          final approved = sl == 'approved' ||
+              sl == 'verified' ||
+              sl == 'success' ||
+              sl == 'approved_by_admin';
+          _kycVerifiedLocal = approved;
+          if (approved) _model.isVerified = true;
+        });
+        try {
+          _computeProfileCompletion();
+        } catch (_) {}
+      }
+      _cancelKycPendingRetry();
+      return;
+    }
+
+    // Still pending — schedule another attempt. Honour
+    // `retryAfterSeconds` when present, otherwise use the default.
+    Duration nextDelay = _kycRetryDefaultDelay;
+    try {
+      final raw = result['retryAfterSeconds'];
+      final secs = raw is num
+          ? raw.toInt()
+          : (raw is String ? int.tryParse(raw) : null);
+      if (secs != null) {
+        // Clamp to a sane band so a bad value can't pin us at 0s or 10min.
+        nextDelay = Duration(seconds: secs.clamp(2, 30));
+      }
+    } catch (_) {}
+    _scheduleNextKycRetry(nextDelay);
+  }
+
+  void _scheduleNextKycRetry(Duration delay) {
+    if (!mounted) {
+      _kycRetryScheduled = false;
+      return;
+    }
+    if (_kycRetryAttempts >= _kycMaxRetryAttempts) {
+      _cancelKycPendingRetry();
+      return;
+    }
+    if (kDebugMode) {
+      debugPrint(
+          '[Dashboard] KYC pending-retry: next attempt in ${delay.inSeconds}s');
+    }
+    _kycRetryTimer?.cancel();
+    _kycRetryTimer = Timer(delay, _runKycPendingRetry);
+  }
+
+  void _cancelKycPendingRetry() {
+    _kycRetryTimer?.cancel();
+    _kycRetryTimer = null;
+    _kycRetryScheduled = false;
+    _kycRetryAttempts = 0;
   }
 
   Future<void> _loadInitialData() async {
@@ -1605,6 +1816,7 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
   void dispose() {
     _notifAnimController?.dispose();
     _notifTimer?.cancel();
+    _kycRetryTimer?.cancel();
     _stopReviewsAutoScroll();
     _model.dispose();
     super.dispose();

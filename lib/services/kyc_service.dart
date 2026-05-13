@@ -329,6 +329,69 @@ class KycService {
     }
   }
 
+  /// POST /api/kyc/dojah/start-session — asks the backend to seed a fresh
+  /// KYC record (status=`pending`, providerStatus=`started`) and hand us a
+  /// canonical `referenceId` to pass into the Dojah SDK. Per
+  /// `dojah-pending-resolution-mobile.md`, this is the documented entry
+  /// point; the SDK echoes the same reference back on success and
+  /// `verify-reference` later uses it to look up the final result.
+  ///
+  /// Returns the `referenceId` string on success, or null on failure (the
+  /// caller can then fall back to a client-generated reference to avoid
+  /// blocking the flow on a transient backend error).
+  static Future<String?> startDojahSession({
+    required String token,
+    Duration timeout = const Duration(seconds: 15),
+  }) async {
+    final uri = Uri.parse('$API_BASE_URL/api/kyc/dojah/start-session');
+    try {
+      final resp = await http.post(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      ).timeout(timeout);
+
+      developer.log(
+          'startDojahSession response: status=${resp.statusCode} body=${resp.body}',
+          name: 'KycService.startDojahSession');
+
+      if (resp.statusCode < 200 || resp.statusCode >= 300) return null;
+      if (resp.body.isEmpty) return null;
+      try {
+        final body = jsonDecode(resp.body);
+        if (body is Map) {
+          // Standard shape: { success: true, data: { referenceId: "..." } }
+          final data = body['data'];
+          if (data is Map && data['referenceId'] != null) {
+            return data['referenceId'].toString();
+          }
+          // Fallback: top-level referenceId
+          if (body['referenceId'] != null) {
+            return body['referenceId'].toString();
+          }
+        }
+      } catch (e, st) {
+        developer.log('Failed to parse startDojahSession body',
+            error: e, stackTrace: st, name: 'KycService.startDojahSession');
+      }
+      return null;
+    } on SocketException catch (e, st) {
+      developer.log('Network error in startDojahSession',
+          error: e, stackTrace: st, name: 'KycService.startDojahSession');
+      return null;
+    } on TimeoutException catch (e, st) {
+      developer.log('Timeout in startDojahSession',
+          error: e, stackTrace: st, name: 'KycService.startDojahSession');
+      return null;
+    } catch (e, st) {
+      developer.log('Unexpected error in startDojahSession',
+          error: e, stackTrace: st, name: 'KycService.startDojahSession');
+      return null;
+    }
+  }
+
   /// POST /api/kyc/dojah/verify-reference — sends a Dojah reference returned
   /// by the native Flutter SDK so the backend can call Dojah's "Get
   /// Verification Details" API server-side and persist the authoritative
