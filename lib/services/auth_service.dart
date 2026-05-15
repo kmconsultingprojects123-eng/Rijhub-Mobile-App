@@ -6,11 +6,29 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../api_config.dart';
 import 'token_storage.dart';
+import 'notification_controller.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, debugPrint;
 import '../state/app_state_notifier.dart';
 import 'dart:io';
 import 'dart:async';
+
+// Best-effort FCM token retrieval for inclusion in OAuth signup bodies so the
+// backend can deliver the welcome push notification without a second round-trip.
+// Returns null if no token is cached and we can't obtain one without prompting
+// for notification permission (permission prompts are deferred until after login
+// per Apple Guideline 4.5.4).
+Future<String?> _getCachedFcmTokenForOAuth() async {
+  try {
+    if (NotificationController.fcmToken != null &&
+        NotificationController.fcmToken!.isNotEmpty) {
+      return NotificationController.fcmToken;
+    }
+    final stored = await NotificationController.loadFcmToken();
+    if (stored != null && stored.isNotEmpty) return stored;
+  } catch (_) {}
+  return null;
+}
 
 // Track whether GoogleSignIn.initialize() has been called to avoid calling
 // it multiple times (the package requires initialize to be called exactly once).
@@ -847,10 +865,18 @@ class AuthService {
       // ignore: avoid_print
       print('│ [Google Sign-In] Sending idToken to backend...');
       final uri = Uri.parse('$API_BASE_URL/api/auth/oauth/google');
+      final fcmToken = await _getCachedFcmTokenForOAuth();
+      // ignore: avoid_print
+      print(
+          '│ [Google Sign-In] FCM token included: ${fcmToken != null && fcmToken.isNotEmpty}');
       final resp = await _postWithRetries(uri,
           body: {
             'idToken': idToken,
             if (role != null) 'role': role,
+            if (fcmToken != null && fcmToken.isNotEmpty) ...{
+              'fcmToken': fcmToken,
+              'platform': Platform.isIOS ? 'ios' : 'android',
+            },
           },
           timeoutSeconds: 20,
           maxAttempts: 2);
@@ -949,6 +975,10 @@ class AuthService {
       // ignore: avoid_print
       print('│ [Apple Sign-In] Sending identityToken to backend...');
       final uri = Uri.parse('$API_BASE_URL/api/auth/oauth/apple');
+      final fcmToken = await _getCachedFcmTokenForOAuth();
+      // ignore: avoid_print
+      print(
+          '│ [Apple Sign-In] FCM token included: ${fcmToken != null && fcmToken.isNotEmpty}');
       // For mobile apps, use identity-token flow (NOT authorization-code flow)
       // We send: identityToken + raw nonce (backend will hash and verify)
       final resp = await _postWithRetries(uri,
@@ -959,6 +989,10 @@ class AuthService {
               'name': displayName,
             if (credential.email != null) 'email': credential.email,
             if (role != null) 'role': role,
+            if (fcmToken != null && fcmToken.isNotEmpty) ...{
+              'fcmToken': fcmToken,
+              'platform': Platform.isIOS ? 'ios' : 'android',
+            },
           },
           timeoutSeconds: 20,
           maxAttempts: 2);
