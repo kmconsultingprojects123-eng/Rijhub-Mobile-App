@@ -510,6 +510,15 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
             _model.businessNameController?.text = bn;
           }
         }
+
+        // Bio (optional) — same pre-fill rule. Backend stores it as
+        // top-level `bio` on the artisan document.
+        final bioPrev = profile['bio']?.toString();
+        if (bioPrev != null && bioPrev.isNotEmpty && mounted) {
+          if ((_model.bioController?.text.trim().isEmpty ?? true)) {
+            _model.bioController?.text = bioPrev;
+          }
+        }
       }
 
       // Subcategories must be loaded before we can populate selected services.
@@ -1439,6 +1448,7 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
 
       final businessName =
           _model.businessNameController?.text.trim() ?? '';
+      final bio = _model.bioController?.text.trim() ?? '';
 
       final payload = <String, dynamic>{
         'portfolio': portfolioJson,
@@ -1446,6 +1456,11 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         // Business name is optional — only sent when filled, so the
         // server doesn't overwrite a previously-saved value with empty.
         if (businessName.isNotEmpty) 'businessName': businessName,
+        // Bio mirrors the legacy ArtisanCompleteProfileWidget's
+        // 'bio' field on PUT /api/artisans/me. Same omit-if-empty
+        // rule so a returning artisan doesn't accidentally wipe a
+        // previously-saved bio by leaving the field blank.
+        if (bio.isNotEmpty) 'bio': bio,
       };
 
       // Kick off the simulated upload tick. We jump to 50% (compression
@@ -3269,6 +3284,49 @@ class _ArtisanOnboardingWidgetState extends State<ArtisanOnboardingWidget> {
         const SizedBox(height: 4),
         Text(
           'Optional — leave blank if you don\'t have one.',
+          style: TextStyle(fontSize: 11.5, color: softTextColor),
+        ),
+        const SizedBox(height: 18),
+
+        // ----- Bio (optional) -----
+        // Free-form intro shown on the artisan's public profile. Mirrors
+        // the legacy ArtisanCompleteProfileWidget's "Bio / About You"
+        // field; the backend stores it as a top-level `bio` string on
+        // PUT /api/artisans/me.
+        Text('Bio',
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: onSurface)),
+        const SizedBox(height: 6),
+        TextField(
+          controller: _model.bioController,
+          focusNode: _model.bioFocus,
+          minLines: 3,
+          maxLines: 4,
+          maxLength: 500,
+          textInputAction: TextInputAction.newline,
+          textCapitalization: TextCapitalization.sentences,
+          style: TextStyle(color: onSurface),
+          decoration: InputDecoration(
+            hintText:
+                'A short intro about you and the work you do. Clients see this on your profile.',
+            hintStyle: TextStyle(color: onSurface.withOpacity(0.5)),
+            filled: true,
+            fillColor: inputFill,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide.none,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12, vertical: 14),
+            counterStyle:
+                TextStyle(fontSize: 11, color: softTextColor),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Optional — leave blank if you prefer.',
           style: TextStyle(fontSize: 11.5, color: softTextColor),
         ),
         const SizedBox(height: 18),

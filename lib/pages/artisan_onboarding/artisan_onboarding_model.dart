@@ -13,6 +13,12 @@ class ArtisanOnboardingModel
   TextEditingController? businessNameController;
   FocusNode? businessNameFocus;
 
+  // Free-form artisan bio shown in the Showcase section. Mirrors the
+  // legacy ArtisanCompleteProfileWidget's "Bio / About You" field —
+  // backend accepts a top-level `bio` string on PUT /api/artisans/me.
+  TextEditingController? bioController;
+  FocusNode? bioFocus;
+
   @override
   void initState(BuildContext context) {
     ninController = TextEditingController();
@@ -21,6 +27,8 @@ class ArtisanOnboardingModel
     experienceFocus = FocusNode();
     businessNameController = TextEditingController();
     businessNameFocus = FocusNode();
+    bioController = TextEditingController();
+    bioFocus = FocusNode();
   }
 
   @override
@@ -31,5 +39,7 @@ class ArtisanOnboardingModel
     experienceFocus?.dispose();
     businessNameController?.dispose();
     businessNameFocus?.dispose();
+    bioController?.dispose();
+    bioFocus?.dispose();
   }
 }
