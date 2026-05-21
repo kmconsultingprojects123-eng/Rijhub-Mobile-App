@@ -10,7 +10,8 @@ String _redactToken(String? token) {
   return '${token.substring(0, 4)}...${token.substring(token.length - 4)}';
 }
 
-const bool _verboseApiLogging = false;
+// Enable request/response logging in debug builds only (off in release).
+const bool _verboseApiLogging = bool.fromEnvironment('dart.vm.product') == false;
 
 class ApiClient {
   // Internal helper: perform HTTP request with retries and timeout.
@@ -31,7 +32,14 @@ class ApiClient {
         print('│ [API Request] $method $uri');
         if (headers != null && headers.isNotEmpty) {
           print('│ Headers:');
-          headers.forEach((k, v) => print('│   $k: $v'));
+          headers.forEach((k, v) {
+            // Redact bearer token so it never lands in logs.
+            if (k.toLowerCase() == 'authorization') {
+              print('│   $k: Bearer ${_redactToken(v.replaceFirst(RegExp(r'^Bearer\s+', caseSensitive: false), ''))}');
+            } else {
+              print('│   $k: $v');
+            }
+          });
         }
         if (body != null) {
           print('│ Body: $body');

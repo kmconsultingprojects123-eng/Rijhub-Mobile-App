@@ -1,0 +1,580 @@
+{
+    "success": true,
+    "data": [
+        {
+            "_id": "6a0c72bfda2514dfa1e9b7a0",
+            "bookingId": {
+                "_id": "6a0c721cda2514dfa1e9b5a6",
+                "status": "completed"
+            },
+            "payerId": {
+                "_id": "69ea7bf3c3d361db1a0335bb",
+                "name": "Adedayo Niyi",
+                "email": "adedayoniyio@gmail.com",
+                "phone": "+2349014873266",
+                "role": "customer"
+            },
+            "amount": 500,
+            "companyFee": 25,
+            "status": "paid",
+            "paymentGatewayRef": "xn82fpu3z9",
+            "refundStatus": "none",
+            "transferStatus": "success",
+            "paystackSplit": false,
+            "paystackSplitMeta": {
+                "reason": "split_disabled",
+                "paymentMode": "transfer"
+            },
+            "createdAt": "2026-05-19T14:25:03.413Z",
+            "__v": 0,
+            "payeeId": {
+                "_id": "6a01fb50f60e1cd3485bb831",
+                "name": "Neel o neel",
+                "email": "neelorneels@gmail.com",
+                "role": "artisan"
+            },
+            "releasedAt": "2026-05-19T14:25:45.360Z",
+            "transferAmount": 475,
+            "transferRef": "TRF_ay6oshmzhfqdqktp",
+            "artisanStatsCreditedAt": "2026-05-19T14:25:47.376Z",
+            "customerStatsCreditedAt": "2026-05-19T14:25:47.383Z"
+        },
+        {
+            "_id": "6a0c721dda2514dfa1e9b5ac",
+            "bookingId": {
+                "_id": "6a0c721cda2514dfa1e9b5a6",
+                "status": "completed"
+            },
+            "payerId": {
+                "_id": "69ea7bf3c3d361db1a0335bb",
+                "name": "Adedayo Niyi",
+                "email": "adedayoniyio@gmail.com",
+                "phone": "+2349014873266",
+                "role": "customer"
+            },
+            "amount": 500,
+            "companyFee": 0,
+            "status": "pending",
+            "paymentGatewayRef": "gsejoc0qqa",
+            "refundStatus": "none",
+            "transferStatus": "none",
+            "paystackSplit": false,
+            "paystackSplitMeta": {
+                "reason": "split_disabled",
+                "paymentMode": "transfer"
+            },
+            "createdAt": "2026-05-19T14:22:21.065Z",
+            "__v": 0
+        },
+        {
+            "_id": "6a0c62c3c92a65100ce4255a",
+            "bookingId": {
+                "_id": "6a0c623ec92a65100ce423e1",
+                "status": "completed"
+            },
+            "payerId": {
+                "_id": "69ea7bf3c3d361db1a0335bb",
+                "name": "Adedayo Niyi",
+                "email": "adedayoniyio@gmail.com",
+                "phone": "+2349014873266",
+                "role": "customer"
+            },
+            "amount": 500,
+            "companyFee": 25,
+            "status": "paid",
+            "paymentGatewayRef": "ijy4q80e3b",
+            "refundStatus": "none",
+            "transferStatus": "success",
+            "paystackSplit": false,
+            "paystackSplitMeta": {
+                "reason": "split_disabled",
+                "paymentMode": "transfer"
+            },
+            "createdAt": "2026-05-19T13:16:51.874Z",
+            "__v": 0,
+            "payeeId": {
+                "_id": "6a01fb50f60e1cd3485bb831",
+                "name": "Neel o neel",
+                "email": "neelorneels@gmail.com",
+                "role": "artisan"
+            },
+            "releasedAt": "2026-05-19T13:17:35.593Z",
+            "transferAmount": 475,
+            "transferFailureMeta": {
+                "status": true,
+                "message": "Transfer requires OTP to continue",
+                "data": {
+                    "transfersessionid": [],
+                    "transfertrials": [],
+                    "domain": "live",
+                    "amount": 47500,
+                    "currency": "NGN",
+                    "reference": "80tejmuf94yc6tmqn1b9",
+                    "source": "balance",
+                    "source_details": null,
+                    "reason": "Payout for booking 6a0c623ec92a65100ce423e1",
+                    "status": "otp",
+                    "failures": null,
+                    "transfer_code": "TRF_qa3af5vr0o5xsxqo",
+                    "titan_code": null,
+                    "transferred_at": null,
+                    "id": 991490113,
+                    "integration": 1704455,
+                    "request": 1254035500,
+                    "recipient": 126756952,
+                    "createdAt": "2026-05-19T13:17:36.000Z",
+                    "updatedAt": "2026-05-19T13:17:36.000Z"
+                }
+            },
+            "transferFailureReason": "paystack_transfer_requires_otp",
+            "transferRef": "TRF_qa3af5vr0o5xsxqo",
+            "artisanStatsCreditedAt": "2026-05-19T13:17:36.294Z",
+            "customerStatsCreditedAt": "2026-05-19T13:17:36.300Z"
+        },
+        {
+            "_id": "6a0c623fc92a65100ce423e7",
+            "bookingId": {
+                "_id": "6a0c623ec92a65100ce423e1",
+                "status": "completed"
+            },
+            "payerId": {
+                "_id": "69ea7bf3c3d361db1a0335bb",
+                "name": "Adedayo Niyi",
+                "email": "adedayoniyio@gmail.com",
+                "phone": "+2349014873266",
+                "role": "customer"
+            },
+            "amount": 500,
+            "companyFee": 0,
+            "status": "pending",
+            "paymentGatewayRef": "clqw5ukdon",
+            "refundStatus": "none",
+            "transferStatus": "none",
+            "paystackSplit": false,
+            "paystackSplitMeta": {
+                "reason": "split_disabled",
+                "paymentMode": "transfer"
+            },
+            "createdAt": "2026-05-19T13:14:39.259Z",
+            "__v": 0
+        },
+        {
+            "_id": "6a0b3229d49bd4580940cec2",
+            "bookingId": {
+                "_id": "6a0b317cd49bd4580940cd31",
+                "status": "completed"
+            },
+            "payerId": {
+                "_id": "69ea7bf3c3d361db1a0335bb",
+                "name": "Adedayo Niyi",
+                "email": "adedayoniyio@gmail.com",
+                "phone": "+2349014873266",
+                "role": "customer"
+            },
+            "amount": 500,
+            "companyFee": 25,
+            "status": "paid",
+            "paymentGatewayRef": "9nzttue2ei",
+            "refundStatus": "none",
+            "transferAmount": 475,
+            "transferStatus": "none",
+            "paystackSplit": true,
+            "paystackSubaccountCode": "ACCT_8s01y5y2yxtf2r4",
+            "paystackSplitBearer": "account",
+            "paystackTransactionCharge": 2500,
+            "paystackSplitMeta": {
+                "subaccountCode": "ACCT_8s01y5y2yxtf2r4",
+                "feePct": 5,
+                "companyFee": 25,
+                "transactionCharge": 2500,
+                "bearer": "account",
+                "transferAmount": 475
+            },
+            "createdAt": "2026-05-18T15:37:13.476Z",
+            "__v": 0,
+            "payeeId": {
+                "_id": "6a01fb50f60e1cd3485bb831",
+                "name": "Neel o neel",
+                "email": "neelorneels@gmail.com",
+                "role": "artisan"
+            },
+            "releasedAt": "2026-05-18T15:37:56.858Z",
+            "artisanStatsCreditedAt": "2026-05-18T15:37:56.861Z",
+            "customerStatsCreditedAt": "2026-05-18T15:37:56.865Z"
+        },
+        {
+            "_id": "6a0b317cd49bd4580940cd40",
+            "bookingId": {
+                "_id": "6a0b317cd49bd4580940cd31",
+                "status": "completed"
+            },
+            "payerId": {
+                "_id": "69ea7bf3c3d361db1a0335bb",
+                "name": "Adedayo Niyi",
+                "email": "adedayoniyio@gmail.com",
+                "phone": "+2349014873266",
+                "role": "customer"
+            },
+            "amount": 500,
+            "companyFee": 25,
+            "status": "pending",
+            "paymentGatewayRef": "3niav0w0to",
+            "refundStatus": "none",
+            "transferAmount": 475,
+            "transferStatus": "none",
+            "paystackSplit": true,
+            "paystackSubaccountCode": "ACCT_8s01y5y2yxtf2r4",
+            "paystackSplitBearer": "account",
+            "paystackTransactionCharge": 2500,
+            "paystackSplitMeta": {
+                "subaccountCode": "ACCT_8s01y5y2yxtf2r4",
+                "feePct": 5,
+                "companyFee": 25,
+                "transactionCharge": 2500,
+                "bearer": "account",
+                "transferAmount": 475
+            },
+            "createdAt": "2026-05-18T15:34:20.756Z",
+            "__v": 0
+        },
+        {
+            "_id": "6a0b2de6d49bd4580940c4f9",
+            "bookingId": {
+                "_id": "6a0b2d94d49bd4580940c36c",
+                "status": "completed"
+            },
+            "payerId": {
+                "_id": "69ea7bf3c3d361db1a0335bb",
+                "name": "Adedayo Niyi",
+                "email": "adedayoniyio@gmail.com",
+                "phone": "+2349014873266",
+                "role": "customer"
+            },
+            "amount": 500,
+            "companyFee": 25,
+            "status": "paid",
+            "paymentGatewayRef": "xm1tsobdzf",
+            "refundStatus": "none",
+            "transferAmount": 475,
+            "transferStatus": "none",
+            "paystackSplit": true,
+            "paystackSubaccountCode": "ACCT_8s01y5y2yxtf2r4",
+            "paystackSplitBearer": "account",
+            "paystackTransactionCharge": 2500,
+            "paystackSplitMeta": {
+                "subaccountCode": "ACCT_8s01y5y2yxtf2r4",
+                "feePct": 5,
+                "companyFee": 25,
+                "transactionCharge": 2500,
+                "bearer": "account",
+                "transferAmount": 475
+            },
+            "createdAt": "2026-05-18T15:19:02.033Z",
+            "__v": 0,
+            "payeeId": {
+                "_id": "6a01fb50f60e1cd3485bb831",
+                "name": "Neel o neel",
+                "email": "neelorneels@gmail.com",
+                "role": "artisan"
+            },
+            "releasedAt": "2026-05-18T15:19:38.664Z",
+            "artisanStatsCreditedAt": "2026-05-18T15:19:38.668Z",
+            "customerStatsCreditedAt": "2026-05-18T15:19:38.673Z"
+        },
+        {
+            "_id": "6a0b2d94d49bd4580940c37d",
+            "bookingId": {
+                "_id": "6a0b2d94d49bd4580940c36c",
+                "status": "completed"
+            },
+            "payerId": {
+                "_id": "69ea7bf3c3d361db1a0335bb",
+                "name": "Adedayo Niyi",
+                "email": "adedayoniyio@gmail.com",
+                "phone": "+2349014873266",
+                "role": "customer"
+            },
+            "amount": 500,
+            "companyFee": 25,
+            "status": "pending",
+            "paymentGatewayRef": "zcsjgmhobs",
+            "refundStatus": "none",
+            "transferAmount": 475,
+            "transferStatus": "none",
+            "paystackSplit": true,
+            "paystackSubaccountCode": "ACCT_8s01y5y2yxtf2r4",
+            "paystackSplitBearer": "account",
+            "paystackTransactionCharge": 2500,
+            "paystackSplitMeta": {
+                "subaccountCode": "ACCT_8s01y5y2yxtf2r4",
+                "feePct": 5,
+                "companyFee": 25,
+                "transactionCharge": 2500,
+                "bearer": "account",
+                "transferAmount": 475
+            },
+            "createdAt": "2026-05-18T15:17:40.831Z",
+            "__v": 0
+        },
+        {
+            "_id": "6a0b01f4c90bbf2495b67b45",
+            "bookingId": {
+                "_id": "6a0b018fc90bbf2495b679b1",
+                "status": "completed"
+            },
+            "payerId": {
+                "_id": "69ea7bf3c3d361db1a0335bb",
+                "name": "Adedayo Niyi",
+                "email": "adedayoniyio@gmail.com",
+                "phone": "+2349014873266",
+                "role": "customer"
+            },
+            "amount": 500,
+            "companyFee": 25,
+            "status": "paid",
+            "paymentGatewayRef": "tq7i6xzfye",
+            "refundStatus": "none",
+            "transferStatus": "failed",
+            "createdAt": "2026-05-18T12:11:32.317Z",
+            "__v": 0,
+            "payeeId": {
+                "_id": "6a01fb50f60e1cd3485bb831",
+                "name": "Neel o neel",
+                "email": "neelorneels@gmail.com",
+                "role": "artisan"
+            },
+            "releasedAt": "2026-05-18T12:12:20.486Z",
+            "transferAmount": 475,
+            "transferFailureMeta": {
+                "status": false,
+                "message": "Your balance is not enough to fulfil this request",
+                "meta": {
+                    "nextStep": "Topup your Paystack Balance and try again."
+                },
+                "type": "api_error",
+                "code": "insufficient_balance"
+            },
+            "transferFailureReason": "Your balance is not enough to fulfil this request",
+            "internalWalletCreditedAt": "2026-05-18T12:12:20.924Z",
+            "artisanStatsCreditedAt": "2026-05-18T12:12:20.924Z",
+            "customerStatsCreditedAt": "2026-05-18T12:12:20.936Z",
+            "paystackSplit": false
+        },
+        {
+            "_id": "6a0b0190c90bbf2495b679b7",
+            "bookingId": {
+                "_id": "6a0b018fc90bbf2495b679b1",
+                "status": "completed"
+            },
+            "payerId": {
+                "_id": "69ea7bf3c3d361db1a0335bb",
+                "name": "Adedayo Niyi",
+                "email": "adedayoniyio@gmail.com",
+                "phone": "+2349014873266",
+                "role": "customer"
+            },
+            "amount": 500,
+            "companyFee": 0,
+            "status": "pending",
+            "paymentGatewayRef": "epbpn6khc0",
+            "refundStatus": "none",
+            "transferStatus": "none",
+            "createdAt": "2026-05-18T12:09:52.380Z",
+            "__v": 0
+        },
+        {
+            "_id": "6a0afc1dd1f7087dee99fc0a",
+            "bookingId": {
+                "_id": "6a0afbc5d1f7087dee99fa21",
+                "status": "completed"
+            },
+            "payerId": {
+                "_id": "69ea7bf3c3d361db1a0335bb",
+                "name": "Adedayo Niyi",
+                "email": "adedayoniyio@gmail.com",
+                "phone": "+2349014873266",
+                "role": "customer"
+            },
+            "amount": 500,
+            "companyFee": 25,
+            "status": "paid",
+            "paymentGatewayRef": "5dgw0yuc11",
+            "refundStatus": "none",
+            "transferStatus": "failed",
+            "createdAt": "2026-05-18T11:46:37.268Z",
+            "__v": 0,
+            "payeeId": {
+                "_id": "6a01fb50f60e1cd3485bb831",
+                "name": "Neel o neel",
+                "email": "neelorneels@gmail.com",
+                "role": "artisan"
+            },
+            "releasedAt": "2026-05-18T11:47:37.444Z",
+            "transferAmount": 475,
+            "transferFailureMeta": {
+                "status": false,
+                "message": "Your balance is not enough to fulfil this request",
+                "meta": {
+                    "nextStep": "Topup your Paystack Balance and try again."
+                },
+                "type": "api_error",
+                "code": "insufficient_balance"
+            },
+            "transferFailureReason": "Your balance is not enough to fulfil this request",
+            "internalWalletCreditedAt": "2026-05-18T11:47:37.826Z",
+            "artisanStatsCreditedAt": "2026-05-18T11:47:37.826Z",
+            "customerStatsCreditedAt": "2026-05-18T11:47:37.833Z",
+            "paystackSplit": false
+        },
+        {
+            "_id": "6a0afbc5d1f7087dee99fa27",
+            "bookingId": {
+                "_id": "6a0afbc5d1f7087dee99fa21",
+                "status": "completed"
+            },
+            "payerId": {
+                "_id": "69ea7bf3c3d361db1a0335bb",
+                "name": "Adedayo Niyi",
+                "email": "adedayoniyio@gmail.com",
+                "phone": "+2349014873266",
+                "role": "customer"
+            },
+            "amount": 500,
+            "companyFee": 0,
+            "status": "pending",
+            "paymentGatewayRef": "7y9ffwbszn",
+            "refundStatus": "none",
+            "transferStatus": "none",
+            "createdAt": "2026-05-18T11:45:09.620Z",
+            "__v": 0
+        },
+        {
+            "_id": "6a0af2bb0a8d4810ca9da24e",
+            "bookingId": {
+                "_id": "6a0af2250a8d4810ca9d9f70",
+                "status": "completed"
+            },
+            "payerId": {
+                "_id": "69ea7bf3c3d361db1a0335bb",
+                "name": "Adedayo Niyi",
+                "email": "adedayoniyio@gmail.com",
+                "phone": "+2349014873266",
+                "role": "customer"
+            },
+            "amount": 500,
+            "companyFee": 25,
+            "status": "paid",
+            "paymentGatewayRef": "dt3ywhm24q",
+            "refundStatus": "none",
+            "transferStatus": "failed",
+            "createdAt": "2026-05-18T11:06:35.170Z",
+            "__v": 0,
+            "payeeId": {
+                "_id": "6a01fb50f60e1cd3485bb831",
+                "name": "Neel o neel",
+                "email": "neelorneels@gmail.com",
+                "role": "artisan"
+            },
+            "releasedAt": "2026-05-18T11:07:26.736Z",
+            "transferAmount": 475,
+            "internalWalletCreditedAt": "2026-05-18T11:19:19.954Z",
+            "artisanStatsCreditedAt": "2026-05-18T11:19:19.954Z",
+            "customerStatsCreditedAt": "2026-05-18T11:19:19.961Z",
+            "paystackSplit": false
+        },
+        {
+            "_id": "6a0af2250a8d4810ca9d9f76",
+            "bookingId": {
+                "_id": "6a0af2250a8d4810ca9d9f70",
+                "status": "completed"
+            },
+            "payerId": {
+                "_id": "69ea7bf3c3d361db1a0335bb",
+                "name": "Adedayo Niyi",
+                "email": "adedayoniyio@gmail.com",
+                "phone": "+2349014873266",
+                "role": "customer"
+            },
+            "amount": 500,
+            "companyFee": 0,
+            "status": "pending",
+            "paymentGatewayRef": "8oqgs3kgsu",
+            "refundStatus": "none",
+            "transferStatus": "none",
+            "createdAt": "2026-05-18T11:04:05.658Z",
+            "__v": 0
+        },
+        {
+            "_id": "6a0ae525662ab63e7b355f39",
+            "bookingId": {
+                "_id": "6a0ae4e5662ab63e7b355de6",
+                "status": "completed"
+            },
+            "payerId": {
+                "_id": "69ea7bf3c3d361db1a0335bb",
+                "name": "Adedayo Niyi",
+                "email": "adedayoniyio@gmail.com",
+                "phone": "+2349014873266",
+                "role": "customer"
+            },
+            "amount": 500,
+            "companyFee": 25,
+            "status": "paid",
+            "paymentGatewayRef": "4yxhiabwif",
+            "refundStatus": "none",
+            "transferStatus": "failed",
+            "createdAt": "2026-05-18T10:08:37.020Z",
+            "__v": 0,
+            "payeeId": {
+                "_id": "6a01fb50f60e1cd3485bb831",
+                "name": "Neel o neel",
+                "email": "neelorneels@gmail.com",
+                "role": "artisan"
+            },
+            "releasedAt": "2026-05-18T10:09:27.707Z",
+            "transferAmount": 475,
+            "transferFailureMeta": {
+                "status": false,
+                "message": "Your balance is not enough to fulfil this request",
+                "meta": {
+                    "nextStep": "Topup your Paystack Balance and try again."
+                },
+                "type": "api_error",
+                "code": "insufficient_balance"
+            },
+            "transferFailureReason": "Your balance is not enough to fulfil this request",
+            "internalWalletCreditedAt": "2026-05-18T11:48:58.429Z",
+            "artisanStatsCreditedAt": "2026-05-18T11:48:58.429Z",
+            "customerStatsCreditedAt": "2026-05-18T11:48:58.435Z",
+            "paystackSplit": false
+        },
+        {
+            "_id": "6a0ae4e5662ab63e7b355dec",
+            "bookingId": {
+                "_id": "6a0ae4e5662ab63e7b355de6",
+                "status": "completed"
+            },
+            "payerId": {
+                "_id": "69ea7bf3c3d361db1a0335bb",
+                "name": "Adedayo Niyi",
+                "email": "adedayoniyio@gmail.com",
+                "phone": "+2349014873266",
+                "role": "customer"
+            },
+            "amount": 500,
+            "companyFee": 0,
+            "status": "pending",
+            "paymentGatewayRef": "fszis3u05v",
+            "refundStatus": "none",
+            "transferStatus": "none",
+            "createdAt": "2026-05-18T10:07:33.602Z",
+            "__v": 0
+        }
+    ],
+    "meta": {
+        "page": 1,
+        "limit": 50,
+        "total": 16,
+        "pages": 1
+    }
+}

@@ -1559,6 +1559,10 @@ class _ArtisanDashboardPageWidgetState extends State<ArtisanDashboardPageWidget>
             final wallet = mine['wallet'] is Map
                 ? Map<String, dynamic>.from(mine['wallet'])
                 : <String, dynamic>{};
+            if (kDebugMode) {
+              debugPrint(
+                  '[Dashboard] GET $centralUrl -> wallet block: $wallet');
+            }
             final bookings = (mine['bookings'] is List)
                 ? List<Map<String, dynamic>>.from(mine['bookings'])
                 : <Map<String, dynamic>>[];

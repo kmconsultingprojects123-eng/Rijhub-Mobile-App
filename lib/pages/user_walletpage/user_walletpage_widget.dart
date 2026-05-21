@@ -574,18 +574,12 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
         final token = await TokenStorage.getToken();
         if (token != null && token.isNotEmpty) {
           final fetched = await WalletService.fetchTransactions(token: token);
-          // Filter to only transactions that belong to the current user
-          final prof = AppStateNotifier.instance.profile;
-          final myId =
-              (prof?['_id'] ?? prof?['id'] ?? prof?['userId'])?.toString();
-          List<Map<String, dynamic>> rawList;
-          if (myId != null && myId.isNotEmpty) {
-            rawList = fetched
-                .where((tx) => _transactionBelongsToUser(tx, myId))
-                .toList();
-          } else {
-            rawList = fetched;
-          }
+          // The /api/transactions endpoint is already scoped to the current
+          // user server-side, so the list is used as-is. A previous client-side
+          // filter dropped every "pending" transaction: pending records only
+          // carry `payerId` (the customer) — the artisan `payeeId` is attached
+          // after payout — so the artisan's id never matched.
+          final List<Map<String, dynamic>> rawList = fetched;
 
           // Compare previous statuses to detect transitions (e.g., pending -> completed)
           for (final tx in rawList) {
@@ -1511,15 +1505,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
           if (list is List && list.isNotEmpty) {
             final additional = List<Map<String, dynamic>>.from(list.map(
                 (e) => e is Map ? Map<String, dynamic>.from(e) : {'raw': e}));
-            final prof = AppStateNotifier.instance.profile;
-            final myId =
-                (prof?['_id'] ?? prof?['id'] ?? prof?['userId'])?.toString();
-            if (myId != null && myId.isNotEmpty) {
-              _transactions.addAll(additional
-                  .where((tx) => _transactionBelongsToUser(tx, myId)));
-            } else {
-              _transactions.addAll(additional);
-            }
+            // Server-scoped endpoint — add the page as-is (see _loadWallet).
+            _transactions.addAll(additional);
             if (additional.length < _txLimit) _txHasMore = false;
             return;
           } else {
@@ -1590,9 +1577,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
     final ff = FlutterFlowTheme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final type = (transaction['type'] ?? '').toString().toLowerCase();
     final status = (transaction['status'] ?? '').toString().toLowerCase();
-    final isCredit = type == 'credit';
+    final isCredit = _txIsCredit(transaction);
     final isPending = status.contains('pending');
 
     final title =
@@ -1600,7 +1586,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
     final description = transaction['subtitle']?.toString() ??
         (transaction['description']?.toString() ??
             (isCredit ? 'Wallet credit' : 'Wallet debit'));
-    final amount = transaction['amount'] ?? transaction['value'] ?? 0;
+    // Display the net (post-deduction) amount the user actually received.
+    final amount = _txDisplayAmount(transaction);
     final date = transaction['date']?.toString() ??
         transaction['createdAt']?.toString() ??
         'Just now';
@@ -1721,6 +1708,89 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
         .toString();
   }
 
+  // Net amount actually moved. `transferAmount` is the post-deduction figure
+  // (after company fee / Paystack charges); when it's absent (e.g. pending
+  // records) fall back to amount minus the company fee.
+  num _txDisplayAmount(Map<String, dynamic> tx) {
+    num? asNum(dynamic v) =>
+        v is num ? v : (v == null ? null : num.tryParse(v.toString()));
+    final transfer = asNum(tx['transferAmount']);
+    if (transfer != null) return transfer;
+    final amount = asNum(tx['amount'] ?? tx['value']) ?? 0;
+    final fee = asNum(tx['companyFee']) ?? 0;
+    return amount - fee;
+  }
+
+  // True when money came in for the logged-in user. Job-payment records only
+  // carry `payeeId` once paid out, so unattributed records fall back to role:
+  // artisans receive payments, customers send them.
+  bool _txIsCredit(Map<String, dynamic> tx) {
+    final prof = AppStateNotifier.instance.profile;
+    final myId = (prof?['_id'] ?? prof?['id'] ?? prof?['userId'])?.toString();
+    String nestedId(dynamic v) => v is Map
+        ? (v['_id'] ?? v['id'] ?? '').toString()
+        : (v?.toString() ?? '');
+    final payeeId = nestedId(tx['payeeId'] ?? tx['payee']);
+    final payerId = nestedId(tx['payerId'] ?? tx['payer']);
+    if (myId != null && myId.isNotEmpty) {
+      if (payeeId == myId) return true;
+      if (payerId == myId) return false;
+    }
+    return _isArtisan;
+  }
+
+  // Average earnings per completed job — mirrors the dashboard's "Avg. per Job"
+  // (totalEarned / jobs). Job count prefers the wallet's own counter, else
+  // falls back to the number of completed (non-pending) transactions.
+  num _avgPerJob() {
+    num asNum(dynamic v) =>
+        v is num ? v : (v == null ? 0 : (num.tryParse(v.toString()) ?? 0));
+    final earned = asNum(_wallet?['totalEarned'] ??
+        _wallet?['totalEarnings'] ??
+        _wallet?['total'] ??
+        _wallet?['balance']);
+    num jobs = asNum(_wallet?['totalJobs'] ?? _wallet?['jobsCompleted']);
+    if (jobs <= 0) {
+      jobs = _transactions.where((tx) {
+        final s = (tx['status'] ?? tx['transactionStatus'] ?? '')
+            .toString()
+            .toLowerCase();
+        return !(s.contains('pending') ||
+            s.contains('holding') ||
+            s.contains('processing'));
+      }).length;
+    }
+    if (jobs <= 0) return 0;
+    return (earned / jobs).round();
+  }
+
+  // The "real" pending amount: the wallet API value when it reports one,
+  // otherwise the sum of net amounts of transactions still pending.
+  num _pendingAmount() {
+    final raw = _wallet?['pending'] ?? _wallet?['pendingAmount'];
+    final apiPending = raw is num
+        ? raw
+        : (raw == null ? 0 : (num.tryParse(raw.toString()) ?? 0));
+    if (apiPending > 0) return apiPending;
+    num sum = 0;
+    for (final tx in _transactions) {
+      final s = (tx['status'] ?? tx['transactionStatus'] ?? '')
+          .toString()
+          .toLowerCase();
+      if (s.contains('pending') ||
+          s.contains('holding') ||
+          s.contains('processing')) {
+        sum += _txDisplayAmount(tx);
+      }
+    }
+    return sum;
+  }
+
+  // NOTE: `_transactionBelongsToUser` is intentionally disabled. The
+  // /api/transactions endpoint is already scoped to the current user, and this
+  // client-side filter dropped every pending transaction (pending records have
+  // no `payeeId`, so an artisan's id never matched). Kept for reference.
+  /*
   // Helper to determine if a transaction belongs to the logged-in user
   bool _transactionBelongsToUser(Map<String, dynamic> tx, String? myId) {
     // If we don't have a logged-in user's id, be conservative and treat
@@ -1746,7 +1816,12 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
       'walletId',
       'customer',
       'owner',
-      'createdBy'
+      'createdBy',
+      // Payment transactions link the user via payer/payee (nested objects).
+      'payerId',
+      'payer',
+      'payeeId',
+      'payee',
     ];
 
     for (final k in candidateKeys) {
@@ -1773,6 +1848,7 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
 
     return false;
   }
+  */
 
   @override
   Widget build(BuildContext context) {
@@ -1925,8 +2001,12 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                       MainAxisAlignment.spaceBetween,
                                   children: [
                                     Text(
-                                      // Show label based on role: artisans see balance, clients see expenses
-                                      _isArtisan ? 'Total Balance' : 'Total Expenses',
+                                      // Artisans see lifetime earnings (kept in sync
+                                      // with the dashboard's "Total Earnings" card);
+                                      // clients see expenses.
+                                      _isArtisan
+                                          ? 'Total Earnings'
+                                          : 'Total Expenses',
                                       style:
                                           theme.textTheme.bodyMedium?.copyWith(
                                         color: colorScheme.onSurface
@@ -1979,11 +2059,15 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                         _hideBalance
                                             ? '*****'
                                             : _formatAmount(
-                                                // For artisans show balance/total; for clients show expenses/spent
+                                                // Artisans: show lifetime earnings
+                                                // (totalEarned) so this stays in sync
+                                                // with the dashboard's "Total Earnings".
+                                                // Clients: show expenses/spent.
                                                 _isArtisan
-                                                    ? (_wallet?['total'] ??
+                                                    ? (_wallet?['totalEarned'] ??
+                                                        _wallet?['totalEarnings'] ??
+                                                        _wallet?['total'] ??
                                                         _wallet?['balance'] ??
-                                                        _wallet?['totalEarned'] ??
                                                         0)
                                                     : (_wallet?['totalSpent'] ??
                                                         _wallet?['totalExpenses'] ??
@@ -2005,7 +2089,7 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                             CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            'Available',
+                                            'Avg. per Job',
                                             style: theme.textTheme.bodySmall
                                                 ?.copyWith(
                                               color: colorScheme.onSurface
@@ -2027,12 +2111,7 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                                   ),
                                                 )
                                               : Text(
-                                                  _formatAmount(_wallet?[
-                                                          'available'] ??
-                                                      _wallet?[
-                                                          'availableBalance'] ??
-                                                      _wallet?['balance'] ??
-                                                      0),
+                                                  _formatAmount(_avgPerJob()),
                                                   style: theme
                                                       .textTheme.titleMedium
                                                       ?.copyWith(
@@ -2070,11 +2149,8 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
                                                   ),
                                                 )
                                               : Text(
-                                                  _formatAmount(_wallet?[
-                                                          'pending'] ??
-                                                      _wallet?[
-                                                          'pendingAmount'] ??
-                                                      0),
+                                                  _formatAmount(
+                                                      _pendingAmount()),
                                                   style: theme
                                                       .textTheme.titleMedium
                                                       ?.copyWith(
@@ -2558,176 +2634,267 @@ class _UserWalletpageWidgetState extends State<UserWalletpageWidget> {
   }
 
   // Show transaction details bottom sheet
+  Widget _sheetDivider(ThemeData theme) => Divider(
+        height: 1,
+        thickness: 1,
+        color: theme.colorScheme.onSurface.withAlpha((0.06 * 255).round()),
+      );
+
   Future<void> _showTransactionDetails(Map<String, dynamic> transaction) async {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final ff = FlutterFlowTheme.of(context);
 
-    // Format date for display
+    // Format an ISO date string for display.
     String formatDate(String? dateStr) {
       if (dateStr == null || dateStr.isEmpty) return 'Unknown date';
       try {
-        final date = DateTime.parse(dateStr);
-        return DateFormat.yMMMd().add_jm().format(date);
+        return DateFormat.yMMMMd()
+            .add_jm()
+            .format(DateTime.parse(dateStr).toLocal());
       } catch (_) {
         return dateStr;
       }
     }
 
-    // Extract and format transaction details
-    final title = transaction['title']?.toString() ?? 'Transaction';
-    final description = transaction['description']?.toString() ?? '';
-    final amount = transaction['amount'] ?? transaction['value'] ?? 0;
-    final date = formatDate(transaction['date']?.toString() ?? '');
-    final status = (transaction['status'] ?? '').toString().toLowerCase();
+    String nestedId(dynamic v) => v is Map
+        ? (v['_id'] ?? v['id'] ?? '').toString()
+        : (v?.toString() ?? '');
+    String nestedName(dynamic v) =>
+        v is Map ? (v['name'] ?? v['email'] ?? '').toString() : '';
+
+    // The API uses `createdAt` (not `date`) and has no `type` field; the
+    // direction and net amount are derived by the shared transaction helpers.
+    final payer = transaction['payerId'] ?? transaction['payer'];
+    final payee = transaction['payeeId'] ?? transaction['payee'];
+    final isCredit = _txIsCredit(transaction);
+
+    final title = (transaction['title']?.toString().isNotEmpty ?? false)
+        ? transaction['title'].toString()
+        : (isCredit ? 'Payout received' : 'Payment sent');
+    final amount = _txDisplayAmount(transaction);
+    final date = formatDate((transaction['date'] ??
+            transaction['createdAt'] ??
+            transaction['updatedAt'] ??
+            '')
+        .toString());
+    final status =
+        (transaction['status'] ?? transaction['transactionStatus'] ?? '')
+            .toString()
+            .toLowerCase();
+    final isPending = status.contains('pending') ||
+        status.contains('holding') ||
+        status.contains('processing');
     final statusLabel = status.isNotEmpty
         ? (status[0].toUpperCase() + status.substring(1))
         : 'Unknown';
-    final isCredit = transaction['type'] == 'credit';
+    final counterparty = isCredit ? nestedName(payer) : nestedName(payee);
+    final reference = (transaction['paymentGatewayRef'] ??
+            transaction['transferRef'] ??
+            transaction['reference'] ??
+            transaction['ref'] ??
+            '')
+        .toString();
+    final bookingRef = nestedId(transaction['bookingId']);
+    final note = (transaction['description'] ??
+            transaction['transferFailureReason'] ??
+            '')
+        .toString();
 
-    // Show bottom sheet
+    final amountColor = isCredit ? ff.success : ff.error;
+    final statusColor = isPending ? ff.warning : ff.success;
+    final mutedColor =
+        theme.colorScheme.onSurface.withAlpha((0.55 * 255).round());
+
+    // A single label/value row in the details list.
+    Widget detailRow(String label, {String? value, Widget? trailing}) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: theme.textTheme.bodyMedium?.copyWith(color: mutedColor),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: trailing ??
+                  Text(
+                    value ?? '',
+                    textAlign: TextAlign.right,
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+            ),
+          ],
+        ),
+      );
+    }
+
     showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (ctx) {
-          return DraggableScrollableSheet(
-            expand: false,
-            initialChildSize: 0.6,
-            minChildSize: 0.4,
-            maxChildSize: 0.9,
-            builder: (_, controller) {
-              return Container(
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.black : Colors.white,
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                padding: EdgeInsets.fromLTRB(
-                    24, 16, 24, MediaQuery.of(context).viewInsets.bottom + 24),
-                child: ListView(
-                  controller: controller,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.onSurface
-                              .withAlpha((0.3 * 255).round()),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      title,
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      date,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface
-                            .withAlpha((0.6 * 255).round()),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Amount',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurface
-                            .withAlpha((0.7 * 255).round()),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${isCredit ? '+' : '-'}${_formatAmount(amount)}',
-                      style: theme.textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 24,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Status',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurface
-                            .withAlpha((0.7 * 255).round()),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 4),
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.62,
+          minChildSize: 0.4,
+          maxChildSize: 0.92,
+          builder: (_, controller) {
+            return Container(
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              padding: EdgeInsets.fromLTRB(
+                  24, 12, 24, MediaQuery.of(context).viewInsets.bottom + 24),
+              child: ListView(
+                controller: controller,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
                       decoration: BoxDecoration(
-                        color: isCredit
-                            ? ff.success.withAlpha((0.1 * 255).round())
-                            : ff.error.withAlpha((0.1 * 255).round()),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        isCredit ? 'Credit' : 'Debit',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: isCredit ? ff.success : ff.error,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    // Show textual transaction status (e.g., Pending, Completed)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: Text(
-                        statusLabel,
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: theme.colorScheme.onSurface
-                              .withAlpha((0.7 * 255).round()),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Description',
-                      style: theme.textTheme.bodyMedium?.copyWith(
                         color: theme.colorScheme.onSurface
-                            .withAlpha((0.7 * 255).round()),
+                            .withAlpha((0.2 * 255).round()),
+                        borderRadius: BorderRadius.circular(4),
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      description,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface
-                            .withAlpha((0.8 * 255).round()),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: theme.colorScheme.primary,
-                          foregroundColor: theme.colorScheme.onPrimary,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                  ),
+                  const SizedBox(height: 24),
+                  // Hero: direction icon, amount and title.
+                  Center(
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 60,
+                          height: 60,
+                          decoration: BoxDecoration(
+                            color:
+                                amountColor.withAlpha((0.12 * 255).round()),
+                            shape: BoxShape.circle,
                           ),
-                          elevation: 0,
+                          child: Icon(
+                            isCredit
+                                ? Icons.arrow_downward_rounded
+                                : Icons.arrow_upward_rounded,
+                            color: amountColor,
+                            size: 28,
+                          ),
                         ),
-                        child: Text('Close'),
-                      ),
+                        const SizedBox(height: 14),
+                        Text(
+                          '${isCredit ? '+' : '-'}${_formatAmount(amount)}',
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: amountColor,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          title,
+                          style: theme.textTheme.bodyMedium
+                              ?.copyWith(color: mutedColor),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
+                  ),
+                  const SizedBox(height: 24),
+                  // Details card.
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.onSurface
+                          .withAlpha((0.035 * 255).round()),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      children: [
+                        detailRow(
+                          'Status',
+                          trailing: Align(
+                            alignment: Alignment.centerRight,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: statusColor
+                                    .withAlpha((0.14 * 255).round()),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                statusLabel,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: statusColor,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        _sheetDivider(theme),
+                        detailRow('Type',
+                            value: isCredit ? 'Credit' : 'Debit'),
+                        _sheetDivider(theme),
+                        detailRow('Date', value: date),
+                        if (counterparty.isNotEmpty) ...[
+                          _sheetDivider(theme),
+                          detailRow(isCredit ? 'From' : 'To',
+                              value: counterparty),
+                        ],
+                        if (reference.isNotEmpty) ...[
+                          _sheetDivider(theme),
+                          detailRow('Reference', value: reference),
+                        ],
+                        if (bookingRef.isNotEmpty) ...[
+                          _sheetDivider(theme),
+                          detailRow(
+                            'Booking',
+                            value:
+                                '#${bookingRef.length > 8 ? bookingRef.substring(bookingRef.length - 8) : bookingRef}',
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  if (note.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      'Note',
+                      style: theme.textTheme.bodyMedium
+                          ?.copyWith(color: mutedColor),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(note, style: theme.textTheme.bodyMedium),
                   ],
-                ),
-              );
-            },
-          );
-        });
+                  const SizedBox(height: 28),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: theme.colorScheme.primary,
+                        foregroundColor: theme.colorScheme.onPrimary,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: const Text('Close'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 }
