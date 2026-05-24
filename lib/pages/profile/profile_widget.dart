@@ -1106,6 +1106,37 @@ class _ProfileWidgetState extends State<ProfileWidget> {
                               }
                             });
                           },
+                          onPortfolio: _isArtisanUser
+                              ? () {
+                                  ensureSignedInForAction(context)
+                                      .then((ok) async {
+                                    if (!ok) return;
+                                    try {
+                                      GoRouter.of(context).pushNamed(
+                                          ArtisanPortfolioPageWidget.routeName);
+                                      return;
+                                    } catch (_) {
+                                      try {
+                                        NavigationUtils.safePush(
+                                          context,
+                                          const ArtisanPortfolioPageWidget(),
+                                        );
+                                        return;
+                                      } catch (_) {
+                                        try {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  const ArtisanPortfolioPageWidget(),
+                                            ),
+                                          );
+                                          return;
+                                        } catch (_) {}
+                                      }
+                                    }
+                                  });
+                                }
+                              : null,
                           onMyService: _isArtisanUser
                               ? () async {
                                   // Resolve the artisan *user id* (not the artisan document id) so
@@ -1670,6 +1701,7 @@ class _ProfileMenuSection extends StatelessWidget {
   final VoidCallback onAboutUs;
   final VoidCallback onVerification;
   final VoidCallback? onMyService;
+  final VoidCallback? onPortfolio;
   final VoidCallback? onSpecialRequests;
   final ThemeData theme;
   final ColorScheme colorScheme;
@@ -1682,6 +1714,7 @@ class _ProfileMenuSection extends StatelessWidget {
     required this.onAboutUs,
     required this.onVerification,
     this.onMyService,
+    this.onPortfolio,
     this.onSpecialRequests,
     required this.theme,
     required this.colorScheme,
@@ -1773,6 +1806,16 @@ class _ProfileMenuSection extends StatelessWidget {
                     icon: Icons.room_service_outlined,
                     title: 'My service',
                     onTap: onMyService!,
+                  ),
+                if (onPortfolio != null)
+                  const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Divider(height: 1)),
+                if (onPortfolio != null)
+                  _buildMenuItem(
+                    icon: Icons.photo_library_outlined,
+                    title: 'Portfolio',
+                    onTap: onPortfolio!,
                   ),
                 const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16.0),

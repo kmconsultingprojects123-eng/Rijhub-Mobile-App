@@ -156,26 +156,18 @@ class AppStateNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Set a guest session in-memory and persist the role flag so UI can
-  /// enable guest behaviour for the current session. We intentionally do
-  /// NOT persist a token for guests (guests are unauthenticated by design),
-  /// but we persist a role flag so routes/pages can detect guest state.
+  /// Guest session creation is currently disabled. This method is kept as a
+  /// no-op placeholder so callers compiling against it won't fail. If guest
+  /// browsing is re-enabled, restore the previous implementation which
+  /// persisted a role flag and updated in-memory profile state.
   Future<void> setGuestSession({Map<String, dynamic>? data}) async {
-    token = null; // guests have no auth token
-    profile = {
-      'isGuest': true,
-      'role': 'guest',
-      'name': (data != null && data['name'] != null) ? data['name'] : 'Guest',
-    };
-    try {
-      await TokenStorage.saveRole('guest');
-    } catch (_) {}
     if (kDebugMode) {
       try {
-        debugPrint('AppStateNotifier: guest session set -> ${profile}');
+        debugPrint('setGuestSession called but guest flow is disabled');
       } catch (_) {}
     }
-    notifyListeners();
+    // Intentionally do nothing.
+    return;
   }
 
   // Clear auth both in-memory and in persistent storage.

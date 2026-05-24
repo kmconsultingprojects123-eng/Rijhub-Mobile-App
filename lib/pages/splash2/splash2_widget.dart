@@ -39,142 +39,19 @@ class _Splash2WidgetState extends State<Splash2Widget> {
     super.dispose();
   }
 
-  // Guest flow: call backend guest endpoint, persist tokens/role if returned,
-  // update notifiers and navigate to home.
+  // Guest flow has been disabled — replace the implementation with a
+  // no-op that informs the user. The full guest flow (server call,
+  // token/role persistence and in-memory guest session) was intentionally
+  // removed per request; restore this only if guest browsing is needed
+  // again.
   Future<void> _continueAsGuest() async {
     if (!mounted) return;
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
-
-    try {
-      final res = await AuthService.guest();
-      try {
-        Navigator.of(context, rootNavigator: true).pop();
-      } catch (_) {}
-
-      if (res['success'] == true) {
-        dynamic body = res['data'];
-        String? token;
-        Map<String, dynamic>? userProfile;
-
-        try {
-          if (body is Map) {
-            if (body['token'] != null) token = body['token'].toString();
-            if (body['data'] is Map && body['data']['token'] != null)
-              token = body['data']['token'].toString();
-            if (body['user'] is Map)
-              userProfile = Map<String, dynamic>.from(body['user']);
-            if (userProfile == null &&
-                body['data'] is Map &&
-                body['data']['user'] is Map)
-              userProfile = Map<String, dynamic>.from(body['data']['user']);
-          }
-        } catch (_) {}
-
-        // Fallback to persisted token if AuthService already saved it
-        try {
-          if (token == null || token.isEmpty)
-            token = await TokenStorage.getToken();
-        } catch (_) {}
-
-        if (token != null && token.isNotEmpty) {
-          try {
-            await TokenStorage.saveToken(token);
-          } catch (_) {}
-          try {
-            await TokenStorage.saveRole('guest');
-          } catch (_) {}
-
-          try {
-            await AuthNotifier.instance.setGuest(token: token);
-          } catch (_) {}
-
-          if (userProfile == null) userProfile = <String, dynamic>{};
-          userProfile['role'] = 'guest';
-          userProfile['isGuest'] = true;
-
-          try {
-            await AuthNotifier.instance.setProfile(userProfile);
-          } catch (_) {}
-
-          // Use setter to persist token and notify listeners instead of direct field assignment
-          try {
-            await AppStateNotifier.instance.setToken(token);
-          } catch (_) {}
-
-          try {
-            AppStateNotifier.instance.setProfile(userProfile);
-          } catch (_) {}
-
-          try {
-            context.go('/homePage');
-          } catch (_) {}
-
-          try {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Text('You are now browsing as a guest.'),
-                action: SnackBarAction(
-                  label: 'Sign in',
-                  onPressed: () {
-                    try {
-                      context.go(LoginAccountWidget.routePath);
-                    } catch (_) {}
-                  },
-                ),
-                duration: const Duration(seconds: 6),
-              ),
-            );
-          } catch (_) {}
-
-          return;
-        }
-
-        // No token returned: use in-memory guest session
-        try {
-          await AppStateNotifier.instance.setGuestSession(data: userProfile);
-        } catch (_) {}
-        try {
-          context.go('/homePage');
-        } catch (_) {}
-        try {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('You are now browsing as a guest.'),
-              action: SnackBarAction(
-                label: 'Sign in',
-                onPressed: () {
-                  try {
-                    context.go(LoginAccountWidget.routePath);
-                  } catch (_) {}
-                },
-              ),
-              duration: const Duration(seconds: 6),
-            ),
-          );
-        } catch (_) {}
-
-        return;
-      }
-
-      final err = res['error'];
-      final message = (err is Map && err['message'] != null)
-          ? err['message'].toString()
-          : (err?.toString() ?? 'Failed to enter as guest');
-      if (!mounted) return;
-      await showAppErrorDialog(context, title: 'Error', desc: message);
-    } catch (e) {
-      try {
-        Navigator.of(context, rootNavigator: true).pop();
-      } catch (_) {}
-      if (!mounted) return;
-      await showAppErrorDialog(context, title: 'Error', desc: e.toString());
-    }
+    await showAppErrorDialog(context,
+        title: 'Guest disabled',
+        desc: 'Browsing as a guest has been disabled. Please sign in or create an account.');
+    return;
   }
+
 
   Future<void> _navigateToRoleSelection() async {
     if (!mounted) return;
@@ -430,6 +307,8 @@ class _Splash2WidgetState extends State<Splash2Widget> {
                                 ),
                                 foregroundColor: theme.colorScheme.onSurface,
                               ),
+                              // Guest continuation disabled — button removed.
+                              /*
                               onPressed: _continueAsGuest,
                               child: Text(
                                 'CONTINUE AS GUEST',
@@ -439,6 +318,9 @@ class _Splash2WidgetState extends State<Splash2Widget> {
                                   letterSpacing: 0.5,
                                 ),
                               ),
+                              */
+                              onPressed: null,
+                              child: SizedBox.shrink(),
                             ),
                           ),
                           Padding(
