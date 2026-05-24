@@ -1,14 +1,8 @@
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
-import '../../services/token_storage.dart';
 import 'package:flutter/material.dart';
 import 'splash2_model.dart';
 export 'splash2_model.dart';
-import '../../services/auth_service.dart';
-import '../../state/auth_notifier.dart';
-import '../../state/app_state_notifier.dart';
-import '../../utils/awesome_dialogs.dart';
-import 'package:go_router/go_router.dart';
 
 class Splash2Widget extends StatefulWidget {
   const Splash2Widget({super.key});
@@ -38,20 +32,6 @@ class _Splash2WidgetState extends State<Splash2Widget> {
     _model.dispose();
     super.dispose();
   }
-
-  // Guest flow has been disabled — replace the implementation with a
-  // no-op that informs the user. The full guest flow (server call,
-  // token/role persistence and in-memory guest session) was intentionally
-  // removed per request; restore this only if guest browsing is needed
-  // again.
-  Future<void> _continueAsGuest() async {
-    if (!mounted) return;
-    await showAppErrorDialog(context,
-        title: 'Guest disabled',
-        desc: 'Browsing as a guest has been disabled. Please sign in or create an account.');
-    return;
-  }
-
 
   Future<void> _navigateToRoleSelection() async {
     if (!mounted) return;
@@ -288,6 +268,8 @@ class _Splash2WidgetState extends State<Splash2Widget> {
                               ),
                             ),
                           ),
+                          // Continue as guest is not needed for now.
+                          /*
                           const SizedBox(height: 12),
                           SizedBox(
                             width: double.infinity,
@@ -307,8 +289,6 @@ class _Splash2WidgetState extends State<Splash2Widget> {
                                 ),
                                 foregroundColor: theme.colorScheme.onSurface,
                               ),
-                              // Guest continuation disabled — button removed.
-                              /*
                               onPressed: _continueAsGuest,
                               child: Text(
                                 'CONTINUE AS GUEST',
@@ -318,11 +298,9 @@ class _Splash2WidgetState extends State<Splash2Widget> {
                                   letterSpacing: 0.5,
                                 ),
                               ),
-                              */
-                              onPressed: null,
-                              child: SizedBox.shrink(),
                             ),
                           ),
+                          */
                           Padding(
                             padding: const EdgeInsets.only(top: 24),
                             child: Text(

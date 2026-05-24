@@ -5,12 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '/index.dart';
 import 'dart:async';
 import 'splash_screen_page2_model.dart';
-import '/services/auth_service.dart';
-import '../../services/token_storage.dart';
 import '../../utils/navigation_utils.dart';
-import '../../utils/awesome_dialogs.dart';
-import '../../state/auth_notifier.dart';
-import '../../state/app_state_notifier.dart';
 export 'splash_screen_page2_model.dart';
 
 class SplashScreenPage2Widget extends StatefulWidget {
@@ -377,13 +372,13 @@ class _SplashScreenPage2WidgetState extends State<SplashScreenPage2Widget>
                             icon: Icons.handyman_outlined,
                             isPrimary: true,
                           ),
+                          // Continue as guest is not needed for now.
+                          /*
                           const SizedBox(height: 16),
-
-                          // Continue as Guest button (restored)
                           Container(
                             width: double.infinity,
                             constraints: const BoxConstraints(maxWidth: 320),
-                            child: /* Guest flow disabled. Original button commented out.
+                            child:
                             ElevatedButton(
                               onPressed: () async {
                                 // guest flow removed
@@ -411,8 +406,9 @@ class _SplashScreenPage2WidgetState extends State<SplashScreenPage2Widget>
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
-                            ),*/ SizedBox.shrink(),
+                            ),
                           ),
+                          */
 
                           const SizedBox(height: 12),
 

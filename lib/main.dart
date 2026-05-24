@@ -668,15 +668,12 @@ class _NavBarPageState extends State<NavBarPage> {
                         style:
                             theme.titleMedium.copyWith(color: theme.primary)),
                     const SizedBox(height: 8.0),
-                    Text(
-                        'Sign in to unlock all features or continue as a guest with limited access.',
+                    Text('Sign in to unlock all features.',
                         textAlign: TextAlign.center,
                         style: theme.bodyMedium
                             .copyWith(color: theme.secondaryText)),
                     const SizedBox(height: 18.0),
-                    // Continue as guest (top) — temporarily removed per request.
-                    // Original button commented out to keep the option disabled
-                    // while preserving sheet layout.
+                    // Continue as guest is not needed for now.
                     /*
                     SizedBox(
                       width: double.infinity,
@@ -692,9 +689,8 @@ class _NavBarPageState extends State<NavBarPage> {
                                 theme.bodyLarge.copyWith(color: theme.primary)),
                       ),
                     ),
-                    */
-                    SizedBox.shrink(),
                     const SizedBox(height: 12.0),
+                    */
                     // Sign in (primary as well) — remove elevation/shadow so it's flat
                     SizedBox(
                       width: double.infinity,
