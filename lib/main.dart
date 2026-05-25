@@ -278,15 +278,35 @@ void main() async {
   print('🔥 Firebase initialized');
 
   // Initialize App Check (Step 4)
-  // Use Debug Provider for development, Play Integrity for Production
-  await FirebaseAppCheck.instance.activate(
-    androidProvider:
-        kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
-    appleProvider: AppleProvider.deviceCheck,
-  );
+  // Use Debug Provider for development, Play Integrity for Production.
+  // Web requires an explicit reCAPTCHA provider; without one the web plugin
+  // throws during startup, so local Chrome debug runs skip it unless configured.
+  final webAppCheckSiteKey =
+      dotenv.env['FIREBASE_APPCHECK_RECAPTCHA_SITE_KEY'] ??
+          dotenv.env['APP_CHECK_RECAPTCHA_SITE_KEY'] ??
+          '';
+  if (kIsWeb) {
+    if (webAppCheckSiteKey.isNotEmpty) {
+      await FirebaseAppCheck.instance.activate(
+        webProvider: ReCaptchaV3Provider(webAppCheckSiteKey),
+      );
+    } else if (kDebugMode) {
+      print('⚠️ App Check skipped on web debug: no reCAPTCHA site key set');
+    } else {
+      throw StateError(
+        'FIREBASE_APPCHECK_RECAPTCHA_SITE_KEY is required for web release builds.',
+      );
+    }
+  } else {
+    await FirebaseAppCheck.instance.activate(
+      androidProvider:
+          kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
+      appleProvider: AppleProvider.deviceCheck,
+    );
+  }
 
   // Configure debug token for development builds
-  if (kDebugMode) {
+  if (kDebugMode && !kIsWeb) {
     // Set the debug token that must be added to Firebase Console App Check allowlist
     // To add this token to Firebase Console:
     // 1. Go to Firebase Console > Project Settings > App Check
@@ -648,13 +668,13 @@ class _NavBarPageState extends State<NavBarPage> {
                         style:
                             theme.titleMedium.copyWith(color: theme.primary)),
                     const SizedBox(height: 8.0),
-                    Text(
-                        'Sign in to unlock all features or continue as a guest with limited access.',
+                    Text('Sign in to unlock all features.',
                         textAlign: TextAlign.center,
                         style: theme.bodyMedium
                             .copyWith(color: theme.secondaryText)),
                     const SizedBox(height: 18.0),
-                    // Continue as guest (top) — show as a simple text link in primary color
+                    // Continue as guest is not needed for now.
+                    /*
                     SizedBox(
                       width: double.infinity,
                       child: TextButton(
@@ -670,6 +690,7 @@ class _NavBarPageState extends State<NavBarPage> {
                       ),
                     ),
                     const SizedBox(height: 12.0),
+                    */
                     // Sign in (primary as well) — remove elevation/shadow so it's flat
                     SizedBox(
                       width: double.infinity,

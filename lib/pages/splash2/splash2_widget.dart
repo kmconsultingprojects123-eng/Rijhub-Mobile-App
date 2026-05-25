@@ -1,14 +1,8 @@
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
-import '../../services/token_storage.dart';
 import 'package:flutter/material.dart';
 import 'splash2_model.dart';
 export 'splash2_model.dart';
-import '../../services/auth_service.dart';
-import '../../state/auth_notifier.dart';
-import '../../state/app_state_notifier.dart';
-import '../../utils/awesome_dialogs.dart';
-import 'package:go_router/go_router.dart';
 
 class Splash2Widget extends StatefulWidget {
   const Splash2Widget({super.key});
@@ -37,143 +31,6 @@ class _Splash2WidgetState extends State<Splash2Widget> {
   void dispose() {
     _model.dispose();
     super.dispose();
-  }
-
-  // Guest flow: call backend guest endpoint, persist tokens/role if returned,
-  // update notifiers and navigate to home.
-  Future<void> _continueAsGuest() async {
-    if (!mounted) return;
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
-
-    try {
-      final res = await AuthService.guest();
-      try {
-        Navigator.of(context, rootNavigator: true).pop();
-      } catch (_) {}
-
-      if (res['success'] == true) {
-        dynamic body = res['data'];
-        String? token;
-        Map<String, dynamic>? userProfile;
-
-        try {
-          if (body is Map) {
-            if (body['token'] != null) token = body['token'].toString();
-            if (body['data'] is Map && body['data']['token'] != null)
-              token = body['data']['token'].toString();
-            if (body['user'] is Map)
-              userProfile = Map<String, dynamic>.from(body['user']);
-            if (userProfile == null &&
-                body['data'] is Map &&
-                body['data']['user'] is Map)
-              userProfile = Map<String, dynamic>.from(body['data']['user']);
-          }
-        } catch (_) {}
-
-        // Fallback to persisted token if AuthService already saved it
-        try {
-          if (token == null || token.isEmpty)
-            token = await TokenStorage.getToken();
-        } catch (_) {}
-
-        if (token != null && token.isNotEmpty) {
-          try {
-            await TokenStorage.saveToken(token);
-          } catch (_) {}
-          try {
-            await TokenStorage.saveRole('guest');
-          } catch (_) {}
-
-          try {
-            await AuthNotifier.instance.setGuest(token: token);
-          } catch (_) {}
-
-          if (userProfile == null) userProfile = <String, dynamic>{};
-          userProfile['role'] = 'guest';
-          userProfile['isGuest'] = true;
-
-          try {
-            await AuthNotifier.instance.setProfile(userProfile);
-          } catch (_) {}
-
-          // Use setter to persist token and notify listeners instead of direct field assignment
-          try {
-            await AppStateNotifier.instance.setToken(token);
-          } catch (_) {}
-
-          try {
-            AppStateNotifier.instance.setProfile(userProfile);
-          } catch (_) {}
-
-          try {
-            context.go('/homePage');
-          } catch (_) {}
-
-          try {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Text('You are now browsing as a guest.'),
-                action: SnackBarAction(
-                  label: 'Sign in',
-                  onPressed: () {
-                    try {
-                      context.go(LoginAccountWidget.routePath);
-                    } catch (_) {}
-                  },
-                ),
-                duration: const Duration(seconds: 6),
-              ),
-            );
-          } catch (_) {}
-
-          return;
-        }
-
-        // No token returned: use in-memory guest session
-        try {
-          await AppStateNotifier.instance.setGuestSession(data: userProfile);
-        } catch (_) {}
-        try {
-          context.go('/homePage');
-        } catch (_) {}
-        try {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('You are now browsing as a guest.'),
-              action: SnackBarAction(
-                label: 'Sign in',
-                onPressed: () {
-                  try {
-                    context.go(LoginAccountWidget.routePath);
-                  } catch (_) {}
-                },
-              ),
-              duration: const Duration(seconds: 6),
-            ),
-          );
-        } catch (_) {}
-
-        return;
-      }
-
-      final err = res['error'];
-      final message = (err is Map && err['message'] != null)
-          ? err['message'].toString()
-          : (err?.toString() ?? 'Failed to enter as guest');
-      if (!mounted) return;
-      await showAppErrorDialog(context, title: 'Error', desc: message);
-    } catch (e) {
-      try {
-        Navigator.of(context, rootNavigator: true).pop();
-      } catch (_) {}
-      if (!mounted) return;
-      await showAppErrorDialog(context, title: 'Error', desc: e.toString());
-    }
   }
 
   Future<void> _navigateToRoleSelection() async {
@@ -411,6 +268,8 @@ class _Splash2WidgetState extends State<Splash2Widget> {
                               ),
                             ),
                           ),
+                          // Continue as guest is not needed for now.
+                          /*
                           const SizedBox(height: 12),
                           SizedBox(
                             width: double.infinity,
@@ -441,6 +300,7 @@ class _Splash2WidgetState extends State<Splash2Widget> {
                               ),
                             ),
                           ),
+                          */
                           Padding(
                             padding: const EdgeInsets.only(top: 24),
                             child: Text(

@@ -5,12 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '/index.dart';
 import 'dart:async';
 import 'splash_screen_page2_model.dart';
-import '/services/auth_service.dart';
-import '../../services/token_storage.dart';
 import '../../utils/navigation_utils.dart';
-import '../../utils/awesome_dialogs.dart';
-import '../../state/auth_notifier.dart';
-import '../../state/app_state_notifier.dart';
 export 'splash_screen_page2_model.dart';
 
 class SplashScreenPage2Widget extends StatefulWidget {
@@ -377,163 +372,16 @@ class _SplashScreenPage2WidgetState extends State<SplashScreenPage2Widget>
                             icon: Icons.handyman_outlined,
                             isPrimary: true,
                           ),
+                          // Continue as guest is not needed for now.
+                          /*
                           const SizedBox(height: 16),
-
-                          // Continue as Guest button (restored)
                           Container(
                             width: double.infinity,
                             constraints: const BoxConstraints(maxWidth: 320),
-                            child: ElevatedButton(
+                            child:
+                            ElevatedButton(
                               onPressed: () async {
-                                // Guest flow: call server, persist token + role, set profile, mark guest, and go to /homePage
-                                showAppLoadingDialog(context);
-                                try {
-                                  final res = await AuthService.guest();
-                                  if (!mounted) return;
-
-                                  // Dismiss loading dialog
-                                  try {
-                                    Navigator.of(context, rootNavigator: true)
-                                        .pop();
-                                  } catch (_) {
-                                    try {
-                                      NavigationUtils.safeMaybePop(context);
-                                    } catch (_) {}
-                                  }
-
-                                  if (res['success'] == true) {
-                                    final body = res['data'] ?? res;
-
-                                    // Extract token (support common response shapes)
-                                    String? token;
-                                    Map<String, dynamic>? userProfile;
-                                    if (body is Map) {
-                                      token = (body['token'] ??
-                                              body['accessToken'] ??
-                                              body['data']?['token'] ??
-                                              body['data']?['accessToken'] ??
-                                              body['user']?['token'])
-                                          ?.toString();
-                                      // Try to find a user object in common locations
-                                      if (body['user'] is Map)
-                                        userProfile = Map<String, dynamic>.from(
-                                            body['user']);
-                                      else if (body['data'] is Map &&
-                                          body['data']['user'] is Map)
-                                        userProfile = Map<String, dynamic>.from(
-                                            body['data']['user']);
-                                      else if (body['data'] is Map &&
-                                          (body['data']['profile'] is Map))
-                                        userProfile = Map<String, dynamic>.from(
-                                            body['data']['profile']);
-                                      else {
-                                        // If body itself contains common profile fields (id/name/email), use it as profile
-                                        final hasId = body.containsKey('_id') ||
-                                            body.containsKey('id') ||
-                                            body.containsKey('userId');
-                                        if (hasId)
-                                          userProfile =
-                                              Map<String, dynamic>.from(body);
-                                      }
-                                    }
-
-                                    if (token != null && token.isNotEmpty) {
-                                      // Persist token and role explicitly
-                                      try {
-                                        await TokenStorage.saveToken(token);
-                                      } catch (_) {}
-                                      try {
-                                        await TokenStorage.saveRole('guest');
-                                      } catch (_) {}
-
-                                      // Update in-memory auth state: AuthNotifier and AppStateNotifier
-                                      try {
-                                        await AuthNotifier.instance
-                                            .setGuest(token: token);
-                                      } catch (_) {}
-
-                                      // Normalize and ensure profile includes guest markers
-                                      if (userProfile == null)
-                                        userProfile = <String, dynamic>{};
-                                      userProfile['role'] = 'guest';
-                                      userProfile['isGuest'] = true;
-
-                                      // Update both notifiers so other parts of the app reflect guest state
-                                      try { await AuthNotifier.instance.setProfile(userProfile); } catch (_) {}
-                                      // Use the public setter to persist token and notify listeners
-                                      try { await AppStateNotifier.instance.setToken(token); } catch (_) {}
-                                      try { AppStateNotifier.instance.setProfile(userProfile); } catch (_) {}
-                                      try {
-                                        await AuthNotifier.instance
-                                            .setProfile(userProfile);
-                                      } catch (_) {}
-                                      try {
-                                        AppStateNotifier.instance.token = token;
-                                      } catch (_) {}
-                                      try {
-                                        AppStateNotifier.instance
-                                            .setProfile(userProfile);
-                                      } catch (_) {}
-
-                                      // Navigate to /homePage using go_router as requested.
-                                      // Do NOT use pushReplacement, do NOT rebuild router.
-                                      try {
-                                        context.go('/homePage');
-                                      } catch (_) {
-                                        // If go() throws, log and don't attempt additional navigation
-                                      }
-
-                                      // Show a snackbar prompting sign-in with action linking to login page
-                                      try {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          SnackBar(
-                                            content: const Text(
-                                                'You are now browsing as a guest.'),
-                                            action: SnackBarAction(
-                                              label: 'Sign in',
-                                              onPressed: () {
-                                                // Must link directly to the login page using GoRouter
-                                                context.go(LoginAccountWidget
-                                                    .routePath);
-                                              },
-                                            ),
-                                            duration:
-                                                const Duration(seconds: 6),
-                                          ),
-                                        );
-                                      } catch (_) {}
-                                    } else {
-                                      final msg =
-                                          'Guest login failed: server did not return a token.';
-                                      if (!mounted) return;
-                                      await showAppErrorDialog(context,
-                                          title: 'Error', desc: msg);
-                                    }
-                                  } else {
-                                    final err = res['error'];
-                                    final message =
-                                        (err is Map && err['message'] != null)
-                                            ? err['message'].toString()
-                                            : (err?.toString() ??
-                                                'Failed to enter as guest');
-                                    if (!mounted) return;
-                                    await showAppErrorDialog(context,
-                                        title: 'Error', desc: message);
-                                  }
-                                } catch (e) {
-                                  if (!mounted) return;
-                                  try {
-                                    Navigator.of(context, rootNavigator: true)
-                                        .pop();
-                                  } catch (_) {
-                                    try {
-                                      NavigationUtils.safeMaybePop(context);
-                                    } catch (_) {}
-                                  }
-                                  await showAppErrorDialog(context,
-                                      title: 'Error', desc: e.toString());
-                                }
+                                // guest flow removed
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.transparent,
@@ -560,6 +408,7 @@ class _SplashScreenPage2WidgetState extends State<SplashScreenPage2Widget>
                               ),
                             ),
                           ),
+                          */
 
                           const SizedBox(height: 12),
 

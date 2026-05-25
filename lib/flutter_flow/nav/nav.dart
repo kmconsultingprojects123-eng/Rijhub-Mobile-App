@@ -50,7 +50,8 @@ GoRouter createRouter(AuthNotifier auth) {
       try {
         final loc = state.uri.path;
         if (kDebugMode) {
-          print('🛤️ Router: loc=$loc, status=${auth.status}, auth.isAuthenticated=${auth.isAuthenticated}');
+          print(
+              '🛤️ Router: loc=$loc, status=${auth.status}, auth.isAuthenticated=${auth.isAuthenticated}');
         }
 
         // If unauthenticated, only allow the auth/onboarding flow pages.
@@ -181,6 +182,12 @@ GoRouter createRouter(AuthNotifier auth) {
                       showDiscover: showDiscoverNow,
                     );
             }),
+        FFRoute(
+          name: ArtisanPortfolioPageWidget.routeName,
+          path: ArtisanPortfolioPageWidget.routePath,
+          requireAuth: true,
+          builder: (context, params) => const ArtisanPortfolioPageWidget(),
+        ),
         FFRoute(
           name: SearchPageWidget.routeName,
           path: SearchPageWidget.routePath,
@@ -521,8 +528,8 @@ GoRouter createRouter(AuthNotifier auth) {
                 params.getParam<String>('artisanName', ParamType.String) ?? '',
             artisanEmail:
                 params.getParam<String>('artisanEmail', ParamType.String),
-            artisanData: params
-                .getParam<Map<String, dynamic>>('artisanData', ParamType.JSON),
+            artisanData: params.getParam<Map<String, dynamic>>(
+                'artisanData', ParamType.JSON),
           ),
         ),
       ];
