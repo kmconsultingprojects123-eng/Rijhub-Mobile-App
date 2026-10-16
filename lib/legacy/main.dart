@@ -1,0 +1,1079 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
+
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'dart:async';
+import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '/firebase_options.dart';
+import '/legacy/services/notification_controller.dart';
+import '/legacy/flutter_flow/flutter_flow_theme.dart';
+import 'flutter_flow/flutter_flow_util.dart';
+import 'package:floating_bottom_navigation_bar/floating_bottom_navigation_bar.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'index.dart';
+import '/legacy/utils/auth_guard.dart';
+import 'utils/location_permission.dart';
+import 'utils/navigation_utils.dart';
+import 'services/health_service.dart';
+import 'widgets/health_snackbar.dart';
+import 'state/auth_notifier.dart';
+import 'state/app_state_notifier.dart';
+import 'package:app_links/app_links.dart';
+
+import 'dart:io';
+import 'dart:convert';
+
+const Color _crimsonPrimary = Color(0xFFA20025);
+const Color _crimsonOnPrimary = Color(0xFFFFFFFF);
+const Color _lightBgMain = Color(0xFFFFFFFF);
+const Color _lightBgSurface = Color(0xFFF8F9FA);
+const Color _lightTextPrimary = Color(0xFF1A1A1B);
+const Color _lightTextSecondary = Color(0xFF64748B);
+const Color _lightStrokeDefault = Color(0xFFE2E8F0);
+const Color _darkBgMain = Color(0xFF121212);
+const Color _darkBgSurface = Color(0xFF1E1E1E);
+const Color _darkTextPrimary = Color(0xFFE4E4E7);
+const Color _darkTextSecondary = Color(0xFFA1A1AA);
+const Color _darkStrokeDefault = Color(0xFF2D2D30);
+
+ThemeData _buildAppTheme({required Brightness brightness}) {
+  final bool isDark = brightness == Brightness.dark;
+  final Color bgMain = isDark ? _darkBgMain : _lightBgMain;
+  final Color bgSurface = isDark ? _darkBgSurface : _lightBgSurface;
+  final Color textPrimary = isDark ? _darkTextPrimary : _lightTextPrimary;
+  final Color textSecondary = isDark ? _darkTextSecondary : _lightTextSecondary;
+  final Color outline = isDark ? _darkStrokeDefault : _lightStrokeDefault;
+
+  final colorScheme = isDark
+      ? const ColorScheme.dark(
+          primary: _crimsonPrimary,
+          onPrimary: _crimsonOnPrimary,
+          secondary: _crimsonPrimary,
+          onSecondary: _crimsonOnPrimary,
+          surface: _darkBgSurface,
+          onSurface: _darkTextPrimary,
+          error: Color(0xFFFF5963),
+          outline: _darkStrokeDefault,
+        )
+      : const ColorScheme.light(
+          primary: _crimsonPrimary,
+          onPrimary: _crimsonOnPrimary,
+          secondary: _crimsonPrimary,
+          onSecondary: _crimsonOnPrimary,
+          surface: _lightBgSurface,
+          onSurface: _lightTextPrimary,
+          error: Color(0xFFFF5963),
+          outline: _lightStrokeDefault,
+        );
+
+  final base = ThemeData(
+    brightness: brightness,
+    useMaterial3: false,
+    colorScheme: colorScheme,
+    scaffoldBackgroundColor: bgMain,
+    canvasColor: bgMain,
+    cardColor: bgSurface,
+    shadowColor: Colors.transparent,
+    dividerColor: outline,
+    disabledColor: textSecondary.withValues(alpha: 0.5),
+    splashColor: _crimsonPrimary.withValues(alpha: 0.08),
+    highlightColor: _crimsonPrimary.withValues(alpha: 0.06),
+    textSelectionTheme: const TextSelectionThemeData(
+      cursorColor: _crimsonPrimary,
+      selectionColor: Color(0x33A20025),
+      selectionHandleColor: _crimsonPrimary,
+    ),
+    appBarTheme: AppBarTheme(
+      backgroundColor: bgMain,
+      foregroundColor: textPrimary,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      shadowColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      centerTitle: false,
+      titleTextStyle: TextStyle(
+        fontFamily: 'Inter Tight',
+        fontSize: 18.0,
+        fontWeight: FontWeight.w600,
+        color: textPrimary,
+      ),
+      iconTheme: IconThemeData(color: textPrimary),
+      actionsIconTheme: IconThemeData(color: textPrimary),
+      shape: Border(
+        bottom: BorderSide(color: outline, width: 1.0),
+      ),
+    ),
+    cardTheme: CardThemeData(
+      color: bgSurface,
+      elevation: 0,
+      shadowColor: Colors.transparent,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: outline, width: 1),
+      ),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: bgSurface,
+      elevation: 0,
+      shadowColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: outline, width: 1),
+      ),
+      titleTextStyle: TextStyle(
+        fontFamily: 'Inter Tight',
+        fontSize: 20,
+        fontWeight: FontWeight.w600,
+        color: textPrimary,
+      ),
+      contentTextStyle: TextStyle(
+        fontFamily: 'Inter',
+        fontSize: 14,
+        color: textPrimary,
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: bgSurface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      labelStyle: TextStyle(
+        fontFamily: 'Inter',
+        color: textSecondary,
+      ),
+      floatingLabelStyle: const TextStyle(
+        fontFamily: 'Inter',
+        color: _crimsonPrimary,
+      ),
+      hintStyle: TextStyle(
+        fontFamily: 'Inter',
+        color: textSecondary.withValues(alpha: 0.85),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: outline, width: 1),
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: outline, width: 1),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: _crimsonPrimary, width: 2),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFFFF5963), width: 1),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFFFF5963), width: 2),
+      ),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: _crimsonPrimary,
+        foregroundColor: _crimsonOnPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        minimumSize: const Size(44, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        backgroundColor: Colors.transparent,
+        foregroundColor: _crimsonPrimary,
+        minimumSize: const Size(44, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        side: const BorderSide(color: _crimsonPrimary, width: 1.5),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: _crimsonPrimary,
+        minimumSize: const Size(44, 44),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    ),
+    bottomNavigationBarTheme: BottomNavigationBarThemeData(
+      backgroundColor: bgMain,
+      selectedItemColor: _crimsonPrimary,
+      unselectedItemColor: textSecondary,
+      type: BottomNavigationBarType.fixed,
+      elevation: 0,
+      selectedLabelStyle: const TextStyle(
+        fontFamily: 'Inter',
+        fontWeight: FontWeight.w600,
+      ),
+      unselectedLabelStyle: const TextStyle(
+        fontFamily: 'Inter',
+        fontWeight: FontWeight.w500,
+      ),
+    ),
+    tabBarTheme: TabBarThemeData(
+      labelColor: _crimsonPrimary,
+      unselectedLabelColor: textSecondary,
+      indicatorColor: _crimsonPrimary,
+      dividerColor: outline,
+      labelStyle: const TextStyle(
+        fontFamily: 'Inter',
+        fontWeight: FontWeight.w600,
+      ),
+      unselectedLabelStyle: const TextStyle(
+        fontFamily: 'Inter',
+        fontWeight: FontWeight.w500,
+      ),
+    ),
+  );
+
+  return base.copyWith(
+    textTheme: base.textTheme.apply(
+      bodyColor: textPrimary,
+      displayColor: textPrimary,
+    ),
+    primaryTextTheme: base.primaryTextTheme.apply(
+      bodyColor: textPrimary,
+      displayColor: textPrimary,
+    ),
+  );
+}
+
+void main() async {
+  // Ensure Flutter binding is initialized before calling any platform
+  // channels (including SharedPreferences) or running async startup logic.
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Load environment variables
+  await dotenv.load();
+
+  print('');
+  print('═══════════════════════════════════════════════════════════');
+  print('🚀 APP STARTING');
+  print('═══════════════════════════════════════════════════════════');
+  print('');
+
+  // Initialize Firebase
+  print('🔥 Initializing Firebase...');
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  print('🔥 Firebase initialized');
+
+  // Initialize App Check (Step 4)
+  // Use Debug Provider for development, Play Integrity for Production.
+  // Web requires an explicit reCAPTCHA provider; without one the web plugin
+  // throws during startup, so local Chrome debug runs skip it unless configured.
+  final webAppCheckSiteKey =
+      dotenv.env['FIREBASE_APPCHECK_RECAPTCHA_SITE_KEY'] ??
+          dotenv.env['APP_CHECK_RECAPTCHA_SITE_KEY'] ??
+          '';
+  if (kIsWeb) {
+    if (webAppCheckSiteKey.isNotEmpty) {
+      await FirebaseAppCheck.instance.activate(
+        webProvider: ReCaptchaV3Provider(webAppCheckSiteKey),
+      );
+    } else if (kDebugMode) {
+      print('⚠️ App Check skipped on web debug: no reCAPTCHA site key set');
+    } else {
+      throw StateError(
+        'FIREBASE_APPCHECK_RECAPTCHA_SITE_KEY is required for web release builds.',
+      );
+    }
+  } else {
+    await FirebaseAppCheck.instance.activate(
+      androidProvider:
+          kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
+      appleProvider: AppleProvider.deviceCheck,
+    );
+  }
+
+  // Configure debug token for development builds
+  if (kDebugMode && !kIsWeb) {
+    // Set the debug token that must be added to Firebase Console App Check allowlist
+    // To add this token to Firebase Console:
+    // 1. Go to Firebase Console > Project Settings > App Check
+    // 2. Select your Android app
+    // 3. Under "Debug tokens", click "Add debug token"
+    // 4. Paste this token: f4d83cb1-32c0-4a4f-9f21-b8a2a1b0b89d
+    // 5. Save and redeploy if needed
+    await FirebaseAppCheck.instance.setTokenAutoRefreshEnabled(true);
+    // Note: The debug token is automatically generated and used when AndroidProvider.debug is active
+    // The token above is logged in your Firebase Console and must be allowlisted for phone auth to work
+  }
+
+  print(
+      '✅ App Check activated (${kDebugMode ? 'Debug Mode (Debug Token Required)' : 'Production Mode'})');
+
+  // Register background message handler (required for background/terminated data messages).
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+
+  // Initialize Awesome Notifications (no permission request here — deferred until after login per Apple Guideline 4.5.4)
+  await NotificationController.initializeNotifications();
+  await NotificationController.startListeningNotificationEvents();
+
+  print('');
+  print('═══════════════════════════════════════════════════════════');
+  print('✅ NOTIFICATION SETUP COMPLETE - PERMISSION DEFERRED TO LOGIN');
+  print('═══════════════════════════════════════════════════════════');
+  print('');
+
+  // Disable debugPrint globally to prevent logging sensitive data to terminal
+  // try {
+  //   debugPrint = (String? messagege, {int? wrapWidth}) {};
+  // } catch (_) {}
+
+  // Global error handlers to capture runtime assertion stack traces (helps diagnose '!semantics.parentDataDirty' issues)
+  FlutterError.onError = (FlutterErrorDetails details) {
+    // Always dump error details; avoid printing extra debug info to terminal
+    FlutterError.dumpErrorToConsole(details);
+    // Removed debugPrint calls for security: do not log exception or stacktrace to terminal
+  };
+
+  ui.PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+    // Removed debugPrint calls for security: do not log platform errors to terminal
+    return false; // prevent the engine from exiting
+  };
+
+  // ✅ FIX: Remove edgeToEdge to prevent Android from showing app name ("RijHub")
+  SystemChrome.setEnabledSystemUIMode(
+    SystemUiMode.manual,
+    overlays: [
+      SystemUiOverlay.top,
+      SystemUiOverlay.bottom,
+    ],
+  );
+
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      systemNavigationBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+    ),
+  );
+  // Eagerly initialize SharedPreferences on the UI thread so plugins using
+  // method channels (e.g. shared_preferences) don't race with engine setup on iOS.
+  final SharedPreferences prefs = await SharedPreferences.getInstance();
+
+  // Use the pre-created prefs instance when initializing the theme so that
+  // FlutterFlowTheme.themeMode and other consumers read a ready-backed value.
+  GoRouter.optionURLReflectsImperativeAPIs = true;
+  usePathUrlStrategy();
+
+  await FlutterFlowTheme.initialize(prefs: prefs);
+
+  try {
+    await AppStateNotifier.instance.refreshAuth();
+  } catch (_) {}
+
+  // Initialize realtime notifications (socket + local notifications)
+  try {
+    // Realtime notifications temporarily disabled to avoid navigation build-time races
+    // await RealtimeNotifications.instance.init();
+  } catch (_) {}
+
+  // Ensure location permission on startup where possible. We don't have a BuildContext here,
+  // so the consent dialog will be triggered on first resume / when UI builds (see MyApp lifecycle).
+
+  // Trust Let's Encrypt roots
+  final bundle = PlatformAssetBundle();
+
+  try {
+    // Removed debugPrint: do not log certificate loading to terminal
+
+    // Load ISRG Root X1 certificate
+    final rootData = await bundle.load('assets/ca/isrgrootx1.pem');
+    SecurityContext.defaultContext
+        .setTrustedCertificatesBytes(rootData.buffer.asUint8List());
+    // Removed debugPrint: do not log certificate load success
+
+    // Load Let's Encrypt R3 Intermediate certificate
+    final r3Data = await bundle.load('assets/ca/lets-encrypt-r3.pem');
+    SecurityContext.defaultContext
+        .setTrustedCertificatesBytes(r3Data.buffer.asUint8List());
+    // Removed debugPrint: do not log certificate load success
+
+    // Removed debugPrint: do not log certificate list or context to terminal
+  } catch (e, stackTrace) {
+    // Removed debugPrint: do not print errors or stack traces to terminal
+  }
+
+  // Start the app normally
+  runApp(
+    MultiProvider(
+      providers: [
+        // Expose the existing singletons via Provider so widgets can use
+        // context.read/watch and we can migrate away from direct static
+        // access to the singletons over time.
+        ChangeNotifierProvider.value(value: AppStateNotifier.instance),
+        ChangeNotifierProvider.value(value: AuthNotifier.instance),
+      ],
+      child: MyApp(),
+    ),
+  );
+}
+
+class MyApp extends StatefulWidget {
+  const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+
+  static _MyAppState of(BuildContext context) =>
+      context.findAncestorStateOfType<_MyAppState>()!;
+}
+
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  // Observe app lifecycle to re-check location permissions on resume
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      // When app resumes, try to ensure location permissions using current context
+      try {
+        LocationPermissionService.ensureLocationPermissions(context);
+      } catch (_) {}
+      // Also refresh auth state non-blocking so token expiry is revalidated on resume
+      try {
+        AppStateNotifier.instance.refreshAuth();
+      } catch (_) {}
+    }
+  }
+
+  ThemeMode _themeMode = FlutterFlowTheme.themeMode;
+
+  late AppStateNotifier _appStateNotifier;
+  late GoRouter _router;
+  late AppLinks _appLinks;
+
+  String getRoute([RouteMatchBase? routeMatch]) {
+    final RouteMatchBase lastMatch =
+        routeMatch ?? _router.routerDelegate.currentConfiguration.last;
+    final RouteMatchList matchList = lastMatch is ImperativeRouteMatch
+        ? lastMatch.matches
+        : _router.routerDelegate.currentConfiguration;
+    return matchList.uri.toString();
+  }
+
+  List<String> getRouteStack() =>
+      _router.routerDelegate.currentConfiguration.matches
+          .map((e) => getRoute(e))
+          .toList();
+
+  bool displaySplashImage = true;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Register this state as a lifecycle observer so we can check permissions on resume
+    WidgetsBinding.instance.addObserver(this);
+
+    // After first frame, prompt for location permissions if needed (we need a BuildContext)
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // Run a lightweight health-check after first frame and show a user-friendly
+      // snackbar if there's a problem. We intentionally don't block app init.
+      try {
+        final hs = HealthService();
+        final token = AppStateNotifier.instance.token;
+        final res = await hs.check(token: token);
+        if (!res.healthy && mounted) {
+          showHealthSnackBar(context, res.message, isError: true);
+        }
+      } catch (_) {}
+      try {
+        await LocationPermissionService.ensureLocationPermissions(context);
+      } catch (_) {}
+    });
+
+    _appStateNotifier = AppStateNotifier.instance;
+
+    // Instantiate AuthNotifier and refresh auth state before creating router
+    final auth = AuthNotifier.instance;
+    // Refresh asynchronously; we don't await here because initState can't be async
+    auth.refreshAuth().catchError((_) {});
+
+    _router = createRouter(auth);
+
+    // Handle deep links
+    _initDeepLinks();
+
+    Future.delayed(const Duration(milliseconds: 1800), () {
+      _appStateNotifier.stopShowingSplashImage();
+      try {
+        _router.go(Splash2Widget.routePath);
+      } catch (e) {
+        // navigation failed - ignore in release logs
+      }
+    });
+  }
+
+  void _initDeepLinks() async {
+    _appLinks = AppLinks();
+
+    // Handle initial link when app is launched from a deep link
+    try {
+      final initialUri = await _appLinks.getInitialLink();
+      if (initialUri != null) {
+        _handleDeepLink(initialUri.toString());
+      }
+    } catch (e) {
+      // Ignore errors
+    }
+
+    // Handle links when app is already running
+    _appLinks.uriLinkStream.listen(
+      (Uri uri) {
+        _handleDeepLink(uri.toString());
+      },
+      onError: (err) {
+        // Ignore errors
+      },
+    );
+  }
+
+  void _handleDeepLink(String link) {
+    final uri = Uri.parse(link);
+    if (uri.path == '/resetPassword' || uri.path == '/reset-password') {
+      final token = uri.queryParameters['token'];
+      final email = uri.queryParameters['email'];
+      if (token != null && token.isNotEmpty) {
+        // Navigate to reset password screen
+        _router.go('/resetPassword?token=$token&email=${email ?? ''}');
+      }
+    }
+  }
+
+  void setThemeMode(ThemeMode mode) => safeSetState(() {
+        _themeMode = mode;
+        FlutterFlowTheme.saveThemeMode(mode);
+      });
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp.router(
+      debugShowCheckedModeBanner: false,
+      title: '',
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [Locale('en', '')],
+      theme: _buildAppTheme(brightness: Brightness.light),
+      darkTheme: _buildAppTheme(brightness: Brightness.dark),
+      themeMode: _themeMode,
+      routerConfig: _router,
+    );
+  }
+}
+
+class NavBarPage extends StatefulWidget {
+  // Route identifiers used across the app
+  static String routeName = 'navBar';
+  static String routePath = '/';
+  const NavBarPage({
+    super.key,
+    this.initialPage,
+    this.page,
+    this.disableResizeToAvoidBottomInset = false,
+    this.showDiscover = true,
+  });
+
+  final String? initialPage;
+  final Widget? page;
+  final bool disableResizeToAvoidBottomInset;
+  // When false the Discover tab is hidden (used for artisan flows)
+  final bool showDiscover;
+
+  @override
+  _NavBarPageState createState() => _NavBarPageState();
+}
+
+class _NavBarPageState extends State<NavBarPage> {
+  String _currentPageName = 'homePage';
+  late Widget? _currentPage;
+  String? _lastKnownRole;
+
+  AppStateNotifier? _appState; // captured notifier for listener management
+
+  // Helper to show the guest sign-in prompt; returns true if the user chose Sign in, false for Continue as guest or null if dismissed.
+  Future<bool?> _showGuestPrompt() async {
+    if (!mounted) return false;
+    final res = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (c) {
+        final theme = FlutterFlowTheme.of(context);
+        final maxWidth =
+            MediaQuery.of(context).size.width < 640 ? double.infinity : 640.0;
+        return Padding(
+          padding:
+              EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxWidth),
+              child: Container(
+                margin: const EdgeInsets.symmetric(
+                    horizontal: 16.0, vertical: 12.0),
+                padding: const EdgeInsets.all(20.0),
+                decoration: BoxDecoration(
+                  color: Colors
+                      .white, // user requested white background for the sheet
+                  borderRadius: BorderRadius.circular(16.0),
+                  boxShadow: [],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Illustration / icon (themed tint)
+                    Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                          color:
+                              Color.lerp(theme.primary, Colors.white, 0.88) ??
+                                  theme.primary,
+                          shape: BoxShape.circle),
+                      child: Center(
+                          child: Icon(Icons.login_rounded,
+                              size: 36, color: theme.primary)),
+                    ),
+                    const SizedBox(height: 12.0),
+                    Text('Continue with RijHub',
+                        style:
+                            theme.titleMedium.copyWith(color: theme.primary)),
+                    const SizedBox(height: 8.0),
+                    Text('Sign in to unlock all features.',
+                        textAlign: TextAlign.center,
+                        style: theme.bodyMedium
+                            .copyWith(color: theme.secondaryText)),
+                    const SizedBox(height: 18.0),
+                    // Continue as guest is not needed for now.
+                    /*
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton(
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14.0),
+                          foregroundColor: theme.primary,
+                          alignment: Alignment.center,
+                        ),
+                        onPressed: () => Navigator.of(c).pop(false),
+                        child: Text('Continue as guest',
+                            style:
+                                theme.bodyLarge.copyWith(color: theme.primary)),
+                      ),
+                    ),
+                    const SizedBox(height: 12.0),
+                    */
+                    // Sign in (primary as well) — remove elevation/shadow so it's flat
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.primary,
+                          elevation: 0,
+                          shadowColor: Colors.transparent,
+                          padding: const EdgeInsets.symmetric(vertical: 14.0),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8.0)),
+                        ),
+                        onPressed: () => Navigator.of(c).pop(true),
+                        child: Text('Sign in',
+                            style: theme.bodyLarge
+                                .copyWith(color: theme.onPrimary)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    return res;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _currentPageName = widget.initialPage ?? _currentPageName;
+    _currentPage = widget.page;
+    // Listen for app state changes (login/logout/role changes) so we can
+    // rebuild the nav bar and tabs accordingly and prevent role leakage.
+    try {
+      // Capture notifier via Provider to ensure we remove the same listener in dispose
+      _appState =
+          AppStateNotifier.instance; // fallback if Provider not ready yet
+      try {
+        final withProvider =
+            Provider.of<AppStateNotifier?>(context, listen: false);
+        if (withProvider != null) _appState = withProvider;
+      } catch (_) {}
+
+      _lastKnownRole = _appState?.profile?['role']?.toString();
+      _appState?.addListener(_onAppStateChanged);
+    } catch (_) {}
+  }
+
+  void _onAppStateChanged() {
+    // Only rebuild when the user's role or auth state changes to avoid
+    // unnecessary rebuilds.
+    final currentRole = _appState?.profile?['role']?.toString();
+    if (currentRole != _lastKnownRole) {
+      _lastKnownRole = currentRole;
+      // Reset current page to ensure tabs are recomputed for new role.
+      setState(() {
+        _currentPage = null;
+        // If the current page name is no longer available for the new role,
+        // default to homePage.
+        _currentPageName = widget.initialPage ?? 'homePage';
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    // Clean up the listener on dispose to prevent memory leaks.
+    try {
+      _appState?.removeListener(_onAppStateChanged);
+    } catch (_) {}
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Choose nav items and order depending on role.
+    // Client & Guest: Home, Job, Discover, Booking, Profile
+    // Artisan: Home, Job, Booking, Profile (Discover hidden)
+    final profile = context.watch<AppStateNotifier>().profile;
+    final bool isArtisan =
+        (profile?['role']?.toString().toLowerCase().contains('artisan') ??
+            false);
+    // Discover is shown only when both the widget allows it and the user is not an artisan.
+    final bool shouldShowDiscover = widget.showDiscover && !isArtisan;
+
+    // Build ordered tabs map according to role
+    final tabs = <String, Widget>{};
+    // Home
+    tabs['homePage'] =
+        isArtisan ? ArtisanDashboardPageWidget() : HomePageWidget();
+    // Job
+    tabs['JobPostPage'] = JobPostPageWidget();
+    // Discover (only for client/guest when allowed)
+    if (shouldShowDiscover) tabs['DiscoverPage'] = DiscoverPageWidget();
+    // Booking
+    tabs['BookingPage'] = BookingPageWidget();
+    // Profile (artisan uses artisan profile)
+    tabs['profile'] = isArtisan ? ArtisanProfilepageWidget() : ProfileWidget();
+
+    var currentIndex = tabs.keys.toList().indexOf(_currentPageName);
+    // If the current page name isn't found, default to the first tab.
+    if (currentIndex < 0) {
+      currentIndex = 0;
+      _currentPageName = tabs.keys.first;
+    }
+    final MediaQueryData queryData = MediaQuery.of(context);
+
+    // Responsive sizing calculations based on screen dimensions
+    final screenSize = queryData.size;
+    final screenHeight = screenSize.height;
+    final screenWidth = screenSize.width;
+
+    // Calculate responsive dimensions
+    final isSmallScreen = screenHeight < 600 || screenWidth < 360;
+    final isLargeScreen = screenHeight > 900 || screenWidth > 480;
+
+    // Responsive navbar height (48-72px range)
+    final navbarHeight = isSmallScreen ? 48.0 : (isLargeScreen ? 72.0 : 60.0);
+
+    // Responsive icon size (18-24px range)
+    final iconSize = isSmallScreen ? 18.0 : (isLargeScreen ? 24.0 : 20.0);
+
+    // Responsive text size (10-13px range)
+    final textSize = isSmallScreen ? 10.0 : (isLargeScreen ? 13.0 : 11.0);
+
+    // Responsive padding (6-12px range)
+    final verticalPadding = isSmallScreen ? 6.0 : (isLargeScreen ? 12.0 : 8.0);
+    final iconPadding = isSmallScreen ? 6.0 : (isLargeScreen ? 10.0 : 8.0);
+
+    // Responsive spacing between icon and text (4-8px range)
+    final iconTextSpacing = isSmallScreen ? 4.0 : (isLargeScreen ? 8.0 : 5.0);
+
+    // Icon mapping for the bottom nav - all solid/filled icons. Keep keys in sync with `tabs` above.
+    final iconMap = <String, IconData>{
+      'homePage': FontAwesomeIcons.solidHouse,
+      'JobPostPage': FontAwesomeIcons.solidClipboard,
+      'BookingPage': FontAwesomeIcons.solidCalendarDays,
+      'profile': FontAwesomeIcons.solidUser,
+    };
+    if (shouldShowDiscover)
+      iconMap['DiscoverPage'] = FontAwesomeIcons.solidCompass;
+
+    // Determine whether current cached profile represents a guest so we can dim restricted tabs visually
+    final bool isGuestNow = (() {
+      final p = profile;
+      if (p == null) return true;
+      if (p['isGuest'] == true) return true;
+      final role = p['role'];
+      final email = p['email'];
+      if ((role == null || role.toString().isEmpty) &&
+          (email == null || email.toString().isEmpty)) return true;
+      return false;
+    })();
+
+    final restrictedForGuests = <String>{
+      'JobPostPage',
+      'BookingPage',
+      'profile'
+    };
+
+    // Build FloatingNavbar items from the tabs keys so they always stay in sync.
+    final navItems = tabs.keys.toList().asMap().entries.map((entry) {
+      final idx = entry.key;
+      final key = entry.value;
+      final iconData = iconMap[key];
+      final label = switch (key) {
+        'homePage' => 'Home',
+        'DiscoverPage' => 'Discover',
+        'JobPostPage' => 'Job',
+        'BookingPage' => 'Booking',
+        'profile' => 'Profile',
+        _ => key,
+      };
+
+      // Determine if this tab should appear disabled for guests
+      final disabledForGuest = isGuestNow && restrictedForGuests.contains(key);
+      final fadedSecondary = disabledForGuest
+          ? Color.lerp(FlutterFlowTheme.of(context).secondaryText,
+                  Colors.transparent, 0.55) ??
+              FlutterFlowTheme.of(context).secondaryText
+          : FlutterFlowTheme.of(context).secondaryText;
+      final iconColor = currentIndex == idx
+          ? FlutterFlowTheme.of(context).primary
+          : fadedSecondary;
+      final labelColor = currentIndex == idx
+          ? FlutterFlowTheme.of(context).primary
+          : fadedSecondary;
+
+      return FloatingNavbarItem(
+        customWidget: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: EdgeInsets.all(iconPadding),
+              decoration: BoxDecoration(
+                color: currentIndex == idx
+                    ? FlutterFlowTheme.of(context)
+                        .primary
+                        .withValues(alpha: 0.12)
+                    : Colors.transparent,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                iconData ?? Icons.circle,
+                color: currentIndex == idx
+                    ? FlutterFlowTheme.of(context).primary
+                    : (disabledForGuest
+                        ? Color.lerp(FlutterFlowTheme.of(context).secondaryText,
+                                Colors.transparent, 0.55) ??
+                            FlutterFlowTheme.of(context).secondaryText
+                        : FlutterFlowTheme.of(context).secondaryText),
+                size: iconSize,
+              ),
+            ),
+            SizedBox(height: iconTextSpacing),
+            Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: currentIndex == idx
+                    ? FlutterFlowTheme.of(context).primary
+                    : (disabledForGuest
+                        ? Color.lerp(FlutterFlowTheme.of(context).secondaryText,
+                                Colors.transparent, 0.55) ??
+                            FlutterFlowTheme.of(context).secondaryText
+                        : FlutterFlowTheme.of(context).secondaryText),
+                fontSize: textSize,
+              ),
+            ),
+          ],
+        ),
+      );
+    }).toList();
+
+    final bool _isNestedNavBar =
+        context.findAncestorWidgetOfExactType<NavBarPage>() != null;
+
+    return Scaffold(
+      resizeToAvoidBottomInset: !widget.disableResizeToAvoidBottomInset,
+      body: MediaQuery(
+        data: queryData
+            .removeViewInsets(removeBottom: true)
+            .removeViewPadding(removeBottom: true),
+        child: _currentPage ?? tabs[_currentPageName] ?? tabs.values.first,
+      ),
+      bottomNavigationBar: Visibility(
+        // Hide nav on desktop or when we have fewer than 2 tabs (avoids assertion),
+        // and also hide if this NavBarPage is nested inside another NavBarPage to
+        // avoid duplicate bottom bars.
+        visible: responsiveVisibility(
+              context: context,
+              desktop: false,
+            ) &&
+            tabs.length > 1 &&
+            !_isNestedNavBar,
+        child: Container(
+          color: FlutterFlowTheme.of(context).secondaryBackground,
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: FlutterFlowTheme.of(context).secondaryBackground,
+                    border: Border(
+                      top: BorderSide(
+                        color: FlutterFlowTheme.of(context).alternate,
+                        width: 1.0,
+                      ),
+                    ),
+                  ),
+                  padding: EdgeInsets.symmetric(vertical: verticalPadding),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: navItems.asMap().entries.map((entry) {
+                      final idx = entry.key;
+                      final item = entry.value;
+                      final isActive = currentIndex == idx;
+
+                      return Expanded(
+                        child: InkWell(
+                          onTap: () async {
+                            // Handle taps asynchronously because we may need to check guest session and prompt sign-in
+                            final key = tabs.keys.toList()[idx];
+                            final restrictedKeysForGuests = [
+                              'JobPostPage',
+                              'BookingPage',
+                              'profile'
+                            ];
+                            final guest = await isGuestSession();
+
+                            if (guest &&
+                                restrictedKeysForGuests.contains(key)) {
+                              // For guests: show the themed guest prompt (immediately on tap) and respect choice
+                              final res = await _showGuestPrompt();
+                              if (res == true) {
+                                try {
+                                  NavigationUtils.safePush(
+                                      context, const LoginAccountWidget());
+                                } catch (_) {}
+                              }
+                              return;
+                            }
+
+                            // Not a guest or allowed: proceed to change tab
+                            safeSetState(() {
+                              _currentPage = null;
+                              // If user taps Home and is an artisan, ensure we show the artisan dashboard
+                              if (key == 'homePage' && isArtisan) {
+                                _currentPageName = 'homePage';
+                                _currentPage = ArtisanDashboardPageWidget();
+                              } else {
+                                // Final guard: ensure the tapped key exists in the computed tabs.
+                                if (tabs.containsKey(key)) {
+                                  _currentPageName = key;
+                                } else {
+                                  // Fallback to first allowed tab.
+                                  _currentPageName = tabs.keys.first;
+                                }
+                              }
+                            });
+                          },
+                          child: SizedBox(
+                            height: navbarHeight,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Center(
+                                  child: item.customWidget ??
+                                      const SizedBox.shrink(),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Global route observer used by pages that need to know when they're re-shown
+final RouteObserver<ModalRoute<void>> routeObserver =
+    RouteObserver<ModalRoute<void>>();
+
+// Return a configured HttpClient. We don't extend `HttpClient` (it's an
+// interface class) — instead we create and configure an instance. For
+// additional logging or custom behavior, call the helper functions below.
+HttpClient createCustomHttpClient() {
+  final client = HttpClient();
+  client.badCertificateCallback =
+      (X509Certificate cert, String host, int port) {
+    // Removed debugPrint to prevent logging host info to terminal.
+    // Keep default behavior: don't accept bad certificates unless you have a
+    // specific reason to allow them. Returning false rejects the certificate.
+    return false;
+  };
+  return client;
+}
+
+void testCustomHttpClient() async {
+  final client = createCustomHttpClient();
+  try {
+    final request = await client.getUrl(Uri.parse('https://rijhub.com'));
+    final response = await request.close();
+    // Removed debugPrint: do not log HTTP response code or body to terminal.
+    final responseBody = await response.transform(utf8.decoder).join();
+    // Intentionally not printing response body for security.
+  } catch (e, stackTrace) {
+    // Intentionally not printing errors or stack traces to terminal for security.
+  }
+}

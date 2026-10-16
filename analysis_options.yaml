@@ -9,6 +9,14 @@
 # packages, and plugins designed to encourage good coding practices.
 include: package:flutter_lints/flutter.yaml
 
+analyzer:
+  exclude:
+    # The previous app, kept for reference while screens are rebuilt. It is
+    # not compiled into the app; delete it once the redesign replaces it.
+    - lib/legacy/**
+    # Archived documentation and one-off scripts for the old backend.
+    - docs/**
+
 linter:
   # The lint rules applied to this project can be customized in the
   # section below to disable rules from the `package:flutter_lints/flutter.yaml`

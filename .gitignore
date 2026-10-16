@@ -48,10 +48,13 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/build/
 
 # Android signing - keep these secure and never commit!
 /android/key.properties
 /android/*.jks
+/android/app/*.jks
+*.jks
 *.keystore
 
 # Environment files - contain secrets, never commit
