@@ -3,20 +3,34 @@
 The rules behind the redesigned app. Code lives in `lib/core/`. If something
 here and the code disagree, fix one of them.
 
+The chosen direction is **"Ask"** (October 2026; mockups in
+`docs/design/variants/`): a conversation leads. People say what's wrong in
+their own words, a photo or a voice note, and RijHub answers with a price
+range, a map of who's free and the best match, then books inside the same
+conversation.
+
 ## Principles
 
-1. **Explore first, sign up when it matters.** The app opens on the home,
-   with a short welcome sheet over it on first launch ("Explore as a guest"
-   is its main button). Nobody is asked for anything until an action needs an account
-   (booking, posting a job, quoting); then a short sheet asks for a phone
-   number, a code and a name, over the screen they were on.
-   No permission prompts up front either: people pick their area from a
-   list, and notifications are asked for when they become useful (after a
-   booking, or when an artisan first goes available).
-2. **What people came for fills the first screen.** Clients see artisans
-   (at least four on a 390 x 844 phone); artisans see work (today's jobs,
-   requests, new jobs). Headers, search and filters together take no more
-   than about a fifth of the screen.
+0. **Simplicity above everything.** Simple to use, simple to understand,
+   easy to navigate. Before adding a section, a choice or a sentence, ask
+   whether the screen works without it. One obvious next step per screen;
+   near-duplicate tabs and sections merge; one pattern is repeated
+   everywhere rather than three similar ones.
+1. **Explore first, sign up when it matters.** The first open is a
+   conversation with RijHub (`/welcome`): say what's wrong, "I'm an
+   artisan", or "Look around". Nobody is asked for anything until an action
+   needs an account (confirming a booking, getting quotes, quoting); then
+   the conversation itself asks for a phone number, a code and a name
+   (elsewhere, a short sheet does).
+   No permission prompts up front either: the area comes from a list (or
+   "Use my location", which asks only when tapped), and notifications are
+   offered once, right after a first booking, job post or quote.
+2. **What people came for fills the first screen.** Clients: "What needs
+   fixing?", the ask bar and problem chips, then the booking under way,
+   quotes waiting, top-rated artisans as photos and who's free on the map.
+   Artisans: status and the week in one line, the next job, requests to
+   answer, then jobs on a map. Nothing else (no price lists, no catalogue
+   grids) competes with that on home.
 3. **Size follows consequence.** A binary state is a pill in the top bar,
    never a card. A passive number (earnings) is a pill or one row. An
    optional nudge (setup, post a job) is one row of 64pt at most. Only a
@@ -153,7 +167,20 @@ tablets. `AppSize.minTapTarget` (48) is never scaled down.
 | `EmptyState` | A whole screen with nothing to show yet. |
 | `InlineError` | A section that failed to load, with "Try again". |
 | `InlineNote` | A short, quiet message inside a section (an empty list). |
+| `AskBar`, `Composer` | The way to ask: type, snap or say it. `AskBar` opens the Ask conversation from home; `Composer` is the input inside a conversation (text, photo, hold-free voice notes). |
+| `PromptChip`, `ChipRow` | One-tap problems, quick replies and filters. `selected` is a picked option (crimson outline and tick), `solid` the active filter or the primary reply. `ChipRow` scrolls sideways from the gutter; inside a padded list, wrap it in `Bleed` so it runs to the screen's edges. |
+| `ChatBubble`, `VoiceNoteBubble`, `PhotoBubble`, `CardMessage`, `TypingBubble` | The conversation. Rich answers (matches, a booking to confirm, a services menu) are `CardMessage`s. |
+| `LiveBar` | What's happening now, in one dark bar: the booking under way, the next job. |
+| `RijMap`, `FacePin`, `PricePin`, `MeDot`, `MapPill` | The painted map of Abuja: faces for free artisans, prices for jobs, the blue dot for you, a route between two places. `fit: true` frames the markers below a top pill; markers that would overlap are nudged apart and labels that would collide are dropped. |
+| `SegmentedTabs`, `InfoLine`, `TimeChip`, `FaceStack` | Two or three views of one list; a label and value; a time; a few faces. |
 | `Pressable` | Making a custom surface tappable with the standard press feel and keyboard focus. Pass `focusRadius` to match the child's corners; its ring sits 3pt outside the edges (`focusOffset: 0` for children with their own touch padding, or in lists that clip). |
+
+Shared screen pieces live in `lib/features/shared/`: `PageScaffold` (a
+pushed page: back, title, content and an optional pinned `bottom` action),
+`Loader` (load, retry and keep the last data while refreshing),
+`showChoiceSheet` (pick one from a short list), `confirmSheet`,
+`showToast`, and `goBack` (leaves a page; one opened from a link goes to the
+page above it instead of crashing).
 
 Icons are Iconsax (`iconsax_plus`): `IconsaxPlusLinear` by default,
 `IconsaxPlusBold` for active and emphasised states. Arrows always use Linear
@@ -171,7 +198,15 @@ Iconsax: Google uses `GoogleMark`, Apple `Icons.apple`, WhatsApp
 3. A title (`headline`), then one line of `body` in `textSecondary` saying
    what to do.
 4. Content.
-5. The primary action, pinned at the bottom in flows.
+5. The primary action, pinned at the bottom (`PageScaffold.bottom`). It sits
+   in the scaffold's bottom slot, so toasts float above it, and it rides up
+   with the keyboard so a form's button stays in reach.
+
+Tabs have a big title (`TabTitle`) with at most two small controls beside
+it (the area and list or map, as on Explore and Jobs). Profile tabs are
+short groups of rows with no group titles: your things, work and money,
+help and settings, sign out. Everything else (appearance, notifications,
+legal, about, deleting the account) lives in Settings.
 
 ## Writing
 
@@ -198,6 +233,13 @@ Iconsax: Google uses `GoogleMark`, Apple `Icons.apple`, WhatsApp
   ("Welcome back") for places where the person has said they have an
   account.
 - Navigation uses the paths in `Routes` (`lib/app/routes.dart`).
+- Device features come through small services in `lib/app/`, provided at
+  the root like repositories, so tests stand in fakes and permission is
+  asked only at the moment of use: `MediaService` (camera, photos, voice
+  notes), `LocationService` ("Use my location") and `PushPermission`.
+- Tests (`test/`) run the real app on the mocks (`test/support/app_harness.dart`:
+  `launch(t, as: As.client, at: '/home')`), with the app's real fonts
+  loaded by `test/flutter_test_config.dart` so text measures as on a phone.
 - Mock data (`lib/data/mock`) stands in for the backend until the new API
   exists; swap implementations in `lib/app/dependencies.dart`. The mocks
   share one record of accounts, told who is signed in by

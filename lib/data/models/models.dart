@@ -1,5 +1,13 @@
 import 'package:flutter/foundation.dart';
 
+import '../geo/places.dart';
+import 'ask_models.dart';
+
+export '../geo/places.dart' show GeoPoint;
+
+export 'ask_models.dart';
+export 'market_models.dart';
+
 /// Domain models used by the redesigned app. They describe what the UI needs,
 /// not the shape of any backend; repositories translate API payloads into
 /// these types.
@@ -124,6 +132,7 @@ class Artisan {
     this.coverPhoto,
     this.coverFocusX = 0,
     this.coverFocusY = -0.25,
+    this.location,
   });
 
   final String id;
@@ -172,10 +181,13 @@ class Artisan {
   final double coverFocusX;
   final double coverFocusY;
 
+  /// Roughly where they are based, for the map. Never their exact address.
+  final GeoPoint? location;
+
   /// "Emeka", for sentences such as "You hired Emeka".
   String get firstName => name.split(' ').first;
 
-  Artisan copyWith({double? distanceKm}) => Artisan(
+  Artisan copyWith({double? distanceKm, GeoPoint? location}) => Artisan(
         id: id,
         name: name,
         trade: trade,
@@ -194,6 +206,7 @@ class Artisan {
         coverPhoto: coverPhoto,
         coverFocusX: coverFocusX,
         coverFocusY: coverFocusY,
+        location: location ?? this.location,
       );
 }
 
@@ -236,6 +249,8 @@ class JobPost {
     this.description,
     this.clientPhoneVerified = false,
     this.clientJobsPosted = 0,
+    this.location,
+    this.photos = const [],
   });
 
   final String id;
@@ -265,7 +280,14 @@ class JobPost {
   /// How many jobs the client has posted on RijHub, this one included.
   final int clientJobsPosted;
 
-  JobPost copyWith({double? distanceKm}) => JobPost(
+  /// Roughly where the job is, for the map (the street comes only with a
+  /// booking).
+  final GeoPoint? location;
+
+  /// Photos the client added of the problem.
+  final List<String> photos;
+
+  JobPost copyWith({double? distanceKm, GeoPoint? location}) => JobPost(
         id: id,
         title: title,
         categoryId: categoryId,
@@ -279,6 +301,8 @@ class JobPost {
         description: description,
         clientPhoneVerified: clientPhoneVerified,
         clientJobsPosted: clientJobsPosted,
+        location: location ?? this.location,
+        photos: photos,
       );
 }
 
@@ -328,7 +352,18 @@ class PriceGuideItem {
   final DateTime updatedOn;
 }
 
-enum BookingStatus { requested, confirmed, onTheWay, inProgress, completed }
+enum BookingStatus {
+  requested,
+  confirmed,
+  onTheWay,
+  inProgress,
+  completed,
+  cancelled,
+}
+
+/// Where the client's money is. RijHub holds it from booking until the
+/// client says the job is done, then releases it to the artisan.
+enum PaymentState { notPaid, held, released, refunded }
 
 @immutable
 class Booking {
@@ -346,6 +381,16 @@ class Booking {
     this.startCode,
     this.landmark,
     this.distanceKm,
+    this.artisanId,
+    this.notes,
+    this.photos = const [],
+    this.voiceNote,
+    this.fee,
+    this.payment = PaymentState.notPaid,
+    this.yourRating,
+    this.conversationId,
+    this.cancelReason,
+    this.etaMinutes,
   });
 
   final String id;
@@ -375,6 +420,65 @@ class Booking {
   /// How far the job is from the artisan, in km, on the artisan's side.
   /// Null for clients.
   final double? distanceKm;
+
+  /// The artisan's id, on the client's side, to open their profile.
+  final String? artisanId;
+
+  /// What the client said about the job.
+  final String? notes;
+  final List<String> photos;
+  final VoiceNote? voiceNote;
+
+  /// RijHub's fee, in naira, on top of [price].
+  final int? fee;
+  final PaymentState payment;
+
+  /// The stars the client gave, once they have reviewed it.
+  final int? yourRating;
+  final String? conversationId;
+  final String? cancelReason;
+
+  /// Minutes until the artisan arrives, while on the way.
+  final int? etaMinutes;
+
+  int get total => (price ?? 0) + (fee ?? 0);
+
+  bool get isOver =>
+      status == BookingStatus.completed || status == BookingStatus.cancelled;
+
+  Booking copyWith({
+    BookingStatus? status,
+    PaymentState? payment,
+    int? yourRating,
+    String? cancelReason,
+    int? etaMinutes,
+    DateTime? scheduledAt,
+  }) =>
+      Booking(
+        id: id,
+        serviceName: serviceName,
+        categoryId: categoryId,
+        scheduledAt: scheduledAt ?? this.scheduledAt,
+        status: status ?? this.status,
+        counterpartName: counterpartName,
+        area: area,
+        counterpartPhoto: counterpartPhoto,
+        counterpartPhone: counterpartPhone,
+        price: price,
+        startCode: startCode,
+        landmark: landmark,
+        distanceKm: distanceKm,
+        artisanId: artisanId,
+        notes: notes,
+        photos: photos,
+        voiceNote: voiceNote,
+        fee: fee,
+        payment: payment ?? this.payment,
+        yourRating: yourRating ?? this.yourRating,
+        conversationId: conversationId,
+        cancelReason: cancelReason ?? this.cancelReason,
+        etaMinutes: etaMinutes ?? this.etaMinutes,
+      );
 }
 
 /// A stretch of time a job can happen in, such as today 4–6 PM.
@@ -400,6 +504,12 @@ class DirectRequest {
     required this.window,
     required this.price,
     required this.expiresAt,
+    this.message,
+    this.photos = const [],
+    this.voiceNote,
+    this.clientPhoto,
+    this.distanceKm,
+    this.landmark,
   });
 
   final String id;
@@ -407,6 +517,16 @@ class DirectRequest {
   /// As the artisan may see it before accepting: first name and initial,
   /// "Ngozi A.".
   final String clientName;
+  final String? clientPhoto;
+
+  /// What the client said, in their own words.
+  final String? message;
+  final List<String> photos;
+  final VoiceNote? voiceNote;
+
+  /// How far the job is from the artisan, in km.
+  final double? distanceKm;
+  final String? landmark;
 
   /// What the client wants done, for example "Socket repair".
   final String serviceName;

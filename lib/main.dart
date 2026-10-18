@@ -12,19 +12,35 @@ import 'features/location/area_picker_sheet.dart';
 
 /// Entry point for the redesigned app.
 ///
-/// It talks to no backend: data comes from `lib/data/mock/`. Firebase, push
-/// notifications and the real API are wired in once the new backend exists.
-/// The previous app is kept for reference in `lib/legacy/` and still runs
-/// with `flutter run -t lib/legacy/main.dart`.
+/// With an API address it talks to the RijHub API:
+///
+///     flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8000
+///
+/// Without one it runs on the sample data in `lib/data/mock/`. The previous
+/// app is kept for reference in `lib/legacy/` and still runs with
+/// `flutter run -t lib/legacy/main.dart`.
+const _apiBaseUrl = String.fromEnvironment('API_BASE_URL');
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Phone layouts are designed for portrait.
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
   final prefs = await SharedPreferences.getInstance();
-  final dependencies = AppDependencies.mock();
+  final navigatorKey = GlobalKey<NavigatorState>();
+  final dependencies = _apiBaseUrl.isEmpty
+      ? AppDependencies.mock()
+      : AppDependencies.api(baseUrl: Uri.parse(_apiBaseUrl), navigator: navigatorKey);
   final session = SessionController(prefs: prefs, auth: dependencies.auth)
     ..restore();
+  // A saved sign-in without its session (the app was reinstalled, or last
+  // ran on sample data) is signed out rather than half signed in.
+  if (session.isSignedIn && !await dependencies.hasSession()) {
+    await session.signOut();
+  }
+  // The server ended the session: signed out on every device, or the
+  // account was deleted or suspended.
+  dependencies.sessionEnded.listen((_) => session.signOut());
   final authFlow = AuthFlowController(
     auth: dependencies.auth,
     session: session,
@@ -39,6 +55,7 @@ Future<void> main() async {
     authFlow: authFlow,
     authGate: AuthGate(showAuthSheet),
     initialLocation: dev.route,
+    navigatorKey: navigatorKey,
     debugSignInPrompt: dev.signInPrompt,
     debugOnLaunch: dev.sheet == 'area'
         ? (context) async {

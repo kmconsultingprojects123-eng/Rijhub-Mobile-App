@@ -58,3 +58,25 @@ class GoogleMark extends StatelessWidget {
         excludeFromSemantics: true,
       );
 }
+
+/// The RijHub mark (the "R" monogram) on its own, for small spaces such as
+/// RijHub's avatar in a conversation.
+class RijHubMark extends StatelessWidget {
+  const RijHubMark({super.key, this.size = 24, this.white = false});
+
+  final double size;
+
+  /// White, for crimson and dark backgrounds.
+  final bool white;
+
+  @override
+  Widget build(BuildContext context) => Image.asset(
+        white
+            ? 'assets/brand/rijhub_mark_white.png'
+            : 'assets/brand/rijhub_mark.png',
+        height: size,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.medium,
+        excludeFromSemantics: true,
+      );
+}

@@ -209,8 +209,8 @@ void main() {
 
   testWidgets('a keyboard can choose an area', (t) async {
     final result = await _open(t);
-    // Close, the search field, Apo, then Asokoro.
-    await _press(t, LogicalKeyboardKey.tab, times: 4);
+    // Close, the search field, "Use my location", Apo, then Asokoro.
+    await _press(t, LogicalKeyboardKey.tab, times: 5);
     await _press(t, LogicalKeyboardKey.enter);
     await _wait(t);
     expect(result.closed, isTrue);
@@ -220,7 +220,8 @@ void main() {
 
   testWidgets('Enter pressed twice closes only the picker', (t) async {
     final result = await _open(t);
-    await _press(t, LogicalKeyboardKey.tab, times: 3);
+    // Close, the search field, "Use my location", then Apo.
+    await _press(t, LogicalKeyboardKey.tab, times: 4);
     await _press(t, LogicalKeyboardKey.enter, times: 2);
     await _wait(t);
     expect(result.area, 'Apo');

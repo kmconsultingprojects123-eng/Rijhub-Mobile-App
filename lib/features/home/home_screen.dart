@@ -4,8 +4,8 @@ import 'package:provider/provider.dart';
 import '../../app/session.dart';
 import '../../core/theme/theme.dart';
 import '../../data/models/models.dart';
-import 'artisan_home_screen.dart';
-import 'client_home_screen.dart';
+import 'artisan_home.dart';
+import 'client_home.dart';
 
 /// The Home tab: clients look for help, artisans run their business.
 ///
@@ -23,8 +23,8 @@ class HomeScreen extends StatelessWidget {
       switchInCurve: AppMotion.standard,
       switchOutCurve: AppMotion.standard,
       child: role == UserRole.artisan
-          ? const ArtisanHomeScreen(key: ValueKey(UserRole.artisan))
-          : const ClientHomeScreen(key: ValueKey(UserRole.client)),
+          ? const ArtisanHome(key: ValueKey(UserRole.artisan))
+          : const ClientHome(key: ValueKey(UserRole.client)),
     );
   }
 }

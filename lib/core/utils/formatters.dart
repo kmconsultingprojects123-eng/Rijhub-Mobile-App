@@ -129,6 +129,17 @@ abstract final class Schedule {
   /// "Today, 2:30 PM", "Tomorrow, 9:00 AM" or "Fri 18 Oct, 9:00 AM".
   static String dayAndTime(DateTime time, {DateTime? now}) =>
       '${dayLabel(time, now: now)}, ${Schedule.time(time)}';
+
+  /// For the middle of a sentence: "today at 2:30 PM", "tomorrow at
+  /// 9:00 AM", "on Fri 18 Oct at 9:00 AM".
+  static String inSentence(DateTime time, {DateTime? now}) {
+    final day = dayLabel(time, now: now);
+    final when = switch (day) {
+      'Today' || 'Tomorrow' || 'Yesterday' => day.toLowerCase(),
+      _ => 'on $day',
+    };
+    return '$when at ${Schedule.time(time)}';
+  }
 }
 
 abstract final class Greeting {

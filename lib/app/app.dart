@@ -11,6 +11,10 @@ import '../core/theme/theme.dart';
 import '../data/repositories/repositories.dart';
 import 'auth_gate.dart';
 import 'dependencies.dart';
+import 'location.dart';
+import 'media.dart';
+import 'payments.dart';
+import 'push.dart';
 import 'router.dart';
 import 'session.dart';
 
@@ -25,6 +29,7 @@ class RijHubApp extends StatefulWidget {
     required this.authFlow,
     required this.authGate,
     this.initialLocation,
+    this.navigatorKey,
     this.debugSignInPrompt,
     this.debugOnLaunch,
   });
@@ -34,6 +39,10 @@ class RijHubApp extends StatefulWidget {
   final AuthFlowController authFlow;
   final AuthGate authGate;
   final String? initialLocation;
+
+  /// The app navigator's key, for what opens pages from outside a screen
+  /// (Paystack's checkout during a booking).
+  final GlobalKey<NavigatorState>? navigatorKey;
 
   /// Debug only: opens the sign-in sheet after launch (for screenshots).
   final AuthPrompt? debugSignInPrompt;
@@ -50,6 +59,7 @@ class _RijHubAppState extends State<RijHubApp> {
   late final GoRouter _router = buildRouter(
     widget.session,
     initialLocation: widget.initialLocation,
+    navigatorKey: widget.navigatorKey,
   );
 
   @override
@@ -87,6 +97,21 @@ class _RijHubAppState extends State<RijHubApp> {
         Provider<JobRepository>.value(value: d.jobs),
         Provider<BookingRepository>.value(value: d.bookings),
         Provider<ArtisanDashboardRepository>.value(value: d.artisanDashboard),
+        Provider<AskRepository>.value(value: d.ask),
+        Provider<DirectoryRepository>.value(value: d.directory),
+        Provider<BookingFlowRepository>.value(value: d.bookingFlow),
+        Provider<ClientJobRepository>.value(value: d.clientJobs),
+        Provider<QuoteRepository>.value(value: d.quotes),
+        Provider<ChatRepository>.value(value: d.chat),
+        Provider<NoticeRepository>.value(value: d.notices),
+        Provider<WalletRepository>.value(value: d.wallet),
+        Provider<AccountRepository>.value(value: d.account),
+        Provider<ArtisanSetupRepository>.value(value: d.artisanSetup),
+        Provider<SupportRepository>.value(value: d.support),
+        Provider<MediaService>.value(value: d.media),
+        Provider<LocationService>.value(value: d.location),
+        Provider<PushPermission>.value(value: d.push),
+        Provider<PaymentGateway>.value(value: d.payments),
         Provider<AuthGate>.value(value: widget.authGate),
         ChangeNotifierProvider.value(value: widget.session),
         ChangeNotifierProvider.value(value: widget.authFlow),
@@ -108,7 +133,8 @@ class _RijHubAppState extends State<RijHubApp> {
                 debugShowCheckedModeBanner: false,
                 theme: AppTheme.light(),
                 darkTheme: AppTheme.dark(),
-                themeMode: ThemeMode.system,
+                themeMode: context
+                    .select<SessionController, ThemeMode>((s) => s.themeMode),
                 routerConfig: _router,
                 supportedLocales: const [Locale('en', 'NG'), Locale('en')],
                 localizationsDelegates: GlobalMaterialLocalizations.delegates,

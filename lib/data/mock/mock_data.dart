@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import '../catalog/trades.dart';
+import '../geo/places.dart';
 import '../models/models.dart';
 
 /// Sample data for the redesign, set in Abuja. It stands in for the backend
@@ -12,92 +14,7 @@ abstract final class MockData {
   /// The city RijHub launches in. As an area, it means all of it.
   static const city = 'Abuja';
 
-  static const categories = [
-    ServiceCategory(
-      id: 'ac',
-      name: 'AC repair',
-      iconKey: 'ac',
-      artisanPlural: 'AC technicians',
-    ),
-    ServiceCategory(
-      id: 'electrical',
-      name: 'Electrical',
-      iconKey: 'electrical',
-      artisanPlural: 'Electricians',
-    ),
-    ServiceCategory(
-      id: 'plumbing',
-      name: 'Plumbing',
-      iconKey: 'plumbing',
-      artisanPlural: 'Plumbers',
-    ),
-    ServiceCategory(
-      id: 'generator',
-      name: 'Generator',
-      iconKey: 'generator',
-      artisanPlural: 'Generator technicians',
-    ),
-    ServiceCategory(
-      id: 'cleaning',
-      name: 'Cleaning',
-      iconKey: 'cleaning',
-      artisanPlural: 'Cleaners',
-    ),
-    ServiceCategory(
-      id: 'mechanic',
-      name: 'Auto repair',
-      iconKey: 'mechanic',
-      artisanPlural: 'Mechanics',
-    ),
-    ServiceCategory(
-      id: 'solar',
-      name: 'Solar',
-      iconKey: 'solar',
-      artisanPlural: 'Solar installers',
-    ),
-    ServiceCategory(
-      id: 'carpentry',
-      name: 'Carpentry',
-      iconKey: 'carpentry',
-      artisanPlural: 'Carpenters',
-    ),
-    ServiceCategory(
-      id: 'painting',
-      name: 'Painting',
-      iconKey: 'painting',
-      artisanPlural: 'Painters',
-    ),
-    ServiceCategory(
-      id: 'tailoring',
-      name: 'Tailoring',
-      iconKey: 'tailoring',
-      artisanPlural: 'Tailors',
-    ),
-    ServiceCategory(
-      id: 'gardening',
-      name: 'Gardening',
-      iconKey: 'gardening',
-      artisanPlural: 'Gardeners',
-    ),
-    ServiceCategory(
-      id: 'moving',
-      name: 'Moving',
-      iconKey: 'moving',
-      artisanPlural: 'Movers',
-    ),
-    ServiceCategory(
-      id: 'pest',
-      name: 'Pest control',
-      iconKey: 'pest',
-      artisanPlural: 'Fumigators',
-    ),
-    ServiceCategory(
-      id: 'tv',
-      name: 'TV & decoder',
-      iconKey: 'tv',
-      artisanPlural: 'TV technicians',
-    ),
-  ];
+  static const categories = Trades.all;
 
   /// Districts and neighbourhoods of Abuja, A to Z.
   static const areas = [
@@ -204,6 +121,16 @@ abstract final class MockData {
     return (km * 10).round() / 10;
   }
 
+  /// A point about [km] from the middle of [area], in a direction set by
+  /// [seed], so each sample sits in its own place on the map.
+  static GeoPoint spot(String area, String seed, double km) {
+    final angle =
+        seed.codeUnits.fold<int>(0, (h, c) => h * 31 + c) % 360 * math.pi / 180;
+    final r = km.clamp(0.3, 1.8);
+    return AbujaPlaces.centreOf(area)
+        .offset(r * math.cos(angle), r * math.sin(angle));
+  }
+
   static const _avatars = 'assets/mock/avatars';
   static const _photos = 'assets/images/onboarding';
 
@@ -223,6 +150,7 @@ abstract final class MockData {
         for (final artisan in _artisans(now))
           artisan.copyWith(
             distanceKm: kmFrom(area, artisan.area, artisan.distanceKm),
+            location: spot(artisan.area, artisan.id, artisan.distanceKm),
           ),
       ]..sort(
           (a, b) => a.rating != b.rating
@@ -496,12 +424,119 @@ abstract final class MockData {
           startingPrice: 4000,
           isAvailableToday: true,
         ),
+        Artisan(
+          id: 'a_aliyu',
+          name: 'Aliyu Sani',
+          trade: 'AC technician',
+          categoryId: 'ac',
+          area: 'Maitama',
+          distanceKm: 0.8,
+          rating: 4.7,
+          reviewCount: 64,
+          jobsCompleted: 102,
+          startingPrice: 8500,
+          isVerified: true,
+          isAvailableToday: true,
+          replyMinutes: 15,
+        ),
+        Artisan(
+          id: 'a_david',
+          name: 'David Okoro',
+          trade: 'AC technician',
+          categoryId: 'ac',
+          area: 'Wuse',
+          distanceKm: 0.9,
+          rating: 4.6,
+          reviewCount: 40,
+          jobsCompleted: 77,
+          startingPrice: 7000,
+          isVerified: true,
+          isAvailableToday: true,
+          replyMinutes: 25,
+        ),
+        Artisan(
+          id: 'a_bala',
+          name: 'Bala Yakubu',
+          trade: 'AC technician',
+          categoryId: 'ac',
+          area: 'Utako',
+          distanceKm: 1.1,
+          rating: 4.6,
+          reviewCount: 33,
+          jobsCompleted: 51,
+          startingPrice: 6500,
+          isVerified: true,
+          isAvailableToday: false,
+        ),
+        Artisan(
+          id: 'a_kelechi',
+          name: 'Kelechi Obi',
+          trade: 'Plumber',
+          categoryId: 'plumbing',
+          area: 'Wuse 2',
+          distanceKm: 0.7,
+          rating: 4.7,
+          reviewCount: 52,
+          jobsCompleted: 88,
+          startingPrice: 5500,
+          isVerified: true,
+          isAvailableToday: true,
+          replyMinutes: 12,
+        ),
+        Artisan(
+          id: 'a_moses',
+          name: 'Moses Danladi',
+          trade: 'Electrician',
+          categoryId: 'electrical',
+          area: 'Wuse 2',
+          distanceKm: 1.3,
+          rating: 4.8,
+          reviewCount: 71,
+          jobsCompleted: 120,
+          startingPrice: 5000,
+          isVerified: true,
+          isAvailableToday: true,
+          replyMinutes: 8,
+        ),
+        Artisan(
+          id: 'a_hadiza',
+          name: 'Hadiza Umar',
+          trade: 'Cleaner',
+          categoryId: 'cleaning',
+          area: 'Garki',
+          distanceKm: 1.0,
+          rating: 4.8,
+          reviewCount: 58,
+          jobsCompleted: 96,
+          startingPrice: 14000,
+          isVerified: true,
+          isAvailableToday: true,
+          replyMinutes: 20,
+        ),
+        Artisan(
+          id: 'a_segun',
+          name: 'Segun Ade',
+          trade: 'Generator technician',
+          categoryId: 'generator',
+          area: 'Wuse',
+          distanceKm: 1.4,
+          rating: 4.7,
+          reviewCount: 49,
+          jobsCompleted: 83,
+          startingPrice: 9000,
+          isVerified: true,
+          isAvailableToday: true,
+          replyMinutes: 18,
+        ),
       ];
 
   /// Open jobs, newest first, with distances from [area].
   static List<JobPost> jobs(DateTime now, {String area = city}) => [
         for (final job in _jobs(now))
-          job.copyWith(distanceKm: kmFrom(area, job.area, job.distanceKm)),
+          job.copyWith(
+            distanceKm: kmFrom(area, job.area, job.distanceKm),
+            location: spot(job.area, job.id, job.distanceKm),
+          ),
       ]..sort((a, b) => b.postedAt.compareTo(a.postedAt));
 
   /// Each one's distanceKm here is how far it is from the middle of its
@@ -956,8 +991,13 @@ abstract final class MockData {
           counterpartPhone: _relayEmeka,
           area: 'Wuse 2',
           price: 12000,
+          fee: 600,
           startCode: '4829',
           landmark: 'near Banex Plaza',
+          artisanId: 'a_emeka',
+          conversationId: 'c_emeka',
+          payment: PaymentState.held,
+          notes: "My bedroom AC is not cooling and it's dripping water.",
         ),
       ];
 
@@ -974,6 +1014,7 @@ abstract final class MockData {
         status: BookingStatus.confirmed,
         counterpartName: 'Chidinma Okafor',
         counterpartPhone: _relayChidinma,
+        payment: PaymentState.held,
         area: 'Wuse 2',
         price: 12000,
         landmark: 'near Banex Plaza',
@@ -987,6 +1028,7 @@ abstract final class MockData {
         status: BookingStatus.confirmed,
         counterpartName: 'Fatima Bello',
         counterpartPhone: _relayFatima,
+        payment: PaymentState.held,
         area: 'Jabi',
         price: 15000,
         landmark: 'behind Jabi Lake Mall',
@@ -1000,6 +1042,7 @@ abstract final class MockData {
         status: BookingStatus.confirmed,
         counterpartName: 'Hauwa Ibrahim',
         counterpartPhone: _relayHauwa,
+        payment: PaymentState.held,
         area: 'Maitama',
         price: 30000,
         landmark: 'near Transcorp Hilton',
@@ -1029,6 +1072,17 @@ abstract final class MockData {
         ),
         price: 6000,
         expiresAt: now.add(const Duration(minutes: 14)),
+        message:
+            "Two sockets in my kitchen are sparking. I've switched them off at the board for now.",
+        photos: const ['$_photos/electrician.webp'],
+        voiceNote: const VoiceNote(
+          path: 'mock://ngozi',
+          duration: Duration(seconds: 12),
+          heard:
+              'The one near the fridge is the worst. It makes a noise when I plug anything in.',
+        ),
+        distanceKm: 0.9,
+        landmark: 'off Aminu Kano Crescent',
       ),
     ];
   }

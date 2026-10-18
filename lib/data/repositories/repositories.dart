@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 
 import '../models/models.dart';
 
+export 'market_repositories.dart';
+
 /// Contracts between the UI and whatever backend serves it.
 ///
 /// Screens depend only on these interfaces. Today they are backed by
@@ -105,6 +107,9 @@ abstract interface class CatalogRepository {
 
   /// What common jobs usually cost in Abuja, the most asked-about first.
   Future<List<PriceGuideItem>> priceGuide();
+
+  /// How many ID-checked artisans RijHub has, and their average rating.
+  Future<MarketStats> stats();
 }
 
 abstract interface class ArtisanRepository {

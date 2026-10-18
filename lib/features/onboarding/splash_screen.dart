@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
+import '../../app/session.dart';
 import '../../core/theme/theme.dart';
 import '../../core/widgets/widgets.dart';
 
@@ -27,8 +29,9 @@ class _SplashScreenState extends State<SplashScreen> {
     if (widget.hold) return;
     Future<void>.delayed(const Duration(milliseconds: 1100), () {
       if (!mounted) return;
-      // First launch is handled on home, by the welcome sheet.
-      context.go(Routes.home);
+      // The first open starts with the welcome conversation.
+      final onboarded = context.read<SessionController>().hasOnboarded;
+      context.go(onboarded ? Routes.home : Routes.welcome);
     });
   }
 

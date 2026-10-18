@@ -125,6 +125,25 @@ class _RenderTapTargetSemantics extends RenderProxyBox {
   }
 }
 
+/// Lets a sideways-scrolling row run to the screen's edges from inside a
+/// list padded by the gutter, so it scrolls away at the edge rather than at
+/// the margin. Give the row its own gutter padding (as [ChipRow] has).
+class Bleed extends StatelessWidget {
+  const Bleed({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, box) => OverflowBox(
+          minWidth: box.maxWidth + 2 * AppSpace.gutter,
+          maxWidth: box.maxWidth + 2 * AppSpace.gutter,
+          fit: OverflowBoxFit.deferToChild,
+          child: child,
+        ),
+      );
+}
+
 /// A plain surface with a hairline border. Cards never use shadows.
 class AppCard extends StatelessWidget {
   const AppCard({

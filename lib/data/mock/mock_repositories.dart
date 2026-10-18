@@ -44,6 +44,62 @@ class MockAccounts {
 
   void addBooking(String userId, Booking booking) =>
       (_newBookings[userId] ??= []).add(booking);
+
+  /// Changes to bookings since launch, by booking id. Both sides of a
+  /// booking share it, so a change one side makes shows on the other.
+  final _changes = <String, BookingChange>{};
+
+  void changeBooking(String bookingId, BookingChange change) =>
+      _changes[bookingId] =
+          (_changes[bookingId] ?? const BookingChange()).merge(change);
+
+  /// [booking] with the changes made since launch.
+  Booking patched(Booking booking) {
+    final change = _changes[booking.id];
+    if (change == null) return booking;
+    return booking.copyWith(
+      status: change.status,
+      payment: change.payment,
+      yourRating: change.yourRating,
+      cancelReason: change.cancelReason,
+      etaMinutes: change.etaMinutes,
+      scheduledAt: change.scheduledAt,
+    );
+  }
+
+  /// Forgets the account with [phone] (a deleted account).
+  void remove(String phone) {
+    _byPhone.remove(phone);
+    if (current?.phone == phone) current = null;
+  }
+}
+
+/// What has changed about a booking since launch. Null fields haven't.
+class BookingChange {
+  const BookingChange({
+    this.status,
+    this.payment,
+    this.yourRating,
+    this.cancelReason,
+    this.etaMinutes,
+    this.scheduledAt,
+  });
+
+  final BookingStatus? status;
+  final PaymentState? payment;
+  final int? yourRating;
+  final String? cancelReason;
+  final int? etaMinutes;
+  final DateTime? scheduledAt;
+
+  BookingChange merge(BookingChange next) => BookingChange(
+        status: next.status ?? status,
+        payment: next.payment ?? payment,
+        yourRating: next.yourRating ?? yourRating,
+        cancelReason: next.cancelReason ?? cancelReason,
+        etaMinutes: next.etaMinutes ?? etaMinutes,
+        scheduledAt: next.scheduledAt ?? scheduledAt,
+      );
 }
 
 class MockAuthRepository implements AuthRepository {
@@ -141,6 +197,24 @@ class MockCatalogRepository implements CatalogRepository {
   Future<List<PriceGuideItem>> priceGuide() async {
     await _latency(300);
     return MockData.priceGuide(DateTime.now());
+  }
+
+  @override
+  Future<MarketStats> stats() async {
+    await _latency(150);
+    // The sample artisans stand in for the whole city's.
+    final artisans = MockData.artisansAt(DateTime.now());
+    final faces = [
+      for (final a in artisans)
+        if (a.photo != null) a.photo!
+    ];
+    final emeka = artisans.firstWhere((a) => a.id == 'a_emeka');
+    return MarketStats(
+      verifiedArtisans: 1240,
+      averageRating: 4.8,
+      cover: emeka.coverPhoto ?? emeka.photo,
+      faces: faces.take(3).toList(),
+    );
   }
 }
 
@@ -248,7 +322,10 @@ class MockBookingRepository implements BookingRepository {
     return [
       ...MockData.bookingsFor(user?.id, as, _accounts.startedAt),
       if (user != null && user.role == as) ..._accounts.newBookingsOf(user.id),
-    ].where((b) => b.scheduledAt.isAfter(over)).toList()
+    ]
+        .map(_accounts.patched)
+        .where((b) => !b.isOver && b.scheduledAt.isAfter(over))
+        .toList()
       ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
   }
 }

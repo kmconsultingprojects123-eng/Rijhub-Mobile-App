@@ -27,7 +27,7 @@ abstract final class AppSpace {
   static double get s64 => 64.w;
 
   /// Horizontal padding for every screen.
-  static double get gutter => 16.w;
+  static double get gutter => 20.w;
 }
 
 /// Corner radii.

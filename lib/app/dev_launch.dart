@@ -23,6 +23,9 @@ import 'session.dart';
 ///     {"route": "/home", "role": "artisan", "signedIn": true} signed-in artisan
 ///     {"route": "/home", "role": "client", "signIn": "postJob",
 ///      "phone": "8031234567", "code": "4829"}                 sheet, code step
+///     {"route": "/home", "role": "client", "phone": "7000000100",
+///      "code": "123456", "verify": true}                      signed in for
+///                                                             real (the API)
 ///
 /// Add `"step": "details"` to open the sheet on the details step. iOS hides
 /// environment variables from Dart, so a file is the dependable channel on
@@ -39,6 +42,7 @@ class DevLaunch {
     this.detailsStep = false,
     this.area,
     this.sheet,
+    this.verify = false,
   });
 
   final bool active;
@@ -57,6 +61,10 @@ class DevLaunch {
 
   /// A sheet to open after the first frame: "area" for the area picker.
   final String? sheet;
+
+  /// Signs in with [phone] and [code] through the real sign-in: with the
+  /// API, the code is one it sent (read from its log in development).
+  final bool verify;
 
   static Future<DevLaunch> load() async {
     if (!kDebugMode || kIsWeb) return const DevLaunch();
@@ -78,6 +86,7 @@ class DevLaunch {
         detailsStep: json['step'] == 'details',
         area: json['area'] as String?,
         sheet: json['sheet'] as String?,
+        verify: json['verify'] == true,
       );
     } on Object {
       return const DevLaunch();
@@ -110,6 +119,13 @@ class DevLaunch {
       );
       flow.draftCode = code ?? '';
       flow.needsDetails = detailsStep;
+      if (verify && code != null) {
+        try {
+          await flow.verify(code!);
+        } on Object catch (e) {
+          debugPrint('dev launch: sign-in failed: $e');
+        }
+      }
     }
     if (area != null) await session.setArea(area!);
   }

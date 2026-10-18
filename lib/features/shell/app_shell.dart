@@ -12,7 +12,6 @@ import '../../app/session.dart';
 import '../../core/theme/theme.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/models/models.dart';
-import '../onboarding/welcome_sheet.dart';
 
 /// The app's frame, for guests and signed-in people alike: five tabs,
 /// labelled for the side of the app they're using.
@@ -25,50 +24,23 @@ class AppShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final role = context.select<SessionController, UserRole>((s) => s.role);
     final tabs = role == UserRole.artisan ? _artisanTabs : _clientTabs;
-    return _FirstLaunchWelcome(
-      child: Scaffold(
-        body: navigationShell,
-        bottomNavigationBar: _BottomBar(
-          tabs: tabs,
-          currentIndex: navigationShell.currentIndex,
-          onSelect: (index) {
-            if (index != navigationShell.currentIndex) {
-              HapticFeedback.selectionClick();
-            }
-            navigationShell.goBranch(
-              index,
-              initialLocation: index == navigationShell.currentIndex,
-            );
-          },
-        ),
+    return Scaffold(
+      body: navigationShell,
+      bottomNavigationBar: _BottomBar(
+        tabs: tabs,
+        currentIndex: navigationShell.currentIndex,
+        onSelect: (index) {
+          if (index != navigationShell.currentIndex) {
+            HapticFeedback.selectionClick();
+          }
+          navigationShell.goBranch(
+            index,
+            initialLocation: index == navigationShell.currentIndex,
+          );
+        },
       ),
     );
   }
-}
-
-/// On the very first launch, opens the welcome sheet over the guest home,
-/// which is already loaded behind it.
-class _FirstLaunchWelcome extends StatefulWidget {
-  const _FirstLaunchWelcome({required this.child});
-
-  final Widget child;
-
-  @override
-  State<_FirstLaunchWelcome> createState() => _FirstLaunchWelcomeState();
-}
-
-class _FirstLaunchWelcomeState extends State<_FirstLaunchWelcome> {
-  @override
-  void initState() {
-    super.initState();
-    if (context.read<SessionController>().hasOnboarded) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) showWelcomeSheet(context);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) => widget.child;
 }
 
 class _Tab {

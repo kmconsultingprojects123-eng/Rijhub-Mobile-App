@@ -65,8 +65,11 @@ class _AuthDetailsStepState extends State<AuthDetailsStep> {
   @override
   void initState() {
     super.initState();
-    _askRole = !context.read<SessionController>().hasOnboarded;
+    final session = context.read<SessionController>();
+    _askRole = !session.hasOnboarded;
     if (!_askRole) _role = context.read<AuthFlowController>().role;
+    // Trades already picked while looking around.
+    _picked.addAll(session.guestTrades.take(_maxTrades));
     // Loaded before "Find work" is picked, so the list is there at once.
     if (_askRole || _isArtisan) _loadTrades();
     // The name comes first, unless the side is asked for: then it follows.

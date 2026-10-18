@@ -36,6 +36,8 @@ class AppTextField extends StatelessWidget {
     this.autocorrect = true,
     this.enableSuggestions = true,
     this.onEditingComplete,
+    this.maxLines = 1,
+    this.minLines,
   });
 
   final String? label;
@@ -69,6 +71,10 @@ class AppTextField extends StatelessWidget {
   final bool autocorrect;
   final bool enableSuggestions;
   final VoidCallback? onEditingComplete;
+
+  /// More than 1 for a multi-line field (null to grow without limit).
+  final int? maxLines;
+  final int? minLines;
 
   @override
   Widget build(BuildContext context) {
@@ -123,6 +129,8 @@ class AppTextField extends StatelessWidget {
             autocorrect: autocorrect,
             enableSuggestions: enableSuggestions,
             onEditingComplete: onEditingComplete,
+            maxLines: maxLines,
+            minLines: minLines,
             style: AppText.bodyLarge.copyWith(color: c.textPrimary),
             cursorColor: c.brandStroke,
             decoration: InputDecoration(

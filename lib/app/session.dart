@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/utils/formatters.dart';
@@ -25,6 +26,9 @@ class SessionController extends ChangeNotifier {
   static const _guestRoleKey = 'session.guestRole';
   static const _onboardedKey = 'session.onboarded';
   static const _areaKey = 'session.area';
+  static const _themeKey = 'session.theme';
+  static const _guestTradesKey = 'session.guestTrades';
+  static const _pushAskedKey = 'session.pushAsked';
 
   final SharedPreferences _prefs;
   final AuthRepository _auth;
@@ -44,9 +48,40 @@ class SessionController extends ChangeNotifier {
   /// False until someone picks a path on the welcome screen or signs in.
   bool get hasOnboarded => _onboarded;
 
+  /// The trades an artisan picked before signing up, so their jobs come
+  /// first and sign-up doesn't ask again.
+  List<String> get guestTrades =>
+      _prefs.getStringList(_guestTradesKey) ?? const [];
+
+  /// Notifications have been offered once already, so they aren't again.
+  bool get pushAsked => _prefs.getBool(_pushAskedKey) ?? false;
+
+  Future<void> markPushAsked() => _prefs.setBool(_pushAskedKey, true);
+
+  /// The trades jobs are shown for: the account's, else those picked
+  /// while looking around.
+  List<String> get tradeIds => _user?.tradeIds ?? guestTrades;
+
+  Future<void> setGuestTrades(List<String> tradeIds) async {
+    await _prefs.setStringList(_guestTradesKey, tradeIds);
+    notifyListeners();
+  }
+
   /// The neighbourhood "near you" results use: the one picked on this
   /// device, else the signed-in user's. Null means all of Abuja.
   String? get area => _area ?? _user?.homeArea;
+
+  /// Light, dark, or as the phone is set (the default).
+  ThemeMode get themeMode => switch (_saved<String>(_themeKey)) {
+        'light' => ThemeMode.light,
+        'dark' => ThemeMode.dark,
+        _ => ThemeMode.system,
+      };
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    await _prefs.setString(_themeKey, mode.name);
+    notifyListeners();
+  }
 
   /// Loads saved state. Local and fast, so it runs before the first frame.
   /// A value this version can't read (left by another one) is dropped
@@ -146,6 +181,7 @@ class SessionController extends ChangeNotifier {
     await _prefs.remove(_guestRoleKey);
     await _prefs.remove(_onboardedKey);
     await _prefs.remove(_areaKey);
+    await _prefs.remove(_guestTradesKey);
     notifyListeners();
   }
 }
@@ -282,7 +318,10 @@ class AuthFlowController extends ChangeNotifier {
       // The area they picked while exploring, so nothing changes under
       // them; null keeps all of Abuja.
       area: _session.area,
-      tradeIds: tradeIds,
+      // Trades picked while looking around count, unless new ones are given.
+      tradeIds: tradeIds.isEmpty && role == UserRole.artisan
+          ? _session.guestTrades
+          : tradeIds,
     );
     await _session.signIn(user);
     reset();

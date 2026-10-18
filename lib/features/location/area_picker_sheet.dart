@@ -5,9 +5,11 @@ import 'package:flutter/semantics.dart';
 import 'package:iconsax_plus/iconsax_plus.dart';
 import 'package:provider/provider.dart';
 
+import '../../app/location.dart';
 import '../../app/session.dart';
 import '../../core/theme/theme.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/geo/places.dart';
 import '../../data/models/models.dart';
 import '../../data/repositories/repositories.dart';
 import '../auth/widgets/auth_sheet_bar.dart';
@@ -15,9 +17,9 @@ import '../auth/widgets/auth_sheet_bar.dart';
 /// Opens the area picker. Resolves to the area the person chose, or null
 /// if they closed it.
 ///
-/// People pick their neighbourhood from a list instead of sharing their
-/// location, so there's no permission prompt; Abuja addresses are given by
-/// district anyway.
+/// People pick their neighbourhood from a list, or tap "Use my location",
+/// which is the only time the phone asks to share it; Abuja addresses are
+/// given by district anyway.
 Future<String?> showAreaPicker(BuildContext context, {String? current}) {
   return showModalBottomSheet<String>(
     context: context,
@@ -55,6 +57,12 @@ class _AreaPickerSheetState extends State<AreaPickerSheet> {
   String _query = '';
   Timer? _announcement;
 
+  /// Finding the phone's location.
+  bool _locating = false;
+
+  /// Why "Use my location" didn't work, if it didn't.
+  String? _locateProblem;
+
   @override
   void initState() {
     super.initState();
@@ -78,6 +86,39 @@ class _AreaPickerSheetState extends State<AreaPickerSheet> {
     if (value.trim().isNotEmpty) {
       _announcement = Timer(_announceAfter, _announceMatches);
     }
+  }
+
+  /// The listed area nearest the phone, if the phone is in Abuja.
+  Future<void> _useLocation(List<String> areas) async {
+    setState(() {
+      _locating = true;
+      _locateProblem = null;
+    });
+    final point = await context.read<LocationService>().current();
+    if (!mounted) return;
+    if (point == null) {
+      setState(() {
+        _locating = false;
+        _locateProblem =
+            'Location is off or not allowed. Pick your area below.';
+      });
+      return;
+    }
+    // Further than this from the city centre is outside Abuja.
+    if (point.kmTo(AbujaPlaces.city) > 60) {
+      setState(() {
+        _locating = false;
+        _locateProblem =
+            'You seem to be outside Abuja. RijHub serves Abuja for now, so pick an area below.';
+      });
+      return;
+    }
+    final nearest = (areas.toList()
+          ..sort((a, b) => AbujaPlaces.centreOf(a)
+              .kmTo(point)
+              .compareTo(AbujaPlaces.centreOf(b).kmTo(point))))
+        .first;
+    Navigator.pop(context, nearest);
   }
 
   void _clear() {
@@ -233,6 +274,9 @@ class _AreaPickerSheetState extends State<AreaPickerSheet> {
                       ),
                     );
                   }
+                  // "Use my location" leads the full list, not a search.
+                  final locate = _query.trim().isEmpty;
+                  final offset = locate ? 1 : 0;
                   return ListView.separated(
                     keyboardDismissBehavior:
                         ScrollViewKeyboardDismissBehavior.onDrag,
@@ -240,7 +284,7 @@ class _AreaPickerSheetState extends State<AreaPickerSheet> {
                       bottom:
                           AppSpace.s16 + MediaQuery.paddingOf(context).bottom,
                     ),
-                    itemCount: matches.length,
+                    itemCount: matches.length + offset,
                     separatorBuilder: (_, __) => Divider(
                       height: 1,
                       thickness: 1,
@@ -248,11 +292,18 @@ class _AreaPickerSheetState extends State<AreaPickerSheet> {
                       endIndent: AppSpace.gutter,
                       color: c.border,
                     ),
-                    itemBuilder: (context, i) => _AreaRow(
-                      name: matches[i],
-                      selected: matches[i] == widget.current,
-                      onTap: () => Navigator.pop(context, matches[i]),
-                    ),
+                    itemBuilder: (context, i) => locate && i == 0
+                        ? _LocateRow(
+                            busy: _locating,
+                            problem: _locateProblem,
+                            onTap: _locating ? null : () => _useLocation(areas),
+                          )
+                        : _AreaRow(
+                            name: matches[i - offset],
+                            selected: matches[i - offset] == widget.current,
+                            onTap: () =>
+                                Navigator.pop(context, matches[i - offset]),
+                          ),
                   );
                 },
               ),
@@ -321,6 +372,72 @@ class _AreaRow extends StatelessWidget {
                     color: c.brandStroke,
                   ),
                 ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Use my location": finds the nearest area, asking to share location
+/// only now.
+class _LocateRow extends StatelessWidget {
+  const _LocateRow({required this.busy, required this.onTap, this.problem});
+
+  final bool busy;
+  final VoidCallback? onTap;
+  final String? problem;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Semantics(
+      container: true,
+      button: true,
+      label: busy ? 'Finding your area' : 'Use my location',
+      hint: problem,
+      onTap: onTap,
+      excludeSemantics: true,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: AppSpace.s8),
+        child: Pressable(
+          onTap: onTap,
+          focusOffset: 0,
+          child: Container(
+            constraints: BoxConstraints(minHeight: AppSize.input),
+            padding: EdgeInsets.symmetric(
+                horizontal: AppSpace.gutter - AppSpace.s8,
+                vertical: AppSpace.s8),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: AppSize.icon,
+                  height: AppSize.icon,
+                  child: busy
+                      ? CircularProgressIndicator(
+                          strokeWidth: 2, color: c.brandStroke)
+                      : Icon(IconsaxPlusLinear.gps,
+                          size: AppSize.icon, color: c.brandText),
+                ),
+                SizedBox(width: AppSpace.s12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        busy ? 'Finding your area…' : 'Use my location',
+                        style: AppText.bodyLarge.copyWith(
+                            color: c.brandText, fontWeight: FontWeight.w600),
+                      ),
+                      if (problem != null)
+                        Text(problem!,
+                            style: AppText.bodySmall
+                                .copyWith(color: c.textSecondary)),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
