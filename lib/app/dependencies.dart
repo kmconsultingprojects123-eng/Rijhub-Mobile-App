@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 
 import '../data/api/api_client.dart';
@@ -43,9 +45,11 @@ class AppDependencies {
     this.payments = const SamplePaymentGateway(),
     this.sessionEnded = const Stream.empty(),
     this.hasSession = _always,
+    this.startPush = _nothing,
   });
 
   static Future<bool> _always() async => true;
+  static Future<void> _nothing() async {}
 
   /// Sample data. The mocks share one record of accounts, so bookings,
   /// earnings, requests and past hires belong to whoever is signed in, and
@@ -104,8 +108,16 @@ class AppDependencies {
       live: Realtime(api),
       checkout: payments.checkout,
     );
+    final auth = ApiAuthRepository(c);
+    final notifications = FirebasePush(
+      permission: push ?? DevicePushPermission(),
+      register: auth.registerDevice,
+      signedIn: () => api.signedIn,
+      navigator: navigator,
+    );
+    auth.onAccount = () => unawaited(notifications.sync());
     return AppDependencies(
-      auth: ApiAuthRepository(c),
+      auth: auth,
       catalog: ApiCatalogRepository(c),
       artisans: ApiArtisanRepository(c),
       jobs: ApiJobRepository(c),
@@ -124,10 +136,11 @@ class AppDependencies {
       support: ApiSupportRepository(c),
       media: media ?? DeviceMediaService(),
       location: location ?? DeviceLocationService(),
-      push: push ?? DevicePushPermission(),
+      push: notifications,
       payments: payments,
       sessionEnded: api.sessionEnded,
       hasSession: () => api.signedIn,
+      startPush: notifications.start,
     );
   }
 
@@ -163,4 +176,8 @@ class AppDependencies {
 
   /// Whether a saved sign-in still has its session (the API's tokens).
   final Future<bool> Function() hasSession;
+
+  /// Starts push notifications once the app is running: the app on the API
+  /// only, after Firebase has started.
+  final Future<void> Function() startPush;
 }

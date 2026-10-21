@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +12,7 @@ import 'app/dev_launch.dart';
 import 'app/session.dart';
 import 'features/auth/auth_sheet.dart';
 import 'features/location/area_picker_sheet.dart';
+import 'firebase_options.dart';
 
 /// Entry point for the redesigned app.
 ///
@@ -25,6 +29,9 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Phone layouts are designed for portrait.
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+
+  // Push notifications need Firebase; only the app on the API uses it.
+  if (_apiBaseUrl.isNotEmpty) await _startFirebase();
 
   final prefs = await SharedPreferences.getInstance();
   final navigatorKey = GlobalKey<NavigatorState>();
@@ -49,6 +56,7 @@ Future<void> main() async {
   final dev = await DevLaunch.load();
   await dev.apply(session, authFlow);
 
+  unawaited(dependencies.startPush());
   runApp(RijHubApp(
     dependencies: dependencies,
     session: session,
@@ -64,4 +72,13 @@ Future<void> main() async {
           }
         : null,
   ));
+}
+
+Future<void> _startFirebase() async {
+  try {
+    await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform);
+  } on Object {
+    // The app works without it; it just gets no push notifications.
+  }
 }

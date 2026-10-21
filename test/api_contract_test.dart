@@ -9,7 +9,8 @@
 //     flutter test test/api_contract_test.dart
 //
 // Run the API with SMS_BACKEND=log, OTP_RESEND_SECONDS=0 and a generous
-// OTP_PER_NUMBER_PER_HOUR, as sign-ins repeat on every run.
+// OTP_PER_NUMBER_PER_HOUR, as sign-ins repeat on every run. Against a
+// deployed API, point RIJHUB_API_LOG at a file its log is copied into.
 
 import 'dart:async';
 import 'dart:io';
@@ -61,26 +62,37 @@ class _App {
   late final ask = ApiAskRepository(c);
 
   Future<AppUser> signIn(String phone) async {
+    final before = (await _codesFor(phone)).length;
     final challenge = await auth.requestCode(phone);
-    final result = await auth.verifyCode(challenge, await _codeFor(phone));
+    final result =
+        await auth.verifyCode(challenge, await _newCodeFor(phone, before));
     final user = result.user!;
     auth.useAccount(user);
     return user;
   }
 }
 
-/// The code the API "sent" [phone], from its log (SMS_BACKEND=log).
-Future<String> _codeFor(String phone) async {
-  for (var tries = 0; tries < 20; tries++) {
-    final lines = await File(_log!).readAsLines();
-    for (final line in lines.reversed) {
-      final m = RegExp('to ${RegExp.escape(phone)}: (\\d{6}) is your')
-          .firstMatch(line);
-      if (m != null) return m.group(1)!;
-    }
+/// The codes the API "sent" [phone], oldest first, from its log
+/// (SMS_BACKEND=log).
+Future<List<String>> _codesFor(String phone) async {
+  final code = RegExp('to ${RegExp.escape(phone)}: (\\d{6}) is your');
+  final codes = <String>[];
+  for (final line in await File(_log!).readAsLines()) {
+    final m = code.firstMatch(line);
+    if (m != null) codes.add(m.group(1)!);
+  }
+  return codes;
+}
+
+/// The code sent after the log already held [before] codes for [phone]. A
+/// deployed API's log arrives seconds late, so this waits up to a minute.
+Future<String> _newCodeFor(String phone, int before) async {
+  for (var tries = 0; tries < 600; tries++) {
+    final codes = await _codesFor(phone);
+    if (codes.length > before) return codes.last;
     await Future<void>.delayed(const Duration(milliseconds: 100));
   }
-  fail('no code for $phone in $_log');
+  fail('no new code for $phone in $_log');
 }
 
 TimeWindow _tomorrow() {
@@ -291,5 +303,38 @@ void main() {
         AvailabilityStatus.busy);
     await artisan.dashboard.setAvailability(true);
     expect((await artisan.dashboard.dashboard()).isAvailable, isTrue);
+  });
+
+  test('a new number signs up, and sends a photo', () async {
+    final app = _App(base);
+    // A number nobody has yet, different on every run.
+    final ms = DateTime.now().millisecondsSinceEpoch;
+    final number = '0700009${(ms % 10000).toString().padLeft(4, '0')}';
+    final phone = '+234${number.substring(1)}';
+    final before = (await _codesFor(phone)).length;
+    final challenge = await app.auth.requestCode(number);
+    expect(challenge.phone, phone);
+    final verified =
+        await app.auth.verifyCode(challenge, await _newCodeFor(phone, before));
+    expect(verified.isNewUser, isTrue);
+    final user = await app.auth.createAccount(
+        phone: phone,
+        role: UserRole.client,
+        firstName: 'Ada',
+        lastName: 'Okeke',
+        area: 'Wuse 2');
+    expect(user.firstName, 'Ada');
+    app.auth.useAccount(user);
+
+    // Straight to Cloud Storage with the API's signed link, then public.
+    final photo = File('${Directory.systemTemp.createTempSync('rijhub').path}'
+        '/leak.jpg')
+      ..writeAsBytesSync(List<int>.generate(64, (i) => i));
+    final url = await app.c.uploads.upload(photo.path, UploadKind.problem);
+    expect(url, isNotNull);
+    final http = HttpClient();
+    final served = await (await http.getUrl(Uri.parse(url!))).close();
+    expect(served.statusCode, 200);
+    http.close();
   });
 }

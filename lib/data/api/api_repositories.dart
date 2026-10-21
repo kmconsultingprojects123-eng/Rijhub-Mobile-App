@@ -24,6 +24,16 @@ class ApiAuthRepository implements AuthRepository {
   /// The push token this device registered, to drop on signing out.
   String? deviceToken;
 
+  /// Called on signing in, and on launch with a saved sign-in: the moment
+  /// this phone registers for push notifications.
+  void Function()? onAccount;
+
+  /// Tells the server this phone's push token, so notifications reach it.
+  Future<void> registerDevice(String token, {required String platform}) async {
+    await _c.api.post('/v1/me/devices', {'token': token, 'platform': platform});
+    deviceToken = token;
+  }
+
   @override
   Future<OtpChallenge> requestCode(String phone,
           {OtpChannel channel = OtpChannel.sms}) =>
@@ -87,6 +97,7 @@ class ApiAuthRepository implements AuthRepository {
   void useAccount(AppUser user) {
     _c.live.start();
     _c.changed(ApiContext.everything);
+    onAccount?.call();
   }
 
   @override
@@ -99,6 +110,7 @@ class ApiAuthRepository implements AuthRepository {
       } on Object {
         // Offline: the token moves to whoever signs in next anyway.
       }
+      deviceToken = null;
     }
     await _c.api.tokens.clear();
     _c.changed(ApiContext.everything);
