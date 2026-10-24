@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>RijHub</string>
+	<string>Employi</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Rijhub</string>
+	<string>Employi</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -68,15 +68,15 @@
 		<true/>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>RijHub needs your location to show nearby artisans and service providers in your area.</string>
+	<string>Employi needs your location to show nearby artisans and service providers in your area.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>RijHub needs your location to show nearby artisans and provide location-based services even when the app is in the background.</string>
+	<string>Employi needs your location to show nearby artisans and provide location-based services even when the app is in the background.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>RijHub needs access to your photo library to let you select and upload images for your profile, service listings, and project galleries.</string>
+	<string>Employi needs access to your photo library to let you select and upload images for your profile, service listings, and project galleries.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>RijHub needs camera access to let you take photos for your profile, service listings, and project galleries.</string>
+	<string>Employi needs camera access to let you take photos for your profile, service listings, and project galleries.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>RijHub needs microphone access for AI-powered voice support calls.</string>
+	<string>Employi needs microphone access for AI-powered voice support calls.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
