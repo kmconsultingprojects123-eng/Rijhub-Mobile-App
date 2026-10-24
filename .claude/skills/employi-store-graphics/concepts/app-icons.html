@@ -1,0 +1,361 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<title>App icons</title>
+<style>
+  /* Round 2 of the app icon: five ways to present the Employi pin. The pin
+     is always the logo's own paths in its own colours; only what's around
+     it changes (and, for the enamel pin, a gold rim and gloss over it).
+     2 and 5 are round 1's (app-icons-round1.html), kept as they were.
+     ?v=1..5 renders one icon at 1024; ?sheet=1 the review sheet. Needs
+     Chrome's --allow-file-access-from-files, to read the logo's paths. */
+  @font-face { font-family: Inter; src: url(../assets/fonts/Inter-latin.woff2) format('woff2'); font-weight: 100 900; }
+  :root { --crimson: #A20025; --ink: #141414; }
+  html, body { margin: 0; background: #fff; }
+  body { font-family: Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .icon { position: relative; width: 1024px; height: 1024px; overflow: hidden; }
+  .icon .pin { position: absolute; left: 50%; transform: translateX(-50%); }
+  .icon .layer { position: absolute; inset: 0; }
+
+  /* 1 Knolled: the pin laid out with the kit, as in the store graphics. */
+  .v1 { background: radial-gradient(120% 80% at 50% 40%, #F2EEE9 0%, #EAE5DE 60%, #DED8D0 100%); }
+  .v1 .kit { position: absolute; filter: drop-shadow(0 20px 16px rgba(70, 45, 25, .2)) drop-shadow(0 4px 3px rgba(70, 45, 25, .22)); }
+  .v1 .kit svg { width: 100%; height: 100%; display: block; }
+
+  /* 2 Dropped pin (round 1). */
+  .v2 { background: #F3EEE6; }
+  .v2 .pin { top: 150px; height: 640px; filter: drop-shadow(0 16px 22px rgba(40, 20, 10, .20)); }
+
+  /* 3 Enamel pin: the map pin as a lapel pin, on an artisan's denim pocket. */
+  .v3 { background:
+      repeating-linear-gradient(45deg, rgba(255, 255, 255, .035) 0 3px, rgba(255, 255, 255, 0) 3px 9px),
+      repeating-linear-gradient(-45deg, rgba(0, 0, 0, .06) 0 2px, rgba(0, 0, 0, 0) 2px 7px),
+      radial-gradient(90% 90% at 40% 30%, #46658F 0%, #304B70 50%, #1E3150 100%); }
+
+  /* 4 On their way: artisans' routes glowing towards the pin at night. */
+  .v4 { background: radial-gradient(90% 90% at 50% 42%, #1D2B4A 0%, #101A30 55%, #080C16 100%); }
+
+  /* 5 Ripple (round 1). */
+  .v5 { background: radial-gradient(85% 85% at 50% 40%, #FFFFFF 0%, #F7F1EB 70%, #EFE6DD 100%); }
+  .v5 .pin { top: 140px; height: 640px; filter: drop-shadow(0 18px 24px rgba(60, 20, 10, .20)); }
+
+  /* The sheet. */
+  #sheet { position: relative; width: 3600px; padding: 110px 120px 120px; box-sizing: border-box; background: #F6F3EF; color: var(--ink); }
+  .eyebrow { font-size: 30px; font-weight: 700; letter-spacing: .2em; color: var(--crimson); }
+  h1 { margin: 14px 0 0; font-size: 100px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+  h1 em { font-style: normal; color: var(--crimson); }
+  .sub { margin: 26px 0 0; width: 2700px; font-size: 38px; line-height: 1.4; color: #4A4A4A; }
+  .row { display: flex; justify-content: space-between; margin-top: 90px; }
+  .col { width: 620px; }
+  .slot { position: relative; overflow: hidden; }
+  .slot > .icon { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  .big { width: 560px; height: 560px; margin: 0 auto; overflow: visible; filter: drop-shadow(0 26px 30px rgba(40, 20, 10, .28)); }
+  .num { display: inline-flex; width: 52px; height: 52px; border-radius: 50%; align-items: center; justify-content: center; background: var(--crimson); color: #fff; font-weight: 800; font-size: 26px; margin-right: 16px; vertical-align: middle; }
+  .num.kept { background: #8A8A8A; }
+  .name { margin: 44px 0 0 30px; font-size: 44px; font-weight: 800; letter-spacing: -0.02em; }
+  .name small { font-size: 24px; font-weight: 700; color: #8A8A8A; letter-spacing: .04em; margin-left: 12px; }
+  .why { margin: 14px 30px 0; font-size: 28px; line-height: 1.4; color: #4A4A4A; }
+  .small { display: flex; align-items: flex-end; gap: 34px; margin: 34px 0 0 30px; }
+  .small .cap { font-size: 22px; color: #7A7A7A; margin-top: 10px; text-align: center; }
+  .label { font-size: 32px; font-weight: 800; letter-spacing: .14em; margin-top: 110px; }
+  .label i { font-style: normal; font-weight: 600; letter-spacing: 0; color: #6B6B6B; margin-left: 18px; }
+  .walls { display: flex; gap: 60px; margin-top: 40px; }
+  .wall { flex: 1; border-radius: 48px; padding: 80px 70px 70px; display: flex; justify-content: space-between; }
+  .wall.light { background: linear-gradient(160deg, #E9E4F5 0%, #F7E9DE 55%, #EFD9CF 100%); }
+  .wall.dark { background: linear-gradient(160deg, #1B2340 0%, #2B1730 55%, #121216 100%); }
+  .app { width: 200px; text-align: center; }
+  .app .tag { margin-top: 18px; font-size: 26px; font-weight: 600; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,.45); }
+  .wall.light .app .tag { color: #2A2A2A; text-shadow: none; }
+  .droid { display: flex; justify-content: space-between; margin-top: 40px; background: #fff; border-radius: 48px; padding: 60px 70px; }
+  .droid .pair { display: flex; gap: 40px; align-items: center; }
+</style></head>
+<body>
+<div id="root"></div>
+<script src="../kit/tools.js"></script>
+<script src="../kit/tools2.js"></script>
+<script>
+(async () => {
+  const Q = new URLSearchParams(location.search);
+  const COLOUR = '../assets/brand/employi-symbol.svg', WHITE = '../assets/brand/employi-symbol-white.svg';
+
+  // The logo's own paths and frame, read from its file.
+  const doc = new DOMParser().parseFromString(await (await fetch(COLOUR)).text(), 'image/svg+xml');
+  const VIEW = doc.documentElement.getAttribute('viewBox');
+  const [VX, VY, VW, VH] = VIEW.split(/\s+/).map(Number);
+  const PATHS = [...doc.querySelectorAll('path')].map((p) => ({ d: p.getAttribute('d'), fill: p.getAttribute('fill') }));
+  const paths = (fill) => PATHS.map((p) => `<path d="${p.d}" fill="${fill || p.fill}"/>`).join('');
+
+  const VARIANTS = [
+    { name: 'Knolled', why: 'The pin laid out with the kit, framed by a level, a screwdriver, a spanner and a tape measure, the way the store graphics are. Icon and listing look like one family.' },
+    { name: 'Dropped pin', kept: true, why: 'The full-colour pin standing on a quiet street map, pinging. It says "near you" before anyone reads a word.' },
+    { name: 'Enamel pin', why: 'The map pin becomes a lapel pin: gold rim, glossy enamel, pinned to an artisan\'s denim pocket. A badge of a trusted trade.' },
+    { name: 'On their way', why: 'Night in the city: artisans\' routes glow across the map and meet at the pin. Help, already heading to you.' },
+    { name: 'Ripple', kept: true, why: 'The full-colour pin dropped onto warm white, with rings spreading from it. Light, but alive, never plain.' },
+  ];
+
+  // An inline copy of the pin, [height] tall, its top at [top], centred.
+  function pinSvg({ height, top, defs = '', layers }) {
+    const width = height * VW / VH;
+    return `<svg class="pin" style="top:${top}px;height:${height}px;width:${width}px;overflow:visible" viewBox="${VIEW}">
+      <defs>${defs}</defs>${layers}</svg>`;
+  }
+
+  function map() {
+    return `<svg width="1024" height="1024" viewBox="0 0 1024 1024" style="position:absolute;inset:0">
+      <g transform="rotate(-14 512 512)">
+        <rect x="-300" y="-300" width="1624" height="1624" fill="#F1EBE2"/>
+        <path d="M-200 720 C 200 660, 420 880, 1300 800 L 1300 890 C 420 970, 200 770, -200 820 Z" fill="#DEE8EE"/>
+        <rect x="640" y="110" width="280" height="220" rx="30" fill="#E1EBD9"/>
+        ${[-60, 180, 600, 840, 1080].map(x => `<rect x="${x}" y="-300" width="16" height="1624" fill="#FFFFFF" opacity=".75"/>`).join('')}
+        ${[-120, 120, 360, 820, 1060].map(y => `<rect x="-300" y="${y}" width="1624" height="16" fill="#FFFFFF" opacity=".75"/>`).join('')}
+        <rect x="-300" y="560" width="1624" height="38" fill="#FFFFFF" opacity=".95"/>
+        <rect x="380" y="-300" width="38" height="1624" fill="#FFFFFF" opacity=".95"/>
+      </g>
+      <ellipse cx="512" cy="812" rx="150" ry="44" fill="none" stroke="#A20025" stroke-opacity=".28" stroke-width="10"/>
+      <ellipse cx="512" cy="812" rx="250" ry="74" fill="none" stroke="#A20025" stroke-opacity=".12" stroke-width="8"/>
+      <ellipse cx="512" cy="804" rx="70" ry="18" fill="#3A1A12" opacity=".22" style="filter:blur(6px)"/>
+    </svg>`;
+  }
+
+  function ripples() {
+    const rings = [[130, 36, .30, 10], [230, 64, .20, 9], [340, 96, .13, 8], [460, 130, .08, 7], [590, 166, .05, 6]];
+    return `<svg width="1024" height="1024" viewBox="0 0 1024 1024" style="position:absolute;inset:0">
+      ${rings.map(([rx, ry, o, w]) => `<ellipse cx="512" cy="790" rx="${rx}" ry="${ry}" fill="none" stroke="#A20025" stroke-opacity="${o}" stroke-width="${w}"/>`).join('')}
+      <ellipse cx="512" cy="784" rx="64" ry="16" fill="#3A1A12" opacity=".20" style="filter:blur(6px)"/>
+    </svg>`;
+  }
+
+  // 1: the kit framing the pin on all four sides, top-down, at right
+  // angles: a level above, a screwdriver and a spanner either side, a tape
+  // measure below.
+  function knolled() {
+    const put = (svg, x, y, w, h, turn = 0) => `<div class="kit" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;transform:rotate(${turn}deg)">${svg}</div>`;
+    return put(TOOLS.level(), 474, -134, 76, 560, 90) +
+      put(TOOLS.screwdriver(), 204, 236, 80, 566) +
+      put(TOOLS.spanner(), 734, 226, 144, 586) +
+      put(TOOLS.tape(), 362, 836, 300, 132) +
+      `<div class="kit" style="left:0;top:0;width:1024px;height:1024px">${pinSvg({ height: 480, top: 254, layers: paths() })}</div>`;
+  }
+
+  // 3: a die-struck pin: the logo's own colours as enamel, set in gold
+  // that fills the gaps between its parts, with a gloss across it.
+  function enamel() {
+    const defs = `
+      <linearGradient id="en-gloss" x1="0" y1="0" x2=".55" y2=".75">
+        <stop offset="0" stop-color="#fff" stop-opacity=".42"/><stop offset=".5" stop-color="#fff" stop-opacity=".06"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
+      </linearGradient>
+      <filter id="en-rim" x="-15%" y="-15%" width="130%" height="130%" color-interpolation-filters="sRGB">
+        <feMorphology in="SourceAlpha" operator="dilate" radius="17" result="grown"/>
+        <feFlood flood-color="#C89A45"/><feComposite in2="grown" operator="in" result="gold"/>
+        <feGaussianBlur in="grown" stdDeviation="7" result="soft"/>
+        <feSpecularLighting in="soft" surfaceScale="9" specularConstant="1.25" specularExponent="18" lighting-color="#FFF1CC" result="shine">
+          <feDistantLight azimuth="225" elevation="42"/>
+        </feSpecularLighting>
+        <feComposite in="shine" in2="grown" operator="in" result="shineIn"/>
+        <feComposite in="gold" in2="shineIn" operator="arithmetic" k1="0" k2="1" k3=".85" k4="0"/>
+      </filter>
+      <filter id="en-shadow" x="-20%" y="-20%" width="140%" height="150%">
+        <feMorphology in="SourceAlpha" operator="dilate" radius="17" result="grown"/>
+        <feGaussianBlur in="grown" stdDeviation="16"/><feOffset dy="26"/>
+        <feComponentTransfer><feFuncA type="linear" slope=".55"/></feComponentTransfer>
+      </filter>`;
+    const stitch = (y) => `<path d="M60 ${y} H964" stroke="#D8A45E" stroke-width="5" stroke-dasharray="16 12" stroke-linecap="round" opacity=".85"/>`;
+    return `<svg width="1024" height="1024" viewBox="0 0 1024 1024" style="position:absolute;inset:0">
+        <rect x="0" y="150" width="1024" height="44" fill="rgba(0,0,0,.14)"/>
+        <rect x="0" y="194" width="1024" height="10" fill="rgba(255,255,255,.05)"/>
+        ${stitch(176)}${stitch(226)}
+        <path d="M110 226 V1024 M914 226 V1024" stroke="rgba(0,0,0,.18)" stroke-width="3"/>
+        <path d="M126 240 V1024 M898 240 V1024" stroke="#D8A45E" stroke-width="5" stroke-dasharray="16 12" opacity=".7"/>
+      </svg>` +
+      pinSvg({ height: 600, top: 236, defs, layers: `
+        <g filter="url(#en-shadow)">${paths('#000')}</g>
+        <g filter="url(#en-rim)">${paths('#000')}</g>
+        ${paths()}
+        ${paths('url(#en-gloss)')}` });
+  }
+
+  // 4: a night map: artisans' routes turn along the streets, glowing, and
+  // meet at the pin's tip, each with an artisan on the way.
+  function onTheWay() {
+    // Streets and routes share the map's frame, turned a little; the tip
+    // (512, 818 on the icon) is (438, 809) in it.
+    const vs = [[-120, 8], [60, 18], [300, 8], [438, 18], [600, 8], [820, 18], [1000, 8]];
+    const hs = [[-100, 8], [150, 18], [420, 8], [640, 18], [809, 8], [1000, 8]];
+    const streets = vs.map(([x, w]) => `<rect x="${x - w / 2}" y="-300" width="${w}" height="1624" fill="#1B2A4C"/>`).join('') +
+      hs.map(([y, w]) => `<rect x="-300" y="${y - w / 2}" width="1624" height="${w}" fill="#1B2A4C"/>`).join('');
+    const routes = [
+      [[-150, 150], [300, 150], [300, 640], [438, 640], [438, 809]],
+      [[1150, 420], [820, 420], [820, 809], [438, 809]],
+      [[-150, 1000], [60, 1000], [60, 809], [438, 809]],
+    ];
+    // A polyline with rounded corners.
+    const round = (pts, r = 46) => {
+      let d = `M${pts[0]}`;
+      for (let i = 1; i < pts.length - 1; i++) {
+        const [a, b, c] = [pts[i - 1], pts[i], pts[i + 1]];
+        const towards = (p, q, dist) => { const len = Math.hypot(q[0] - p[0], q[1] - p[1]); return [p[0] + (q[0] - p[0]) * dist / len, p[1] + (q[1] - p[1]) * dist / len]; };
+        const [p1, p2] = [towards(b, a, r), towards(b, c, r)];
+        d += ` L${p1} Q${b} ${p2}`;
+      }
+      return `${d} L${pts[pts.length - 1]}`;
+    };
+    // The point [t] of the way along a polyline.
+    const along = (pts, t) => {
+      const segs = pts.slice(1).map((q, i) => [pts[i], q, Math.hypot(q[0] - pts[i][0], q[1] - pts[i][1])]);
+      let left = t * segs.reduce((n, s) => n + s[2], 0);
+      for (const [a, b, len] of segs) {
+        if (left <= len) return [a[0] + (b[0] - a[0]) * left / len, a[1] + (b[1] - a[1]) * left / len];
+        left -= len;
+      }
+      return pts[pts.length - 1];
+    };
+    const svg = `<svg width="1024" height="1024" viewBox="0 0 1024 1024" style="position:absolute;inset:0">
+      <defs>
+        <linearGradient id="ow-route" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1024" y2="1024">
+          <stop offset="0" stop-color="#FFB547"/><stop offset="1" stop-color="#FF3D66"/>
+        </linearGradient>
+        <filter id="ow-glow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="10"/></filter>
+        <radialGradient id="ow-pool" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#FFD7A8" stop-opacity=".5"/><stop offset="1" stop-color="#FFD7A8" stop-opacity="0"/></radialGradient>
+      </defs>
+      <g transform="rotate(-14 512 512)">
+        ${streets}
+        ${routes.map((r) => `<path d="${round(r)}" stroke="url(#ow-route)" stroke-width="30" fill="none" opacity=".5" filter="url(#ow-glow)"/>
+          <path d="${round(r)}" stroke="url(#ow-route)" stroke-width="12" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`).join('')}
+        ${routes.map((r, i) => { const [x, y] = along(r, [0.3, 0.42, 0.36][i]); return `<circle cx="${x}" cy="${y}" r="28" fill="#FFE2B0" opacity=".5" filter="url(#ow-glow)"/><circle cx="${x}" cy="${y}" r="16" fill="#FFF6E6"/><circle cx="${x}" cy="${y}" r="7" fill="#FF8A3D"/>`; }).join('')}
+      </g>
+      <ellipse cx="512" cy="818" rx="230" ry="70" fill="url(#ow-pool)"/>
+      <ellipse cx="512" cy="818" rx="110" ry="32" fill="none" stroke="#FFC56B" stroke-width="8" opacity=".85"/>
+      <ellipse cx="512" cy="818" rx="190" ry="56" fill="none" stroke="#FFC56B" stroke-width="6" opacity=".4"/>
+    </svg>`;
+    const defs = `<filter id="ow-halo" x="-30%" y="-30%" width="160%" height="160%">
+        <feMorphology in="SourceAlpha" operator="dilate" radius="18" result="g"/>
+        <feGaussianBlur in="g" stdDeviation="24"/>
+        <feComponentTransfer><feFuncA type="linear" slope=".42"/></feComponentTransfer>
+        <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 .9  0 0 0 0 .78  0 0 0 1 0"/>
+      </filter>`;
+    return svg + pinSvg({ height: 560, top: 258, defs, layers: `<g filter="url(#ow-halo)">${paths('#000')}</g>${paths()}` });
+  }
+
+  function icon(v) {
+    const el = document.createElement('div');
+    el.className = `icon v${v}`;
+    el.innerHTML = {
+      1: knolled,
+      2: () => map() + `<img class="pin" src="${COLOUR}">`,
+      3: enamel,
+      4: onTheWay,
+      5: () => ripples() + `<img class="pin" src="${COLOUR}">`,
+    }[v]();
+    return el;
+  }
+
+  function squircle(size) {
+    const n = 5, r = size / 2, pts = [];
+    for (let i = 0; i <= 360; i += 2) {
+      const t = i * Math.PI / 180, c = Math.cos(t), s = Math.sin(t);
+      pts.push([r + r * Math.sign(c) * Math.abs(c) ** (2 / n), r + r * Math.sign(s) * Math.abs(s) ** (2 / n)]);
+    }
+    return `path('M ${pts.map(p => p.map(v => v.toFixed(1)).join(' ')).join(' L ')} Z')`;
+  }
+
+  // Each icon's SVG ids must be unique once several share the sheet.
+  let copy = 0;
+  function slot(v, size, mask) {
+    const s = document.createElement('div');
+    s.className = 'slot';
+    s.style.width = s.style.height = `${size}px`;
+    const i = icon(v);
+    copy++;
+    i.innerHTML = i.innerHTML.replace(/\b(en-[a-z]+|ow-[a-z]+)\b/g, `$1-${copy}`);
+    i.style.transform = `scale(${size / 1024})`;
+    i.style.clipPath = mask === 'circle' ? 'circle(512px at 512px 512px)' : squircle(1024);
+    s.appendChild(i);
+    if (mask === 'circle') s.style.borderRadius = '50%';
+    return s;
+  }
+
+  // Android's adaptive icon, as separate layers (?layer=bg, fg or mono):
+  // the launcher shows the middle two-thirds of each, so the design is
+  // drawn into it (?zoom=0.6667), and the background runs to the edges.
+  function layer(v, which, zoom) {
+    const el = icon(v);
+    const zoomed = document.createElement('div');
+    zoomed.style.cssText = `position:absolute;inset:0;transform:scale(${zoom});transform-origin:512px 512px`;
+    zoomed.append(...el.childNodes);
+    el.appendChild(zoomed);
+    const pin = el.querySelector('.pin');
+    if (which === 'bg') {
+      pin.remove();
+    } else {
+      // The pin alone, on nothing; for Android 13's themed icons, in white.
+      el.style.background = 'none';
+      zoomed.querySelectorAll(':scope > svg').forEach((n) => n.remove());
+      if (which === 'mono') { pin.src = WHITE; pin.style.filter = 'none'; }
+      document.documentElement.style.background = document.body.style.background = 'transparent';
+    }
+    return el;
+  }
+
+  const root = document.getElementById('root');
+  if (!Q.get('sheet')) {
+    const v = Number(Q.get('v') || 1);
+    root.appendChild(Q.get('layer') ? layer(v, Q.get('layer'), Number(Q.get('zoom') || 1)) : icon(v));
+  } else {
+    const sheet = document.createElement('div');
+    sheet.id = 'sheet';
+    sheet.innerHTML = `<div class="eyebrow">APP ICON · ROUND 2</div>
+      <h1>Three new ones, <em>with your two.</em></h1>
+      <div class="sub">2 and 5 are kept from round 1. 1, 3 and 4 are new. The pin is always the logo's own shape and colours: only what's around it changes, and the enamel pin adds a gold rim and a shine. Each is shown large, on a light and a dark home screen, at the small sizes phones use, and in Android's round and rounded-square masks.</div>`;
+    const row = document.createElement('div');
+    row.className = 'row';
+    VARIANTS.forEach((d, k) => {
+      const v = k + 1, col = document.createElement('div');
+      col.className = 'col';
+      const big = slot(v, 560);
+      big.classList.add('big');
+      col.appendChild(big);
+      col.insertAdjacentHTML('beforeend', `<div class="name"><span class="num${d.kept ? ' kept' : ''}">${v}</span>${d.name}${d.kept ? '<small>KEPT</small>' : ''}</div><div class="why">${d.why}</div>`);
+      const small = document.createElement('div');
+      small.className = 'small';
+      [[120, 'Home'], [80, 'Spotlight'], [58, 'Settings'], [40, 'Small']].forEach(([px]) => {
+        const w = document.createElement('div');
+        w.appendChild(slot(v, px));
+        w.insertAdjacentHTML('beforeend', `<div class="cap">${px}px</div>`);
+        small.appendChild(w);
+      });
+      col.appendChild(small);
+      row.appendChild(col);
+    });
+    sheet.appendChild(row);
+    sheet.insertAdjacentHTML('beforeend', '<div class="label">ON THE HOME SCREEN<i>iPhone size, light and dark wallpaper</i></div>');
+    const walls = document.createElement('div');
+    walls.className = 'walls';
+    ['light', 'dark'].forEach((tone) => {
+      const w = document.createElement('div');
+      w.className = `wall ${tone}`;
+      VARIANTS.forEach((d, k) => {
+        const a = document.createElement('div');
+        a.className = 'app';
+        a.appendChild(slot(k + 1, 200));
+        a.insertAdjacentHTML('beforeend', '<div class="tag">Employi</div>');
+        w.appendChild(a);
+      });
+      walls.appendChild(w);
+    });
+    sheet.appendChild(walls);
+    sheet.insertAdjacentHTML('beforeend', '<div class="label">ANDROID<i>the same icon in a round and a rounded-square mask</i></div>');
+    const droid = document.createElement('div');
+    droid.className = 'droid';
+    VARIANTS.forEach((d, k) => {
+      const pair = document.createElement('div');
+      pair.className = 'pair';
+      pair.appendChild(slot(k + 1, 170, 'circle'));
+      pair.appendChild(slot(k + 1, 170));
+      droid.appendChild(pair);
+    });
+    sheet.appendChild(droid);
+    root.appendChild(sheet);
+  }
+  document.body.dataset.ready = '1';
+})();
+</script>
+</body></html>

@@ -1,0 +1,202 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<title>App icons</title>
+<style>
+  /* Five ways to present the Employi pin as an app icon. The pin is the
+     logo file itself (full colour or the white version), never redrawn:
+     only the tile around it changes. ?v=1..5 renders one icon at 1024 for
+     export; ?sheet=1 the review sheet. */
+  @font-face { font-family: Inter; src: url(../assets/fonts/Inter-latin.woff2) format('woff2'); font-weight: 100 900; }
+  :root { --crimson: #A20025; --ink: #141414; }
+  html, body { margin: 0; background: #fff; }
+  body { font-family: Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .icon { position: relative; width: 1024px; height: 1024px; overflow: hidden; }
+  .icon .pin { position: absolute; left: 50%; transform: translateX(-50%); }
+
+  /* 1 Crimson: the white pin on the brand's crimson, lit from the top left. */
+  .v1 { background: radial-gradient(120% 120% at 22% 12%, #CC0632 0%, #A20025 46%, #74001A 100%); }
+  .v1::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255,255,255,.10) 0%, rgba(255,255,255,0) 38%); }
+  .v1 .pin { top: 190px; height: 640px; filter: drop-shadow(0 22px 34px rgba(70, 0, 12, .38)); z-index: 1; }
+
+  /* 2 Dropped pin: the full-colour pin standing on a quiet map, pinging. */
+  .v2 { background: #F3EEE6; }
+  .v2 .pin { top: 150px; height: 640px; filter: drop-shadow(0 16px 22px rgba(40, 20, 10, .20)); }
+
+  /* 3 Midnight: the white pin in a crimson glow on near-black. */
+  .v3 { background: linear-gradient(180deg, #1A1718 0%, #0B0A0B 100%); }
+  .v3::before { content: ''; position: absolute; left: 50%; top: 44%; width: 860px; height: 860px; transform: translate(-50%, -50%);
+    background: radial-gradient(circle, rgba(200, 10, 52, .62) 0%, rgba(162, 0, 37, .30) 38%, rgba(162, 0, 37, 0) 68%); }
+  .v3 .pin { top: 190px; height: 640px; filter: drop-shadow(0 26px 40px rgba(0, 0, 0, .6)); z-index: 1; }
+
+  /* 4 Split: the tile splits crimson and black as the pin does; the white
+     pin sits on the seam, and its ring and handshake show both halves. */
+  .v4 { background: linear-gradient(90deg, #A20025 0 50%, #141414 50% 100%); }
+  .v4::before { content: ''; position: absolute; inset: 0;
+    background: radial-gradient(90% 90% at 18% 10%, rgba(255,255,255,.14), rgba(255,255,255,0) 60%),
+                radial-gradient(90% 90% at 82% 10%, rgba(255,255,255,.07), rgba(255,255,255,0) 60%); }
+  .v4 .pin { top: 190px; height: 640px; filter: drop-shadow(0 20px 30px rgba(0, 0, 0, .35)); z-index: 1; }
+
+  /* 5 Ripple: the full-colour pin dropped onto warm white, rings spreading. */
+  .v5 { background: radial-gradient(85% 85% at 50% 40%, #FFFFFF 0%, #F7F1EB 70%, #EFE6DD 100%); }
+  .v5 .pin { top: 140px; height: 640px; filter: drop-shadow(0 18px 24px rgba(60, 20, 10, .20)); }
+
+  /* The sheet. */
+  #sheet { position: relative; width: 3600px; padding: 110px 120px 120px; box-sizing: border-box; background: #F6F3EF; color: var(--ink); }
+  .eyebrow { font-size: 30px; font-weight: 700; letter-spacing: .2em; color: var(--crimson); }
+  h1 { margin: 14px 0 0; font-size: 100px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+  h1 em { font-style: normal; color: var(--crimson); }
+  .sub { margin: 26px 0 0; width: 2600px; font-size: 38px; line-height: 1.4; color: #4A4A4A; }
+  .row { display: flex; justify-content: space-between; margin-top: 90px; }
+  .col { width: 620px; }
+  .slot { position: relative; overflow: hidden; }
+  .slot > .icon { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  .big { width: 560px; height: 560px; margin: 0 auto; overflow: visible; filter: drop-shadow(0 26px 30px rgba(40, 20, 10, .28)); }
+  .num { display: inline-flex; width: 52px; height: 52px; border-radius: 50%; align-items: center; justify-content: center; background: var(--crimson); color: #fff; font-weight: 800; font-size: 26px; margin-right: 16px; vertical-align: middle; }
+  .name { margin: 44px 0 0 30px; font-size: 44px; font-weight: 800; letter-spacing: -0.02em; }
+  .why { margin: 14px 30px 0; font-size: 28px; line-height: 1.4; color: #4A4A4A; }
+  .small { display: flex; align-items: flex-end; gap: 34px; margin: 34px 0 0 30px; }
+  .small .cap { font-size: 22px; color: #7A7A7A; margin-top: 10px; text-align: center; }
+  .label { font-size: 32px; font-weight: 800; letter-spacing: .14em; margin-top: 110px; }
+  .label i { font-style: normal; font-weight: 600; letter-spacing: 0; color: #6B6B6B; margin-left: 18px; }
+  .walls { display: flex; gap: 60px; margin-top: 40px; }
+  .wall { flex: 1; border-radius: 48px; padding: 80px 70px 70px; display: flex; justify-content: space-between; }
+  .wall.light { background: linear-gradient(160deg, #E9E4F5 0%, #F7E9DE 55%, #EFD9CF 100%); }
+  .wall.dark { background: linear-gradient(160deg, #1B2340 0%, #2B1730 55%, #121216 100%); }
+  .app { width: 200px; text-align: center; }
+  .app .tag { margin-top: 18px; font-size: 26px; font-weight: 600; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,.45); }
+  .wall.light .app .tag { color: #2A2A2A; text-shadow: none; }
+  .droid { display: flex; justify-content: space-between; margin-top: 40px; background: #fff; border-radius: 48px; padding: 60px 70px; }
+  .droid .pair { display: flex; gap: 40px; align-items: center; }
+</style></head>
+<body>
+<div id="root"></div>
+<script>
+  const Q = new URLSearchParams(location.search);
+  const COLOUR = '../assets/brand/employi-symbol.svg', WHITE = '../assets/brand/employi-symbol-white.svg';
+  const VARIANTS = [
+    { name: 'Crimson', why: 'The white pin on Employi crimson, lit from the top. The boldest, and it reads at any size, on any wallpaper.', pin: WHITE },
+    { name: 'Dropped pin', why: 'The full-colour pin standing on a quiet street map, pinging. It says "near you" before anyone reads a word.', pin: COLOUR },
+    { name: 'Midnight', why: 'The white pin in a crimson glow on near-black. Premium, and it stands out among bright icons.', pin: WHITE },
+    { name: 'Split', why: 'The tile splits crimson and black exactly as the pin does. The white pin sits on the seam, and its ring shows both halves.', pin: WHITE },
+    { name: 'Ripple', why: 'The full-colour pin dropped onto warm white, with rings spreading from it. Light, but alive, never plain.', pin: COLOUR },
+  ];
+
+  // iOS masks icons to a continuous-corner square; this superellipse is
+  // close to it.
+  function squircle(size) {
+    const n = 5, r = size / 2, pts = [];
+    for (let i = 0; i <= 360; i += 2) {
+      const t = i * Math.PI / 180, c = Math.cos(t), s = Math.sin(t);
+      pts.push([r + r * Math.sign(c) * Math.abs(c) ** (2 / n), r + r * Math.sign(s) * Math.abs(s) ** (2 / n)]);
+    }
+    return `path('M ${pts.map(p => p.map(v => v.toFixed(1)).join(' ')).join(' L ')} Z')`;
+  }
+
+  function map() {
+    // A quiet street map: blocks, two avenues, a park and a river, all low
+    // contrast so the pin leads.
+    return `<svg width="1024" height="1024" viewBox="0 0 1024 1024" style="position:absolute;inset:0">
+      <g transform="rotate(-14 512 512)">
+        <rect x="-300" y="-300" width="1624" height="1624" fill="#F1EBE2"/>
+        <path d="M-200 720 C 200 660, 420 880, 1300 800 L 1300 890 C 420 970, 200 770, -200 820 Z" fill="#DEE8EE"/>
+        <rect x="640" y="110" width="280" height="220" rx="30" fill="#E1EBD9"/>
+        ${[-60, 180, 600, 840, 1080].map(x => `<rect x="${x}" y="-300" width="16" height="1624" fill="#FFFFFF" opacity=".75"/>`).join('')}
+        ${[-120, 120, 360, 820, 1060].map(y => `<rect x="-300" y="${y}" width="1624" height="16" fill="#FFFFFF" opacity=".75"/>`).join('')}
+        <rect x="-300" y="560" width="1624" height="38" fill="#FFFFFF" opacity=".95"/>
+        <rect x="380" y="-300" width="38" height="1624" fill="#FFFFFF" opacity=".95"/>
+      </g>
+      <ellipse cx="512" cy="812" rx="150" ry="44" fill="none" stroke="#A20025" stroke-opacity=".28" stroke-width="10"/>
+      <ellipse cx="512" cy="812" rx="250" ry="74" fill="none" stroke="#A20025" stroke-opacity=".12" stroke-width="8"/>
+      <ellipse cx="512" cy="804" rx="70" ry="18" fill="#3A1A12" opacity=".22" style="filter:blur(6px)"/>
+    </svg>`;
+  }
+
+  function ripples() {
+    const rings = [[130, 36, .30, 10], [230, 64, .20, 9], [340, 96, .13, 8], [460, 130, .08, 7], [590, 166, .05, 6]];
+    return `<svg width="1024" height="1024" viewBox="0 0 1024 1024" style="position:absolute;inset:0">
+      ${rings.map(([rx, ry, o, w]) => `<ellipse cx="512" cy="790" rx="${rx}" ry="${ry}" fill="none" stroke="#A20025" stroke-opacity="${o}" stroke-width="${w}"/>`).join('')}
+      <ellipse cx="512" cy="784" rx="64" ry="16" fill="#3A1A12" opacity=".20" style="filter:blur(6px)"/>
+    </svg>`;
+  }
+
+  function icon(v) {
+    const d = VARIANTS[v - 1];
+    const el = document.createElement('div');
+    el.className = `icon v${v}`;
+    el.innerHTML = (v === 2 ? map() : v === 5 ? ripples() : '') + `<img class="pin" src="${d.pin}">`;
+    return el;
+  }
+
+  function slot(v, size, mask) {
+    const s = document.createElement('div');
+    s.className = 'slot';
+    s.style.width = s.style.height = `${size}px`;
+    const i = icon(v);
+    i.style.transform = `scale(${size / 1024})`;
+    i.style.clipPath = mask === 'circle' ? 'circle(512px at 512px 512px)' : squircle(1024);
+    s.appendChild(i);
+    if (mask === 'circle') s.style.borderRadius = '50%';
+    return s;
+  }
+
+  const root = document.getElementById('root');
+  if (!Q.get('sheet')) {
+    root.appendChild(icon(Number(Q.get('v') || 1)));
+  } else {
+    const sheet = document.createElement('div');
+    sheet.id = 'sheet';
+    sheet.innerHTML = `<div class="eyebrow">APP ICON · 5 VARIANTS</div>
+      <h1>Same logo. <em>A better tile.</em></h1>
+      <div class="sub">The pin is the logo file itself, never redrawn: only what's around it changes. Each one is shown large, on a phone's home screen with a light and a dark wallpaper, at the small sizes phones use, and in Android's round and rounded-square masks.</div>`;
+    const row = document.createElement('div');
+    row.className = 'row';
+    VARIANTS.forEach((d, k) => {
+      const v = k + 1, col = document.createElement('div');
+      col.className = 'col';
+      const big = slot(v, 560);
+      big.classList.add('big');
+      col.appendChild(big);
+      col.insertAdjacentHTML('beforeend', `<div class="name"><span class="num">${v}</span>${d.name}</div><div class="why">${d.why}</div>`);
+      const small = document.createElement('div');
+      small.className = 'small';
+      [[120, 'Home'], [80, 'Spotlight'], [58, 'Settings'], [40, 'Small']].forEach(([px, cap]) => {
+        const w = document.createElement('div');
+        w.appendChild(slot(v, px));
+        w.insertAdjacentHTML('beforeend', `<div class="cap">${px}px</div>`);
+        small.appendChild(w);
+      });
+      col.appendChild(small);
+      row.appendChild(col);
+    });
+    sheet.appendChild(row);
+    sheet.insertAdjacentHTML('beforeend', '<div class="label">ON THE HOME SCREEN<i>iPhone size, light and dark wallpaper</i></div>');
+    const walls = document.createElement('div');
+    walls.className = 'walls';
+    ['light', 'dark'].forEach((tone) => {
+      const w = document.createElement('div');
+      w.className = `wall ${tone}`;
+      VARIANTS.forEach((d, k) => {
+        const a = document.createElement('div');
+        a.className = 'app';
+        a.appendChild(slot(k + 1, 200));
+        a.insertAdjacentHTML('beforeend', '<div class="tag">Employi</div>');
+        w.appendChild(a);
+      });
+      walls.appendChild(w);
+    });
+    sheet.appendChild(walls);
+    sheet.insertAdjacentHTML('beforeend', '<div class="label">ANDROID<i>the same icon in a round and a rounded-square mask</i></div>');
+    const droid = document.createElement('div');
+    droid.className = 'droid';
+    VARIANTS.forEach((d, k) => {
+      const pair = document.createElement('div');
+      pair.className = 'pair';
+      pair.appendChild(slot(k + 1, 170, 'circle'));
+      pair.appendChild(slot(k + 1, 170));
+      droid.appendChild(pair);
+    });
+    sheet.appendChild(droid);
+    root.appendChild(sheet);
+  }
+</script>
+</body></html>

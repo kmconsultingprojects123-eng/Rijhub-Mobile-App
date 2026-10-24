@@ -15,7 +15,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # In iOS, build-name is used as CFBundleShortVersionString while build-number used as CFBundleVersion.
 # Read more about iOS versioning at
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
-version: 1.2.0+38
+version: 1.2.0+39
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -115,11 +115,15 @@ flutter_launcher_icons:
   ios: true
   web:
     generate: true
+  # The Ripple icon (2026-10-24, .claude/skills/employi-store-graphics,
+  # concepts/app-icons.html): on Android, the warm background and its rings
+  # behind, the pin in front, and the pin alone for themed icons.
   image_path: 'assets/icon/app_icon.png'
-  adaptive_icon_background: '#ffffff'
+  adaptive_icon_background: 'assets/icon/app_icon_background.png'
   remove_alpha_ios: true
   adaptive_icon_foreground: 'assets/icon/app_icon_foreground.png'
-  # The foreground is already drawn to Android's safe zone; no extra inset.
+  adaptive_icon_monochrome: 'assets/icon/app_icon_monochrome.png'
+  # The layers are already drawn to Android's safe zone; no extra inset.
   adaptive_icon_foreground_inset: 0
 
 
