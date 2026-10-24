@@ -24,6 +24,7 @@ class FirebasePhoneVerifier implements PhoneVerifier {
   Future<PhoneVerification> send(String phone) async {
     if (Firebase.apps.isEmpty) throw const AuthException(_cantSend);
     final sent = Completer<PhoneVerification>();
+    final readByPhone = Completer<String>();
     void fail(Object e) {
       if (!sent.isCompleted) sent.completeError(_failure(e, _cantSend));
     }
@@ -36,16 +37,25 @@ class FirebasePhoneVerifier implements PhoneVerifier {
           _resendToken = resendToken;
           _resendFor = phone;
           if (!sent.isCompleted) {
-            sent.complete(PhoneVerification.codeSent(verificationId));
+            sent.complete(PhoneVerification.codeSent(verificationId,
+                readByPhone: readByPhone.future));
           }
         },
-        // Android can confirm the number by itself before any text goes
-        // out. Once a text is on its way, its code is typed as usual.
+        // Android can confirm the number by itself: before any text goes
+        // out, or by reading the code in the text when it lands. Either way
+        // there's nothing to type.
         verificationCompleted: (credential) async {
-          if (sent.isCompleted) return;
+          if (sent.isCompleted && readByPhone.isCompleted) return;
           try {
-            sent.complete(PhoneVerification.verified(await _proof(credential)));
+            final proof = await _proof(credential);
+            if (!sent.isCompleted) {
+              sent.complete(PhoneVerification.verified(proof));
+            } else if (!readByPhone.isCompleted) {
+              readByPhone.complete(proof);
+            }
           } on Object catch (e) {
+            // A late read that fails changes nothing: the code can still
+            // be typed.
             fail(e);
           }
         },

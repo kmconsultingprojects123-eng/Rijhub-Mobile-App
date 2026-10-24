@@ -16,11 +16,20 @@ abstract interface class PhoneVerifier {
 /// What sending did: a text is on its way ([verificationId]), or the phone
 /// confirmed the number by itself and [proof] is ready, with nothing to type.
 class PhoneVerification {
-  const PhoneVerification.codeSent(String this.verificationId) : proof = null;
-  const PhoneVerification.verified(String this.proof) : verificationId = null;
+  const PhoneVerification.codeSent(String this.verificationId,
+      {this.readByPhone})
+      : proof = null;
+  const PhoneVerification.verified(String this.proof)
+      : verificationId = null,
+        readByPhone = null;
 
   final String? verificationId;
   final String? proof;
+
+  /// With a text on its way: the proof, once the phone reads the code in
+  /// the text by itself (Android does), so nothing needs typing. Never
+  /// completes where the phone can't.
+  final Future<String>? readByPhone;
 }
 
 /// For builds without Firebase: says texts can't be sent.

@@ -241,6 +241,9 @@ class AskFlow extends ChangeNotifier {
   /// Asking one artisan for a price for something not on their list.
   bool _askingPrice = false;
 
+  /// Android reading the texted code by itself, while the chat waits for it.
+  StreamSubscription<bool>? _read;
+
   /// RijHub reads its messages aloud, for people who'd rather listen than
   /// read: unless they turned it off with the speaker button (remembered),
   /// or came to type. Typing a problem in words turns it off; a voice note
@@ -267,6 +270,7 @@ class AskFlow extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _read?.cancel();
     speaker?.stop();
     super.dispose();
   }
@@ -1157,6 +1161,12 @@ class AskFlow extends ChangeNotifier {
       _say(
           'I sent a 6-digit code to ${NigerianPhone.display(national)}. Type it here.',
           hint: "It's in your text messages.");
+      // The phone may read the code in the text by itself (Android): then
+      // the chat goes on as if it had been typed.
+      _read?.cancel();
+      _read = authFlow.readByPhone.listen((known) {
+        if (mode == ComposerMode.code) _verified(known);
+      });
     } on AuthException catch (e) {
       _set(() => busy = false);
       _say(e.message);

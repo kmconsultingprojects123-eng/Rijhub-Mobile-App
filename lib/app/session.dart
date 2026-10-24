@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -230,6 +231,16 @@ class AuthFlowController extends ChangeNotifier {
   /// the person's details.
   bool needsDetails = false;
 
+  final _readByPhone = StreamController<bool>.broadcast();
+
+  /// The last challenge checked: a late read of its code changes nothing.
+  OtpChallenge? _checked;
+
+  /// [verify]'s answer when the phone read the texted code by itself
+  /// (Android), so nothing was typed: true signed in, false goes on to the
+  /// details.
+  Stream<bool> get readByPhone => _readByPhone.stream;
+
   String? get phoneDisplay =>
       phone == null ? null : NigerianPhone.display(phone!);
 
@@ -291,6 +302,24 @@ class AuthFlowController extends ChangeNotifier {
     draftCode = '';
     needsDetails = false;
     notifyListeners();
+    final read = sent.readByPhone;
+    if (read != null && !sent.verified) {
+      unawaited(read.then((_) async {
+        // Only for the code still waiting: not one already typed, replaced
+        // or abandoned.
+        if (attempt != _attempt ||
+            !identical(challenge, sent) ||
+            identical(_checked, sent)) {
+          return;
+        }
+        try {
+          final known = await verify('');
+          if (known != null) _readByPhone.add(known);
+        } on AuthException {
+          // The code can still be typed.
+        }
+      }));
+    }
     return sent.verified ? verify('') : null;
   }
 
@@ -307,6 +336,7 @@ class AuthFlowController extends ChangeNotifier {
     final pending = challenge!;
     final result = await _auth.verifyCode(pending, code);
     if (!identical(pending, challenge)) return null;
+    _checked = pending;
     if (result.user == null) {
       needsDetails = true;
       notifyListeners();

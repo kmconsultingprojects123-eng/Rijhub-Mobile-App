@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -15,19 +16,23 @@ import 'package:rijhub/data/repositories/repositories.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Stands in for Firebase: a text named 'v-1' whose code is 123456, or, with
-/// [instant], a number the phone confirms by itself.
+/// [instant], a number the phone confirms by itself. [read] completes when
+/// the phone reads the code in the text by itself, as Android does.
 class _FakePhone implements PhoneVerifier {
   _FakePhone({this.instant = false});
 
   final bool instant;
+  final read = Completer<String>();
+  int confirms = 0;
 
   @override
   Future<PhoneVerification> send(String phone) async => instant
       ? const PhoneVerification.verified('proof-instant')
-      : const PhoneVerification.codeSent('v-1');
+      : PhoneVerification.codeSent('v-1', readByPhone: read.future);
 
   @override
   Future<String> confirm(String verificationId, String code) async {
+    confirms++;
     if (verificationId != 'v-1' || code != '123456') {
       throw const AuthException("That code isn't right. Check the text.");
     }
@@ -110,6 +115,51 @@ void main() {
       expect(api.bodies.last, {'id_token': 'proof-instant'});
       await expectLater(
           api.auth.verifyCode(sent, ''), throwsA(isA<AuthException>()));
+    });
+
+    test('a code the phone reads from the text needs no typing', () async {
+      SharedPreferences.setMockInitialValues({});
+      final phone = _FakePhone();
+      final api = _Api(phone);
+      final session = SessionController(
+          prefs: await SharedPreferences.getInstance(), auth: api.auth);
+      final flow = AuthFlowController(auth: api.auth, session: session);
+      final read = <bool>[];
+      flow.readByPhone.listen(read.add);
+
+      // The text is on its way: a code to type, for now.
+      expect(await flow.sendCode('8031234567'), isNull);
+      expect(flow.needsDetails, isFalse);
+
+      // It lands, and Android reads its code.
+      phone.read.complete('proof-read');
+      await pumpEventQueue();
+
+      expect(read, [false]);
+      expect(flow.needsDetails, isTrue);
+      expect(api.bodies.last, {'id_token': 'proof-read'});
+      expect(phone.confirms, 0);
+    });
+
+    test('a code typed first is checked once, even if the phone reads it too',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final phone = _FakePhone();
+      final api = _Api(phone);
+      final session = SessionController(
+          prefs: await SharedPreferences.getInstance(), auth: api.auth);
+      final flow = AuthFlowController(auth: api.auth, session: session);
+      final read = <bool>[];
+      flow.readByPhone.listen(read.add);
+
+      await flow.sendCode('8031234567');
+      expect(await flow.verify('123456'), isFalse);
+      phone.read.complete('proof-read');
+      await pumpEventQueue();
+
+      expect(read, isEmpty);
+      expect(
+          api.calls.where((c) => c == 'POST /v1/auth/firebase'), hasLength(1));
     });
 
     test('a new number the phone confirmed goes straight to its details',

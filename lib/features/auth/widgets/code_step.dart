@@ -53,6 +53,7 @@ class _AuthCodeStepState extends State<AuthCodeStep> {
   late DateTime _resendAt;
 
   Timer? _cooldown;
+  StreamSubscription<bool>? _read;
   int _secondsLeft = 0;
   bool _verifying = false;
   bool _resending = false;
@@ -82,6 +83,7 @@ class _AuthCodeStepState extends State<AuthCodeStep> {
     _viaWhatsApp = _flow.challenge!.channel == OtpChannel.whatsapp;
     _digits = _flow.draftCode;
     _code = TextEditingController(text: _digits)..addListener(_onCodeChanged);
+    _read = _flow.readByPhone.listen(_readByPhone);
     _startCooldown();
     // Autofocus can't take focus from the step this one replaces.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -92,6 +94,7 @@ class _AuthCodeStepState extends State<AuthCodeStep> {
   @override
   void dispose() {
     _cooldown?.cancel();
+    _read?.cancel();
     _code.dispose();
     _focus.dispose();
     _change.dispose();
@@ -139,6 +142,12 @@ class _AuthCodeStepState extends State<AuthCodeStep> {
   void _setRequest(VoidCallback change) {
     setState(change);
     widget.onBusyChanged(_busy);
+  }
+
+  /// The phone read the texted code by itself (Android): signed in (the
+  /// sheet finishes by itself), or on to the details.
+  void _readByPhone(bool signedIn) {
+    if (mounted && !signedIn) widget.onNeedsDetails();
   }
 
   Future<void> _verify() async {

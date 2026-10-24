@@ -54,7 +54,9 @@ class ApiAuthRepository implements AuthRepository {
         final number = j['phone']! as String;
         final resendAt = DateTime.parse(j['resend_at']! as String).toLocal();
         if (j['via'] == 'firebase') {
-          // The API leaves the text to the app.
+          // The API leaves the text to the app. A new code: any older proof
+          // for the number is spent.
+          _proofs.remove(number);
           final sent = await _phone.send(number);
           final proof = sent.proof;
           if (proof != null) _proofs[number] = proof;
@@ -64,6 +66,9 @@ class ApiAuthRepository implements AuthRepository {
             requestId: '$_byPhone${sent.verificationId ?? ''}',
             resendAvailableAt: resendAt,
             verified: proof != null,
+            readByPhone: sent.readByPhone?.then((p) {
+              _proofs[number] = p;
+            }),
           );
         }
         return OtpChallenge(
@@ -80,10 +85,13 @@ class ApiAuthRepository implements AuthRepository {
       _auth(() async {
         final Json j;
         if (challenge.requestId.startsWith(_byPhone)) {
-          final proof = challenge.verified
-              ? _proofs.remove(challenge.phone)
-              : await _phone.confirm(
-                  challenge.requestId.substring(_byPhone.length), code);
+          // Confirmed by the phone (at once, or by reading the text): the
+          // proof is already here.
+          final proof =
+              challenge.verified || _proofs.containsKey(challenge.phone)
+                  ? _proofs.remove(challenge.phone)
+                  : await _phone.confirm(
+                      challenge.requestId.substring(_byPhone.length), code);
           if (proof == null) {
             throw const AuthException(
                 'That took a while. Ask for a new code to carry on.');

@@ -24,6 +24,7 @@ class OtpChallenge {
     required this.requestId,
     required this.resendAvailableAt,
     this.verified = false,
+    this.readByPhone,
   });
 
   /// E.164.
@@ -35,6 +36,10 @@ class OtpChallenge {
   /// The phone confirmed the number by itself (Android can, without a
   /// text), so there's no code to type: check it with an empty code.
   final bool verified;
+
+  /// Completes if the phone reads the texted code by itself after it was
+  /// sent (Android): check it then with an empty code, as for [verified].
+  final Future<void>? readByPhone;
 }
 
 /// The result of checking a code. [user] is null when the phone number has
