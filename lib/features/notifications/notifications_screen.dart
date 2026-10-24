@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:iconsax_plus/iconsax_plus.dart';
 import 'package:provider/provider.dart';
 
+import '../../app/live_updates.dart';
 import '../../core/theme/theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/widgets.dart';
@@ -36,6 +37,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget build(BuildContext context) {
     final repo = context.read<NoticeRepository>();
     return Loader<List<AppNotice>>(
+      reloadOn: context.read<LiveUpdates>(),
       load: repo.notices,
       loading: const PageScaffold(
           title: 'Notifications', body: ListSkeleton(leading: 44)),

@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -12,6 +14,7 @@ import '../../app/media.dart';
 import '../../app/push.dart';
 import '../../app/routes.dart';
 import '../../app/session.dart';
+import '../../app/speech.dart';
 import '../../core/theme/theme.dart';
 import '../../core/utils/category_icons.dart';
 import '../../core/utils/formatters.dart';
@@ -19,6 +22,7 @@ import '../../core/widgets/widgets.dart';
 import '../../data/models/models.dart';
 import '../../data/repositories/repositories.dart';
 import '../booking/checkout.dart';
+import '../location/area_picker_sheet.dart';
 import '../shared/page.dart';
 import 'ask_cards.dart';
 import 'ask_flow.dart';
@@ -38,7 +42,12 @@ class _AskScreenState extends State<AskScreen> {
   late final AskFlow _flow;
   final _scroll = ScrollController();
   final _focus = FocusNode();
+  late final _terms = TapGestureRecognizer()
+    ..onTap = () => context.push(Routes.terms);
+  late final _privacy = TapGestureRecognizer()
+    ..onTap = () => context.push(Routes.privacy);
   int _seen = 0;
+  double _keyboard = 0;
 
   // Voice note playback.
   Object? _playing;
@@ -61,9 +70,11 @@ class _AskScreenState extends State<AskScreen> {
       jobs: context.read<JobRepository>(),
       catalog: context.read<CatalogRepository>(),
       push: context.read<PushPermission>(),
+      speaker: context.read<Speaker>(),
       onPay: (total, description) =>
           showCheckout(context, total: total, description: description),
       onPickDay: () => showDayPicker(context),
+      onPickArea: () => showAreaPicker(context),
       onOpen: _open,
     )..addListener(_changed);
     WidgetsBinding.instance.addPostFrameCallback((_) => _begin());
@@ -81,8 +92,17 @@ class _AskScreenState extends State<AskScreen> {
           await context.read<DirectoryRepository>().profile(launch.artisanId!);
       artisan = profile.artisan;
     }
-    await _flow.start(text: launch.text, artisan: artisan);
+    // Read aloud, unless they came to type: the Ask bar's text box, or a
+    // search they typed.
+    final talk = artisan != null ||
+        launch.start != AskStart.typing ||
+        (launch.text != null && !launch.typed);
+    await _flow.start(text: launch.text, artisan: artisan, talk: talk);
     if (!mounted) return;
+    if (kDebugMode && launch.script.isNotEmpty) {
+      await _playScript(launch.script);
+      return;
+    }
     switch (launch.start) {
       case AskStart.camera:
         await _flow.sendPhoto(camera: true);
@@ -92,6 +112,28 @@ class _AskScreenState extends State<AskScreen> {
         if (launch.text == null && artisan == null) _focus.requestFocus();
       case AskStart.welcome:
         break;
+    }
+  }
+
+  /// Debug only: plays [steps] through the conversation, for store
+  /// screenshots. Each step taps the reply that names it or, while the input
+  /// waits for an address, is sent as typed.
+  Future<void> _playScript(List<String> steps) async {
+    for (final step in steps) {
+      for (var tries = 0; tries < 80 && mounted; tries++) {
+        final reply =
+            _flow.replies.where((r) => r.label.contains(step)).firstOrNull;
+        if (reply != null) {
+          reply.onTap();
+          break;
+        }
+        if (_flow.mode == ComposerMode.address) {
+          await _flow.sendText(step);
+          break;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 700));
     }
   }
 
@@ -135,18 +177,32 @@ class _AskScreenState extends State<AskScreen> {
 
   void _changed() {
     if (!mounted) return;
+    // Reading the newest when it changed: the input below may grow (the
+    // number, the code), so it's kept in view.
+    final atEnd = _scroll.hasClients &&
+        _scroll.position.pixels >= _scroll.position.maxScrollExtent - 80;
     setState(() {});
     if (_flow.items.length != _seen) {
       _seen = _flow.items.length;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!_scroll.hasClients) return;
-        _scroll.animateTo(
-          _scroll.position.maxScrollExtent,
-          duration: context.motion(AppMotion.slow),
-          curve: AppMotion.standard,
-        );
-      });
+      _toEnd();
+    } else if (atEnd) {
+      _toEnd(animate: false);
     }
+  }
+
+  /// Scrolls to the newest message, once the next frame is laid out.
+  void _toEnd({bool animate = true}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      final end = _scroll.position.maxScrollExtent;
+      if (animate) {
+        _scroll.animateTo(end,
+            duration: context.motion(AppMotion.slow),
+            curve: AppMotion.standard);
+      } else {
+        _scroll.jumpTo(end);
+      }
+    });
   }
 
   void _togglePlay(Object key, VoiceNote note) {
@@ -177,6 +233,8 @@ class _AskScreenState extends State<AskScreen> {
       ..dispose();
     _scroll.dispose();
     _focus.dispose();
+    _terms.dispose();
+    _privacy.dispose();
     super.dispose();
   }
 
@@ -185,6 +243,11 @@ class _AskScreenState extends State<AskScreen> {
     final c = context.colors;
     final g = AppSpace.gutter;
     final flow = _flow;
+    // The keyboard opening leaves less room: the question it answers stays
+    // in view.
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    if (keyboard > _keyboard) _toEnd(animate: false);
+    _keyboard = keyboard;
     final lastSummary = flow.items.lastIndexWhere((i) => i is BotSummary);
     return Scaffold(
       backgroundColor: c.background,
@@ -193,7 +256,11 @@ class _AskScreenState extends State<AskScreen> {
           children: [
             // The welcome is the first screen there is: no way back until
             // the person picks a way in, then back leads home.
-            _AskHeader(welcome: flow.welcome),
+            _AskHeader(
+              welcome: flow.welcome,
+              talking: flow.talking,
+              onTalk: flow.toggleTalking,
+            ),
             Divider(height: 1, thickness: 1, color: c.border),
             Expanded(
               child: GestureDetector(
@@ -206,7 +273,11 @@ class _AskScreenState extends State<AskScreen> {
                     final item = flow.items[i];
                     return switch (item) {
                       MeText(:final text) => ChatBubble(text: text, mine: true),
-                      BotText(:final text) => ChatBubble(text: text),
+                      BotText() => _SpokenBubble(
+                          item: item,
+                          saying: context.read<Speaker>().saying,
+                          onListen: () => flow.listen(item),
+                        ),
                       BotTyping() => const TypingBubble(),
                       MePhoto(:final path) =>
                         PhotoBubble(image: path, mine: true),
@@ -267,7 +338,8 @@ class _AskScreenState extends State<AskScreen> {
                 ),
               ),
             ),
-            _Bottom(flow: flow, focus: _focus),
+            _Bottom(
+                flow: flow, focus: _focus, terms: _terms, privacy: _privacy),
           ],
         ),
       ),
@@ -276,9 +348,14 @@ class _AskScreenState extends State<AskScreen> {
 }
 
 class _AskHeader extends StatelessWidget {
-  const _AskHeader({this.welcome = false});
+  const _AskHeader(
+      {this.welcome = false, required this.talking, required this.onTalk});
 
   final bool welcome;
+
+  /// Reading aloud, and the speaker button that turns it on or off.
+  final bool talking;
+  final VoidCallback onTalk;
 
   @override
   Widget build(BuildContext context) {
@@ -304,7 +381,7 @@ class _AskHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('RijHub',
+                Text('Employi',
                     style: AppText.titleSmall
                         .copyWith(fontWeight: FontWeight.w700)),
                 Row(
@@ -323,6 +400,13 @@ class _AskHeader extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+          AppIconButton(
+            icon: talking
+                ? IconsaxPlusLinear.volume_high
+                : IconsaxPlusLinear.volume_slash,
+            semanticLabel: talking ? 'Stop reading aloud' : 'Read aloud',
+            onPressed: onTalk,
           ),
           if (guest)
             AppButton(
@@ -346,10 +430,18 @@ class _AskHeader extends StatelessWidget {
 
 /// One-tap answers, then the input for whatever RijHub is waiting for.
 class _Bottom extends StatelessWidget {
-  const _Bottom({required this.flow, required this.focus});
+  const _Bottom(
+      {required this.flow,
+      required this.focus,
+      required this.terms,
+      required this.privacy});
 
   final AskFlow flow;
   final FocusNode focus;
+
+  /// Open the Terms and the Privacy Policy from the sign-up note.
+  final GestureRecognizer terms;
+  final GestureRecognizer privacy;
 
   @override
   Widget build(BuildContext context) {
@@ -392,10 +484,11 @@ class _Bottom extends StatelessWidget {
               child: Text.rich(
                 TextSpan(children: [
                   TextSpan(
-                      text: "By continuing you agree to RijHub's ",
+                      text: "By continuing you agree to Employi's ",
                       style: AppText.caption.copyWith(color: c.textTertiary)),
                   TextSpan(
                       text: 'Terms',
+                      recognizer: terms,
                       style: AppText.caption.copyWith(
                           color: c.textSecondary, fontWeight: FontWeight.w600)),
                   TextSpan(
@@ -403,6 +496,7 @@ class _Bottom extends StatelessWidget {
                       style: AppText.caption.copyWith(color: c.textTertiary)),
                   TextSpan(
                       text: 'Privacy Policy',
+                      recognizer: privacy,
                       style: AppText.caption.copyWith(
                           color: c.textSecondary, fontWeight: FontWeight.w600)),
                 ]),
@@ -437,14 +531,22 @@ class _Bottom extends StatelessWidget {
                   hint: switch (flow.mode) {
                     ComposerMode.address =>
                       'Street, house number and a landmark',
-                    ComposerMode.name => 'First and last name',
+                    ComposerMode.name => 'Full name, as on your ID',
+                    ComposerMode.trade => 'Type or say your trade',
                     _ => 'Type, snap or say it',
                   },
                   enabled: !flow.busy,
                   recording: flow.recording,
                   level: media.level,
-                  onSend: flow.sendText,
-                  onCamera: () => _photoChoice(context),
+                  capitalization: flow.mode == ComposerMode.name
+                      ? TextCapitalization.words
+                      : TextCapitalization.sentences,
+                  onSend: (text) => flow.sendText(text, typed: true),
+                  // A photo helps with a problem, not with a name or a trade.
+                  onCamera: flow.mode == ComposerMode.name ||
+                          flow.mode == ComposerMode.trade
+                      ? null
+                      : () => _photoChoice(context),
                   onVoiceStart: flow.startVoice,
                   onVoiceCancel: flow.cancelVoice,
                   onVoiceSend: flow.sendVoice,
@@ -661,6 +763,42 @@ class _CodeInputState extends State<_CodeInput> {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// One of RijHub's messages: a tap reads it aloud, and a speaker shows
+/// beside it while it's read.
+class _SpokenBubble extends StatelessWidget {
+  const _SpokenBubble(
+      {required this.item, required this.saying, required this.onListen});
+
+  final BotText item;
+  final ValueListenable<Object?> saying;
+  final VoidCallback onListen;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return GestureDetector(
+      onTap: onListen,
+      behavior: HitTestBehavior.opaque,
+      child: Semantics(
+        onTapHint: 'Read aloud',
+        child: ValueListenableBuilder<Object?>(
+          valueListenable: saying,
+          builder: (context, now, _) => ChatBubble(
+            text: item.text,
+            trailing: identical(now, item)
+                ? Padding(
+                    padding: EdgeInsets.only(left: 6.w, bottom: 8.w),
+                    child: Icon(IconsaxPlusBold.volume_high,
+                        size: 18.w, color: c.brandStroke),
+                  )
+                : null,
+          ),
+        ),
+      ),
     );
   }
 }

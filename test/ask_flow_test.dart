@@ -1,9 +1,11 @@
 // Booking through the Ask conversation: say what's wrong, pick who, when
 // and where, confirm and pay; or send the job out for quotes. Guests sign up
-// inside the conversation, only when they confirm.
+// inside the conversation as soon as they choose who to book.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rijhub/core/widgets/widgets.dart';
+import 'package:rijhub/features/ask/ask_flow.dart';
+import 'package:rijhub/features/location/area_picker_sheet.dart';
 
 import 'support/app_harness.dart';
 
@@ -13,10 +15,30 @@ Future<void> tapFirstReply(WidgetTester t) async {
   await wait(t, 1.5);
 }
 
-/// From home: a problem, its best match, the first time offered.
-Future<void> askAndPickTime(WidgetTester t) async {
+/// A guest's sign-up, in the chat: the number, its code, the full name.
+Future<void> signUpInChat(WidgetTester t,
+    {String phone = '8091234567', String name = 'Ada Obi'}) async {
+  await t.enterText(find.byType(TextField).last, phone);
+  await tapLabel(t, 'Send code', then: 2);
+  await t.enterText(
+      find
+          .descendant(
+              of: find.byType(OtpCodeField),
+              matching: find.byType(EditableText))
+          .first,
+      '123456');
+  await wait(t, 2.5);
+  await t.enterText(find.byType(TextField).last, name);
+  await t.testTextInput.receiveAction(TextInputAction.send);
+  await wait(t, 2.5);
+}
+
+/// From home: a problem, its best match (a guest signs up there), the first
+/// time offered.
+Future<void> askAndPickTime(WidgetTester t, {bool guest = false}) async {
   await tapText(t, 'AC not cooling', then: 3);
   await tapText(t, 'Book Emeka', exact: true, then: 1.5);
+  if (guest) await signUpInChat(t);
   expect(find.text('When should Emeka come?'), findsOneWidget);
   await tapFirstReply(t);
 }
@@ -73,26 +95,40 @@ void main() {
     expect(find.textContaining('Done!'), findsNothing);
   });
 
-  appTest('a guest books, and signs up in the chat only when confirming',
+  appTest('an address that names no area is asked for it once', (t) async {
+    await launch(t, as: As.guestClient, at: '/home');
+
+    await askAndPickTime(t, guest: true);
+    await tapText(t, 'Type the address', then: 1);
+    await t.enterText(find.byType(TextField).last, 'Behind the big mosque');
+    await t.testTextInput.receiveAction(TextInputAction.send);
+    await wait(t, 2);
+
+    expect(find.text('Which area of Abuja is that in?'), findsOneWidget);
+    // The list of areas is already open.
+    expect(find.byType(AreaPickerSheet), findsOneWidget);
+    await t.enterText(find.byType(TextField).last, 'Jabi');
+    await wait(t, 1);
+    await tapText(t, 'Jabi', exact: true, then: 2);
+
+    expect(find.text("Here's your booking:"), findsOneWidget);
+    expect(find.textContaining('Confirm ·'), findsOneWidget);
+  });
+
+  appTest('a guest chooses who to book, signs up in the chat, and books on',
       (t) async {
     final app = await launch(t, as: As.guestClient, at: '/home');
 
-    await askAndPickTime(t);
-    await tapText(t, 'Type the address', then: 1);
-    await t.enterText(
-        find.byType(TextField).last, 'Plot 12, Aminu Kano Crescent');
-    await t.testTextInput.receiveAction(TextInputAction.send);
-    await wait(t, 2);
-    expect(app.session.isGuest, isTrue);
-
-    await tapText(t, 'Confirm ·', then: 1.5);
-    expect(find.textContaining("what's your phone number?"), findsOneWidget);
+    await tapText(t, 'AC not cooling', then: 3);
+    await tapText(t, 'Book Emeka', exact: true, then: 1.5);
+    // Straight to signing up, in the chat: no sheet, no form.
+    expect(find.textContaining("Let's book Emeka. What's your phone number?"),
+        findsOneWidget);
     expect(find.textContaining('By continuing you agree'), findsOneWidget);
 
     await t.enterText(find.byType(TextField).last, '8091234567');
     await tapLabel(t, 'Send code', then: 2);
     expect(find.textContaining('I sent a 6-digit code'), findsOneWidget);
-
     await t.enterText(
         find
             .descendant(
@@ -101,16 +137,35 @@ void main() {
             .first,
         '123456');
     await wait(t, 2.5);
-    expect(find.textContaining("What's your name?"), findsOneWidget);
+    expect(find.textContaining('as it is on your ID'), findsOneWidget);
+
+    // One name isn't the name on an ID.
+    await t.enterText(find.byType(TextField).last, 'Ada');
+    await t.testTextInput.receiveAction(TextInputAction.send);
+    await wait(t, 1);
+    expect(find.text('Add your surname too, as it is on your ID.'),
+        findsOneWidget);
+    expect(app.session.isGuest, isTrue);
 
     await t.enterText(find.byType(TextField).last, 'Ada Obi');
     await t.testTextInput.receiveAction(TextInputAction.send);
     await wait(t, 2.5);
-
     expect(app.session.isSignedIn, isTrue);
     expect(app.session.user!.firstName, 'Ada');
     expect(find.textContaining('Your account is ready'), findsOneWidget);
-    // Then straight on to payment.
+
+    // Then on with the booking, and paying asks for nothing more.
+    expect(find.text('When should Emeka come?'), findsOneWidget);
+    await tapFirstReply(t);
+    await tapText(t, 'Type the address', then: 1);
+    await t.enterText(
+        find.byType(TextField).last, 'Plot 12, Aminu Kano Crescent, Wuse 2');
+    await t.testTextInput.receiveAction(TextInputAction.send);
+    await wait(t, 2);
+    // The address named its area, so nobody asks for it.
+    expect(find.textContaining('Which area'), findsNothing);
+    await tapText(t, 'Confirm ·', then: 1.5);
+    expect(find.textContaining("What's your phone number?"), findsNothing);
     expect(find.text('Card'), findsOneWidget);
     await tapText(t, 'Pay ₦', then: 3);
     expect(find.textContaining('Done! I sent your request to Emeka'),
@@ -202,5 +257,33 @@ void main() {
     await tapLabel(t, 'Send voice note', then: 4);
 
     expect(find.text('Best match'), findsOneWidget);
+  });
+
+  appTest('the question stays in view when the keyboard opens', (t) async {
+    await launch(t, as: As.guestClient, at: '/home');
+    await tapText(t, 'AC not cooling', then: 3);
+    await tapText(t, 'Book Emeka', exact: true, then: 1.5);
+
+    t.view.viewInsets = const FakeViewPadding(bottom: 336 * 3);
+    await wait(t, 1);
+
+    final chat = t.getRect(find.byWidgetPredicate(
+        (w) => w is ListView && w.scrollDirection == Axis.vertical));
+    final question =
+        t.getRect(find.textContaining("What's your phone number?"));
+    expect(question.top, greaterThanOrEqualTo(chat.top));
+    expect(question.bottom, lessThanOrEqualTo(chat.bottom));
+  });
+
+  test('the times offered start at 8 AM, even after midnight', () {
+    final labels = [
+      for (final (label, _) in suggestedWindows(DateTime(2026, 10, 24, 0, 30)))
+        label
+    ];
+    expect(labels.first, 'Today, 8–10 AM');
+    expect(labels, contains('Tomorrow, 9–11 AM'));
+    // Late in the day, only tomorrow.
+    final late = suggestedWindows(DateTime(2026, 10, 24, 18, 10));
+    expect(late.first.$1, startsWith('Tomorrow'));
   });
 }

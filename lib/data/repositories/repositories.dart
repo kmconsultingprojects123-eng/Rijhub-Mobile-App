@@ -23,6 +23,7 @@ class OtpChallenge {
     required this.channel,
     required this.requestId,
     required this.resendAvailableAt,
+    this.verified = false,
   });
 
   /// E.164.
@@ -30,6 +31,10 @@ class OtpChallenge {
   final OtpChannel channel;
   final String requestId;
   final DateTime resendAvailableAt;
+
+  /// The phone confirmed the number by itself (Android can, without a
+  /// text), so there's no code to type: check it with an empty code.
+  final bool verified;
 }
 
 /// The result of checking a code. [user] is null when the phone number has

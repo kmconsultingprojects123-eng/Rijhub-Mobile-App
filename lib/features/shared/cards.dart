@@ -70,8 +70,8 @@ class ArtisanPhotoCard extends StatelessWidget {
     return Pressable(
       onTap: onTap,
       focusRadius: radius,
-      semanticLabel: '${artisan.name}, ${artisan.trade}, rated '
-          '${artisan.rating.toStringAsFixed(1)}, from ${Naira.format(artisan.startingPrice)}',
+      semanticLabel: '${artisan.name}, ${artisan.trade}, ${artisan.ratingSpoken}, '
+          'from ${Naira.format(artisan.startingPrice)}',
       child: ClipRRect(
         borderRadius: radius,
         child: SizedBox(
@@ -166,18 +166,24 @@ class ArtisanPhotoCard extends StatelessWidget {
                     SizedBox(height: 6.w),
                     Row(
                       children: [
-                        Icon(IconsaxPlusBold.star_1,
-                            size: 14.w, color: c.rating),
-                        SizedBox(width: 3.w),
-                        Text(
-                          artisan.rating.toStringAsFixed(1),
-                          style: AppText.caption
-                              .copyWith(color: fg, fontWeight: FontWeight.w700),
-                        ),
-                        Text(
-                          ' (${artisan.reviewCount})',
-                          style: AppText.caption.copyWith(color: fg2),
-                        ),
+                        if (artisan.isNew)
+                          Text('New',
+                              style: AppText.caption.copyWith(
+                                  color: fg, fontWeight: FontWeight.w700))
+                        else ...[
+                          Icon(IconsaxPlusBold.star_1,
+                              size: 14.w, color: c.rating),
+                          SizedBox(width: 3.w),
+                          Text(
+                            artisan.rating.toStringAsFixed(1),
+                            style: AppText.caption.copyWith(
+                                color: fg, fontWeight: FontWeight.w700),
+                          ),
+                          Text(
+                            ' (${artisan.reviewCount})',
+                            style: AppText.caption.copyWith(color: fg2),
+                          ),
+                        ],
                         Flexible(
                           child: Text(
                             '  ·  from ${Naira.format(artisan.startingPrice)}',
@@ -357,7 +363,7 @@ class ArtisanRow extends StatelessWidget {
       pressedScale: 0.99,
       focusOffset: 0,
       semanticLabel: '${artisan.name}, ${artisan.trade}, '
-          '${artisan.isVerified ? 'verified, ' : ''}rated ${artisan.rating.toStringAsFixed(1)} '
+          '${artisan.isVerified ? 'verified, ' : ''}${artisan.ratingSpoken} '
           'from ${artisan.reviewCount} reviews, ${whereLabel(artisan, hasArea: hasArea)}, '
           'from ${Naira.format(artisan.startingPrice)}',
       child: Container(
@@ -458,7 +464,7 @@ class ArtisanTile extends StatelessWidget {
     return Pressable(
       onTap: onTap,
       semanticLabel:
-          '${artisan.name}, ${artisan.trade}, rated ${artisan.rating.toStringAsFixed(1)}',
+          '${artisan.name}, ${artisan.trade}, ${artisan.ratingSpoken}',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -497,11 +503,13 @@ class ArtisanTile extends StatelessWidget {
           SizedBox(height: 2.w),
           Row(
             children: [
-              Icon(IconsaxPlusBold.star_1, size: 13.w, color: c.rating),
-              SizedBox(width: 3.w),
+              if (!artisan.isNew) ...[
+                Icon(IconsaxPlusBold.star_1, size: 13.w, color: c.rating),
+                SizedBox(width: 3.w),
+              ],
               Flexible(
                 child: Text(
-                  '${artisan.rating.toStringAsFixed(1)} · ${artisan.trade}',
+                  '${artisan.isNew ? 'New' : artisan.rating.toStringAsFixed(1)} · ${artisan.trade}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppText.caption.copyWith(color: c.textSecondary),

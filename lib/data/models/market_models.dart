@@ -417,7 +417,7 @@ class BookingDraft {
   final VoiceNote? voiceNote;
 }
 
-/// What a booking costs: the artisan's price and RijHub's fee.
+/// What a booking costs: the artisan's price and Employi's fee.
 @immutable
 class PriceBreakdown {
   const PriceBreakdown({required this.price, required this.fee});

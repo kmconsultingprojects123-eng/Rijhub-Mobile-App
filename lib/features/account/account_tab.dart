@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../app/auth_gate.dart';
 import '../../app/routes.dart';
 import '../../app/session.dart';
+import '../../app/live_updates.dart';
 import '../../core/theme/theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/images.dart';
@@ -64,7 +65,7 @@ class _GuestAccount extends StatelessWidget {
                 const RijHubAvatar(size: 44),
                 SizedBox(height: 14.w),
                 Text(
-                  artisan ? 'Get jobs near you' : 'Join RijHub',
+                  artisan ? 'Get jobs near you' : 'Join Employi',
                   style: AppText.headline.copyWith(color: c.onSurfaceStrong),
                 ),
                 SizedBox(height: 6.w),
@@ -261,7 +262,7 @@ class _ArtisanAccount extends StatelessWidget {
     final session = context.watch<SessionController>();
     final user = session.user!;
     return Loader<(ArtisanProfile, Verification, WalletSummary)>(
-      reloadOn: session,
+      reloadOn: Listenable.merge([session, context.read<LiveUpdates>()]),
       load: () async {
         final r = await Future.wait<Object>([
           context.read<ArtisanSetupRepository>().myProfile(),
@@ -515,7 +516,7 @@ class _Version extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: EdgeInsets.only(bottom: 28.w),
         child: Center(
-          child: Text('RijHub 2.0.0 · Made in Abuja',
+          child: Text('Employi 2.0.0 · Made in Abuja',
               style:
                   AppText.caption.copyWith(color: context.colors.textTertiary)),
         ),

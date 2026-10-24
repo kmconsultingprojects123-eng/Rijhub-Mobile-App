@@ -9,7 +9,7 @@ import 'client_home.dart';
 
 /// The Home tab: clients look for help, artisans run their business.
 ///
-/// Switching sides (a guest's "Find work on RijHub", or signing in as the
+/// Switching sides (a guest's "Find work on Employi", or signing in as the
 /// other role) cross-fades from one home to the other, so the change reads
 /// as intended; with reduced motion it is instant.
 class HomeScreen extends StatelessWidget {

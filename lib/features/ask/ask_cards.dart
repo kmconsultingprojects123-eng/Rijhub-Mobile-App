@@ -90,7 +90,7 @@ class MatchesCard extends StatelessWidget {
             pressedScale: 0.99,
             focusOffset: 0,
             semanticLabel:
-                'Best match: ${best.name}, rated ${best.rating.toStringAsFixed(1)}, '
+                'Best match: ${best.name}, ${best.ratingSpoken}, '
                 'from ${Naira.format(best.startingPrice)}. Open profile',
             child: Padding(
               padding: EdgeInsets.all(12.w),
@@ -178,7 +178,7 @@ class MatchesCard extends StatelessWidget {
               pressedScale: 0.99,
               focusOffset: 0,
               semanticLabel:
-                  '${a.name}, rated ${a.rating.toStringAsFixed(1)}, from ${Naira.format(a.startingPrice)}',
+                  '${a.name}, ${a.ratingSpoken}, from ${Naira.format(a.startingPrice)}',
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.w),
                 child: Row(
@@ -209,22 +209,25 @@ class MatchesCard extends StatelessWidget {
               ),
             ),
           ],
-          Divider(height: 1, thickness: 1, color: c.border),
-          Semantics(
-            button: true,
-            child: InkWell(
-              onTap: onSeeAll,
-              child: SizedBox(
-                height: 48.w,
-                child: Center(
-                  child: Text(
-                    'See all ${matches.artisans.length} ${TextCase.midSentence(plural)}',
-                    style: AppText.labelSmall.copyWith(color: c.brandText),
+          // One match is already on the card: nothing more to see.
+          if (matches.artisans.length > 1) ...[
+            Divider(height: 1, thickness: 1, color: c.border),
+            Semantics(
+              button: true,
+              child: InkWell(
+                onTap: onSeeAll,
+                child: SizedBox(
+                  height: 48.w,
+                  child: Center(
+                    child: Text(
+                      'See all ${matches.artisans.length} ${TextCase.midSentence(plural)}',
+                      style: AppText.labelSmall.copyWith(color: c.brandText),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -313,8 +316,16 @@ class SummaryCard extends StatelessWidget {
           ),
           SizedBox(height: 10.w),
           _Line(IconsaxPlusLinear.calendar_1, windowLabel(d.window)),
-          _Line(IconsaxPlusLinear.location,
-              [d.landmark, d.area].whereType<String>().join(', ')),
+          // The area, unless the address already says it.
+          _Line(
+              IconsaxPlusLinear.location,
+              [
+                d.landmark,
+                if (!(d.landmark ?? '')
+                    .toLowerCase()
+                    .contains(d.area.toLowerCase()))
+                  d.area,
+              ].whereType<String>().join(', ')),
           Divider(height: 20.w, thickness: 1, color: c.border),
           if (summary.services.isEmpty)
             InfoLine(label: d.service.name, value: Naira.format(p.price))
@@ -610,12 +621,19 @@ class WelcomeCard extends StatelessWidget {
     final count = stats.verifiedArtisans
         .toString()
         .replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]},');
+    final artisans = stats.verifiedArtisans == 1
+        ? '1 ID-checked artisan'
+        : '$count ID-checked artisans';
+    // No rating until someone has been rated.
+    final rated = stats.averageRating > 0;
+    final rating = stats.averageRating.toStringAsFixed(1);
     return Padding(
       padding: EdgeInsets.only(bottom: 10.w),
       child: Semantics(
         container: true,
-        label:
-            '$count ID-checked artisans across Abuja, rated ${stats.averageRating} on average',
+        label: rated
+            ? '$artisans across Abuja, rated $rating on average'
+            : '$artisans across Abuja',
         child: ExcludeSemantics(
           child: ClipRRect(
             borderRadius: BorderRadius.circular(22.w),
@@ -624,7 +642,10 @@ class WelcomeCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (photo != null) Image(image: photo, fit: BoxFit.cover),
+                  if (photo != null)
+                    Image(image: photo, fit: BoxFit.cover)
+                  else
+                    ColoredBox(color: context.colors.brand),
                   const DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -651,12 +672,14 @@ class WelcomeCard extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('$count ID-checked artisans',
+                              Text(artisans,
                                   style: AppText.titleSmall.copyWith(
                                       color: Colors.white,
                                       fontWeight: FontWeight.w700)),
                               Text(
-                                'across Abuja · ${stats.averageRating.toStringAsFixed(1)} average rating',
+                                rated
+                                    ? 'across Abuja · $rating average rating'
+                                    : 'across Abuja',
                                 style: AppText.caption.copyWith(
                                     color:
                                         Colors.white.withValues(alpha: 0.85)),

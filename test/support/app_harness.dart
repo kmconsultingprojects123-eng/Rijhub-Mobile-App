@@ -11,10 +11,12 @@ import 'package:rijhub/app/location.dart';
 import 'package:rijhub/app/media.dart';
 import 'package:rijhub/app/push.dart';
 import 'package:rijhub/app/session.dart';
+import 'package:rijhub/app/speech.dart';
 import 'package:rijhub/core/widgets/widgets.dart';
 import 'package:rijhub/data/geo/places.dart';
 import 'package:rijhub/data/mock/mock_data.dart';
 import 'package:rijhub/data/models/models.dart';
+import 'package:rijhub/data/repositories/repositories.dart';
 import 'package:rijhub/features/auth/auth_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -22,10 +24,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 enum As { firstOpen, guestClient, guestArtisan, client, artisan }
 
 class Launched {
-  Launched(this.session, this.deps);
+  Launched(this.session, this.deps, this.authFlow);
 
   final SessionController session;
   final AppDependencies deps;
+  final AuthFlowController authFlow;
 }
 
 /// Starts the app as [as], at [at] (the app's own start when null), on a
@@ -33,7 +36,10 @@ class Launched {
 /// Notifications count as already allowed unless [pushAllowed] is false,
 /// so the one-time offer only shows in the tests about it.
 Future<Launched> launch(WidgetTester t,
-    {As as = As.client, String? at, bool pushAllowed = true}) async {
+    {As as = As.client,
+    String? at,
+    bool pushAllowed = true,
+    CatalogRepository? catalog}) async {
   t.view.devicePixelRatio = 3;
   t.view.physicalSize = const Size(390 * 3, 844 * 3);
   t.view.padding = const FakeViewPadding(top: 47 * 3, bottom: 34 * 3);
@@ -50,6 +56,8 @@ Future<Launched> launch(WidgetTester t,
     media: SampleMediaService(),
     location: SampleLocationService(AbujaPlaces.centreOf('Gwarinpa')),
     push: SamplePushPermission(allowed: pushAllowed),
+    catalog: catalog,
+    speaker: SampleSpeaker(),
   );
   final session = SessionController(prefs: prefs, auth: deps.auth)..restore();
   if (as == As.client) {
@@ -67,7 +75,7 @@ Future<Launched> launch(WidgetTester t,
     initialLocation: at,
   ));
   await wait(t);
-  return Launched(session, deps);
+  return Launched(session, deps, authFlow);
 }
 
 /// Runs [body] in the app, then lets the mocks' last timers finish so the

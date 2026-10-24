@@ -2,17 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 enum LogoVariant {
-  /// "Rij" in crimson, "HUB" in black. For light backgrounds.
+  /// The pin in crimson and black, "employi" in black. For light
+  /// backgrounds.
   color,
 
-  /// "Rij" in crimson, "HUB" in white. For dark backgrounds and photos.
+  /// The pin in crimson and white, "employi" in white. For dark backgrounds
+  /// and photos.
   onDark,
 
   /// All white. For crimson backgrounds.
   white,
 }
 
-/// The RijHub wordmark with its tagline, cropped from the original artwork.
+/// The Employi logo: the pin beside "employi", with "powered by RijHub"
+/// under it, drawn from the chosen artwork.
 class RijHubLogo extends StatelessWidget {
   const RijHubLogo({
     super.key,
@@ -23,8 +26,8 @@ class RijHubLogo extends StatelessWidget {
   final double height;
   final LogoVariant variant;
 
-  /// Width / height of the cropped artwork.
-  static const aspectRatio = 975 / 318;
+  /// Width / height of the artwork.
+  static const aspectRatio = 1261 / 400;
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +42,7 @@ class RijHubLogo extends StatelessWidget {
       width: height * aspectRatio,
       fit: BoxFit.contain,
       filterQuality: FilterQuality.medium,
-      semanticLabel: 'RijHub',
+      semanticLabel: 'Employi',
     );
   }
 }
@@ -59,8 +62,8 @@ class GoogleMark extends StatelessWidget {
       );
 }
 
-/// The RijHub mark (the "R" monogram) on its own, for small spaces such as
-/// RijHub's avatar in a conversation.
+/// The Employi mark (the pin with a handshake) on its own, for small spaces
+/// such as Employi's avatar in a conversation.
 class RijHubMark extends StatelessWidget {
   const RijHubMark({super.key, this.size = 24, this.white = false});
 

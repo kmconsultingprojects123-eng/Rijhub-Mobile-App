@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/routes.dart';
 import '../../app/session.dart';
+import '../../app/live_updates.dart';
 import '../../core/theme/theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/images.dart';
@@ -33,6 +34,9 @@ class BookingScreen extends StatelessWidget {
     final artisan = context
         .select<SessionController, bool>((s) => s.role == UserRole.artisan);
     return Loader<Booking>(
+      // Each step the other side takes (on the way, started, done) arrives
+      // in the inbox, so the page follows along without a pull to refresh.
+      reloadOn: context.read<LiveUpdates>(),
       load: () => context.read<BookingFlowRepository>().byId(bookingId),
       loading: const Scaffold(body: ListSkeleton()),
       builder: (context, booking, reload) => _BookingView(
@@ -220,7 +224,14 @@ class _BookingViewState extends State<_BookingView> {
                 Schedule.dayAndTime(b.scheduledAt)),
             _Detail(
               IconsaxPlusLinear.location,
-              [b.landmark, b.area].whereType<String>().join(', '),
+              // The area, unless the address already says it.
+              [
+                b.landmark,
+                if (!(b.landmark ?? '')
+                    .toLowerCase()
+                    .contains(b.area.toLowerCase()))
+                  b.area,
+              ].whereType<String>().join(', '),
               // The map carries directions when it shows.
               trailing: artisan && !b.isOver && !showMap
                   ? AppButton(
@@ -395,7 +406,7 @@ class _Status extends StatelessWidget {
           : ("Is it done?", 'Confirm, and we release your payment to $first.'),
       BookingStatus.completed => (
           'Done',
-          artisan ? 'Paid. Nice work.' : 'Thanks for booking through RijHub.'
+          artisan ? 'Paid. Nice work.' : 'Thanks for booking through Employi.'
         ),
       BookingStatus.cancelled => (
           'Cancelled',
@@ -530,33 +541,48 @@ class _Person extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final card = Container(
+    final who = Row(
+      children: [
+        AppAvatar(
+            name: booking.counterpartName,
+            image: imageFor(booking.counterpartPhoto),
+            size: 48.w),
+        SizedBox(width: 12.w),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(booking.counterpartName,
+                  style:
+                      AppText.titleSmall.copyWith(fontWeight: FontWeight.w700)),
+              Text(
+                artisan
+                    ? 'Client · ${booking.area}${booking.distanceKm == null ? '' : ' · ${booking.distanceKm!.toStringAsFixed(1)} km'}'
+                    : 'Your artisan${onProfile == null ? '' : ' · see profile'}',
+                style: AppText.bodySmall.copyWith(color: c.textSecondary),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+    // Only the person opens the profile, so screen readers still find Call
+    // and Message as buttons of their own.
+    return Container(
       padding: EdgeInsets.all(14.w),
       decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(18.w),
           border: Border.all(color: c.border)),
       child: Row(
         children: [
-          AppAvatar(
-              name: booking.counterpartName,
-              image: imageFor(booking.counterpartPhoto),
-              size: 48.w),
-          SizedBox(width: 12.w),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(booking.counterpartName,
-                    style: AppText.titleSmall
-                        .copyWith(fontWeight: FontWeight.w700)),
-                Text(
-                  artisan
-                      ? 'Client · ${booking.area}${booking.distanceKm == null ? '' : ' · ${booking.distanceKm!.toStringAsFixed(1)} km'}'
-                      : 'Your artisan${onProfile == null ? '' : ' · see profile'}',
-                  style: AppText.bodySmall.copyWith(color: c.textSecondary),
-                ),
-              ],
-            ),
+            child: onProfile == null
+                ? who
+                : Pressable(
+                    onTap: onProfile,
+                    semanticLabel:
+                        '${booking.counterpartName}, your artisan. Open profile',
+                    child: who),
           ),
           if (onCall != null)
             AppIconButton(
@@ -572,11 +598,6 @@ class _Person extends StatelessWidget {
         ],
       ),
     );
-    if (onProfile == null) return card;
-    return Pressable(
-        onTap: onProfile,
-        semanticLabel: '${booking.counterpartName}. Open profile',
-        child: card);
   }
 }
 
@@ -667,7 +688,7 @@ class _Money extends StatelessWidget {
           c.success,
           artisan
               ? 'The client has paid. You get it as soon as they confirm the job is done.'
-              : 'Held safely by RijHub. ${b.counterpartName.split(' ').first} gets it when you say the job is done.',
+              : 'Held safely by Employi. ${b.counterpartName.split(' ').first} gets it when you say the job is done.',
         ),
       PaymentState.released => (
           IconsaxPlusBold.tick_circle,

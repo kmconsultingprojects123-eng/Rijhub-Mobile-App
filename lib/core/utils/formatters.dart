@@ -159,6 +159,17 @@ abstract final class TextCase {
     if (text.isEmpty || opensWithAcronym) return text;
     return '${text[0].toLowerCase()}${text.substring(1)}';
   }
+
+  /// "AC repair", "AC repair and electrical", "AC repair, electrical and
+  /// plumbing": names in a sentence, all but the first mid-sentence.
+  static String list(List<String> names) {
+    final words = [
+      for (var i = 0; i < names.length; i++)
+        i == 0 ? names[i] : midSentence(names[i]),
+    ];
+    if (words.length < 2) return words.join();
+    return '${words.sublist(0, words.length - 1).join(', ')} and ${words.last}';
+  }
 }
 
 int _calendarDays(DateTime from, DateTime to) =>

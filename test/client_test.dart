@@ -72,7 +72,7 @@ void main() {
       expect(find.text('Tap a face to see who it is'), findsOneWidget);
     });
 
-    appTest('a search with no one to show offers to ask RijHub instead',
+    appTest('a search with no one to show offers to ask Employi instead',
         (t) async {
       await launch(t, as: As.client, at: '/explore');
 
@@ -80,7 +80,7 @@ void main() {
       await wait(t, 1.5);
 
       expect(find.text('No one matches that'), findsOneWidget);
-      await tapText(t, 'Ask RijHub', exact: true, then: 3);
+      await tapText(t, 'Ask Employi', exact: true, then: 3);
       expect(find.text('zzzz'), findsOneWidget);
     });
   });
@@ -207,7 +207,7 @@ void main() {
     appTest('a conversation, and a reply', (t) async {
       await launch(t, as: As.client, at: '/messages');
 
-      expect(find.text('RijHub'), findsOneWidget);
+      expect(find.text('Employi'), findsOneWidget);
       await tapText(t, 'Emeka Nwosu', exact: true, then: 2);
       expect(find.textContaining("I'll be there on time"), findsOneWidget);
 
@@ -281,7 +281,7 @@ void main() {
       await launch(t, as: As.client, at: '/support');
 
       for (final way in [
-        'Talk to RijHub',
+        'Talk to Employi',
         'Chat with us',
         'Call us',
         'WhatsApp',
@@ -294,11 +294,29 @@ void main() {
       expect(find.textContaining('refund'), findsWidgets);
     });
 
-    appTest('payments show what RijHub is holding', (t) async {
+    appTest('payments show what Employi is holding', (t) async {
       await launch(t, as: As.client, at: '/account/payments');
 
       expect(find.text('Held safely now'), findsOneWidget);
       expect(find.text('Held'), findsOneWidget);
     });
+  });
+
+  appTest('a new client with no places opens on adding one', (t) async {
+    final app = await launch(t, as: As.guestClient);
+    // The mock's network delays only pass while the test pumps.
+    final created = app.deps.auth.createAccount(
+        phone: '+2348090000002',
+        role: UserRole.client,
+        firstName: 'Ada',
+        lastName: 'Obi');
+    await wait(t, 1);
+    final signedIn = app.session.signIn(await created);
+    await wait(t, 1);
+    await signedIn;
+    await go(t, '/account/places', then: 3);
+
+    expect(find.text('Add a place'), findsWidgets);
+    expect(find.text('Save place'), findsOneWidget);
   });
 }

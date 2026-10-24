@@ -253,9 +253,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
             title: 'No one matches that',
             message: _query.text.isEmpty
                 ? 'Try another trade, or turn off a filter.'
-                : 'Tell RijHub what you need instead, and we will find the right person.',
+                : 'Tell Employi what you need instead, and we will find the right person.',
             action: AppButton(
-              label: _query.text.isEmpty ? 'Clear filters' : 'Ask RijHub',
+              label: _query.text.isEmpty ? 'Clear filters' : 'Ask Employi',
               expand: false,
               onPressed: _query.text.isEmpty
                   ? () {
@@ -265,7 +265,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       });
                       _search();
                     }
-                  : () => openAsk(context, text: _query.text),
+                  : () => openAsk(context, text: _query.text, typed: true),
             ),
           ),
         ],
@@ -294,8 +294,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
             SizedBox(height: 16.w),
             Pressable(
               onTap: () => openAsk(context,
-                  text: _query.text.isEmpty ? null : _query.text),
-              semanticLabel: 'Not sure who you need? Ask RijHub',
+                  text: _query.text.isEmpty ? null : _query.text, typed: true),
+              semanticLabel: 'Not sure who you need? Ask Employi',
               child: Container(
                 padding: EdgeInsets.all(14.w),
                 decoration: BoxDecoration(
@@ -307,7 +307,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     SizedBox(width: 12.w),
                     Expanded(
                         child: Text(
-                            'Not sure who you need? Describe it and RijHub will match you.',
+                            'Not sure who you need? Describe it and Employi will match you.',
                             style: AppText.bodySmall)),
                     Icon(IconsaxPlusLinear.arrow_right_3,
                         size: 16.w, color: c.textTertiary),

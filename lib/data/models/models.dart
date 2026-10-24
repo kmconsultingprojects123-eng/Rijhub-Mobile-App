@@ -187,6 +187,13 @@ class Artisan {
   /// "Emeka", for sentences such as "You hired Emeka".
   String get firstName => name.split(' ').first;
 
+  /// No reviews yet: shown as "New", never as a 0.0 rating.
+  bool get isNew => reviewCount == 0;
+
+  /// "rated 4.8", or "new on Employi", for what screen readers say.
+  String get ratingSpoken =>
+      isNew ? 'new on Employi' : 'rated ${rating.toStringAsFixed(1)}';
+
   Artisan copyWith({double? distanceKm, GeoPoint? location}) => Artisan(
         id: id,
         name: name,

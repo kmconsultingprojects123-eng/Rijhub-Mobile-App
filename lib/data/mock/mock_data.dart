@@ -953,6 +953,77 @@ abstract final class MockData {
         maxPrice: 40000,
         updatedOn: updatedOn,
       ),
+      // The rest of the API's guide (app/catalog.py PRICE_GUIDE): every trade.
+      PriceGuideItem(
+        problem: 'Gas top-up (1 unit)',
+        categoryId: 'ac',
+        minPrice: 12000,
+        maxPrice: 18000,
+        updatedOn: updatedOn,
+      ),
+      PriceGuideItem(
+        problem: 'Inverter and battery check',
+        categoryId: 'solar',
+        minPrice: 15000,
+        maxPrice: 40000,
+        updatedOn: updatedOn,
+      ),
+      PriceGuideItem(
+        problem: 'Paint one room (labour)',
+        categoryId: 'painting',
+        minPrice: 25000,
+        maxPrice: 80000,
+        updatedOn: updatedOn,
+      ),
+      PriceGuideItem(
+        problem: 'Car repair',
+        categoryId: 'mechanic',
+        minPrice: 10000,
+        maxPrice: 30000,
+        updatedOn: updatedOn,
+      ),
+      PriceGuideItem(
+        problem: 'Door, lock or furniture repair',
+        categoryId: 'carpentry',
+        minPrice: 8000,
+        maxPrice: 25000,
+        updatedOn: updatedOn,
+      ),
+      PriceGuideItem(
+        problem: 'Sewing or altering clothes',
+        categoryId: 'tailoring',
+        minPrice: 6500,
+        maxPrice: 25000,
+        updatedOn: updatedOn,
+      ),
+      PriceGuideItem(
+        problem: 'Lawn and hedge care',
+        categoryId: 'gardening',
+        minPrice: 4000,
+        maxPrice: 12000,
+        updatedOn: updatedOn,
+      ),
+      PriceGuideItem(
+        problem: 'Moving help',
+        categoryId: 'moving',
+        minPrice: 20000,
+        maxPrice: 60000,
+        updatedOn: updatedOn,
+      ),
+      PriceGuideItem(
+        problem: 'Home fumigation',
+        categoryId: 'pest',
+        minPrice: 15000,
+        maxPrice: 35000,
+        updatedOn: updatedOn,
+      ),
+      PriceGuideItem(
+        problem: 'TV mounting or decoder setup',
+        categoryId: 'tv',
+        minPrice: 5000,
+        maxPrice: 15000,
+        updatedOn: updatedOn,
+      ),
     ];
   }
 
@@ -1111,12 +1182,11 @@ abstract final class MockData {
 
   /// The dashboard of artisan [user]: the sample one for the sample
   /// artisan, and a first-run one for anyone else: off, nothing earned,
-  /// and setup to finish. Sign-up has already verified their phone and
-  /// taken their trades (and their area, if they picked one), so those
-  /// steps start done.
+  /// and the server's four setup steps to do (services/artisans.py
+  /// setup_steps), the first two holding back bookings.
   static ArtisanDashboard dashboardFor(AppUser? user) {
     if (user?.id == _emeka) return dashboard;
-    return ArtisanDashboard(
+    return const ArtisanDashboard(
       isAvailable: false,
       earningsThisWeek: 0,
       earningsLastWeek: 0,
@@ -1126,37 +1196,35 @@ abstract final class MockData {
       reviewCount: 0,
       responseRate: 0,
       setupSteps: [
-        const SetupStep(
-          id: 'phone',
-          label: 'Verify your phone number',
-          done: true,
-        ),
-        const SetupStep(id: 'trades', label: 'Choose your trades', done: true),
         SetupStep(
-          id: 'area',
-          label: 'Set your work area',
-          done: user?.homeArea != null,
-          reason: 'So we can show you jobs nearby.',
-        ),
-        const SetupStep(
-          id: 'identity',
-          label: 'Verify your identity',
+          id: 'services',
+          label: 'Add your services and prices',
           done: false,
-          reason: 'Clients look for the verified badge.',
-          effort: '2 minutes · NIN + selfie',
+          reason: 'Clients book from your prices',
+          effort: '2 minutes',
           blocksBookings: true,
         ),
-        const SetupStep(
-          id: 'services',
-          label: 'Add services and prices',
+        SetupStep(
+          id: 'identity',
+          label: 'Check your ID',
           done: false,
-          reason: 'So clients know what you charge.',
+          reason: 'Clients only book ID-checked artisans',
+          effort: '2 minutes',
+          blocksBookings: true,
         ),
-        const SetupStep(
+        SetupStep(
           id: 'work_photos',
           label: 'Add photos of your work',
           done: false,
-          reason: 'Clients can see what you do before they book.',
+          reason: 'Clients can see what you do before they book',
+          effort: '1 minute',
+        ),
+        SetupStep(
+          id: 'payout',
+          label: 'Add your bank account',
+          done: false,
+          reason: 'So we can pay you for finished jobs',
+          effort: '1 minute',
         ),
       ],
     );

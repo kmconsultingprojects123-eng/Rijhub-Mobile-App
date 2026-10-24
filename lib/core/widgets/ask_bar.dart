@@ -161,10 +161,13 @@ class Composer extends StatefulWidget {
     this.controller,
     this.focusNode,
     this.enabled = true,
+    this.capitalization = TextCapitalization.sentences,
   });
 
   final ValueChanged<String> onSend;
-  final VoidCallback onCamera;
+
+  /// Null where a photo can't help (a name, a trade): no camera button.
+  final VoidCallback? onCamera;
   final VoidCallback onVoiceStart;
   final VoidCallback onVoiceCancel;
   final VoidCallback onVoiceSend;
@@ -176,6 +179,7 @@ class Composer extends StatefulWidget {
   final TextEditingController? controller;
   final FocusNode? focusNode;
   final bool enabled;
+  final TextCapitalization capitalization;
 
   @override
   State<Composer> createState() => _ComposerState();
@@ -238,7 +242,7 @@ class _ComposerState extends State<Composer> {
                 enabled: widget.enabled,
                 minLines: 1,
                 maxLines: 5,
-                textCapitalization: TextCapitalization.sentences,
+                textCapitalization: widget.capitalization,
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => _send(),
                 style: AppText.body,
@@ -257,7 +261,7 @@ class _ComposerState extends State<Composer> {
               ),
             ),
           ),
-          if (!hasText)
+          if (!hasText && widget.onCamera != null)
             _RoundAction(
               icon: IconsaxPlusLinear.camera,
               label: 'Add a photo',

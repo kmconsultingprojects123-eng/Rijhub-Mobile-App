@@ -78,6 +78,35 @@ abstract final class AbujaPlaces {
   /// The centre of [area], or of the city when it is unknown or null.
   static GeoPoint centreOf(String? area) => centres[area] ?? city;
 
+  /// Other ways people write an area.
+  static const _aliases = <String, String>{
+    'cbd': 'Central Business District',
+    'area 11': 'Garki Area 11',
+    'wuse ii': 'Wuse 2',
+    'wuse zone': 'Wuse',
+    'lifecamp': 'Life Camp',
+  };
+
+  /// The area an address names ("12 Aminu Kano Crescent, Wuse 2" gives
+  /// "Wuse 2"), the longest when several fit ("Wuse 2", not "Wuse"), or
+  /// null, so nobody is asked for what they already typed.
+  static String? areaIn(String address) {
+    final text = address.toLowerCase();
+    bool names(String name) =>
+        RegExp('(^|[^a-z0-9])${RegExp.escape(name.toLowerCase())}(?![a-z0-9])')
+            .hasMatch(text);
+    String? best;
+    for (final (written, area) in [
+      for (final a in centres.keys) (a, a),
+      for (final e in _aliases.entries) (e.key, e.value),
+    ]) {
+      if (names(written) && (best == null || area.length > best.length)) {
+        best = area;
+      }
+    }
+    return best;
+  }
+
   /// Named places near [point], nearest first, for map labels.
   static List<(String, GeoPoint)> near(GeoPoint point, {double withinKm = 4}) {
     final list = [

@@ -2,16 +2,18 @@
 // what's wrong, "I'm an artisan", or "Look around".
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rijhub/core/widgets/widgets.dart';
+import 'package:rijhub/data/mock/mock_repositories.dart';
 import 'package:rijhub/data/models/models.dart';
 
 import 'support/app_harness.dart';
 
 void main() {
-  appTest('a first open starts with RijHub, not a form', (t) async {
+  appTest('a first open starts with Employi, not a form', (t) async {
     final app = await launch(t, as: As.firstOpen);
 
     expect(find.textContaining('ID-checked artisans'), findsOneWidget);
-    expect(find.textContaining("Hi! I'm RijHub"), findsOneWidget);
+    expect(find.textContaining("Hi! I'm Employi"), findsOneWidget);
     expect(find.text("I'm an artisan"), findsOneWidget);
     expect(find.text('Look around'), findsOneWidget);
     // Nowhere to go back to yet.
@@ -44,7 +46,7 @@ void main() {
     expect(find.bySemanticsLabel('Back'), findsOneWidget);
   });
 
-  appTest('an artisan picks trades, sees this week\'s jobs, and lands on them',
+  appTest('an artisan picks trades, sees the jobs, and joins in the chat',
       (t) async {
     final app = await launch(t, as: As.firstOpen);
 
@@ -59,13 +61,73 @@ void main() {
 
     await tapText(t, 'Show me jobs', then: 3);
     expect(find.textContaining('this week'), findsWidgets);
-    expect(find.textContaining('Free to join'), findsOneWidget);
+    expect(find.textContaining('Joining is free'), findsOneWidget);
 
-    await tapText(t, 'See all', then: 3);
-    expect(find.text('Jobs'), findsWidgets);
+    // Joining is the number, its code and a name, all in the chat.
+    await tapText(t, 'Join free', exact: true, then: 1.5);
+    expect(find.textContaining("What's your phone number?"), findsOneWidget);
+    await t.enterText(find.byType(TextField).last, '8091234599');
+    await tapLabel(t, 'Send code', then: 2);
+    await t.enterText(
+        find
+            .descendant(
+                of: find.byType(OtpCodeField),
+                matching: find.byType(EditableText))
+            .first,
+        '123456');
+    await wait(t, 2.5);
+    // The trades are known, so there's no form: just the name.
+    expect(find.textContaining('as it is on your ID'), findsOneWidget);
+    expect(find.text('What do you do?'), findsNothing);
+
+    await t.enterText(find.byType(TextField).last, 'Emeka Nwosu');
+    await t.testTextInput.receiveAction(TextInputAction.send);
+    await wait(t, 4);
+    expect(app.session.isSignedIn, isTrue);
+    expect(app.session.role, UserRole.artisan);
+    expect(app.session.user!.tradeIds, ['ac', 'generator']);
+    // His home leads with what's left before clients can book him.
+    expect(find.text('Emeka Nwosu'), findsOneWidget);
+    expect(find.text('Get ready for clients'), findsOneWidget);
+  });
+
+  appTest('an artisan can look at the jobs first, as a guest', (t) async {
+    final app = await launch(t, as: As.firstOpen);
+    await tapText(t, "I'm an artisan", then: 2);
+    await tapText(t, 'AC repair', then: 0.5);
+    await tapText(t, 'Show me jobs', then: 3);
+
+    await tapText(t, 'first', then: 3);
     expect(find.text('My trades'), findsOneWidget);
     expect(app.session.role, UserRole.artisan);
-    expect(app.session.guestTrades, ['ac', 'generator']);
+    expect(app.session.isGuest, isTrue);
+    expect(app.session.guestTrades, ['ac']);
+  });
+
+  appTest('an artisan can type the trade, and it is picked for them',
+      (t) async {
+    await launch(t, as: As.firstOpen);
+    await tapText(t, "I'm an artisan", then: 2);
+
+    await t.enterText(find.byType(TextField).last, 'I fix ACs and fridges');
+    await t.testTextInput.receiveAction(TextInputAction.send);
+    await wait(t, 3);
+    expect(find.textContaining('Got it: AC repair.'), findsOneWidget);
+    expect(find.textContaining('this week'), findsWidgets);
+    expect(find.text('Join free'), findsOneWidget);
+  });
+
+  appTest('a trade that isn\'t matched keeps the list to pick from', (t) async {
+    await launch(t, as: As.firstOpen);
+    await tapText(t, "I'm an artisan", then: 2);
+
+    await t.enterText(find.byType(TextField).last, 'I sell things');
+    await t.testTextInput.receiveAction(TextInputAction.send);
+    await wait(t, 2);
+    expect(find.textContaining('Pick the closest'), findsOneWidget);
+    expect(find.text('Join free'), findsNothing);
+    await tapText(t, 'AC repair', then: 0.5);
+    expect(find.text('Show me jobs'), findsOneWidget);
   });
 
   appTest('three trades at most', (t) async {
@@ -89,6 +151,22 @@ void main() {
     expect(find.text('TV & decoder'), findsOneWidget);
   });
 
+  appTest('before any artisan is ID-checked, the welcome skips the count',
+      (t) async {
+    await launch(t, as: As.firstOpen, catalog: _City(artisans: 0));
+
+    expect(find.textContaining('ID-checked artisan'), findsNothing);
+    expect(find.textContaining("Hi! I'm Employi"), findsOneWidget);
+  });
+
+  appTest('one artisan, not yet rated, is counted without a rating', (t) async {
+    await launch(t, as: As.firstOpen, catalog: _City(artisans: 1));
+
+    expect(find.text('1 ID-checked artisan'), findsOneWidget);
+    expect(find.text('across Abuja'), findsOneWidget);
+    expect(find.textContaining('average rating'), findsNothing);
+  });
+
   appTest('later opens go straight home', (t) async {
     await launch(t, as: As.guestClient);
 
@@ -108,4 +186,15 @@ void main() {
     expect(find.text('Best match'), findsOneWidget);
     expect(app.session.hasOnboarded, isTrue);
   });
+}
+
+/// The sample city with [artisans] ID-checked artisans, none rated yet.
+class _City extends MockCatalogRepository {
+  _City({required this.artisans});
+
+  final int artisans;
+
+  @override
+  Future<MarketStats> stats() async =>
+      MarketStats(verifiedArtisans: artisans, averageRating: 0);
 }

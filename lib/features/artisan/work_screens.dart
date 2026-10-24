@@ -9,6 +9,7 @@ import '../../app/auth_gate.dart';
 import '../../app/push.dart';
 import '../../app/routes.dart';
 import '../../app/session.dart';
+import '../../app/live_updates.dart';
 import '../../core/theme/theme.dart';
 import '../../core/utils/category_icons.dart';
 import '../../core/utils/formatters.dart';
@@ -82,8 +83,15 @@ class _RequestViewState extends State<_RequestView> {
   Future<void> _answer(bool accept) async {
     final r = widget.request;
     if (!accept) {
-      final reason = await _declineReason(context);
-      if (reason == null || !mounted) return;
+      // Just a check: the reason chips that were here were never sent.
+      final sure = await confirmSheet(
+        context,
+        title: 'Decline this request?',
+        message: "We'll offer ${r.clientName.split(' ').first} someone else.",
+        confirm: 'Decline',
+        cancel: 'Keep it',
+      );
+      if (!sure || !mounted) return;
     }
     setState(() => _busy = true);
     final repo = context.read<ArtisanDashboardRepository>();
@@ -218,7 +226,7 @@ class _RequestViewState extends State<_RequestView> {
           InfoLine(
               label: 'You receive', value: Naira.format(r.price), strong: true),
           Text(
-            'The client pays RijHub when you accept. You get it as soon as they confirm the job is done.',
+            'The client pays Employi when you accept. You get it as soon as they confirm the job is done.',
             style: AppText.caption.copyWith(color: c.textTertiary),
           ),
         ],
@@ -227,45 +235,49 @@ class _RequestViewState extends State<_RequestView> {
   }
 }
 
-Future<String?> _declineReason(BuildContext context) =>
-    showModalBottomSheet<String>(
-      context: context,
-      useRootNavigator: true,
-      showDragHandle: true,
-      backgroundColor: context.colors.surface,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-              AppSpace.gutter, 0, AppSpace.gutter, AppSpace.gutter),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('Why are you declining?', style: AppText.headline),
-              SizedBox(height: 6.w),
-              Text(
-                  'It helps us send you better requests. The client won\'t see it.',
-                  style: AppText.body
-                      .copyWith(color: context.colors.textSecondary)),
-              SizedBox(height: 14.w),
-              Wrap(
-                spacing: 8.w,
-                children: [
-                  for (final r in const [
-                    "I'm busy then",
-                    'Too far',
-                    'Price too low',
-                    "Not my kind of job"
-                  ])
-                    PromptChip(
-                        label: r, onTap: () => Navigator.of(context).pop(r)),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+// A reason was asked for on every decline but never sent anywhere, so it
+// went (2026-10-23: never collect what isn't used). Kept for if it's
+// ever sent to the API, which accepts one.
+//
+// Future<String?> _declineReason(BuildContext context) =>
+//     showModalBottomSheet<String>(
+//       context: context,
+//       useRootNavigator: true,
+//       showDragHandle: true,
+//       backgroundColor: context.colors.surface,
+//       builder: (context) => SafeArea(
+//         child: Padding(
+//           padding: EdgeInsets.fromLTRB(
+//               AppSpace.gutter, 0, AppSpace.gutter, AppSpace.gutter),
+//           child: Column(
+//             mainAxisSize: MainAxisSize.min,
+//             crossAxisAlignment: CrossAxisAlignment.stretch,
+//             children: [
+//               Text('Why are you declining?', style: AppText.headline),
+//               SizedBox(height: 6.w),
+//               Text(
+//                   'It helps us send you better requests. The client won\'t see it.',
+//                   style: AppText.body
+//                       .copyWith(color: context.colors.textSecondary)),
+//               SizedBox(height: 14.w),
+//               Wrap(
+//                 spacing: 8.w,
+//                 children: [
+//                   for (final r in const [
+//                     "I'm busy then",
+//                     'Too far',
+//                     'Price too low',
+//                     "Not my kind of job"
+//                   ])
+//                     PromptChip(
+//                         label: r, onTap: () => Navigator.of(context).pop(r)),
+//                 ],
+//               ),
+//             ],
+//           ),
+//         ),
+//       ),
+//     );
 
 // ---------------------------------------------------------------- job board
 
@@ -574,6 +586,7 @@ class QuotesList extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     return Loader<List<Quote>>(
+      reloadOn: context.read<LiveUpdates>(),
       load: () => context.read<QuoteRepository>().mine(),
       builder: (context, quotes, reload) => RefreshIndicator(
         color: c.brandStroke,
@@ -675,6 +688,7 @@ class ArtisanJobScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Loader<(JobPost, Quote?)>(
+      reloadOn: context.read<LiveUpdates>(),
       load: () async {
         final quotes = context.read<QuoteRepository>();
         final JobPost job;

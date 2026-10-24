@@ -252,6 +252,109 @@ void main() {
     expect(find.byIcon(IconsaxPlusLinear.sun_1), findsNothing);
     expect(find.byIcon(IconsaxPlusLinear.drop), findsOneWidget);
   });
+
+  group('Pasting a code', () {
+    test('finds the code in what was copied', () {
+      expect(codeInText('953276', 6), '953276');
+      expect(codeInText('953276 is your verification code.', 6), '953276');
+      expect(codeInText('953 276', 6), '953276');
+      expect(codeInText('Code 953276. It expires in 10 minutes.', 6), '953276');
+      expect(codeInText('Start code: 4821', 4), '4821');
+      // A phone number, two different codes, or none: nothing to paste.
+      expect(codeInText('Call 08031234567', 6), isNull);
+      expect(codeInText('953276 or 112233', 6), isNull);
+      expect(codeInText('Lunch at 2?', 6), isNull);
+      expect(codeInText(null, 6), isNull);
+    });
+
+    /// Stands in for the phone's clipboard, holding [copied].
+    void clipboard(WidgetTester t, String? copied) {
+      t.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        return switch (call.method) {
+          'Clipboard.hasStrings' => {'value': copied != null},
+          'Clipboard.getData' => copied == null ? null : {'text': copied},
+          _ => null,
+        };
+      });
+      addTearDown(() => t.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null));
+    }
+
+    testWidgets('fills the boxes from a copied message, and submits',
+        (t) async {
+      clipboard(t, '953276 is your verification code.');
+      final controller = TextEditingController();
+      String? completed;
+      await _pump(
+          t,
+          OtpCodeField(
+              controller: controller,
+              autofocus: false,
+              onCompleted: (code) => completed = code));
+      await t.pump();
+      await t.tap(find.text('Paste code'));
+      await t.pump();
+      expect(controller.text, '953276');
+      expect(completed, '953276');
+    });
+
+    testWidgets('says so when the copy holds no code', (t) async {
+      clipboard(t, 'Lunch at 2?');
+      final controller = TextEditingController();
+      await _pump(t, OtpCodeField(controller: controller, autofocus: false));
+      await t.pump();
+      await t.tap(find.text('Paste code'));
+      await t.pump();
+      expect(find.text('No 6-digit code copied'), findsOneWidget);
+      expect(controller.text, isEmpty);
+      await t.pump(const Duration(seconds: 3));
+      expect(find.text('Paste code'), findsOneWidget);
+    });
+
+    testWidgets('stays out of the way with nothing copied', (t) async {
+      clipboard(t, null);
+      await _pump(t,
+          OtpCodeField(controller: TextEditingController(), autofocus: false));
+      await t.pump();
+      expect(find.text('Paste code'), findsNothing);
+    });
+  });
+
+  group('Ratings', () {
+    testWidgets('no reviews yet reads "New", not a 0.0', (t) async {
+      await _pump(t, const RatingLabel(rating: 0, count: 0));
+
+      expect(find.text('New'), findsOneWidget);
+      expect(find.text('0.0'), findsNothing);
+    });
+
+    testWidgets('a rated artisan shows the rating and the count', (t) async {
+      await _pump(t, const RatingLabel(rating: 4.8, count: 12));
+
+      expect(find.text('4.8'), findsOneWidget);
+      expect(find.text('(12)'), findsOneWidget);
+    });
+  });
+
+  group('Segmented tabs', () {
+    testWidgets('the picked tab fills the track, not just its label',
+        (t) async {
+      await _pump(
+          t,
+          SegmentedTabs(
+              labels: const ['All', 'Pending', 'Completed'],
+              selected: 0,
+              onChanged: (_) {}));
+
+      final track = t.getSize(find.byType(SegmentedTabs));
+      final picked = t.getSize(find
+          .ancestor(of: find.text('All'), matching: find.byType(AnimatedContainer))
+          .first);
+      // The track's height less its padding (4 each side) and border (1).
+      expect(picked.height, closeTo(track.height - 2 * 4.w - 2, 0.5));
+    });
+  });
 }
 
 void _noop() {}

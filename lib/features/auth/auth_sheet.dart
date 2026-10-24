@@ -229,6 +229,7 @@ class _AuthSheetState extends State<_AuthSheet> {
             prompt: widget.prompt,
             initialPhone: _phoneDraft,
             onCodeSent: () => _go(_Stage.code),
+            onNeedsDetails: () => _go(_Stage.details),
           ),
         _Stage.code => AuthCodeStep(
             onChangeNumber: _changeNumber,

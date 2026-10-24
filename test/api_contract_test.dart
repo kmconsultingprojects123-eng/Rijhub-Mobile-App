@@ -136,6 +136,11 @@ void main() {
         await guest.ask.triage(const AskInput(text: 'My AC is leaking water'));
     expect(triage.categoryId, 'ac');
     expect(triage.isUrgent, isTrue);
+    final work = await guest.ask
+        .triage(const AskInput(text: "I'm a plumber looking for work"));
+    expect(work.wantsWork, isTrue);
+    final trades = await guest.ask.trades('plumber and painter');
+    expect(trades.tradeIds, ['plumbing', 'painting']);
 
     final jobs = await guest.jobs.openJobsNearby(area: 'Jabi');
     expect(jobs, isNotEmpty);

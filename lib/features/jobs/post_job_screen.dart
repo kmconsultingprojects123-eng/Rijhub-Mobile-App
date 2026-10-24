@@ -15,7 +15,6 @@ import '../../core/widgets/widgets.dart';
 import '../../data/catalog/trades.dart';
 import '../../data/models/models.dart';
 import '../../data/repositories/repositories.dart';
-import '../account/account_pages.dart';
 import '../location/area_picker_sheet.dart';
 import '../shared/cards.dart';
 import '../shared/page.dart';
@@ -32,7 +31,7 @@ class PostJobScreen extends StatefulWidget {
   State<PostJobScreen> createState() => _PostJobScreenState();
 }
 
-enum _When { asap, week, flexible }
+enum _When { asap, week } // flexible went: it was stored just like week
 
 class _PostJobScreenState extends State<PostJobScreen> {
   final _title = TextEditingController();
@@ -74,11 +73,18 @@ class _PostJobScreenState extends State<PostJobScreen> {
     super.dispose();
   }
 
-  Future<void> _addPhoto() async {
-    final camera = await pickPhotoSource(context);
-    if (camera == null || !mounted) return;
-    final path = await context.read<MediaService>().pickPhoto(camera: camera);
-    if (path != null) setState(() => _photos.add(path));
+  /// Straight to the photos (several at once), or the camera.
+  Future<void> _addPhotos({bool camera = false}) async {
+    final media = context.read<MediaService>();
+    final List<String> picked;
+    if (camera) {
+      final path = await media.pickPhoto(camera: true);
+      picked = [if (path != null) path];
+    } else {
+      picked = await media.pickPhotos();
+    }
+    if (picked.isEmpty || !mounted) return;
+    setState(() => _photos.addAll(picked.take(5 - _photos.length)));
   }
 
   Future<void> _suggestTrade(String title) async {
@@ -226,24 +232,27 @@ class _PostJobScreenState extends State<PostJobScreen> {
                   ],
                 ),
               if (_photos.length < 5)
-                Semantics(
-                  button: true,
-                  label: 'Add a photo',
-                  child: GestureDetector(
-                    onTap: _addPhoto,
-                    child: Container(
-                      width: 76.w,
-                      height: 76.w,
-                      decoration: BoxDecoration(
-                        color: c.surfaceMuted,
-                        borderRadius: BorderRadius.circular(20.w),
-                        border: Border.all(color: c.border),
+                for (final (label, icon, camera) in [
+                  ('Add photos', IconsaxPlusLinear.gallery_add, false),
+                  ('Take a photo', IconsaxPlusLinear.camera, true),
+                ])
+                  Semantics(
+                    button: true,
+                    label: label,
+                    child: GestureDetector(
+                      onTap: () => _addPhotos(camera: camera),
+                      child: Container(
+                        width: 76.w,
+                        height: 76.w,
+                        decoration: BoxDecoration(
+                          color: c.surfaceMuted,
+                          borderRadius: BorderRadius.circular(20.w),
+                          border: Border.all(color: c.border),
+                        ),
+                        child: Icon(icon, size: 24.w, color: c.textSecondary),
                       ),
-                      child: Icon(IconsaxPlusLinear.gallery_add,
-                          size: 24.w, color: c.textSecondary),
                     ),
                   ),
-                ),
             ],
           ),
           SizedBox(height: 4.w),
@@ -301,7 +310,8 @@ class _PostJobScreenState extends State<PostJobScreen> {
               for (final (w, label) in const [
                 (_When.asap, 'As soon as possible'),
                 (_When.week, 'This week'),
-                (_When.flexible, "I'm flexible")
+                // "I'm flexible" was stored just like "This week" (2026-10-23).
+                // (_When.flexible, "I'm flexible"),
               ])
                 PromptChip(
                     label: label,
@@ -309,39 +319,42 @@ class _PostJobScreenState extends State<PostJobScreen> {
                     onTap: () => setState(() => _when = w)),
             ],
           ),
-          SizedBox(height: 18.w),
-          Text('Budget', style: AppText.labelSmall),
-          SizedBox(height: 2.w),
-          Text(
-            _trade == null
-                ? 'Optional. Leave it empty to hear what artisans charge.'
-                : 'Optional. Most ${TextCase.midSentence(Trades.byId(_trade!).name)} jobs cost what artisans quote; leave it empty to see.',
-            style: AppText.bodySmall.copyWith(color: c.textSecondary),
-          ),
-          SizedBox(height: 8.w),
-          Row(
-            children: [
-              Expanded(
-                  child: AppTextField(
-                      controller: _min,
-                      label: 'From',
-                      hint: '₦5,000',
-                      keyboardType: TextInputType.number)),
-              SizedBox(width: 10.w),
-              Expanded(
-                  child: AppTextField(
-                      controller: _max,
-                      label: 'To',
-                      hint: '₦12,000',
-                      keyboardType: TextInputType.number)),
-            ],
-          ),
+          // The budget went (2026-10-23): it was optional, and its own hint said
+          // to leave it empty to hear what artisans charge. A job being edited
+          // keeps the budget it has.
+          // SizedBox(height: 18.w),
+          // Text('Budget', style: AppText.labelSmall),
+          // SizedBox(height: 2.w),
+          // Text(
+          //   _trade == null
+          //       ? 'Optional. Leave it empty to hear what artisans charge.'
+          //       : 'Optional. Most ${TextCase.midSentence(Trades.byId(_trade!).name)} jobs cost what artisans quote; leave it empty to see.',
+          //   style: AppText.bodySmall.copyWith(color: c.textSecondary),
+          // ),
+          // SizedBox(height: 8.w),
+          // Row(
+          //   children: [
+          //     Expanded(
+          //         child: AppTextField(
+          //             controller: _min,
+          //             label: 'From',
+          //             hint: '₦5,000',
+          //             keyboardType: TextInputType.number)),
+          //     SizedBox(width: 10.w),
+          //     Expanded(
+          //         child: AppTextField(
+          //             controller: _max,
+          //             label: 'To',
+          //             hint: '₦12,000',
+          //             keyboardType: TextInputType.number)),
+          //   ],
+          // ),
           SizedBox(height: 18.w),
           InlineNote(
             icon: IconsaxPlusLinear.shield_tick,
             title: 'You pay only when you accept a quote',
             message:
-                'And RijHub holds it until the job is done. Quotes are free.',
+                'And Employi holds it until the job is done. Quotes are free.',
             iconColor: c.success,
           ),
           if (_trade != null) ...[

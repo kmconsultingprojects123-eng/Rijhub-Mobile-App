@@ -56,4 +56,15 @@ void main() {
       expect(auth.deviceToken, isNull);
     });
   });
+
+  group('banners while the app is open', () {
+    test('every push gets one, but not a message for the open chat', () {
+      expect(showsBanner('/booking/b1', openChat: null), isTrue);
+      expect(showsBanner('/booking/b1', openChat: 'c1'), isTrue);
+      expect(showsBanner('/chat/c1', openChat: null), isTrue);
+      expect(showsBanner('/chat/c1', openChat: 'c2'), isTrue);
+      expect(showsBanner('/chat/c1', openChat: 'c1'), isFalse);
+      expect(showsBanner(null, openChat: 'c1'), isTrue);
+    });
+  });
 }

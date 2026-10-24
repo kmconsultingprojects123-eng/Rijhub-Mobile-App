@@ -29,7 +29,9 @@ Future<T?> _sheet<T>(BuildContext context, Widget child) =>
             AppSpace.gutter,
             AppSpace.gutter + MediaQuery.viewInsetsOf(context).bottom,
           ),
-          child: child,
+          // Scrolls when the keyboard leaves too little room (writing a
+          // review), instead of cutting off the button below.
+          child: SingleChildScrollView(child: child),
         ),
       ),
     );

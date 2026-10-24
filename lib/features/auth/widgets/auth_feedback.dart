@@ -91,7 +91,7 @@ String reportUnexpectedAuthError(Object error, StackTrace stackTrace) {
     FlutterErrorDetails(
       exception: error,
       stack: stackTrace,
-      library: 'RijHub sign-in',
+      library: 'Employi sign-in',
       context: ErrorDescription('in the sign-in sheet'),
     ),
   );

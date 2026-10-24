@@ -42,7 +42,7 @@ class MockMarket {
       artisans(area: area).firstWhere(
         (a) => a.id == id,
         orElse: () =>
-            throw const AppException('That artisan is no longer on RijHub.'),
+            throw const AppException('That artisan is no longer on Employi.'),
       );
 
   final _saved = <String?, List<String>>{};
@@ -273,6 +273,35 @@ class MockAskRepository implements AskRepository {
   }
 
   @override
+  Future<TradeReading> trades(String text) async {
+    await _wait(_m.live ? 900 : 300);
+    final t = ' ${text.toLowerCase()} ';
+    final ids = [
+      for (final e in _tradeWords.entries)
+        if (e.value.any(t.contains)) e.key,
+    ];
+    // Sample data can't name work it doesn't know, so it names none.
+    return TradeReading(tradeIds: ids.take(3).toList());
+  }
+
+  static const _tradeWords = {
+    'ac': [' ac', 'air con', 'fridge', 'freezer'],
+    'electrical': ['electric', 'wiring', 'socket'],
+    'plumbing': ['plumb', 'pipe', 'toilet'],
+    'generator': ['generator', ' gen '],
+    'cleaning': ['clean'],
+    'mechanic': ['mechanic', ' car', 'auto'],
+    'solar': ['solar', 'inverter'],
+    'carpentry': ['carpent', 'wood', 'furniture'],
+    'painting': ['paint'],
+    'tailoring': ['tailor', 'sew', 'fashion'],
+    'gardening': ['garden', 'lawn'],
+    'moving': ['moving', 'mover', 'relocat'],
+    'pest': ['pest', 'fumig'],
+    'tv': [' tv', 'decoder', 'dstv', 'satellite'],
+  };
+
+  @override
   Future<Triage> triage(AskInput input, {String? area}) async {
     await _wait(_m.live ? 1100 : 300);
     final words = input.words.isNotEmpty
@@ -288,6 +317,7 @@ class MockAskRepository implements AskRepository {
       isUrgent: t.isUrgent,
       heard: input.voiceNote?.heard,
       confident: t.confident,
+      kind: MarketData.wantsWork(words) ? 'work' : 'problem',
     );
   }
 }
@@ -888,7 +918,7 @@ class MockChatRepository implements ChatRepository {
     if (existing != null) return existing.view;
     final c = _m.startConvo(Conversation(
       id: 'c_support',
-      title: 'RijHub support',
+      title: 'Employi support',
       subtitle: 'Usually replies in 10 minutes',
       online: true,
       updatedAt: _m.now,

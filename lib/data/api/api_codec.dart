@@ -89,6 +89,7 @@ Triage triageFrom(Json j) => Triage(
       isUrgent: _b(j, 'is_urgent'),
       heard: _so(j, 'heard'),
       confident: j['confident'] != false,
+      kind: _so(j, 'kind') ?? 'problem',
     );
 
 // ---------------------------------------------------------------- artisans

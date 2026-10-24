@@ -3,6 +3,7 @@
 // test says otherwise.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rijhub/app/speech.dart';
 import 'package:rijhub/core/widgets/widgets.dart';
 import 'package:rijhub/data/mock/mock_data.dart';
 import 'package:rijhub/data/models/models.dart';
@@ -62,8 +63,7 @@ void main() {
       expect(find.text('Confirmed'), findsOneWidget);
     });
 
-    appTest('declining asks why, so the client hears something kind',
-        (t) async {
+    appTest('declining checks first, and asks for no reason', (t) async {
       await launch(t, as: As.artisan, at: '/requests/r_1');
       expect(
           find.text(
@@ -71,9 +71,8 @@ void main() {
           findsOneWidget);
 
       await tapText(t, 'Decline', exact: true, then: 1);
-      expect(find.byType(PromptChip), findsWidgets);
-      await t.tap(find.byType(PromptChip).first);
-      await wait(t, 0.5);
+      expect(find.text('Decline this request?'), findsOneWidget);
+      expect(find.text('Why are you declining?'), findsNothing);
       await tapText(t, 'Decline', exact: true, then: 2);
 
       expect(find.textContaining('Declined'), findsWidgets);
@@ -179,13 +178,21 @@ void main() {
   });
 
   group('money', () {
-    appTest('the wallet shows what can be withdrawn and where it goes',
-        (t) async {
+    appTest('the wallet says what is waiting and where it goes', (t) async {
       await launch(t, as: As.artisan, at: '/account/wallet');
 
-      expect(find.text('Ready to withdraw'), findsOneWidget);
+      expect(find.text('Waiting to be sent'), findsOneWidget);
       expect(find.text('On hold'), findsOneWidget);
       expect(find.textContaining('GTBank'), findsWidgets);
+      expect(find.text('Withdraw'), findsNothing);
+    });
+
+    appTest('what is waiting goes to the bank in one tap', (t) async {
+      await launch(t, as: As.artisan, at: '/account/wallet');
+
+      await tapText(t, 'Send to my bank', then: 2.5);
+
+      expect(find.textContaining('on its way to your bank'), findsWidgets);
     });
 
     appTest('withdrawing everything in two taps', (t) async {
@@ -274,6 +281,93 @@ void main() {
       expect(find.text('This is how clients see you'), findsOneWidget);
       expect(find.text('Services and prices'), findsOneWidget);
       expect(find.textContaining('Book Emeka'), findsNothing);
+    });
+  });
+
+  group('a new artisan, nothing added yet', () {
+    /// Signs up a new artisan and opens [at].
+    Future<Launched> newArtisan(WidgetTester t, String at) async {
+      final app = await launch(t, as: As.guestArtisan);
+      // The mock's network delays only pass while the test pumps.
+      final created = app.deps.auth.createAccount(
+          phone: '+2348090000001',
+          role: UserRole.artisan,
+          firstName: 'Tunde',
+          lastName: 'Bello',
+          tradeIds: const ['ac']);
+      await wait(t, 1);
+      final signedIn = app.session.signIn(await created);
+      await wait(t, 1);
+      await signedIn;
+      await go(t, at, then: 3);
+      return app;
+    }
+
+    appTest('home leads with the steps to get booked, the next one a button',
+        (t) async {
+      await newArtisan(t, '/home');
+
+      expect(find.text('Get ready for clients'), findsOneWidget);
+      expect(find.text('Getting set up'), findsOneWidget);
+      expect(find.text('0 of 4 done · about 6 minutes left'), findsOneWidget);
+      expect(find.text('Check your ID'), findsOneWidget);
+      expect(
+          find.text(
+              'Clients can book you once your prices and your ID check are done.'),
+          findsOneWidget);
+      // Nothing to switch on, and no "you're available", while clients
+      // can't book yet.
+      expect(find.byType(Switch), findsNothing);
+      expect(find.text('No requests right now'), findsNothing);
+
+      await tapText(t, 'Add your services and prices', then: 2);
+      expect(find.text('Add a service'), findsWidgets);
+    });
+
+    appTest('what clients usually pay guides the first prices', (t) async {
+      await newArtisan(t, '/home');
+
+      await t.scrollUntilVisible(find.text('What clients usually pay'), 300,
+          scrollable: find.byType(Scrollable).first);
+      await wait(t, 0.5);
+      expect(find.text('AC servicing (1 unit)'), findsOneWidget);
+    });
+
+    appTest('the steps are read aloud on request', (t) async {
+      final app = await newArtisan(t, '/home');
+
+      await tapLabel(t, 'Read aloud', then: 0.5);
+
+      expect((app.deps.speaker as SampleSpeaker).said.last,
+          contains('Next: Add your services and prices.'));
+    });
+
+    appTest('work photos open the photos at once, and go straight on',
+        (t) async {
+      await newArtisan(t, '/account/work');
+
+      // The picked photo goes on the profile: no chooser, no caption.
+      expect(find.text('Choose a photo'), findsNothing);
+      expect(find.text('Say what it shows'), findsNothing);
+      expect(find.text('1 on your profile'), findsOneWidget);
+      expect(find.text('Photo added to your profile'), findsOneWidget);
+    });
+
+    appTest('a bank account: the number first, then the banks open', (t) async {
+      await newArtisan(t, '/account/wallet/bank');
+
+      await t.enterText(find.byType(TextField).first, '0123456789');
+      await wait(t, 2);
+
+      expect(find.text('Search banks'), findsOneWidget);
+    });
+
+    appTest('services open on adding the first one', (t) async {
+      await newArtisan(t, '/account/services');
+
+      // The sheet is open over the page.
+      expect(find.text('Add a service'), findsWidgets);
+      expect(find.text('Save'), findsOneWidget);
     });
   });
 }

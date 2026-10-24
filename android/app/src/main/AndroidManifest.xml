@@ -9,7 +9,7 @@
     <!-- Awesome Notifications Permissions -->
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <!-- <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/> -->
 
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
@@ -22,9 +22,26 @@
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <uses-feature android:name="android.hardware.camera.front" android:required="false"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
+    <!-- <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/> -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove"/>
+
+    <!-- Unused by this app, and each makes Google Play ask for a declaration
+         (a video, for foreground services): exact alarms and the old
+         voice-call screen's foreground services, plugins' copies included
+         (2026-10-23). -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" tools:node="remove"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" tools:node="remove"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" tools:node="remove"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" tools:node="remove"/>
+
+    <!-- Reading Employi's messages aloud: lets the app find the phone's
+         speech engine (Android 11 and later). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE"/>
+        </intent>
+    </queries>
 
     <application
         android:label="@string/app_name"
@@ -36,6 +53,14 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="@string/default_notification_channel_id" />
+
+        <!-- Push notifications: the white Employi pin in the status bar, tinted crimson -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_employi" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_crimson" />
 
         <!-- Google Maps API Key -->
         <meta-data
@@ -52,13 +77,27 @@
             android:name="com.google.android.gms.client_id"
             android:value="REPLACE_WITH_WEB_CLIENT_ID.apps.googleusercontent.com" />
 
+        <!-- Flutter's standard activity (2026-10-23). It had lost them:
+             singleTop, so tapping a notification returns to the running app
+             instead of starting a second copy on top; configChanges, so
+             turning the phone or switching dark mode doesn't restart the app;
+             adjustResize, so the keyboard pushes fields up; LaunchTheme for
+             the splash. Gone with them, from the old voice-call screen:
+             android:showOnLockScreen="true" and android:turnScreenOn="true". -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:label=""
-            android:showOnLockScreen="true"
-            android:turnScreenOn="true"
-            >
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- The theme behind the Flutter UI once it has started. -->
+            <meta-data
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
@@ -73,6 +112,12 @@
             android:foregroundServiceType="microphone"
             android:exported="false" />
         -->
+
+        <!-- awesome_notifications only shows banners here; its phone-call
+             foreground service would need a Play declaration. -->
+        <service
+            android:name="me.carda.awesome_notifications.core.services.ForegroundService"
+            tools:node="remove" />
 
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

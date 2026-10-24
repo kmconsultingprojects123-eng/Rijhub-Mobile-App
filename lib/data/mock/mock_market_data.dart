@@ -215,6 +215,26 @@ abstract final class MarketData {
     );
   }
 
+  /// Said by an artisan looking for work, or saying what work they do
+  /// ("I'm a plumber"), not someone with a job.
+  static bool wantsWork(String words) {
+    final newest = ' ${words.split('. ').last.toLowerCase()} ';
+    return const [
+          'looking for work',
+          'looking for a job',
+          'need work',
+          'need a job',
+          'find work',
+          'join as',
+          "i'm an artisan",
+          'i am an artisan',
+        ].any(newest.contains) ||
+        _iAm.hasMatch(newest);
+  }
+
+  static final _iAm = RegExp(
+      r"\b(i'm|i am|i be)\s+(an?\s+)?(\w+\s+)?(plumber|electrician|technician|carpenter|painter|tailor|cleaner|mechanic|gardener|welder|artisan)s?\b");
+
   static String _grouped(int n) {
     final s = n.toString();
     final out = StringBuffer();
@@ -1000,7 +1020,7 @@ abstract final class MarketData {
       AppNotice(
           id: 'n_w',
           kind: NoticeKind.news,
-          title: 'Welcome to RijHub',
+          title: 'Welcome to Employi',
           body:
               'Tell us what needs fixing, and we will find a trusted artisan near you.',
           at: ago(1),
@@ -1166,7 +1186,7 @@ abstract final class MarketData {
     FaqItem(
         id: 'f3',
         topic: 'Getting started',
-        question: 'Where is RijHub available?',
+        question: 'Where is Employi available?',
         answer:
             'Across Abuja: the city and the Area Councils of Abaji, Abuja Municipal, Bwari, Gwagwalada, Kuje and Kwali. More cities are coming.'),
     FaqItem(
@@ -1174,7 +1194,7 @@ abstract final class MarketData {
         topic: 'Booking',
         question: 'How do I find and book an artisan?',
         answer:
-            'On the home screen, tell RijHub what needs fixing: type it, send a photo or record a voice note. We show you what it usually costs and the top-rated artisans who are free near you. Pick one, choose a time and place, and confirm.'),
+            'On the home screen, tell Employi what needs fixing: type it, send a photo or record a voice note. We show you what it usually costs and the top-rated artisans who are free near you. Pick one, choose a time and place, and confirm.'),
     FaqItem(
         id: 'f5',
         topic: 'Booking',
@@ -1204,7 +1224,7 @@ abstract final class MarketData {
         topic: 'Payments',
         question: 'When do I pay, and how is my money protected?',
         answer:
-            'You pay when you book, and RijHub holds the money safely. The artisan gets it only after you confirm the job is done. If you don\'t respond within 48 hours of the artisan finishing, it is released automatically.'),
+            'You pay when you book, and Employi holds the money safely. The artisan gets it only after you confirm the job is done. If you don\'t respond within 48 hours of the artisan finishing, it is released automatically.'),
     FaqItem(
         id: 'f10',
         topic: 'Payments',
@@ -1222,7 +1242,7 @@ abstract final class MarketData {
         topic: 'Safety',
         question: 'How are artisans checked?',
         answer:
-            'Artisans with the verified badge have matched their NIN to a live selfie. Reviews come only from clients who booked and paid through RijHub.'),
+            'Artisans with the verified badge have matched their NIN to a live selfie. Reviews come only from clients who booked and paid through Employi.'),
     FaqItem(
         id: 'f13',
         topic: 'Safety',
@@ -1276,13 +1296,13 @@ abstract final class MarketData {
         topic: 'Your account',
         question: 'I am not getting notifications',
         answer:
-            'Check that notifications are on for RijHub in your phone\'s settings, and in Profile, Settings, Notifications. A weak connection can delay them.'),
+            'Check that notifications are on for Employi in your phone\'s settings, and in Profile, Settings, Notifications. A weak connection can delay them.'),
     FaqItem(
         id: 'f22',
         topic: 'Your account',
         question: 'How do I switch between light and dark?',
         answer:
-            'Go to Profile, Settings, Appearance. By default RijHub follows your phone.'),
+            'Go to Profile, Settings, Appearance. By default Employi follows your phone.'),
     FaqItem(
         id: 'f23',
         topic: 'Your account',
@@ -1294,7 +1314,7 @@ abstract final class MarketData {
         topic: 'Something not working',
         question: 'The app is blank or won\'t load',
         answer:
-            'Check your connection, then close and reopen RijHub. If it still won\'t load, update the app from your app store.'),
+            'Check your connection, then close and reopen Employi. If it still won\'t load, update the app from your app store.'),
     FaqItem(
         id: 't2',
         topic: 'Something not working',

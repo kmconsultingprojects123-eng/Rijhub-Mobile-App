@@ -16,7 +16,6 @@ import '../../data/catalog/trades.dart';
 import '../../data/geo/places.dart';
 import '../../data/models/models.dart';
 import '../../data/repositories/repositories.dart';
-import '../account/account_pages.dart';
 import '../artisan_profile/artisan_profile_screen.dart';
 import '../booking/booking_sheets.dart';
 import '../location/area_picker_sheet.dart';
@@ -24,8 +23,16 @@ import '../shared/page.dart';
 
 // ---------------------------------------------------------------- services
 
-class ServicesScreen extends StatelessWidget {
+class ServicesScreen extends StatefulWidget {
   const ServicesScreen({super.key});
+
+  @override
+  State<ServicesScreen> createState() => _ServicesScreenState();
+}
+
+class _ServicesScreenState extends State<ServicesScreen> {
+  /// With no services yet, the page opens on adding one, the first time.
+  bool _opened = false;
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +63,13 @@ class ServicesScreen extends StatelessWidget {
                 _ServiceSheet(service: s, trades: trades, guide: guide),
           );
           if (changed == true) await reload();
+        }
+
+        if (profile.services.isEmpty && !_opened) {
+          _opened = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) edit(null);
+          });
         }
 
         return PageScaffold(
@@ -127,7 +141,7 @@ class ServicesScreen extends StatelessWidget {
                       ),
                     SizedBox(height: 16.w),
                     Text(
-                      'Prices are what clients pay you. RijHub adds its small fee on top, so you keep your full price.',
+                      'Prices are what clients pay you. Employi adds its small fee on top, so you keep your full price.',
                       style: AppText.bodySmall.copyWith(color: c.textSecondary),
                     ),
                   ],
@@ -328,8 +342,17 @@ class _ServiceSheetState extends State<_ServiceSheet> {
 
 // ---------------------------------------------------------------- work photos
 
-class PortfolioScreen extends StatelessWidget {
+class PortfolioScreen extends StatefulWidget {
   const PortfolioScreen({super.key});
+
+  @override
+  State<PortfolioScreen> createState() => _PortfolioScreenState();
+}
+
+class _PortfolioScreenState extends State<PortfolioScreen> {
+  /// An empty page opens the photos at once, the first time only.
+  bool _opened = false;
+  bool _uploading = false;
 
   @override
   Widget build(BuildContext context) {
@@ -338,30 +361,67 @@ class PortfolioScreen extends StatelessWidget {
       loading: const PageScaffold(title: 'Work photos', body: ListSkeleton()),
       builder: (context, profile, reload) {
         final c = context.colors;
-        Future<void> add() async {
-          final camera = await pickPhotoSource(context);
-          if (camera == null || !context.mounted) return;
+        // Straight from the photos (or the camera) onto the profile: no
+        // chooser and no caption to fill in.
+        Future<void> add({required bool camera}) async {
           final media = context.read<MediaService>();
           final setup = context.read<ArtisanSetupRepository>();
-          final path = await media.pickPhoto(camera: camera);
-          if (path == null || !context.mounted) return;
-          final caption = await _askCaption(context);
-          if (!context.mounted) return;
-          await runAction(
-              context, () => setup.addWorkPhoto(path, caption: caption));
-          await reload();
-          if (context.mounted) {
-            showToast(context, 'Photo added to your profile');
+          final List<String> paths;
+          if (camera) {
+            final path = await media.pickPhoto(camera: true);
+            paths = [if (path != null) path];
+          } else {
+            paths = await media.pickPhotos();
           }
+          if (paths.isEmpty || !context.mounted) return;
+          setState(() => _uploading = true);
+          var added = 0;
+          await runAction(context, () async {
+            for (final path in paths) {
+              await setup.addWorkPhoto(path);
+              added++;
+            }
+          });
+          if (!mounted) return;
+          setState(() => _uploading = false);
+          await reload();
+          if (added > 0 && context.mounted) {
+            showToast(
+                context,
+                added == 1
+                    ? 'Photo added to your profile'
+                    : '$added photos added to your profile');
+          }
+        }
+
+        if (profile.work.isEmpty && !_opened) {
+          _opened = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) add(camera: false);
+          });
         }
 
         return PageScaffold(
           title: 'Work photos',
           subtitle: '${profile.work.length} on your profile',
-          bottom: AppButton(
-              label: 'Add photos',
-              leading: const Icon(IconsaxPlusLinear.gallery_add),
-              onPressed: add),
+          bottom: Row(
+            children: [
+              AppButton(
+                  label: 'Camera',
+                  variant: AppButtonVariant.secondary,
+                  expand: false,
+                  leading: const Icon(IconsaxPlusLinear.camera),
+                  onPressed: _uploading ? null : () => add(camera: true)),
+              SizedBox(width: 10.w),
+              Expanded(
+                child: AppButton(
+                    label: _uploading ? 'Adding…' : 'Add photos',
+                    isLoading: _uploading,
+                    leading: const Icon(IconsaxPlusLinear.gallery_add),
+                    onPressed: _uploading ? null : () => add(camera: false)),
+              ),
+            ],
+          ),
           body: profile.work.isEmpty
               ? const Center(
                   child: EmptyState(
@@ -431,16 +491,16 @@ class PortfolioScreen extends StatelessWidget {
                                             Alignment(w.focusX, w.focusY)),
                                   ),
                                 ),
-                                SizedBox(height: 6.w),
-                                Text(
-                                  w.caption ?? 'No caption',
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppText.bodySmall.copyWith(
-                                      color: w.caption == null
-                                          ? c.textTertiary
-                                          : c.textPrimary),
-                                ),
+                                if (w.caption != null) ...[
+                                  SizedBox(height: 6.w),
+                                  Text(
+                                    w.caption!,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppText.bodySmall
+                                        .copyWith(color: c.textPrimary),
+                                  ),
+                                ],
                               ],
                             ),
                           );
@@ -454,42 +514,45 @@ class PortfolioScreen extends StatelessWidget {
     );
   }
 
-  static Future<String?> _askCaption(BuildContext context) async {
-    final controller = TextEditingController();
-    final caption = await showModalBottomSheet<String>(
-      context: context,
-      useRootNavigator: true,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      backgroundColor: context.colors.surface,
-      builder: (context) => Padding(
-        padding: EdgeInsets.fromLTRB(AppSpace.gutter, 0, AppSpace.gutter,
-            AppSpace.gutter + MediaQuery.viewInsetsOf(context).bottom),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Say what it shows', style: AppText.headline),
-            SizedBox(height: 12.w),
-            AppTextField(
-                controller: controller,
-                label: 'Caption',
-                optional: true,
-                hint: 'Split unit service, Wuse 2',
-                autofocus: true),
-            SizedBox(height: 14.w),
-            AppButton(
-                label: 'Add photo',
-                onPressed: () =>
-                    Navigator.of(context).pop(controller.text.trim())),
-          ],
-        ),
-      ),
-    );
-    controller.dispose();
-    return caption == null || caption.isEmpty ? null : caption;
-  }
+  // Captions were asked for after every photo; work photos now go straight
+  // onto the profile (2026-10-23, fewer taps). Kept for if they come back.
+  //
+  // static Future<String?> _askCaption(BuildContext context) async {
+  //   final controller = TextEditingController();
+  //   final caption = await showModalBottomSheet<String>(
+  //     context: context,
+  //     useRootNavigator: true,
+  //     isScrollControlled: true,
+  //     useSafeArea: true,
+  //     showDragHandle: true,
+  //     backgroundColor: context.colors.surface,
+  //     builder: (context) => Padding(
+  //       padding: EdgeInsets.fromLTRB(AppSpace.gutter, 0, AppSpace.gutter,
+  //           AppSpace.gutter + MediaQuery.viewInsetsOf(context).bottom),
+  //       child: Column(
+  //         mainAxisSize: MainAxisSize.min,
+  //         crossAxisAlignment: CrossAxisAlignment.stretch,
+  //         children: [
+  //           Text('Say what it shows', style: AppText.headline),
+  //           SizedBox(height: 12.w),
+  //           AppTextField(
+  //               controller: controller,
+  //               label: 'Caption',
+  //               optional: true,
+  //               hint: 'Split unit service, Wuse 2',
+  //               autofocus: true),
+  //           SizedBox(height: 14.w),
+  //           AppButton(
+  //               label: 'Add photo',
+  //               onPressed: () =>
+  //                   Navigator.of(context).pop(controller.text.trim())),
+  //         ],
+  //       ),
+  //     ),
+  //   );
+  //   controller.dispose();
+  //   return caption == null || caption.isEmpty ? null : caption;
+  // }
 }
 
 // ---------------------------------------------------------------- work area

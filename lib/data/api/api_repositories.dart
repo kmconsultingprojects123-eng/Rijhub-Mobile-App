@@ -3,6 +3,7 @@ import '../repositories/repositories.dart';
 import 'api_client.dart';
 import 'api_codec.dart';
 import 'api_context.dart';
+import 'phone_verifier.dart';
 import 'uploads.dart';
 
 /// The repositories, backed by the RijHub API. Screens see the same
@@ -13,13 +14,23 @@ import 'uploads.dart';
 // ---------------------------------------------------------------- signing in
 
 class ApiAuthRepository implements AuthRepository {
-  ApiAuthRepository(this._c);
+  ApiAuthRepository(this._c, {PhoneVerifier phone = const NoPhoneVerifier()})
+      : _phone = phone;
 
   final ApiContext _c;
+
+  /// Texts codes when the API leaves that to the app (Firebase).
+  final PhoneVerifier _phone;
+
+  /// Marks a code texted by [_phone]; the rest is its text's name.
+  static const _byPhone = 'firebase:';
 
   /// A number that's verified but has no account yet, waiting for its
   /// details: its sign-up token.
   final _signupTokens = <String, String>{};
+
+  /// Proof for numbers the phone confirmed by itself, until it's used.
+  final _proofs = <String, String>{};
 
   /// The push token this device registered, to drop on signing out.
   String? deviceToken;
@@ -40,21 +51,49 @@ class ApiAuthRepository implements AuthRepository {
       _auth(() async {
         final j = asMap(await _c.api
             .post('/v1/auth/otp', {'phone': phone, 'channel': channel.name}));
+        final number = j['phone']! as String;
+        final resendAt = DateTime.parse(j['resend_at']! as String).toLocal();
+        if (j['via'] == 'firebase') {
+          // The API leaves the text to the app.
+          final sent = await _phone.send(number);
+          final proof = sent.proof;
+          if (proof != null) _proofs[number] = proof;
+          return OtpChallenge(
+            phone: number,
+            channel: OtpChannel.sms,
+            requestId: '$_byPhone${sent.verificationId ?? ''}',
+            resendAvailableAt: resendAt,
+            verified: proof != null,
+          );
+        }
         return OtpChallenge(
-          phone: j['phone']! as String,
+          phone: number,
           channel:
               j['channel'] == 'whatsapp' ? OtpChannel.whatsapp : OtpChannel.sms,
-          requestId: j['phone']! as String,
-          resendAvailableAt:
-              DateTime.parse(j['resend_at']! as String).toLocal(),
+          requestId: number,
+          resendAvailableAt: resendAt,
         );
       });
 
   @override
   Future<VerifyResult> verifyCode(OtpChallenge challenge, String code) =>
       _auth(() async {
-        final j = asMap(await _c.api
-            .post('/v1/auth/verify', {'phone': challenge.phone, 'code': code}));
+        final Json j;
+        if (challenge.requestId.startsWith(_byPhone)) {
+          final proof = challenge.verified
+              ? _proofs.remove(challenge.phone)
+              : await _phone.confirm(
+                  challenge.requestId.substring(_byPhone.length), code);
+          if (proof == null) {
+            throw const AuthException(
+                'That took a while. Ask for a new code to carry on.');
+          }
+          j = asMap(
+              await _c.api.post('/v1/auth/firebase', {'id_token': proof}));
+        } else {
+          j = asMap(await _c.api.post(
+              '/v1/auth/verify', {'phone': challenge.phone, 'code': code}));
+        }
         if (j['status'] == 'new') {
           _signupTokens[challenge.phone] = j['signup_token']! as String;
           return const VerifyResult();
@@ -341,6 +380,17 @@ class ApiAskRepository implements AskRepository {
     final j =
         asMap(await _c.api.post('/v1/ask/transcribe', {'audio_url': url}));
     return j['text']! as String;
+  }
+
+  @override
+  Future<TradeReading> trades(String text) async {
+    final j = asMap(await _c.api.post('/v1/ask/trades', {'text': text}));
+    return TradeReading(
+      tradeIds: [
+        for (final t in (j['trade_ids'] as List?) ?? const []) t as String
+      ],
+      other: j['other'] as String?,
+    );
   }
 
   @override

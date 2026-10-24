@@ -56,7 +56,7 @@ void main() {
       );
     });
 
-    test('a request that never reaches RijHub says so', () async {
+    test('a request that never reaches Employi says so', () async {
       final api =
           await _client((_) async => throw const SocketException('no route'));
       await expectLater(
@@ -177,7 +177,8 @@ void main() {
         "payment": "held", "photos": [], "created_at": "2026-10-18T09:00:00Z"
       }''')));
       expect(booking.scheduledAt.isUtc, isFalse);
-      expect(booking.scheduledAt.toUtc(), DateTime.utc(2026, 10, 19, 9)); // the same moment
+      expect(booking.scheduledAt.toUtc(),
+          DateTime.utc(2026, 10, 19, 9)); // the same moment
       expect(booking.status, BookingStatus.onTheWay);
       expect(booking.payment, PaymentState.held);
       expect(booking.total, 8400);

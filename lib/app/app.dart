@@ -11,12 +11,14 @@ import '../core/theme/theme.dart';
 import '../data/repositories/repositories.dart';
 import 'auth_gate.dart';
 import 'dependencies.dart';
+import 'live_updates.dart';
 import 'location.dart';
 import 'media.dart';
 import 'payments.dart';
 import 'push.dart';
 import 'router.dart';
 import 'session.dart';
+import 'speech.dart';
 
 /// Screens are designed at this size (an iPhone 14-class phone).
 const designSize = Size(390, 844);
@@ -56,6 +58,7 @@ class RijHubApp extends StatefulWidget {
 }
 
 class _RijHubAppState extends State<RijHubApp> {
+  late final _live = LiveUpdates(widget.dependencies.notices.unreadCount());
   late final GoRouter _router = buildRouter(
     widget.session,
     initialLocation: widget.initialLocation,
@@ -83,6 +86,7 @@ class _RijHubAppState extends State<RijHubApp> {
   @override
   void dispose() {
     _router.dispose();
+    _live.dispose();
     super.dispose();
   }
 
@@ -109,12 +113,14 @@ class _RijHubAppState extends State<RijHubApp> {
         Provider<ArtisanSetupRepository>.value(value: d.artisanSetup),
         Provider<SupportRepository>.value(value: d.support),
         Provider<MediaService>.value(value: d.media),
+        Provider<Speaker>.value(value: d.speaker),
         Provider<LocationService>.value(value: d.location),
         Provider<PushPermission>.value(value: d.push),
         Provider<PaymentGateway>.value(value: d.payments),
         Provider<AuthGate>.value(value: widget.authGate),
         ChangeNotifierProvider.value(value: widget.session),
         ChangeNotifierProvider.value(value: widget.authFlow),
+        ChangeNotifierProvider.value(value: _live),
       ],
       // Rebuilds when the window changes size, so the scale stays right
       // after rotation or in split screen.
@@ -129,7 +135,7 @@ class _RijHubAppState extends State<RijHubApp> {
             return ScreenUtilInit(
               designSize: Size(designWidth, designSize.height),
               builder: (context, _) => MaterialApp.router(
-                title: 'RijHub',
+                title: 'Employi',
                 debugShowCheckedModeBanner: false,
                 theme: AppTheme.light(),
                 darkTheme: AppTheme.dark(),

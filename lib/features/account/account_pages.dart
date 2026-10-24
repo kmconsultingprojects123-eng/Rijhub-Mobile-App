@@ -68,51 +68,51 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
-  Future<void> _addCertificate() async {
-    final controller = TextEditingController();
-    final name = await showModalBottomSheet<String>(
-      context: context,
-      useRootNavigator: true,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      backgroundColor: context.colors.surface,
-      builder: (context) => Padding(
-        padding: EdgeInsets.fromLTRB(AppSpace.gutter, 0, AppSpace.gutter,
-            AppSpace.gutter + MediaQuery.viewInsetsOf(context).bottom),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Add a certificate', style: AppText.headline),
-            SizedBox(height: 12.w),
-            AppTextField(
-              controller: controller,
-              label: 'Certificate',
-              hint: 'For example, NABTEB Plumbing',
-              autofocus: true,
-              textCapitalization: TextCapitalization.words,
-            ),
-            SizedBox(height: 14.w),
-            AppButton(
-              label: 'Add',
-              onPressed: () =>
-                  Navigator.of(context).pop(controller.text.trim()),
-            ),
-          ],
-        ),
-      ),
-    );
-    controller.dispose();
-    if (name == null || name.isEmpty || !mounted) return;
-    setState(() => _certificates.add(name));
-  }
+  // Certificates are hidden for now (see the note in build).
+  // Future<void> _addCertificate() async {
+  //   final controller = TextEditingController();
+  //   final name = await showModalBottomSheet<String>(
+  //     context: context,
+  //     useRootNavigator: true,
+  //     isScrollControlled: true,
+  //     useSafeArea: true,
+  //     showDragHandle: true,
+  //     backgroundColor: context.colors.surface,
+  //     builder: (context) => Padding(
+  //       padding: EdgeInsets.fromLTRB(AppSpace.gutter, 0, AppSpace.gutter,
+  //           AppSpace.gutter + MediaQuery.viewInsetsOf(context).bottom),
+  //       child: Column(
+  //         mainAxisSize: MainAxisSize.min,
+  //         crossAxisAlignment: CrossAxisAlignment.stretch,
+  //         children: [
+  //           Text('Add a certificate', style: AppText.headline),
+  //           SizedBox(height: 12.w),
+  //           AppTextField(
+  //             controller: controller,
+  //             label: 'Certificate',
+  //             hint: 'For example, NABTEB Plumbing',
+  //             autofocus: true,
+  //             textCapitalization: TextCapitalization.words,
+  //           ),
+  //           SizedBox(height: 14.w),
+  //           AppButton(
+  //             label: 'Add',
+  //             onPressed: () =>
+  //                 Navigator.of(context).pop(controller.text.trim()),
+  //           ),
+  //         ],
+  //       ),
+  //     ),
+  //   );
+  //   controller.dispose();
+  //   if (name == null || name.isEmpty || !mounted) return;
+  //   setState(() => _certificates.add(name));
+  // }
 
-  Future<void> _pickPhoto() async {
-    final camera = await _photoSource(context);
-    if (camera == null || !mounted) return;
+  /// The photo itself opens the photos; its camera badge, the camera.
+  Future<void> _pickPhoto({bool camera = false}) async {
     final path = await context.read<MediaService>().pickPhoto(camera: camera);
-    if (path != null) setState(() => _photo = path);
+    if (path != null && mounted) setState(() => _photo = path);
   }
 
   String? get _emailError {
@@ -124,9 +124,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _save() async {
-    if (_first.text.trim().isEmpty ||
-        _last.text.trim().isEmpty ||
-        _emailError != null) {
+    // Some people go by one name, so the last name can stay empty.
+    if (_first.text.trim().isEmpty || _emailError != null) {
       setState(() {});
       return;
     }
@@ -163,7 +162,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final area = context.select<SessionController, String?>((s) => s.area);
+    // final area = context.select<SessionController, String?>((s) => s.area);
     return PageScaffold(
       title: 'Edit profile',
       bottom: AppButton(
@@ -187,15 +186,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     Positioned(
                       right: 0,
                       bottom: 0,
-                      child: Container(
-                        width: 34.w,
-                        height: 34.w,
-                        decoration: BoxDecoration(
-                            color: c.brand,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: c.surface, width: 3)),
-                        child: Icon(IconsaxPlusLinear.camera,
-                            size: 16.w, color: c.onBrand),
+                      child: Semantics(
+                        button: true,
+                        label: 'Take a photo',
+                        child: GestureDetector(
+                          onTap: () => _pickPhoto(camera: true),
+                          child: Container(
+                            width: 34.w,
+                            height: 34.w,
+                            decoration: BoxDecoration(
+                                color: c.brand,
+                                shape: BoxShape.circle,
+                                border:
+                                    Border.all(color: c.surface, width: 3)),
+                            child: Icon(IconsaxPlusLinear.camera,
+                                size: 16.w, color: c.onBrand),
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -217,10 +224,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           AppTextField(
             controller: _last,
             label: 'Last name',
+            optional: true,
             textCapitalization: TextCapitalization.words,
             autofillHints: const [AutofillHints.familyName],
-            errorText: _last.text.trim().isEmpty ? 'Add your last name.' : null,
-            onChanged: (_) => setState(() {}),
           ),
           SizedBox(height: 14.w),
           AppTextField(
@@ -244,38 +250,40 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             helperText:
                 'To change your number, contact us from the Help centre.',
           ),
-          SizedBox(height: 14.w),
-          Text('Your area', style: AppText.labelSmall),
-          SizedBox(height: 6.w),
-          Pressable(
-            onTap: () async {
-              final session = context.read<SessionController>();
-              final picked =
-                  await showAreaPicker(context, current: session.area);
-              if (picked != null) await session.setArea(picked);
-            },
-            semanticLabel: 'Area, ${area ?? 'all of Abuja'}. Change',
-            child: Container(
-              height: AppSize.input,
-              padding: EdgeInsets.symmetric(horizontal: 14.w),
-              decoration: BoxDecoration(
-                  color: c.surfaceMuted,
-                  borderRadius: AppRadius.mdAll,
-                  border: Border.all(color: c.inputBorder)),
-              child: Row(
-                children: [
-                  Icon(IconsaxPlusBold.location,
-                      size: 18.w, color: c.brandText),
-                  SizedBox(width: 10.w),
-                  Expanded(
-                      child: Text(area ?? 'All of Abuja',
-                          style: AppText.bodyLarge)),
-                  Icon(IconsaxPlusLinear.arrow_down,
-                      size: 16.w, color: c.textSecondary),
-                ],
-              ),
-            ),
-          ),
+          // Your area: the area pill sets the same value, which never leaves the
+          // phone, so it went (2026-10-23: never ask for what isn't needed).
+          // SizedBox(height: 14.w),
+          // Text('Your area', style: AppText.labelSmall),
+          // SizedBox(height: 6.w),
+          // Pressable(
+          //   onTap: () async {
+          //     final session = context.read<SessionController>();
+          //     final picked =
+          //         await showAreaPicker(context, current: session.area);
+          //     if (picked != null) await session.setArea(picked);
+          //   },
+          //   semanticLabel: 'Area, ${area ?? 'all of Abuja'}. Change',
+          //   child: Container(
+          //     height: AppSize.input,
+          //     padding: EdgeInsets.symmetric(horizontal: 14.w),
+          //     decoration: BoxDecoration(
+          //         color: c.surfaceMuted,
+          //         borderRadius: AppRadius.mdAll,
+          //         border: Border.all(color: c.inputBorder)),
+          //     child: Row(
+          //       children: [
+          //         Icon(IconsaxPlusBold.location,
+          //             size: 18.w, color: c.brandText),
+          //         SizedBox(width: 10.w),
+          //         Expanded(
+          //             child: Text(area ?? 'All of Abuja',
+          //                 style: AppText.bodyLarge)),
+          //         Icon(IconsaxPlusLinear.arrow_down,
+          //             size: 16.w, color: c.textSecondary),
+          //       ],
+          //     ),
+          //   ),
+          // ),
           if (_artisan) ...[
             SizedBox(height: 24.w),
             Text('About you', style: AppText.title),
@@ -303,40 +311,43 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               keyboardType: TextInputType.number,
               hint: 'For example, 6',
             ),
-            SizedBox(height: 14.w),
-            AppTextField(
-              controller: _business,
-              label: 'Business name',
-              optional: true,
-              hint: 'For example, Smart Hands Plumbing',
-              textCapitalization: TextCapitalization.words,
-            ),
-            SizedBox(height: 18.w),
-            Text('Certificates', style: AppText.labelSmall),
-            SizedBox(height: 2.w),
-            Text('Trade certificates clients can trust, by name.',
-                style: AppText.bodySmall.copyWith(color: c.textSecondary)),
-            SizedBox(height: 6.w),
-            Wrap(
-              spacing: 8.w,
-              children: [
-                for (final cert in _certificates)
-                  InputChip(
-                    label: Text(cert, style: AppText.labelSmall),
-                    onDeleted: () => setState(() => _certificates.remove(cert)),
-                    deleteButtonTooltipMessage: 'Remove $cert',
-                    backgroundColor: c.surfaceMuted,
-                    side: BorderSide.none,
-                    shape:
-                        RoundedRectangleBorder(borderRadius: AppRadius.pillAll),
-                  ),
-                PromptChip(
-                  label: 'Add a certificate',
-                  icon: IconsaxPlusLinear.add,
-                  onTap: _addCertificate,
-                ),
-              ],
-            ),
+            // Business name and free-text certificates went (2026-10-23): nobody
+            // checks the certificates, yet clients would read them as credentials,
+            // and a business name isn't needed to book. Saved values are kept.
+            // SizedBox(height: 14.w),
+            // AppTextField(
+            //   controller: _business,
+            //   label: 'Business name',
+            //   optional: true,
+            //   hint: 'For example, Smart Hands Plumbing',
+            //   textCapitalization: TextCapitalization.words,
+            // ),
+            // SizedBox(height: 18.w),
+            // Text('Certificates', style: AppText.labelSmall),
+            // SizedBox(height: 2.w),
+            // Text('Trade certificates clients can trust, by name.',
+            //     style: AppText.bodySmall.copyWith(color: c.textSecondary)),
+            // SizedBox(height: 6.w),
+            // Wrap(
+            //   spacing: 8.w,
+            //   children: [
+            //     for (final cert in _certificates)
+            //       InputChip(
+            //         label: Text(cert, style: AppText.labelSmall),
+            //         onDeleted: () => setState(() => _certificates.remove(cert)),
+            //         deleteButtonTooltipMessage: 'Remove $cert',
+            //         backgroundColor: c.surfaceMuted,
+            //         side: BorderSide.none,
+            //         shape:
+            //             RoundedRectangleBorder(borderRadius: AppRadius.pillAll),
+            //       ),
+            //     PromptChip(
+            //       label: 'Add a certificate',
+            //       icon: IconsaxPlusLinear.add,
+            //       onTap: _addCertificate,
+            //     ),
+            //   ],
+            // ),
           ],
         ],
       ),
@@ -344,41 +355,45 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 }
 
-Future<bool?> _photoSource(BuildContext context) => showModalBottomSheet<bool>(
-      context: context,
-      useRootNavigator: true,
-      showDragHandle: true,
-      backgroundColor: context.colors.surface,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-              AppSpace.gutter, 0, AppSpace.gutter, AppSpace.s16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SelectionCard(
-                icon: IconsaxPlusLinear.camera,
-                title: 'Take a photo',
-                subtitle: 'Use the camera',
-                selected: false,
-                onTap: () => Navigator.of(context).pop(true),
-              ),
-              SizedBox(height: 8.w),
-              SelectionCard(
-                icon: IconsaxPlusLinear.gallery,
-                title: 'Choose a photo',
-                subtitle: 'From your photos',
-                selected: false,
-                onTap: () => Navigator.of(context).pop(false),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-/// Where a photo comes from: true for the camera.
-Future<bool?> pickPhotoSource(BuildContext context) => _photoSource(context);
+// Photos used to start with a camera-or-library sheet. Each place now goes
+// straight to the likelier one and keeps the other one tap away
+// (2026-10-23, fewer taps). Kept for if a chooser is ever wanted again.
+//
+// Future<bool?> _photoSource(BuildContext context) => showModalBottomSheet<bool>(
+//       context: context,
+//       useRootNavigator: true,
+//       showDragHandle: true,
+//       backgroundColor: context.colors.surface,
+//       builder: (context) => SafeArea(
+//         child: Padding(
+//           padding: EdgeInsets.fromLTRB(
+//               AppSpace.gutter, 0, AppSpace.gutter, AppSpace.s16),
+//           child: Column(
+//             mainAxisSize: MainAxisSize.min,
+//             children: [
+//               SelectionCard(
+//                 icon: IconsaxPlusLinear.camera,
+//                 title: 'Take a photo',
+//                 subtitle: 'Use the camera',
+//                 selected: false,
+//                 onTap: () => Navigator.of(context).pop(true),
+//               ),
+//               SizedBox(height: 8.w),
+//               SelectionCard(
+//                 icon: IconsaxPlusLinear.gallery,
+//                 title: 'Choose a photo',
+//                 subtitle: 'From your photos',
+//                 selected: false,
+//                 onTap: () => Navigator.of(context).pop(false),
+//               ),
+//             ],
+//           ),
+//         ),
+//       ),
+//     );
+//
+// /// Where a photo comes from: true for the camera.
+// Future<bool?> pickPhotoSource(BuildContext context) => _photoSource(context);
 
 // ---------------------------------------------------------------- saved
 
@@ -487,25 +502,49 @@ class MyJobsScreen extends StatelessWidget {
 
 // ---------------------------------------------------------------- places
 
-class PlacesScreen extends StatelessWidget {
+class PlacesScreen extends StatefulWidget {
   const PlacesScreen({super.key});
+
+  @override
+  State<PlacesScreen> createState() => _PlacesScreenState();
+}
+
+class _PlacesScreenState extends State<PlacesScreen> {
+  /// With no places yet, the page opens on adding one, the first time.
+  bool _opened = false;
 
   @override
   Widget build(BuildContext context) {
     return Loader<List<SavedPlace>>(
       load: () => context.read<AccountRepository>().places(),
       loading: const PageScaffold(title: 'Places', body: ListSkeleton()),
-      builder: (context, places, reload) => PageScaffold(
+      builder: (context, places, reload) {
+        Future<void> add() async {
+          final saved = await _editPlace(context, null);
+          if (saved) await reload();
+        }
+
+        if (places.isEmpty && !_opened) {
+          _opened = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) add();
+          });
+        }
+        return _places(context, places, reload, add);
+      },
+    );
+  }
+
+  Widget _places(BuildContext context, List<SavedPlace> places,
+          Future<void> Function() reload, Future<void> Function() add) =>
+      PageScaffold(
         title: 'Places',
         subtitle: 'Book faster at the addresses you use',
         bottom: AppButton(
           label: 'Add a place',
           variant: AppButtonVariant.secondary,
           leading: const Icon(IconsaxPlusLinear.location_add),
-          onPressed: () async {
-            final saved = await _editPlace(context, null);
-            if (saved) await reload();
-          },
+          onPressed: add,
         ),
         body: places.isEmpty
             ? const Center(
@@ -571,9 +610,7 @@ class PlacesScreen extends StatelessWidget {
                     ),
                 ],
               ),
-      ),
-    );
-  }
+      );
 
   /// Adds or edits a place; true when something was saved or deleted.
   static Future<bool> _editPlace(
@@ -988,7 +1025,7 @@ class SettingsScreen extends StatelessWidget {
                     onTap: () => context.push(Routes.notificationSettings)),
               SettingsRow(
                   icon: IconsaxPlusLinear.information,
-                  label: 'About RijHub',
+                  label: 'About Employi',
                   onTap: () => context.push(Routes.about)),
               SettingsRow(
                   icon: IconsaxPlusLinear.document_text,
@@ -1023,7 +1060,7 @@ class AboutScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => PageScaffold(
-        title: 'About RijHub',
+        title: 'About Employi',
         body: ListView(
           padding: EdgeInsets.only(top: 8.w, bottom: 24.w),
           children: const [_About()],
@@ -1074,7 +1111,7 @@ class _About extends StatelessWidget {
           const RijHubLogo(height: 32),
           SizedBox(height: 12.w),
           Text(
-            'RijHub connects people in Abuja with skilled, ID-checked artisans: AC technicians, electricians, plumbers, '
+            'Employi connects people in Abuja with skilled, ID-checked artisans: AC technicians, electricians, plumbers, '
             'generator and solar technicians, cleaners and more. Our mission is simple: getting things fixed should be '
             'easy, fair and safe, for clients and for the artisans who do the work.',
             style: AppText.body,
@@ -1204,7 +1241,7 @@ class DeleteAccountScreen extends StatefulWidget {
 }
 
 class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
-  String? _reason;
+  // String? _reason; // see the note above the build's last section
   bool _busy = false;
 
   Future<void> _delete() async {
@@ -1276,31 +1313,33 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
           bullet('Your profile, photo and phone number'),
           bullet('Your saved artisans and places'),
           bullet('Your messages and booking history'),
-          bullet('Money waiting in your wallet: withdraw it first'),
+          bullet('Money waiting in your wallet: send it to your bank first'),
           SizedBox(height: 8.w),
           Text(
             'Receipts we must keep by law stay on our systems, without your name.',
             style: AppText.bodySmall.copyWith(color: c.textSecondary),
           ),
-          SizedBox(height: 24.w),
-          Text('Why are you leaving? (optional)', style: AppText.labelSmall),
-          SizedBox(height: 8.w),
-          Wrap(
-            spacing: 8.w,
-            children: [
-              for (final r in const [
-                'I don\'t need it now',
-                'Too expensive',
-                'Had a bad experience',
-                'Privacy worries',
-                'Something else'
-              ])
-                PromptChip(
-                    label: r,
-                    selected: _reason == r,
-                    onTap: () => setState(() => _reason = r)),
-            ],
-          ),
+          // A reason to leave was asked for but never sent, so it went
+          // (2026-10-23: never collect what isn't used).
+          // SizedBox(height: 24.w),
+          // Text('Why are you leaving? (optional)', style: AppText.labelSmall),
+          // SizedBox(height: 8.w),
+          // Wrap(
+          //   spacing: 8.w,
+          //   children: [
+          //     for (final r in const [
+          //       'I don\'t need it now',
+          //       'Too expensive',
+          //       'Had a bad experience',
+          //       'Privacy worries',
+          //       'Something else'
+          //     ])
+          //       PromptChip(
+          //           label: r,
+          //           selected: _reason == r,
+          //           onTap: () => setState(() => _reason = r)),
+          //   ],
+          // ),
         ],
       ),
     );

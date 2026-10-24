@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/media.dart';
 import '../../app/routes.dart';
+import '../../app/push.dart';
 import '../../core/theme/theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/images.dart';
@@ -45,6 +46,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    OpenChat.id = widget.conversationId;
     _load();
   }
 
@@ -71,6 +73,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    if (OpenChat.id == widget.conversationId) OpenChat.id = null;
     _play?.cancel();
     _scroll.dispose();
     super.dispose();

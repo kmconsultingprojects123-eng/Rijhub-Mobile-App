@@ -23,6 +23,9 @@ abstract interface class AskRepository {
   /// Which trade [input] is about, what the job is called and what it
   /// usually costs in [area].
   Future<Triage> triage(AskInput input, {String? area});
+
+  /// The trades an artisan describes in [text], up to three.
+  Future<TradeReading> trades(String text);
 }
 
 enum ArtisanSort { recommended, nearest, rating, price }

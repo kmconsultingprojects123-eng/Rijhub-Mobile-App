@@ -22,7 +22,7 @@ class AuthPrompt {
   /// A general way in, used by new and returning people alike, such as a
   /// header's "Sign in" or the Profile tab's "Sign in or sign up".
   static const join = AuthPrompt(
-    title: 'Welcome to RijHub',
+    title: 'Welcome to Employi',
     message: "Enter your phone number and we'll text you a code.",
   );
 

@@ -5,8 +5,10 @@ import 'package:flutter/foundation.dart';
 import '../../app/media.dart';
 import '../../app/push.dart';
 import '../../app/session.dart';
+import '../../app/speech.dart';
 import '../../core/utils/formatters.dart';
 import '../../data/catalog/trades.dart';
+import '../../data/geo/places.dart';
 import '../../data/models/models.dart';
 import '../../data/repositories/repositories.dart';
 
@@ -122,7 +124,7 @@ class Reply {
 
 /// What the input at the bottom is waiting for. [none] hides it, for a
 /// step that ends with a button instead ([AskFlow.cta]).
-enum ComposerMode { chat, address, phone, code, name, none }
+enum ComposerMode { chat, address, phone, code, name, trade, none }
 
 /// A big button in place of the input, with an optional line under it.
 @immutable
@@ -134,7 +136,17 @@ class Cta {
 }
 
 /// What happens after the person signs in inside the conversation.
-enum _Pending { book, quotes, priceRequest }
+enum _Pending {
+  book,
+  quotes,
+  priceRequest,
+
+  /// An artisan joining from the welcome: home once signed in.
+  join,
+
+  /// A client who chose an artisan: on to the time once signed in.
+  bookArtisan,
+}
 
 /// The Ask conversation: RijHub reads the problem, shows who can help, and
 /// books or gathers quotes, asking for an account only at the end.
@@ -152,8 +164,10 @@ class AskFlow extends ChangeNotifier {
     required this.jobs,
     required this.catalog,
     required this.push,
+    this.speaker,
     this.onPay,
     this.onPickDay,
+    this.onPickArea,
     this.onOpen,
   });
 
@@ -170,11 +184,17 @@ class AskFlow extends ChangeNotifier {
   final CatalogRepository catalog;
   final PushPermission push;
 
+  /// Reads RijHub's messages aloud while [talking].
+  final Speaker? speaker;
+
   /// Takes payment for [total]; true once paid.
   final Future<bool> Function(int total, String description)? onPay;
 
   /// Lets the person pick a day and time; null when they back out.
   final Future<TimeWindow?> Function()? onPickDay;
+
+  /// Lets the person pick their area; null when they back out.
+  final Future<String?> Function()? onPickArea;
 
   /// Opens an app path (a booking, a job, a list).
   final void Function(String path)? onOpen;
@@ -221,22 +241,89 @@ class AskFlow extends ChangeNotifier {
   /// Asking one artisan for a price for something not on their list.
   bool _askingPrice = false;
 
+  /// RijHub reads its messages aloud, for people who'd rather listen than
+  /// read: unless they turned it off with the speaker button (remembered),
+  /// or came to type. Typing a problem in words turns it off; a voice note
+  /// turns it back on.
+  bool get talking => session.readAloud ?? _talkHere;
+  bool _talkHere = true;
+
   String get _you => session.user?.firstName ?? '';
   String get _areaName => session.area ?? 'Abuja';
 
   void _set(void Function() change) {
     if (_disposed) return;
+    final mine = _mine;
     change();
+    // They've said or picked something new: what RijHub was still saying
+    // is out of date.
+    if (_mine != mine) speaker?.stop();
     notifyListeners();
   }
+
+  int get _mine =>
+      items.where((i) => i is MeText || i is MeVoice || i is MePhoto).length;
 
   @override
   void dispose() {
     _disposed = true;
+    speaker?.stop();
     super.dispose();
   }
 
-  void _say(String text) => _set(() => items.add(BotText(text)));
+  /// RijHub says [text]. Read aloud, [hint] follows it: what to tap, for
+  /// someone who can't read the screen.
+  void _say(String text, {String? hint}) {
+    final item = BotText(text);
+    _set(() => items.add(item));
+    if (talking && !_disposed) {
+      speaker?.say(hint == null ? text : '$text $hint', key: item);
+    }
+  }
+
+  /// Said aloud only, while [talking]: what to tap next.
+  void _hint(String hint) {
+    if (talking && !_disposed) speaker?.say(hint);
+  }
+
+  /// A problem with what they entered, under the input; read aloud too.
+  void _fail(String message) {
+    _set(() => error = message);
+    _hint(message);
+  }
+
+  /// Reads one of RijHub's messages aloud: a tap on it.
+  Future<void> listen(BotText item) async {
+    await speaker?.stop();
+    speaker?.say(item.text, key: item);
+  }
+
+  /// Waits for RijHub to finish what it's saying, [atMost].
+  Future<void> _quiet({Duration atMost = const Duration(seconds: 12)}) async {
+    final s = speaker;
+    if (s == null || !talking || s.saying.value == null) return;
+    final done = Completer<void>();
+    void check() {
+      if (s.saying.value == null && !done.isCompleted) done.complete();
+    }
+
+    s.saying.addListener(check);
+    await done.future.timeout(atMost, onTimeout: () {});
+    s.saying.removeListener(check);
+  }
+
+  /// The speaker button: reading aloud on or off, from now on.
+  Future<void> toggleTalking() async {
+    final on = !talking;
+    await session.setReadAloud(on);
+    if (on) {
+      final last = items.whereType<BotText>().lastOrNull;
+      if (last != null) speaker?.say(last.text, key: last);
+    } else {
+      await speaker?.stop();
+    }
+    _set(() {});
+  }
 
   Future<void> _typing([int ms = 700]) async {
     _set(() => items.add(const BotTyping()));
@@ -247,7 +334,9 @@ class AskFlow extends ChangeNotifier {
   // ---------------------------------------------------------------- start
 
   /// Opens the conversation. With [artisan], it is about booking them.
-  Future<void> start({String? text, Artisan? artisan}) async {
+  /// [talk] is false for someone who came to type.
+  Future<void> start({String? text, Artisan? artisan, bool talk = true}) async {
+    _talkHere = talk;
     if (artisan != null) {
       _artisan = artisan;
       await _offerServicesOf(artisan);
@@ -259,12 +348,16 @@ class AskFlow extends ChangeNotifier {
     }
     _say(
         "Hi${_you.isEmpty ? '' : ' $_you'}! What needs fixing? Type it, send a photo or record a voice note, "
-        "and I'll find a trusted artisan near you.");
+        "and I'll find a trusted artisan near you.",
+        hint: _talkHint);
     _set(() => replies = [
           for (final (label, key) in _problems)
             Reply(label, () => sendText(label), iconKey: key),
         ]);
   }
+
+  static const _talkHint = 'To talk to me, tap the red microphone.';
+  static const _sayItHint = 'Type it, or tap the red microphone and say it.';
 
   static const _problems = [
     ('AC not cooling', 'ac'),
@@ -303,7 +396,16 @@ class AskFlow extends ChangeNotifier {
       replies = const [];
     });
     _service = s;
-    _askWhen();
+    _signUpThenWhen();
+  }
+
+  /// A guest who has chosen who to book signs up now, in the chat, and the
+  /// booking carries on from the time.
+  Future<void> _signUpThenWhen() async {
+    if (!session.isGuest) return _askWhen();
+    _pending = _Pending.bookArtisan;
+    await _askPhone(
+        "Let's book ${_artisan!.firstName}. What's your phone number? I'll text you a code. No password needed.");
   }
 
   // ---------------------------------------------------------------- welcome
@@ -313,12 +415,19 @@ class AskFlow extends ChangeNotifier {
   Future<void> startWelcome() async {
     _set(() => welcome = true);
     final stats = await catalog.stats();
-    _set(() => items.add(BotWelcome(stats)));
+    // "0 ID-checked artisans" would put people off: the card waits for the
+    // first one.
+    if (stats.verifiedArtisans > 0) _set(() => items.add(BotWelcome(stats)));
     await _typing(500);
     _say(
-        "Hi! I'm RijHub. Tell me what needs fixing and I'll find a trusted artisan near you.");
+        "Hi! I'm Employi. Tell me what needs fixing and I'll find a trusted artisan near you.");
     _say(
-        'You pay through RijHub, and we hold your money until the job is done.');
+        'You pay through Employi, and we hold your money until the job is done.');
+    // Artisans open the same app: told their way in too, on screen and
+    // aloud, for one who can't read the button.
+    _say(
+        'Are you an artisan looking for work? Tap "I\'m an artisan" below, or just tell me your trade, like "I\'m a plumber".',
+        hint: _talkHint);
     _set(() => replies = [
           for (final (label, key) in _problems)
             Reply(label, () => sendText(label), iconKey: key),
@@ -344,11 +453,55 @@ class AskFlow extends ChangeNotifier {
       welcome = false;
       items.add(const MeText("I'm an artisan looking for work"));
       replies = const [];
-      mode = ComposerMode.none;
+      mode = ComposerMode.trade;
     });
     await _typing(500);
-    _say("Welcome! What's your trade? Pick up to 3.");
+    _say("Welcome! What's your trade? Type it, or pick up to 3.",
+        hint: 'Or tap the red microphone and say it.');
     _set(() => items.add(const BotTrades()));
+  }
+
+  /// The trade in their own words: matched to the ones Employi covers, or a
+  /// list to pick from when nothing matches. [echo] is false when their
+  /// words are on screen already.
+  Future<void> _readTrades(String text, {bool echo = true}) async {
+    _set(() {
+      if (echo) items.add(MeText(text));
+      replies = const [];
+      items.add(const BotTyping());
+    });
+    final TradeReading reading;
+    try {
+      reading = await ask.trades(text);
+    } on AppException catch (e) {
+      _set(() => items.removeWhere((i) => i is BotTyping));
+      _say(e.message);
+      return;
+    }
+    _set(() => items.removeWhere((i) => i is BotTyping));
+    if (reading.tradeIds.isEmpty) {
+      final other = reading.other?.trim() ?? '';
+      // Said they want work but not the trade: asked, as "I'm an artisan"
+      // does.
+      final picker = items.any((i) => i is BotTrades);
+      _set(() => mode = ComposerMode.trade);
+      if (other.isNotEmpty && other.length <= 30) {
+        _say(
+            "We don't have ${TextCase.midSentence(other)} on Employi yet. Pick the closest from the list, or check back soon.");
+      } else if (picker) {
+        _say(
+            "I couldn't tell which trade that is. Pick the closest from the list.");
+      } else {
+        _say("Welcome! What's your trade? Type it, or pick up to 3.",
+            hint: 'Or tap the red microphone and say it.');
+      }
+      if (!picker) _set(() => items.add(const BotTrades()));
+      return;
+    }
+    _set(() => pickedTrades
+      ..clear()
+      ..addAll(reading.tradeIds.take(3)));
+    await _showJobs(typed: true);
   }
 
   void toggleTrade(String id) {
@@ -363,13 +516,16 @@ class AskFlow extends ChangeNotifier {
     });
   }
 
-  Future<void> _showJobs() async {
+  Future<void> _showJobs({bool typed = false}) async {
+    final names = [for (final id in pickedTrades) Trades.byId(id).name];
     _set(() {
       tradesSent = true;
-      items.add(MeText(
-          [for (final id in pickedTrades) Trades.byId(id).name].join(', ')));
+      mode = ComposerMode.none;
+      // Said in their own words already: no need to say it again for them.
+      if (!typed) items.add(MeText(names.join(', ')));
       replies = const [];
     });
+    if (typed) _say('Got it: ${TextCase.list(names)}.');
     await _typing(600);
     final area = session.area;
     final demand = await Future.wait([
@@ -387,12 +543,29 @@ class AskFlow extends ChangeNotifier {
             '${lows.isEmpty ? '' : ' Most pay ${Naira.range(lows.reduce((a, b) => a < b ? a : b), highs.reduce((a, b) => a > b ? a : b))}.'}');
     _set(() {
       if (found.isNotEmpty) items.add(BotJobsTeaser(jobs: found, area: area));
-      cta = Cta(
-        count == 0 ? 'See jobs' : 'See all $count jobs',
-        _enterAsArtisan,
-        note: 'Free to join. You only add your number to send a quote.',
-      );
     });
+    _say(
+        'Joining is free, right here: your phone number and your name. Then clients can find you.',
+        hint: 'To join, tap the black button.');
+    _set(() => replies = [
+          Reply('Join free', _join, primary: true),
+          Reply(count == 0 ? 'Look around first' : 'See all $count jobs first',
+              _enterAsArtisan),
+        ]);
+  }
+
+  /// Joins as an artisan in the chat: the number, its code and a name. The
+  /// trades are the ones they gave, so nothing else is asked.
+  Future<void> _join() async {
+    _set(() {
+      items.add(const MeText('Join free'));
+      replies = const [];
+    });
+    await session.setGuestTrades(pickedTrades.toList());
+    await session.continueAsGuest(UserRole.artisan);
+    _pending = _Pending.join;
+    await _askPhone(
+        "Great. What's your phone number? I'll text you a code. No password needed.");
   }
 
   Future<void> _enterAsArtisan() async {
@@ -403,9 +576,14 @@ class AskFlow extends ChangeNotifier {
 
   // ---------------------------------------------------------------- input
 
-  Future<void> sendText(String text) async {
+  /// Something said in words: [typed] on the keyboard, or a tap on one of
+  /// the replies.
+  Future<void> sendText(String text, {bool typed = false}) async {
     final t = text.trim();
     if (t.isEmpty) return;
+    // A problem typed in words: they read fine, so RijHub stops reading
+    // aloud.
+    if (typed && mode == ComposerMode.chat) _talkHere = false;
     switch (mode) {
       case ComposerMode.address:
         _set(() {
@@ -413,7 +591,13 @@ class AskFlow extends ChangeNotifier {
           mode = ComposerMode.chat;
         });
         _address = t;
-        _area ??= _areaName;
+        // The area comes from the address ("…, Wuse 2") or the one already
+        // chosen. Only an address that names none is followed by a question.
+        _area ??= AbujaPlaces.areaIn(t) ?? session.area;
+        if (_area == null) {
+          await _askArea();
+          return;
+        }
         await _review();
         return;
       case ComposerMode.phone:
@@ -424,6 +608,9 @@ class AskFlow extends ChangeNotifier {
         return;
       case ComposerMode.name:
         await _saveName(t);
+        return;
+      case ComposerMode.trade:
+        await _readTrades(t);
         return;
       case ComposerMode.chat:
       case ComposerMode.none:
@@ -458,6 +645,11 @@ class AskFlow extends ChangeNotifier {
   }
 
   Future<void> sendPhoto({required bool camera}) async {
+    // A booking or job keeps 5 photos at most.
+    if (_photos.length >= 5) {
+      _say("That's 5 photos, the most for one job.");
+      return;
+    }
     final path = await media.pickPhoto(camera: camera);
     if (path == null) return;
     await _enter(UserRole.client);
@@ -484,6 +676,8 @@ class AskFlow extends ChangeNotifier {
   }
 
   Future<void> startVoice() async {
+    // Quiet first, so the voice note is theirs alone.
+    await speaker?.stop();
     final ok = await media.startRecording();
     if (!ok) {
       _say(
@@ -502,6 +696,8 @@ class AskFlow extends ChangeNotifier {
     final note = await media.stopRecording();
     _set(() => recording = false);
     if (note == null) return;
+    // They talk, so RijHub talks back.
+    _talkHere = true;
     await _enter(UserRole.client);
     final bubble = MeVoice(note);
     _set(() {
@@ -519,11 +715,16 @@ class AskFlow extends ChangeNotifier {
       return;
     }
     _set(() => bubble.note = note.withHeard(heard));
-    _voice = bubble.note;
-    if (mode == ComposerMode.address) {
+    // Said at a step that waits for words (an address, a trade, a name):
+    // it answers that step.
+    if (mode == ComposerMode.address ||
+        mode == ComposerMode.trade ||
+        mode == ComposerMode.name) {
+      _set(() => items.remove(bubble));
       await sendText(heard);
       return;
     }
+    _voice = bubble.note;
     if (_askingPrice) {
       _words.add(heard);
       await _requestPrice();
@@ -548,6 +749,10 @@ class AskFlow extends ChangeNotifier {
       return;
     }
     _set(() => items.removeWhere((i) => i is BotTyping));
+    if (categoryId == null && triage.wantsWork) {
+      await _toArtisan(_words.last);
+      return;
+    }
     if (categoryId != null) {
       final trade = Trades.byId(categoryId);
       triage = Triage(
@@ -578,6 +783,15 @@ class AskFlow extends ChangeNotifier {
     await _showMatches(triage);
   }
 
+  /// Someone who said they want work, not a job done: the artisan welcome,
+  /// with their trade read from what they said.
+  Future<void> _toArtisan(String said) async {
+    _words.clear();
+    _photos.clear();
+    _voice = null;
+    await _readTrades(said, echo: false);
+  }
+
   Future<void> _showMatches(Triage triage) async {
     final area = session.area;
     final found = await artisans.topRatedNearby(
@@ -599,9 +813,14 @@ class AskFlow extends ChangeNotifier {
       replies = [
         Reply('Book ${card.best.firstName}', () => chooseArtisan(card.best),
             primary: true),
-        Reply('Get quotes from all ${found.length}', _getQuotes),
+        Reply(
+            found.length == 1
+                ? 'Get a quote'
+                : 'Get quotes from all ${found.length}',
+            _getQuotes),
       ];
     });
+    _hint('To book ${card.best.firstName}, tap the black button.');
   }
 
   // ---------------------------------------------------------------- booking
@@ -620,13 +839,14 @@ class AskFlow extends ChangeNotifier {
       name: triage?.serviceName ?? a.trade,
       price: a.startingPrice,
     );
-    _askWhen();
+    _signUpThenWhen();
   }
 
   Future<void> _askWhen() async {
     final a = _artisan!;
     await _typing(450);
-    _say('When should ${a.firstName} come?');
+    _say('When should ${a.firstName} come?',
+        hint: 'Tap one of the times at the bottom.');
     _set(() => replies = [
           for (final (label, window) in suggestedWindows(DateTime.now()))
             Reply(label, () => _pickWhen(label, window)),
@@ -645,9 +865,12 @@ class AskFlow extends ChangeNotifier {
     });
     await _typing(450);
     final name = _artisan!.firstName;
-    _say("Where should $name come? Add a landmark so it's easy to find.");
     final places =
         session.isSignedIn ? await account.places() : const <SavedPlace>[];
+    _say("Where should $name come? Add a landmark so it's easy to find.",
+        hint: places.isEmpty
+            ? _sayItHint
+            : 'Tap one of your places at the bottom, or Somewhere else.');
     _set(() {
       replies = [
         for (final p in places)
@@ -661,6 +884,25 @@ class AskFlow extends ChangeNotifier {
       ];
       if (places.isEmpty) mode = ComposerMode.address;
     });
+  }
+
+  /// The address named no area: one tap to pick it.
+  Future<void> _askArea() async {
+    await _typing(400);
+    _say('Which area of Abuja is that in?');
+    Future<void> pick() async {
+      final area = await onPickArea?.call();
+      if (area == null) return;
+      _area = area;
+      _set(() {
+        items.add(MeText(area));
+        replies = const [];
+      });
+      await _review();
+    }
+
+    _set(() => replies = [Reply('Pick the area', pick, primary: true)]);
+    await pick();
   }
 
   Future<void> _pickPlace(SavedPlace p) async {
@@ -698,7 +940,8 @@ class AskFlow extends ChangeNotifier {
   Future<void> _review() async {
     await _typing(500);
     final price = await bookingFlow.price(_booked);
-    _say("Here's your booking:");
+    _say("Here's your booking:",
+        hint: 'Check it, then tap the red Confirm button.');
     _set(() {
       items.add(_summary(price));
       replies = const [];
@@ -808,9 +1051,11 @@ class AskFlow extends ChangeNotifier {
 
   Future<void> _getQuotes() async {
     _set(() {
-      items.add(MeText(_matches.isEmpty
-          ? 'Get quotes'
-          : 'Get quotes from all ${_matches.length}'));
+      items.add(MeText(switch (_matches.length) {
+        0 => 'Get quotes',
+        1 => 'Get a quote',
+        final n => 'Get quotes from all $n',
+      }));
       replies = const [];
     });
     if (session.isGuest) {
@@ -885,14 +1130,14 @@ class AskFlow extends ChangeNotifier {
   Future<void> _askPhone(String why) async {
     authFlow.begin();
     await _typing(450);
-    _say(why);
+    _say(why, hint: 'Type your number at the bottom.');
     _set(() => mode = ComposerMode.phone);
   }
 
   Future<void> _sendPhone(String input) async {
     final national = NigerianPhone.normalize(input);
     if (!NigerianPhone.isValid(national)) {
-      _set(() => error = 'Enter an 11-digit number, like 0803 123 4567.');
+      _fail('Enter an 11-digit number, like 0803 123 4567.');
       return;
     }
     _set(() {
@@ -901,13 +1146,20 @@ class AskFlow extends ChangeNotifier {
       busy = true;
     });
     try {
-      await authFlow.sendCode(national);
-      _set(() {
-        busy = false;
-        mode = ComposerMode.code;
-      });
+      final done = await authFlow.sendCode(national);
+      _set(() => busy = false);
+      if (done != null) {
+        // The phone confirmed the number by itself: no code to type.
+        await _verified(done);
+        return;
+      }
+      _set(() => mode = ComposerMode.code);
       _say(
-          'I sent a 6-digit code to ${NigerianPhone.display(national)}. Type it here.');
+          'I sent a 6-digit code to ${NigerianPhone.display(national)}. Type it here.',
+          hint: "It's in your text messages.");
+    } on AuthException catch (e) {
+      _set(() => busy = false);
+      _say(e.message);
     } on Object {
       _set(() => busy = false);
       _say("I couldn't send the code. Check your connection and try again.");
@@ -915,8 +1167,13 @@ class AskFlow extends ChangeNotifier {
   }
 
   Future<void> resendCode() async {
-    await authFlow.resend();
-    _say('Sent a new code.');
+    try {
+      final done = await authFlow.resend();
+      if (done != null) return _verified(done);
+      _say('Sent a new code.');
+    } on AuthException catch (e) {
+      _say(e.message);
+    }
   }
 
   /// Back to the number, to fix a typo.
@@ -933,25 +1190,34 @@ class AskFlow extends ChangeNotifier {
       final known = await authFlow.verify(code);
       _set(() => busy = false);
       if (known == null) return;
-      if (known) {
-        _set(() => mode = ComposerMode.chat);
-        _say('Welcome back, ${session.user?.firstName}!');
-        await _continue();
-      } else {
-        _set(() => mode = ComposerMode.name);
-        _say("Nice to meet you. What's your name?");
-      }
+      await _verified(known);
     } on AuthException catch (e) {
-      _set(() {
-        busy = false;
-        error = e.message;
-      });
+      _set(() => busy = false);
+      _fail(e.message);
+    }
+  }
+
+  /// The number is proven: on with what they were doing, or their name
+  /// first for a new account.
+  Future<void> _verified(bool known) async {
+    if (known) {
+      _set(() => mode = ComposerMode.chat);
+      _say('Welcome back, ${session.user?.firstName}!');
+      await _continue();
+    } else {
+      _set(() => mode = ComposerMode.name);
+      _say("Nice to meet you. What's your full name, as it is on your ID?",
+          hint: _sayItHint);
     }
   }
 
   Future<void> _saveName(String name) async {
-    if (name.trim().split(RegExp(r'\s+')).length < 2) {
-      _set(() => error = 'Add your first and last name.');
+    // As on their ID: an artisan's is checked against it, and a client's
+    // is what their artisan sees.
+    if (!isFullName(name)) {
+      _fail(name.trim().isEmpty
+          ? 'Add your full name, as it is on your ID.'
+          : 'Add your surname too, as it is on your ID.');
       return;
     }
     _set(() {
@@ -964,7 +1230,9 @@ class AskFlow extends ChangeNotifier {
       busy = false;
       mode = ComposerMode.chat;
     });
-    _say('Thanks, ${session.user?.firstName}. Your account is ready.');
+    _say(_pending == _Pending.join
+        ? "Welcome to Employi, ${session.user?.firstName}! Next, add your prices so clients can book you. It's on your home screen."
+        : 'Thanks, ${session.user?.firstName}. Your account is ready.');
     await _continue();
   }
 
@@ -978,6 +1246,13 @@ class AskFlow extends ChangeNotifier {
         await _postJob();
       case _Pending.priceRequest:
         await _requestPrice();
+      case _Pending.bookArtisan:
+        await _askWhen();
+      case _Pending.join:
+        await Future<void>.delayed(const Duration(milliseconds: 1200));
+        // Heard to the end, first: what to do next.
+        await _quiet();
+        onOpen?.call('/home');
       case null:
         break;
     }
@@ -992,6 +1267,10 @@ class AskFlow extends ChangeNotifier {
 List<(String, TimeWindow)> suggestedWindows(DateTime now) {
   final out = <(String, TimeWindow)>[];
   var start = DateTime(now.year, now.month, now.day, now.hour + 2);
+  // Nothing before 8 AM: artisans' working day.
+  if (start.day == now.day && start.hour < 8) {
+    start = DateTime(now.year, now.month, now.day, 8);
+  }
   if (start.hour.isOdd) start = start.add(const Duration(hours: 1));
   while (out.length < 2 && start.day == now.day && start.hour <= 18) {
     final w =

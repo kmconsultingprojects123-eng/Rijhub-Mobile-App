@@ -8,6 +8,7 @@ import 'package:iconsax_plus/iconsax_plus.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
+import '../../app/live_updates.dart';
 import '../../core/theme/theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/widgets.dart';
@@ -28,12 +29,29 @@ class WalletScreen extends StatefulWidget {
 class _WalletScreenState extends State<WalletScreen> {
   int _tab = 0;
   bool _hidden = false;
+  bool _sending = false;
+
+  /// Sends what's waiting to the bank now, in one tap.
+  Future<void> _send(int amount, Future<void> Function() reload) async {
+    setState(() => _sending = true);
+    try {
+      await context.read<WalletRepository>().withdraw(amount);
+      if (!mounted) return;
+      showToast(context, '${Naira.format(amount)} is on its way to your bank.');
+      await reload();
+    } on AppException catch (e) {
+      if (mounted) showToast(context, e.message, error: true);
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     return Loader<
         (WalletSummary, List<WalletTx>, PayoutAccount?, ArtisanProfile)>(
+      reloadOn: context.read<LiveUpdates>(),
       load: () async {
         final w = context.read<WalletRepository>();
         final r = await Future.wait<Object?>([
@@ -77,38 +95,17 @@ class _WalletScreenState extends State<WalletScreen> {
               padding: EdgeInsets.fromLTRB(
                   AppSpace.gutter, 4.w, AppSpace.gutter, 24.w),
               children: [
-                Container(
-                  padding: EdgeInsets.all(18.w),
-                  decoration: BoxDecoration(
-                      color: c.surfaceStrong,
-                      borderRadius: BorderRadius.circular(22.w)),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Ready to withdraw',
-                          style: AppText.bodySmall.copyWith(
-                              color: c.onSurfaceStrong.withValues(alpha: 0.7))),
-                      SizedBox(height: 4.w),
-                      Text(money(s.available),
-                          style: AppText.display.copyWith(
-                              color: c.onSurfaceStrong,
-                              fontWeight: FontWeight.w800)),
-                      SizedBox(height: 14.w),
-                      AppButton(
-                        label: 'Withdraw',
-                        variant: AppButtonVariant.inverse,
-                        onPressed: s.available <= 0
-                            ? null
-                            : () async {
-                                final done = await context.push<bool>(
-                                    account == null
-                                        ? Routes.payoutAccount
-                                        : Routes.withdraw);
-                                if (done == true) await reload();
-                              },
-                      ),
-                    ],
-                  ),
+                _MoneyCard(
+                  summary: s,
+                  account: account,
+                  money: money,
+                  sending: _sending,
+                  onAddAccount: () async {
+                    final saved =
+                        await context.push<bool>(Routes.payoutAccount);
+                    if (saved == true) await reload();
+                  },
+                  onSend: () => _send(s.available, reload),
                 ),
                 SizedBox(height: 12.w),
                 IntrinsicHeight(
@@ -121,7 +118,7 @@ class _WalletScreenState extends State<WalletScreen> {
                           hint: 'Yours when clients confirm'),
                       SizedBox(width: 10.w),
                       _Stat(
-                          label: 'Earned on RijHub',
+                          label: 'Earned on Employi',
                           value: money(s.earnedTotal),
                           hint: switch (jobs) {
                             0 => 'No jobs yet',
@@ -131,56 +128,52 @@ class _WalletScreenState extends State<WalletScreen> {
                     ],
                   ),
                 ),
-                SizedBox(height: 16.w),
-                Pressable(
-                  onTap: () async {
-                    final saved =
-                        await context.push<bool>(Routes.payoutAccount);
-                    if (saved == true) await reload();
-                  },
-                  semanticLabel: account == null
-                      ? 'Add your bank account'
-                      : 'Bank account, ${account.bank.name} ${account.masked}. Change',
-                  child: Container(
-                    padding: EdgeInsets.all(14.w),
-                    decoration: BoxDecoration(
-                      color: account == null ? c.warningSubtle : c.surface,
-                      borderRadius: BorderRadius.circular(16.w),
-                      border:
-                          account == null ? null : Border.all(color: c.border),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(IconsaxPlusLinear.bank,
-                            size: 22.w,
-                            color: account == null ? c.warning : c.textPrimary),
-                        SizedBox(width: 12.w),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                  account == null
-                                      ? 'Add your bank account'
-                                      : '${account.bank.name} ${account.masked}',
-                                  style: AppText.titleSmall),
-                              Text(
-                                account == null
-                                    ? 'So we can send you your money.'
-                                    : account.accountName,
-                                style: AppText.bodySmall
-                                    .copyWith(color: c.textSecondary),
-                              ),
-                            ],
+                // Where the money goes, to change it. Without an account the
+                // card above asks for one.
+                if (account != null) ...[
+                  SizedBox(height: 16.w),
+                  Pressable(
+                    onTap: () async {
+                      final saved =
+                          await context.push<bool>(Routes.payoutAccount);
+                      if (saved == true) await reload();
+                    },
+                    semanticLabel:
+                        'Bank account, ${account.bank.name} ${account.masked}. Change',
+                    child: Container(
+                      padding: EdgeInsets.all(14.w),
+                      decoration: BoxDecoration(
+                        color: c.surface,
+                        borderRadius: BorderRadius.circular(16.w),
+                        border: Border.all(color: c.border),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(IconsaxPlusLinear.bank,
+                              size: 22.w, color: c.textPrimary),
+                          SizedBox(width: 12.w),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('${account.bank.name} ${account.masked}',
+                                    style: AppText.titleSmall),
+                                Text(
+                                  account.accountName,
+                                  style: AppText.bodySmall
+                                      .copyWith(color: c.textSecondary),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        Text(account == null ? 'Add' : 'Change',
-                            style: AppText.labelSmall
-                                .copyWith(color: c.brandText)),
-                      ],
+                          Text('Change',
+                              style: AppText.labelSmall
+                                  .copyWith(color: c.brandText)),
+                        ],
+                      ),
                     ),
                   ),
-                ),
+                ],
                 SizedBox(height: 22.w),
                 Text('Activity', style: AppText.title),
                 SizedBox(height: 10.w),
@@ -203,6 +196,84 @@ class _WalletScreenState extends State<WalletScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+/// What happened to the artisan's money. Earnings go straight to their
+/// bank when a job is confirmed, so this mostly says where it went; money
+/// still waiting (no bank account yet, or a transfer that failed) gets the
+/// one button that sends it.
+class _MoneyCard extends StatelessWidget {
+  const _MoneyCard({
+    required this.summary,
+    required this.account,
+    required this.money,
+    required this.sending,
+    required this.onAddAccount,
+    required this.onSend,
+  });
+
+  final WalletSummary summary;
+  final PayoutAccount? account;
+  final String Function(int) money;
+  final bool sending;
+  final VoidCallback onAddAccount;
+  final VoidCallback onSend;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final s = summary, a = account;
+    final waiting = s.available > 0;
+    // Earned less what's waiting: sent, or on its way.
+    final sent = (s.earnedTotal - s.available).clamp(0, s.earnedTotal);
+    final (String label, int amount, String note) = switch ((a, waiting)) {
+      (null, _) => (
+          waiting ? 'Waiting to be sent' : 'Paid straight to your bank',
+          waiting ? s.available : sent,
+          "Add your bank account, and we'll send your money there as soon as each job is confirmed."
+        ),
+      (_, true) => (
+          'Waiting to be sent',
+          s.available,
+          'It goes to ${a!.bank.name} ${a.masked} by itself. Send it now if you\'d rather not wait.'
+        ),
+      _ => (
+          'Sent to your bank',
+          sent,
+          'Paid to ${a!.bank.name} ${a.masked} as soon as each job is confirmed.'
+        ),
+    };
+    return Container(
+      padding: EdgeInsets.all(18.w),
+      decoration: BoxDecoration(
+          color: c.surfaceStrong, borderRadius: BorderRadius.circular(22.w)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: AppText.bodySmall
+                  .copyWith(color: c.onSurfaceStrong.withValues(alpha: 0.7))),
+          SizedBox(height: 4.w),
+          Text(money(amount),
+              style: AppText.display.copyWith(
+                  color: c.onSurfaceStrong, fontWeight: FontWeight.w800)),
+          SizedBox(height: 6.w),
+          Text(note,
+              style: AppText.bodySmall
+                  .copyWith(color: c.onSurfaceStrong.withValues(alpha: 0.7))),
+          if (a == null || waiting) ...[
+            SizedBox(height: 14.w),
+            AppButton(
+              label: a == null ? 'Add your bank account' : 'Send to my bank',
+              variant: AppButtonVariant.inverse,
+              isLoading: sending,
+              onPressed: sending ? null : (a == null ? onAddAccount : onSend),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -250,6 +321,7 @@ class PayoutAccountScreen extends StatefulWidget {
 class _PayoutAccountScreenState extends State<PayoutAccountScreen> {
   Bank? _bank;
   final _number = TextEditingController();
+  final _numberFocus = FocusNode();
   String? _name;
   String? _error;
   bool _checking = false;
@@ -261,7 +333,12 @@ class _PayoutAccountScreenState extends State<PayoutAccountScreen> {
   void initState() {
     super.initState();
     context.read<WalletRepository>().payoutAccount().then((a) {
-      if (a == null || !mounted) return;
+      if (!mounted) return;
+      // Nothing saved yet: start typing the number straight away.
+      if (a == null) {
+        _numberFocus.requestFocus();
+        return;
+      }
       setState(() {
         _bank = a.bank;
         _number.text = a.accountNumber;
@@ -274,6 +351,7 @@ class _PayoutAccountScreenState extends State<PayoutAccountScreen> {
   void dispose() {
     _debounce?.cancel();
     _number.dispose();
+    _numberFocus.dispose();
     super.dispose();
   }
 
@@ -283,7 +361,13 @@ class _PayoutAccountScreenState extends State<PayoutAccountScreen> {
       _name = null;
       _error = null;
     });
-    if (_bank == null || _number.text.length != 10) return;
+    if (_number.text.length != 10) return;
+    // The number first, then the bank: its list opens by itself.
+    if (_bank == null) {
+      _numberFocus.unfocus();
+      _pickBank();
+      return;
+    }
     _debounce = Timer(const Duration(milliseconds: 600), _resolve);
   }
 
@@ -347,6 +431,20 @@ class _PayoutAccountScreenState extends State<PayoutAccountScreen> {
         padding:
             EdgeInsets.fromLTRB(AppSpace.gutter, 8.w, AppSpace.gutter, 24.w),
         children: [
+          AppTextField(
+            controller: _number,
+            focusNode: _numberFocus,
+            label: 'Account number',
+            hint: '10 digits',
+            keyboardType: TextInputType.number,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(10)
+            ],
+            errorText: _error,
+            onChanged: (_) => _changed(),
+          ),
+          SizedBox(height: 14.w),
           Text('Bank', style: AppText.labelSmall),
           SizedBox(height: 6.w),
           Pressable(
@@ -377,19 +475,6 @@ class _PayoutAccountScreenState extends State<PayoutAccountScreen> {
                 ],
               ),
             ),
-          ),
-          SizedBox(height: 14.w),
-          AppTextField(
-            controller: _number,
-            label: 'Account number',
-            hint: '10 digits',
-            keyboardType: TextInputType.number,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(10)
-            ],
-            errorText: _error,
-            onChanged: (_) => _changed(),
           ),
           SizedBox(height: 12.w),
           if (_checking)
@@ -443,6 +528,34 @@ class _BankPicker extends StatefulWidget {
 class _BankPickerState extends State<_BankPicker> {
   final _q = TextEditingController();
 
+  /// The banks most people in Nigeria use, first and in this order, so most
+  /// artisans find theirs without searching; the rest follow A to Z.
+  static const _common = [
+    'opay',
+    'moniepoint',
+    'palmpay',
+    'kuda',
+    'guaranty trust',
+    'access bank',
+    'zenith',
+    'first bank',
+    'united bank for africa',
+    'fidelity',
+    'wema',
+    'sterling',
+    'union bank',
+    'ecobank',
+    'stanbic',
+    'first city monument',
+    'polaris',
+  ];
+
+  static int _rank(String bank) {
+    final name = bank.toLowerCase();
+    final i = _common.indexWhere(name.contains);
+    return i < 0 ? _common.length : i;
+  }
+
   @override
   void dispose() {
     _q.dispose();
@@ -454,7 +567,11 @@ class _BankPickerState extends State<_BankPicker> {
     final c = context.colors;
     final q = _q.text.trim().toLowerCase();
     final shown =
-        widget.banks.where((b) => b.name.toLowerCase().contains(q)).toList();
+        widget.banks.where((b) => b.name.toLowerCase().contains(q)).toList()
+          ..sort((a, b) {
+            final r = _rank(a.name).compareTo(_rank(b.name));
+            return r != 0 ? r : a.name.compareTo(b.name);
+          });
     return SizedBox(
       height: MediaQuery.sizeOf(context).height * 0.75,
       child: Column(

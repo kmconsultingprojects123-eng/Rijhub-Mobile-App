@@ -41,6 +41,16 @@ class RatingLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final textColor = color ?? c.textPrimary;
+    // No reviews yet: "New", not a 0.0 that reads as a bad rating.
+    if (count == 0 || rating <= 0) {
+      return Semantics(
+        label: 'New on Employi, no reviews yet',
+        excludeSemantics: true,
+        child: Text('New',
+            style: AppText.caption
+                .copyWith(color: textColor, fontWeight: FontWeight.w600)),
+      );
+    }
     return Semantics(
       label: count == null
           ? 'Rated ${rating.toStringAsFixed(1)} out of 5'

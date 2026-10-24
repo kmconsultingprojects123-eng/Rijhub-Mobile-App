@@ -116,7 +116,7 @@ class _HelpCentreScreenState extends State<HelpCentreScreen> {
                   padding: EdgeInsets.symmetric(horizontal: g),
                   child: LiveBar(
                     leading: const RijHubAvatar(size: 40),
-                    title: 'Talk to RijHub',
+                    title: 'Talk to Employi',
                     subtitle: 'Voice help, any time of day',
                     actionLabel: 'Call',
                     onTap: () => context.push(Routes.voiceSupport),
@@ -153,14 +153,14 @@ class _HelpCentreScreenState extends State<HelpCentreScreen> {
                       onTap: () => launchUrl(Uri(
                           scheme: 'mailto',
                           path: supportEmail,
-                          query: 'subject=Help with RijHub')),
+                          query: 'subject=Help with Employi')),
                     ),
                   ],
                 ),
                 Padding(
                   padding: EdgeInsets.fromLTRB(g, 0, g, 20.w),
                   child: Text(
-                    'Our team is in Monday to Friday 9 AM–6 PM and Saturday 10 AM–4 PM. Talk to RijHub any time.',
+                    'Our team is in Monday to Friday 9 AM–6 PM and Saturday 10 AM–4 PM. Talk to Employi any time.',
                     style: AppText.bodySmall.copyWith(color: c.textSecondary),
                   ),
                 ),
@@ -364,7 +364,7 @@ class _VoiceSupportScreenState extends State<VoiceSupportScreen>
                   onTap: () => Navigator.of(context).pop('email')),
               SizedBox(height: 8.w),
               AppButton(
-                  label: 'Stay with RijHub',
+                  label: 'Stay with Employi',
                   variant: AppButtonVariant.tertiary,
                   onPressed: () => Navigator.of(context).pop()),
             ],
@@ -386,7 +386,7 @@ class _VoiceSupportScreenState extends State<VoiceSupportScreen>
     final left = _limit - elapsed;
     final status = switch (_state) {
       _CallState.connecting => 'Connecting…',
-      _CallState.speaking => 'RijHub is speaking',
+      _CallState.speaking => 'Employi is speaking',
       _CallState.listening =>
         _muted ? 'You are muted' : 'Listening. Go ahead and speak',
       _CallState.ended => 'Call ended',
@@ -441,7 +441,7 @@ class _VoiceSupportScreenState extends State<VoiceSupportScreen>
                 ),
               ),
               SizedBox(height: 24.w),
-              Text('RijHub',
+              Text('Employi',
                   style: AppText.headline.copyWith(color: Colors.white)),
               SizedBox(height: 6.w),
               Semantics(
@@ -599,8 +599,8 @@ class LegalScreen extends StatelessWidget {
         children: [
           Text(
             privacy
-                ? 'How RijHub collects, uses and protects your information, in plain words.'
-                : 'The rules for using RijHub, in plain words. By using RijHub you agree to them.',
+                ? 'How Employi collects, uses and protects your information, in plain words.'
+                : 'The rules for using Employi, in plain words. By using Employi you agree to them.',
             style: AppText.bodyLarge.copyWith(color: c.textSecondary),
           ),
           for (final (i, (title, body)) in sections.indexed) ...[
@@ -630,8 +630,8 @@ class LegalScreen extends StatelessWidget {
 
   static const _terms = [
     (
-      'What RijHub is',
-      'RijHub is a marketplace that connects clients with independent artisans in Abuja. Artisans are not RijHub employees; they set their own prices and do the work. RijHub provides the app, checks identities, holds payments and helps when things go wrong.'
+      'What Employi is',
+      'Employi, powered by RijHub, is a marketplace that connects clients with independent artisans in Abuja. Artisans don\'t work for Employi; they set their own prices and do the work. Employi provides the app, checks identities, holds payments and helps when things go wrong.'
     ),
     (
       'Your account',
@@ -639,11 +639,11 @@ class LegalScreen extends StatelessWidget {
     ),
     (
       'Booking and paying',
-      'When you book, you pay the price shown plus a service fee. RijHub holds the money and releases it to the artisan when you confirm the job is done. If you don\'t confirm or raise a problem within 48 hours of the artisan marking it done, the payment is released automatically.'
+      'When you book, you pay the price shown plus a service fee. Employi holds the money and releases it to the artisan when you confirm the job is done. If you don\'t confirm or raise a problem within 48 hours of the artisan marking it done, the payment is released automatically.'
     ),
     (
       'Fees and fair dealing',
-      'Clients pay a service fee shown before they book. Artisans and clients must not arrange to pay outside RijHub for work found on RijHub; doing so removes payment protection and can close the account.'
+      'Clients pay a service fee shown before they book. Artisans and clients must not arrange to pay outside Employi for work found on Employi; doing so removes payment protection and can close the account.'
     ),
     (
       'Cancellations and refunds',
@@ -659,7 +659,7 @@ class LegalScreen extends StatelessWidget {
     ),
     (
       'Our responsibility',
-      'We work hard to keep RijHub safe and reliable, but the artisan is responsible for their work. Our liability is limited to the fees you paid us for the booking in question, except where the law says otherwise.'
+      'We work hard to keep Employi safe and reliable, but the artisan is responsible for their work. Our liability is limited to the fees you paid us for the booking in question, except where the law says otherwise.'
     ),
     (
       'Changes and contact',
@@ -674,15 +674,15 @@ class LegalScreen extends StatelessWidget {
     ),
     (
       'How we use it',
-      'To match you with artisans or jobs, run bookings and payments, keep RijHub safe, give support, and improve the app. We use your area, not your exact location, unless you share it for a booking.'
+      'To match you with artisans or jobs, run bookings and payments, keep Employi safe, give support, and improve the app. We use your area, not your exact location, unless you share it for a booking.'
     ),
     (
       'Who we share it with',
-      'With the other side of a booking, only what they need (for example, your first name, area and the address once the booking is confirmed). With service providers who help us run RijHub, such as payment and ID-check partners, under contract. With authorities when the law requires.'
+      'With the other side of a booking, only what they need (for example, your first name, area and the address once the booking is confirmed). With service providers who help us run Employi, such as payment and ID-check partners, under contract. With authorities when the law requires.'
     ),
     (
       'Calls and numbers',
-      'Calls about a booking go through a RijHub number, so neither side sees the other\'s own number.'
+      'Calls about a booking go through an Employi number, so neither side sees the other\'s own number.'
     ),
     (
       'How long we keep it',
@@ -694,7 +694,7 @@ class LegalScreen extends StatelessWidget {
     ),
     (
       'Security',
-      'Your data is encrypted in transit, payments are handled by a licensed payment partner, and access inside RijHub is limited to people who need it.'
+      'Your data is encrypted in transit, payments are handled by a licensed payment partner, and access inside Employi is limited to people who need it.'
     ),
   ];
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/widgets.dart';
@@ -72,22 +73,66 @@ class FirebasePush implements PushPermission {
 
   bool _started = false;
 
-  /// Listens for new tokens and opened notifications, then registers this
-  /// phone if it can. Needs Firebase started; without it push stays off.
+  /// The one in use, for taps on the banners it shows.
+  static FirebasePush? _current;
+
+  /// Listens for new tokens, pushes and opened notifications, then
+  /// registers this phone if it can. Needs Firebase started; without it
+  /// push stays off.
   Future<void> start() async {
     if (_started || Firebase.apps.isEmpty) return;
     _started = true;
+    _current = this;
     try {
       final messaging = FirebaseMessaging.instance;
       messaging.onTokenRefresh.listen((_) => unawaited(sync()));
-      FirebaseMessaging.onMessageOpenedApp.listen((m) => unawaited(_open(m)));
+      // Firebase shows nothing while the app is open: the banner is ours.
+      FirebaseMessaging.onMessage.listen((m) => unawaited(_foreground(m)));
+      FirebaseMessaging.onMessageOpenedApp
+          .listen((m) => unawaited(_open(appRouteOf(m.data))));
       final first = await messaging.getInitialMessage();
-      if (first != null) unawaited(_open(first));
+      if (first != null) unawaited(_open(appRouteOf(first.data)));
+      await AwesomeNotifications()
+          .setListeners(onActionReceivedMethod: _bannerTapped);
     } on Object {
       // Push stays off; the rest of the app carries on.
     }
     await sync();
   }
+
+  /// A push while the app is open: shown as a banner, like one that came
+  /// while it was closed. Not for the chat it's about when that's on screen,
+  /// where the message has already appeared.
+  Future<void> _foreground(RemoteMessage message) async {
+    final route = appRouteOf(message.data);
+    final title = message.notification?.title ?? message.data['title'];
+    final body = message.notification?.body ?? message.data['body'];
+    if (title is! String || !showsBanner(route, openChat: OpenChat.id)) return;
+    try {
+      await AwesomeNotifications().createNotification(
+        content: NotificationContent(
+          // Positive and 31-bit; a clash only replaces an older banner.
+          id: DateTime.now().millisecondsSinceEpoch.remainder(1 << 31),
+          channelKey: LocalBanners.channel,
+          title: title,
+          body: body is String ? body : null,
+          payload: {'route': route},
+          category: message.data['kind'] == 'message'
+              ? NotificationCategory.Message
+              : NotificationCategory.Event,
+          wakeUpScreen: true,
+        ),
+      );
+    } on Object {
+      // No banner, but the screens still update live.
+    }
+  }
+
+  @pragma('vm:entry-point')
+  static Future<void> _bannerTapped(ReceivedAction action) async {
+    await _current?._open(action.payload?['route']);
+  }
+
 
   /// Sends this phone's token to the server when someone is signed in and
   /// notifications are allowed. Safe to call any time; never throws.
@@ -115,8 +160,7 @@ class FirebasePush implements PushPermission {
     return messaging.getToken();
   }
 
-  Future<void> _open(RemoteMessage message) async {
-    final route = appRouteOf(message.data);
+  Future<void> _open(String? route) async {
     if (route == null) return;
     // Opened from a notification at launch: wait for the first screen.
     for (var i = 0; i < 50 && navigator.currentContext == null; i++) {
@@ -148,3 +192,51 @@ String? appRouteOf(Map<String, dynamic> data) {
   }
   return route;
 }
+
+/// The conversation on screen, if any (the chat screen keeps it), so its
+/// own messages, which appear in it at once, get no banner.
+abstract final class OpenChat {
+  static String? id;
+}
+
+/// Whether a push for [route] gets a banner while the app is open: always,
+/// except a message for [openChat], the conversation on screen.
+bool showsBanner(String? route, {required String? openChat}) =>
+    route == null || openChat == null || route != '/chat/$openChat';
+
+/// The banners the app shows itself, for pushes that come while it's open.
+/// [channel] is the one every push names (see the API's notifications.py);
+/// MainActivity creates it too, for pushes Android shows by itself.
+abstract final class LocalBanners {
+  static const channel = 'default';
+
+  /// Sets the channel up. Asks for no permission: that waits for a moment
+  /// it's plainly useful (see [PushPermission]).
+  static Future<void> init() async {
+    try {
+      await AwesomeNotifications().initialize(
+        'resource://drawable/ic_stat_employi',
+        [
+          NotificationChannel(
+            channelKey: channel,
+            channelName: 'Bookings and messages',
+            channelDescription: 'Requests, bookings, payments and messages',
+            defaultColor: const Color(0xFFA20025),
+            ledColor: const Color(0xFFA20025),
+            importance: NotificationImportance.High,
+            channelShowBadge: true,
+            playSound: true,
+            enableVibration: true,
+          ),
+        ],
+      );
+    } on Object {
+      // Pushes still come while the app is closed; banners are extra.
+    }
+  }
+}
+
+/// Firebase shows background and closed-app pushes by itself; it only
+/// needs a handler registered (in main) to deliver them.
+@pragma('vm:entry-point')
+Future<void> firebaseBackgroundMessage(RemoteMessage message) async {}

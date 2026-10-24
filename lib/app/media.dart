@@ -18,6 +18,10 @@ abstract interface class MediaService {
   /// local file path. Null when the person cancels or says no.
   Future<String?> pickPhoto({required bool camera});
 
+  /// Photos from the library, as many as the person picks. Empty when they
+  /// cancel or say no.
+  Future<List<String>> pickPhotos();
+
   /// Starts recording. False when the microphone isn't allowed.
   Future<bool> startRecording();
 
@@ -57,6 +61,18 @@ class DeviceMediaService implements MediaService {
     } on Object catch (e) {
       debugPrint('pickPhoto: $e');
       return null;
+    }
+  }
+
+  @override
+  Future<List<String>> pickPhotos() async {
+    try {
+      final files =
+          await _picker.pickMultiImage(maxWidth: 1600, imageQuality: 80);
+      return [for (final f in files) f.path];
+    } on Object catch (e) {
+      debugPrint('pickPhotos: $e');
+      return const [];
     }
   }
 
@@ -172,6 +188,9 @@ class SampleMediaService implements MediaService {
 
   @override
   Future<String?> pickPhoto({required bool camera}) async => photo;
+
+  @override
+  Future<List<String>> pickPhotos() async => [photo];
 
   @override
   Future<bool> startRecording() async => _recording = true;

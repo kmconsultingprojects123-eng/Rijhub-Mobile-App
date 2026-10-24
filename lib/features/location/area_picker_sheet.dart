@@ -109,7 +109,7 @@ class _AreaPickerSheetState extends State<AreaPickerSheet> {
       setState(() {
         _locating = false;
         _locateProblem =
-            'You seem to be outside Abuja. RijHub serves Abuja for now, so pick an area below.';
+            'You seem to be outside Abuja. Employi serves Abuja for now, so pick an area below.';
       });
       return;
     }
@@ -269,7 +269,7 @@ class _AreaPickerSheetState extends State<AreaPickerSheet> {
                       child: InlineNote(
                         icon: IconsaxPlusLinear.location,
                         title: 'No areas match "${_query.trim()}"',
-                        message: 'RijHub serves Abuja for now. Check the '
+                        message: 'Employi serves Abuja for now. Check the '
                             'spelling, or pick the area closest to you.',
                       ),
                     );

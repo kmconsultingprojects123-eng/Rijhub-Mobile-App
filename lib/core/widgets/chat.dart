@@ -30,6 +30,7 @@ class ChatBubble extends StatelessWidget {
     required this.text,
     this.mine = false,
     this.meta,
+    this.trailing,
   });
 
   final String text;
@@ -38,9 +39,26 @@ class ChatBubble extends StatelessWidget {
   /// A time or "Seen" under the bubble.
   final String? meta;
 
+  /// Beside the bubble, at its foot: a sign it's being read aloud.
+  final Widget? trailing;
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final bubble = Container(
+      constraints: BoxConstraints(maxWidth: _maxBubble(context)),
+      padding: EdgeInsets.fromLTRB(14.w, 10.w, 14.w, 10.w),
+      decoration: BoxDecoration(
+        color: mine ? c.brand : c.surfaceMuted,
+        borderRadius: _bubbleRadius(mine),
+      ),
+      child: Text(
+        text,
+        style: AppText.body.copyWith(
+          color: mine ? c.onBrand : c.textPrimary,
+        ),
+      ),
+    );
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Padding(
@@ -49,20 +67,14 @@ class ChatBubble extends StatelessWidget {
           crossAxisAlignment:
               mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            Container(
-              constraints: BoxConstraints(maxWidth: _maxBubble(context)),
-              padding: EdgeInsets.fromLTRB(14.w, 10.w, 14.w, 10.w),
-              decoration: BoxDecoration(
-                color: mine ? c.brand : c.surfaceMuted,
-                borderRadius: _bubbleRadius(mine),
+            if (trailing == null)
+              bubble
+            else
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [bubble, trailing!],
               ),
-              child: Text(
-                text,
-                style: AppText.body.copyWith(
-                  color: mine ? c.onBrand : c.textPrimary,
-                ),
-              ),
-            ),
             if (meta != null)
               Padding(
                 padding: EdgeInsets.only(top: 3.w, left: 4.w, right: 4.w),
@@ -383,7 +395,7 @@ class _TypingBubbleState extends State<TypingBubble>
     return Align(
       alignment: Alignment.centerLeft,
       child: Semantics(
-        label: 'RijHub is typing',
+        label: 'Employi is typing',
         child: Container(
           margin: EdgeInsets.only(bottom: 8.w),
           padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.w),

@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../app/auth_gate.dart';
 import '../../app/routes.dart';
 import '../../app/session.dart';
+import '../../app/live_updates.dart';
 import '../../core/theme/theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/widgets/widgets.dart';
@@ -135,7 +136,7 @@ class _ClientBookingsState extends State<_ClientBookings> {
               // Everything still to happen in one list: jobs waiting on
               // quotes first (they need you), then booked work.
               Loader<(List<ClientJob>, List<Booking>)>(
-                reloadOn: session,
+                reloadOn: Listenable.merge([session, context.read<LiveUpdates>()]),
                 load: () async {
                   final r = await Future.wait<Object>([
                     context.read<ClientJobRepository>().mine(),
@@ -164,8 +165,8 @@ class _ClientBookingsState extends State<_ClientBookings> {
                             icon: IconsaxPlusLinear.calendar_tick,
                             title: 'Nothing coming up',
                             message:
-                                'Tell RijHub what needs fixing, and book a trusted artisan in minutes.',
-                            action: 'Ask RijHub',
+                                'Tell Employi what needs fixing, and book a trusted artisan in minutes.',
+                            action: 'Ask Employi',
                             onAction: () => context.push(Routes.ask),
                           )
                         : ListView(
@@ -204,7 +205,7 @@ class _ClientBookingsState extends State<_ClientBookings> {
                 },
               ),
               Loader<List<Booking>>(
-                reloadOn: session,
+                reloadOn: Listenable.merge([session, context.read<LiveUpdates>()]),
                 load: () => context
                     .read<BookingFlowRepository>()
                     .past(as: UserRole.client),
@@ -405,7 +406,7 @@ class _ScheduleViewState extends State<ScheduleView> {
         Expanded(
           child: _tab == 0
               ? Loader<List<Booking>>(
-                  reloadOn: session,
+                  reloadOn: Listenable.merge([session, context.read<LiveUpdates>()]),
                   load: () => context
                       .read<BookingRepository>()
                       .upcoming(as: UserRole.artisan),
@@ -482,7 +483,7 @@ class _ScheduleViewState extends State<ScheduleView> {
                   },
                 )
               : Loader<List<Booking>>(
-                  reloadOn: session,
+                  reloadOn: Listenable.merge([session, context.read<LiveUpdates>()]),
                   load: () => context
                       .read<BookingFlowRepository>()
                       .past(as: UserRole.artisan),

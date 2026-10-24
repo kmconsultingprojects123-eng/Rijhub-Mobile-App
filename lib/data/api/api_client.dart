@@ -43,7 +43,7 @@ class ApiClient {
   Completer<bool?>? _refreshing;
 
   static const _offline = ApiException(
-      "You're offline, or RijHub can't be reached. Check your connection and try again.",
+      "You're offline, or Employi can't be reached. Check your connection and try again.",
       code: 'offline');
 
   Stream<void> get sessionEnded => _ended.stream;
@@ -105,7 +105,7 @@ class ApiClient {
           await _http.send(request).timeout(timeout));
     } on TimeoutException {
       throw const ApiException(
-          "RijHub is taking too long to answer. Try again in a moment.",
+          "Employi is taking too long to answer. Try again in a moment.",
           code: 'offline');
     } on SocketException {
       throw _offline;

@@ -29,6 +29,7 @@ class SessionController extends ChangeNotifier {
   static const _themeKey = 'session.theme';
   static const _guestTradesKey = 'session.guestTrades';
   static const _pushAskedKey = 'session.pushAsked';
+  static const _readAloudKey = 'session.readAloud';
 
   final SharedPreferences _prefs;
   final AuthRepository _auth;
@@ -57,6 +58,15 @@ class SessionController extends ChangeNotifier {
   bool get pushAsked => _prefs.getBool(_pushAskedKey) ?? false;
 
   Future<void> markPushAsked() => _prefs.setBool(_pushAskedKey, true);
+
+  /// Whether the Ask chat reads its messages aloud, once the person has
+  /// chosen with its speaker button; null until then.
+  bool? get readAloud => _prefs.getBool(_readAloudKey);
+
+  Future<void> setReadAloud(bool on) async {
+    await _prefs.setBool(_readAloudKey, on);
+    notifyListeners();
+  }
 
   /// The trades jobs are shown for: the account's, else those picked
   /// while looking around.
@@ -262,7 +272,10 @@ class AuthFlowController extends ChangeNotifier {
     _codeSentAt = DateTime.now();
   }
 
-  Future<void> sendCode(
+  /// Sends a code; null once it's on its way. When the phone confirmed the
+  /// number by itself (Android can), there's nothing to type: true when that
+  /// signed the person in, false when they go on to add their details.
+  Future<bool?> sendCode(
     String nationalNumber, {
     OtpChannel channel = OtpChannel.sms,
   }) async {
@@ -272,15 +285,16 @@ class AuthFlowController extends ChangeNotifier {
       NigerianPhone.toE164(nationalNumber),
       channel: channel,
     );
-    if (attempt != _attempt) return;
+    if (attempt != _attempt) return null;
     challenge = sent;
     _codeSentAt = DateTime.now();
     draftCode = '';
     needsDetails = false;
     notifyListeners();
+    return sent.verified ? verify('') : null;
   }
 
-  Future<void> resend({OtpChannel? channel}) => sendCode(
+  Future<bool?> resend({OtpChannel? channel}) => sendCode(
         phone!,
         channel: channel ?? challenge?.channel ?? OtpChannel.sms,
       );

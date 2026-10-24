@@ -61,6 +61,9 @@ class _AuthCodeStepState extends State<AuthCodeStep> {
   /// A confirmation, such as where a new code went.
   String? _notice;
 
+  /// Whether the code went by WhatsApp, which shows what to look for.
+  late bool _viaWhatsApp;
+
   /// The digits last seen, to tell edits apart from caret moves.
   late String _digits;
 
@@ -76,6 +79,7 @@ class _AuthCodeStepState extends State<AuthCodeStep> {
     // Non-breaking spaces keep the number on one line.
     _phoneDisplay = _flow.phoneDisplay!.replaceAll(' ', '\u00A0');
     _resendAt = _flow.challenge!.resendAvailableAt;
+    _viaWhatsApp = _flow.challenge!.channel == OtpChannel.whatsapp;
     _digits = _flow.draftCode;
     _code = TextEditingController(text: _digits)..addListener(_onCodeChanged);
     _startCooldown();
@@ -185,8 +189,15 @@ class _AuthCodeStepState extends State<AuthCodeStep> {
       _notice = null;
     });
     try {
-      await _flow.resend(channel: channel);
+      final done = await _flow.resend(channel: channel);
       if (!mounted) return;
+      if (done != null) {
+        // Confirmed with no code to type: signed in (the sheet finishes by
+        // itself), or on to the details.
+        _setRequest(() => _resending = false);
+        if (!done) widget.onNeedsDetails();
+        return;
+      }
       final edited = _code.text != typed;
       // What was there belongs to the old code, which no longer works.
       if (!edited) _code.clear();
@@ -194,9 +205,13 @@ class _AuthCodeStepState extends State<AuthCodeStep> {
         _resending = false;
         _resendAt = _flow.challenge!.resendAvailableAt;
         _startCooldown();
-        _notice = channel == OtpChannel.whatsapp
-            ? 'Check WhatsApp for your code.'
-            : 'New code sent to $_phoneDisplay.';
+        // Where it really went: when WhatsApp fails, the code is texted.
+        _viaWhatsApp = _flow.challenge!.channel == OtpChannel.whatsapp;
+        _notice = _viaWhatsApp
+            ? null
+            : channel == OtpChannel.whatsapp
+                ? "WhatsApp didn't work, so we texted the code to $_phoneDisplay."
+                : 'New code sent to $_phoneDisplay.';
       });
       _focus.requestFocus();
       if (edited) {
@@ -272,6 +287,10 @@ class _AuthCodeStepState extends State<AuthCodeStep> {
           if (error != null || notice != null) ...[
             SizedBox(height: AppSpace.s12),
             AuthStatusLine(message: error ?? notice!, isError: error != null),
+          ],
+          if (_viaWhatsApp) ...[
+            SizedBox(height: AppSpace.s12),
+            const _WhatsAppExample(),
           ],
           SizedBox(height: AppSpace.s8),
           _ResendRow(
@@ -396,6 +415,41 @@ class _ResendAction extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// What a code on WhatsApp looks like. Flutterwave sends it for us, so the
+/// message carries their name, not ours; seeing it here first means nobody
+/// waits for a message from Employi.
+class _WhatsAppExample extends StatelessWidget {
+  const _WhatsAppExample();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const AuthStatusLine(
+          message: 'Check WhatsApp for a message from Flutterwave:',
+          isError: false,
+        ),
+        SizedBox(height: AppSpace.s8),
+        Container(
+          width: 240.w,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            borderRadius: AppRadius.mdAll,
+            border: Border.all(color: c.border),
+          ),
+          child: Image.asset(
+            'assets/images/whatsapp_code_example.webp',
+            semanticLabel: 'Example: a WhatsApp message from Flutterwave, '
+                'your code followed by "is your verification code."',
+          ),
+        ),
+      ],
     );
   }
 }

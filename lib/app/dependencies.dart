@@ -13,7 +13,9 @@ import '../data/mock/mock_market.dart';
 import 'location.dart';
 import 'media.dart';
 import 'payments.dart';
+import 'phone_sign_in.dart';
 import 'push.dart';
+import 'speech.dart';
 import '../data/mock/mock_repositories.dart';
 import '../data/repositories/repositories.dart';
 
@@ -42,6 +44,7 @@ class AppDependencies {
     required this.media,
     required this.location,
     required this.push,
+    required this.speaker,
     this.payments = const SamplePaymentGateway(),
     this.sessionEnded = const Stream.empty(),
     this.hasSession = _always,
@@ -61,12 +64,14 @@ class AppDependencies {
     MediaService? media,
     LocationService? location,
     PushPermission? push,
+    CatalogRepository? catalog,
+    Speaker? speaker,
   }) {
     final accounts = MockAccounts();
     final market = MockMarket(accounts, live: live);
     return AppDependencies(
       auth: MockAuthRepository(accounts: accounts),
-      catalog: MockCatalogRepository(),
+      catalog: catalog ?? MockCatalogRepository(),
       artisans: MockArtisanRepository(accounts: accounts),
       jobs: MockJobRepository(accounts: accounts),
       bookings: MockBookingRepository(accounts: accounts),
@@ -85,6 +90,7 @@ class AppDependencies {
       media: media ?? DeviceMediaService(),
       location: location ?? DeviceLocationService(),
       push: push ?? DevicePushPermission(),
+      speaker: speaker ?? DeviceSpeaker(),
     );
   }
 
@@ -98,6 +104,7 @@ class AppDependencies {
     MediaService? media,
     LocationService? location,
     PushPermission? push,
+    Speaker? speaker,
   }) {
     final api =
         ApiClient(baseUrl: baseUrl, tokens: tokens ?? SecureTokenStore());
@@ -108,7 +115,7 @@ class AppDependencies {
       live: Realtime(api),
       checkout: payments.checkout,
     );
-    final auth = ApiAuthRepository(c);
+    final auth = ApiAuthRepository(c, phone: FirebasePhoneVerifier());
     final notifications = FirebasePush(
       permission: push ?? DevicePushPermission(),
       register: auth.registerDevice,
@@ -137,6 +144,7 @@ class AppDependencies {
       media: media ?? DeviceMediaService(),
       location: location ?? DeviceLocationService(),
       push: notifications,
+      speaker: speaker ?? DeviceSpeaker(),
       payments: payments,
       sessionEnded: api.sessionEnded,
       hasSession: () => api.signedIn,
@@ -166,6 +174,9 @@ class AppDependencies {
   final MediaService media;
   final LocationService location;
   final PushPermission push;
+
+  /// Reads the Ask chat aloud.
+  final Speaker speaker;
 
   /// How payments are taken: the app's pay sheet, or Paystack's checkout.
   final PaymentGateway payments;

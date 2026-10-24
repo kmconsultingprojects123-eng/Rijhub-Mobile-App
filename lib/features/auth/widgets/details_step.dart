@@ -31,7 +31,6 @@ class AuthDetailsStep extends StatefulWidget {
 
 class _AuthDetailsStepState extends State<AuthDetailsStep> {
   static const _maxTrades = 3;
-  static final _letter = RegExp(r'\p{L}', unicode: true);
 
   final _name = TextEditingController();
   final _focus = FocusNode();
@@ -59,8 +58,11 @@ class _AuthDetailsStepState extends State<AuthDetailsStep> {
 
   bool get _canSubmit =>
       _role != null &&
-      _letter.allMatches(_name.text).length >= 2 &&
+      isFullName(_name.text) &&
       (!_isArtisan || _picked.isNotEmpty);
+
+  /// Trades already given in the chat: not asked again.
+  bool _tradesKnown = false;
 
   @override
   void initState() {
@@ -68,10 +70,11 @@ class _AuthDetailsStepState extends State<AuthDetailsStep> {
     final session = context.read<SessionController>();
     _askRole = !session.hasOnboarded;
     if (!_askRole) _role = context.read<AuthFlowController>().role;
-    // Trades already picked while looking around.
+    // Trades already picked while looking around, so they aren't asked for.
     _picked.addAll(session.guestTrades.take(_maxTrades));
+    _tradesKnown = _picked.isNotEmpty;
     // Loaded before "Find work" is picked, so the list is there at once.
-    if (_askRole || _isArtisan) _loadTrades();
+    if (!_tradesKnown && (_askRole || _isArtisan)) _loadTrades();
     // The name comes first, unless the side is asked for: then it follows.
     if (!_askRole) _focusName();
   }
@@ -193,9 +196,8 @@ class _AuthDetailsStepState extends State<AuthDetailsStep> {
           if (role != null) ...[
             SizedBox(height: AppSpace.s24),
             AppTextField(
-              // Clients need only a first name; artisans' profiles show
-              // their full name.
-              label: _isArtisan ? 'Full name' : 'Your name',
+              // As on their ID: an artisan's is checked against it.
+              label: 'Full name, as it is on your ID',
               controller: _name,
               focusNode: _focus,
               textCapitalization: TextCapitalization.words,
@@ -208,7 +210,7 @@ class _AuthDetailsStepState extends State<AuthDetailsStep> {
               onSubmitted: _onSubmitted,
             ),
           ],
-          if (_isArtisan) ...[
+          if (_isArtisan && !_tradesKnown) ...[
             SizedBox(height: AppSpace.s24),
             _TradePicker(
               trades: _trades,
@@ -232,7 +234,7 @@ class _AuthDetailsStepState extends State<AuthDetailsStep> {
     if (_askRole) {
       return AuthStepHeader(
         title: 'Create your account',
-        message: 'This number is new to RijHub.',
+        message: 'This number is new to Employi.',
       );
     }
     if (_isArtisan) {
@@ -248,7 +250,7 @@ class _AuthDetailsStepState extends State<AuthDetailsStep> {
   }
 }
 
-/// "How will you use RijHub?": the welcome screen's two ways in, for a
+/// "How will you use Employi?": the welcome screen's two ways in, for a
 /// new number that arrived before either was picked.
 class _RolePicker extends StatelessWidget {
   const _RolePicker({required this.role, required this.onPicked});
@@ -263,7 +265,7 @@ class _RolePicker extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'How will you use RijHub?',
+          'How will you use Employi?',
           style: AppText.labelSmall.copyWith(color: c.textPrimary),
         ),
         SizedBox(height: AppSpace.s12),

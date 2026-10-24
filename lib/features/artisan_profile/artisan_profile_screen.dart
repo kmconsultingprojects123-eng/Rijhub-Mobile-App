@@ -361,8 +361,13 @@ class _ProfileState extends State<_Profile> {
                     SizedBox(height: 12.w),
                     if (p.businessName?.isNotEmpty ?? false)
                       _Fact(IconsaxPlusLinear.shop, p.businessName!),
-                    _Fact(IconsaxPlusLinear.medal_star,
-                        '${p.experienceYears} years of experience'),
+                    // Optional: "0 years of experience" would only put people off.
+                    if (p.experienceYears > 0)
+                      _Fact(
+                          IconsaxPlusLinear.medal_star,
+                          p.experienceYears == 1
+                              ? '1 year of experience'
+                              : '${p.experienceYears} years of experience'),
                     for (final cert in p.certifications)
                       _Fact(IconsaxPlusLinear.award, cert),
                     _Fact(IconsaxPlusLinear.location,
@@ -371,7 +376,7 @@ class _ProfileState extends State<_Profile> {
                     _Fact(IconsaxPlusLinear.message_text_1,
                         'Speaks ${p.languages.join(' and ')}'),
                     _Fact(IconsaxPlusLinear.calendar_1,
-                        'On RijHub since ${_monthYear(p.joinedOn)}'),
+                        'On Employi since ${_monthYear(p.joinedOn)}'),
                     SizedBox(height: 28.w),
                     SectionTitle(
                       'Reviews',
@@ -385,7 +390,7 @@ class _ProfileState extends State<_Profile> {
                       const InlineNote(
                           title: 'No reviews yet',
                           message:
-                              'Reviews come only from clients who booked and paid through RijHub.')
+                              'Reviews come only from clients who booked and paid through Employi.')
                     else
                       // The rating and count are in the stats up top;
                       // the full breakdown is on the reviews page.
@@ -589,17 +594,24 @@ class _Stats extends StatelessWidget {
               a.reviewCount == 0 ? 'New' : a.rating.toStringAsFixed(1),
               a.reviewCount == 0
                   ? 'No reviews yet'
-                  : '${a.reviewCount} reviews',
+                  : a.reviewCount == 1
+                      ? '1 review'
+                      : '${a.reviewCount} reviews',
               icon: a.reviewCount == 0 ? null : IconsaxPlusBold.star_1),
           rule(),
-          cell('${a.jobsCompleted}', 'jobs done'),
-          rule(),
-          cell(
-            a.replyMinutes == null
-                ? '${profile.responseRate ?? 0}%'
-                : '~${a.replyMinutes} min',
-            a.replyMinutes == null ? 'reply rate' : 'to reply',
-          ),
+          cell('${a.jobsCompleted}',
+              a.jobsCompleted == 1 ? 'job done' : 'jobs done'),
+          // How fast they reply, once there is something to measure: an
+          // unknown rate is not 0%.
+          if (a.replyMinutes != null || profile.responseRate != null) ...[
+            rule(),
+            cell(
+              a.replyMinutes == null
+                  ? '${profile.responseRate}%'
+                  : '~${a.replyMinutes} min',
+              a.replyMinutes == null ? 'reply rate' : 'to reply',
+            ),
+          ],
         ],
       ),
     );
@@ -739,7 +751,7 @@ class RatingSummaryView extends StatelessWidget {
               ],
             ),
             SizedBox(height: 2.w),
-            Text('${summary.count} reviews',
+            Text(summary.count == 1 ? '1 review' : '${summary.count} reviews',
                 style: AppText.caption.copyWith(color: c.textSecondary)),
           ],
         ),

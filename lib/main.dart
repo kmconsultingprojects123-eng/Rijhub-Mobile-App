@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,7 +10,9 @@ import 'app/app.dart';
 import 'app/auth_gate.dart';
 import 'app/dependencies.dart';
 import 'app/dev_launch.dart';
+import 'app/push.dart';
 import 'app/session.dart';
+import 'features/ask/ask_launch.dart';
 import 'features/auth/auth_sheet.dart';
 import 'features/location/area_picker_sheet.dart';
 import 'firebase_options.dart';
@@ -70,7 +73,12 @@ Future<void> main() async {
             final area = await showAreaPicker(context, current: session.area);
             if (area != null) await session.setArea(area);
           }
-        : null,
+        : dev.ask != null || dev.askVoice
+            ? (context) async => openAsk(context,
+                text: dev.ask,
+                script: dev.askScript,
+                start: dev.askVoice ? AskStart.voice : AskStart.typing)
+            : null,
   ));
 }
 
@@ -78,6 +86,9 @@ Future<void> _startFirebase() async {
   try {
     await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform);
+    // Pushes while the app is closed, and banners while it's open.
+    FirebaseMessaging.onBackgroundMessage(firebaseBackgroundMessage);
+    await LocalBanners.init();
   } on Object {
     // The app works without it; it just gets no push notifications.
   }

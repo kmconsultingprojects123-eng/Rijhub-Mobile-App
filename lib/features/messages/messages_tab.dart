@@ -39,7 +39,7 @@ class MessagesTab extends StatelessWidget {
                         icon: IconsaxPlusLinear.message,
                         title: 'Chat with your artisans',
                         message:
-                            'Once you book, you can message, send photos and voice notes, and call through RijHub.',
+                            'Once you book, you can message, send photos and voice notes, and call through Employi.',
                         action: AppButton(
                           label: 'Sign in',
                           expand: false,
@@ -105,7 +105,7 @@ class _RijHubRow extends StatelessWidget {
       onTap: () => context.push(artisan ? Routes.support : Routes.ask),
       pressedScale: 0.99,
       focusOffset: 0,
-      semanticLabel: artisan ? 'RijHub help' : 'Ask RijHub',
+      semanticLabel: artisan ? 'Employi help' : 'Ask Employi',
       child: Container(
         padding: EdgeInsets.symmetric(vertical: 12.w),
         decoration:
@@ -118,7 +118,7 @@ class _RijHubRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('RijHub',
+                  Text('Employi',
                       style: AppText.titleSmall
                           .copyWith(fontWeight: FontWeight.w700)),
                   SizedBox(height: 2.w),

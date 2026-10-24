@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../app/auth_gate.dart';
 import '../../app/routes.dart';
 import '../../app/session.dart';
+import '../../app/live_updates.dart';
 import '../../core/theme/theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/images.dart';
@@ -32,7 +33,7 @@ class ClientHome extends StatelessWidget {
       body: SafeArea(
         bottom: false,
         child: Loader<_HomeData>(
-          reloadOn: session,
+          reloadOn: Listenable.merge([session, context.read<LiveUpdates>()]),
           load: () => _HomeData.load(context),
           loading: const _HomeSkeleton(),
           builder: (context, data, reload) => RefreshIndicator(
@@ -194,8 +195,11 @@ class _HomeBodyState extends State<_HomeBody> {
         SizedBox(height: 24.w),
         Padding(
           padding: EdgeInsets.symmetric(horizontal: gutter),
+          // "Top-rated" only once someone has been rated.
           child: SectionTitle(
-            hasArea ? 'Top-rated near you' : 'Top-rated in Abuja',
+            d.topRated.any((a) => !a.isNew)
+                ? (hasArea ? 'Top-rated near you' : 'Top-rated in Abuja')
+                : (hasArea ? 'ID-checked near you' : 'ID-checked in Abuja'),
             action: 'See all',
             onAction: () => context.go(Routes.explore),
           ),

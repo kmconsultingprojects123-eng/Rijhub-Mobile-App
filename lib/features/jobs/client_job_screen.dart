@@ -5,6 +5,7 @@ import 'package:iconsax_plus/iconsax_plus.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
+import '../../app/live_updates.dart';
 import '../../core/theme/theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/images.dart';
@@ -26,6 +27,7 @@ class ClientJobScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Loader<ClientJob>(
+      reloadOn: context.read<LiveUpdates>(),
       load: () => context.read<ClientJobRepository>().byId(jobId),
       loading: const Scaffold(body: ListSkeleton()),
       builder: (context, job, reload) => _JobView(job: job, reload: reload),
@@ -312,7 +314,7 @@ class QuoteCard extends StatelessWidget {
           Pressable(
             onTap: onProfile,
             semanticLabel:
-                '${a.name}, rated ${a.rating.toStringAsFixed(1)}. Open profile',
+                '${a.name}, ${a.ratingSpoken}. Open profile',
             child: Row(
               children: [
                 AppAvatar(name: a.name, image: imageFor(a.photo), size: 44.w),

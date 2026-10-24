@@ -322,7 +322,10 @@ class SegmentedTabs extends StatelessWidget {
         borderRadius: BorderRadius.circular(14.w),
         border: Border.all(color: c.border),
       ),
+      // Stretched, so the picked tab's white fills the track's height, not
+      // just its label's.
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (var i = 0; i < labels.length; i++)
             Expanded(
