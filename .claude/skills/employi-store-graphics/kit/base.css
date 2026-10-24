@@ -1,0 +1,69 @@
+/* Employi store graphics: type, colour, the canvas and the phone.
+   Every concept page links this and builds into #canvas. */
+
+/* Inter, the app's own typeface (lib/core/theme/app_typography.dart), as the
+   variable font with its optical-size axis, so display sizes get Inter
+   Display's tighter forms. Two subsets: ₦ (U+20A6) is in latin-ext. */
+@font-face {
+  font-family: 'Inter';
+  src: url('../assets/fonts/Inter-latin.woff2') format('woff2');
+  font-weight: 100 900;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('../assets/fonts/Inter-latin-ext.woff2') format('woff2');
+  font-weight: 100 900;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* lib/core/theme/palette.dart. Crimson 600 is the logo's. */
+:root {
+  --c50: #FCF2F4; --c100: #F9E3E8; --c200: #F2C4CE; --c300: #E595A6; --c400: #D25A75;
+  --c500: #BB1C43; --crimson: #A20025; --c700: #87001F; --c800: #6C0019; --c900: #520013;
+  --ink: #171717; --ink2: #262626; --muted: #6B6B6B; --line: #E5E5E5; --paper: #F7F7F7;
+  --green: #16A34A;
+}
+
+html, body { margin: 0; background: #000; }
+#canvas {
+  position: relative; overflow: hidden;
+  width: var(--W, 1320px); height: var(--H, 2868px);
+  font-family: 'Inter', sans-serif; font-optical-sizing: auto; color: var(--ink);
+  -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision;
+  font-feature-settings: 'ss03' 0;
+}
+.abs { position: absolute; }
+.nowrap { white-space: nowrap; }
+
+/* Headlines: Inter at display size, tight, two short full-stopped lines. */
+.hl { font-weight: 800; letter-spacing: -0.04em; line-height: 0.98; margin: 0; }
+.hl span { display: block; width: max-content; white-space: nowrap; }
+
+/* ── the phone: iPhone 17 Pro Max at its real proportions ──────────────────
+   Built at native size round a 1320x2868 capture (46px of frame and bezel,
+   corners from the simulator's own framebuffer mask), then scaled into
+   place by kit.js. The body is dark with a lit hairline edge: a light rail
+   on a light ground reads as a border, not as hardware. */
+.phone { position: absolute; left: 0; top: 0; width: 1412px; height: 2960px; transform-origin: 0 0; }
+.phone .p-shadow { position: absolute; inset: 40px 30px -20px 30px; border-radius: 236px; background: rgba(30, 0, 8, .55); filter: blur(70px); transform: translateY(90px); }
+.phone .p-body {
+  position: absolute; inset: 0; border-radius: 236px;
+  background: linear-gradient(128deg, #8a8c91 0%, #3a3b3f 9%, #1c1d20 30%, #15161a 52%, #222328 74%, #45474c 91%, #8f9196 100%);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .28), inset 0 0 0 6px rgba(0, 0, 0, .55), inset 0 0 0 9px rgba(255, 255, 255, .06);
+}
+.phone .p-bezel { position: absolute; inset: 15px; border-radius: 221px; background: #050506; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .07); }
+.phone .p-screen { position: absolute; left: 46px; top: 46px; width: 1320px; height: 2868px; border-radius: 190px; overflow: hidden; background: #fff; }
+.phone .p-screen img { position: absolute; left: 0; top: 0; width: 1320px; height: 2868px; display: block; }
+.phone .p-glare { position: absolute; left: 46px; top: 46px; width: 1320px; height: 2868px; border-radius: 190px; pointer-events: none;
+  background: linear-gradient(112deg, rgba(255, 255, 255, .10) 0%, rgba(255, 255, 255, .035) 22%, rgba(255, 255, 255, 0) 38%); }
+.phone .p-btn { position: absolute; width: 12px; border-radius: 6px; background: linear-gradient(90deg, #6d6f74, #2b2c30 60%, #1a1b1e); }
+.phone .p-btn.l { left: -8px; } .phone .p-btn.r { right: -8px; background: linear-gradient(270deg, #6d6f74, #2b2c30 60%, #1a1b1e); }
+.phone .p-btn.action { top: 560px; height: 150px; }
+.phone .p-btn.volup { top: 800px; height: 250px; }
+.phone .p-btn.voldn { top: 1110px; height: 250px; }
+.phone .p-btn.side { top: 900px; height: 380px; }
+.phone .p-btn.cam { top: 1680px; height: 250px; width: 9px; right: -5px; background: linear-gradient(270deg, #4b4d52, #202125); }
+
+/* A piece of the capture lifted off the screen: the same pixels, larger. */
+.pop { position: absolute; background-repeat: no-repeat; transform-origin: 0 0; }

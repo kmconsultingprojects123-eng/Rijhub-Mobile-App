@@ -1,0 +1,11 @@
+engine/node_modules/
+engine/package-lock.json
+engine/assets/rec/
+engine/media/*.placeholder
+films/*/work/
+films/*/audio/
+films/*/stills/
+films/*/covers/
+films/*/*.mp4
+films/*/*.log
+films/*/covers_sheet.jpg

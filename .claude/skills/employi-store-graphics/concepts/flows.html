@@ -1,0 +1,184 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<title>Flows</title>
+<link rel="stylesheet" href="../kit/base.css">
+<style>
+  /* Review sheets: a flow as the person meets it, step by step, in real
+     screens from the walkthrough recordings and the emulator, with what makes
+     it simple, counted. ?sheet=signup or ?sheet=kyc. */
+  #canvas { background: linear-gradient(180deg, #FBFAF8 0%, #F3F0EC 100%); color: var(--ink); }
+  .eyebrow { position: absolute; left: 120px; top: 96px; font-size: 30px; font-weight: 700; letter-spacing: .2em; color: var(--crimson); }
+  .title { position: absolute; left: 116px; top: 146px; font-size: 104px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; margin: 0; }
+  .title em { font-style: normal; color: var(--crimson); }
+  .sub { position: absolute; left: 120px; top: 276px; width: 3300px; font-size: 38px; line-height: 1.4; color: #4A4A4A; }
+  .lockup { position: absolute; right: 120px; top: 100px; height: 92px; }
+  .row-label { position: absolute; left: 120px; font-size: 32px; font-weight: 800; letter-spacing: .14em; color: var(--ink); }
+  .row-label i { font-style: normal; font-weight: 600; letter-spacing: 0; color: #6B6B6B; margin-left: 18px; font-size: 32px; }
+  .cap { position: absolute; width: 360px; font-size: 27px; line-height: 1.32; color: #2A2A2A; font-weight: 500; }
+  .cap b { display: inline-flex; align-items: center; justify-content: center; width: 46px; height: 46px; border-radius: 50%; background: var(--crimson); color: #FFF; font-size: 24px; font-weight: 800; margin-right: 12px; vertical-align: middle; }
+  .cap.signup b { background: var(--ink); }
+  .cap .tag { display: inline-block; margin-top: 10px; padding: 4px 14px; border-radius: 30px; background: #F9E3E8; color: var(--crimson); font-size: 22px; font-weight: 700; }
+  .cap .tag.guest { background: #EDF8F1; color: #15803D; }
+  .panel { position: absolute; background: #FFF; border-radius: 36px; box-shadow: 0 30px 60px -36px rgba(60, 30, 20, .35), inset 0 0 0 2px #EEE7E1; padding: 52px 60px; box-sizing: border-box; }
+  .panel h3 { margin: 0 0 26px; font-size: 44px; font-weight: 800; letter-spacing: -0.02em; }
+  .panel h3 em { font-style: normal; color: var(--crimson); }
+  .panel ul { margin: 0; padding: 0; list-style: none; }
+  .panel li { position: relative; padding-left: 46px; margin: 0 0 20px; font-size: 30px; line-height: 1.38; color: #333; }
+  .panel li::before { content: ''; position: absolute; left: 0; top: 12px; width: 22px; height: 22px; border-radius: 50%; background: var(--crimson); }
+  .panel.honest li::before { background: #F5A524; }
+  .panel li b { color: var(--ink); }
+  .stats { position: absolute; display: flex; gap: 28px; }
+  .stat { background: var(--ink); color: #FFF; border-radius: 30px; padding: 26px 36px; min-width: 250px; box-sizing: border-box; }
+  .stat b { display: block; font-size: 66px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+  .stat span { display: block; margin-top: 10px; font-size: 25px; color: rgba(255, 255, 255, .72); font-weight: 600; }
+  .arrow { position: absolute; height: 4px; background: #D9D2CB; border-radius: 2px; }
+  .bracket { position: absolute; border: 4px solid var(--crimson); border-bottom: 0; border-radius: 16px 16px 0 0; height: 26px; }
+  .bracket span { position: absolute; left: 50%; top: -52px; transform: translateX(-50%); white-space: nowrap; font-size: 26px; font-weight: 800; color: var(--crimson); letter-spacing: .04em; }
+</style></head>
+<body><div id="canvas"></div>
+<script src="../kit/kit.js"></script>
+<script>
+  const SHEETS = {
+    signup: {
+      size: [3720, 4460], eyebrow: 'SIGN-UP, CLIENT AND ARTISAN',
+      title: 'One chat. <em>Three answers.</em>',
+      sub: 'Both sides see what Employi can do before it asks for anything. Joining happens in the same chat: a phone number, the code texted to it, and a full name. No form, no password, no email, and every message is read aloud. Real screens from our test run on Android, against the Employi server with Gemini.',
+      rows: [
+        { label: 'CLIENT', who: 'Amaka books an AC service', y: 470, steps: [
+          ['chat-c1', 'Opens Employi: a chat that asks what needs fixing, and tells artisans their way in.', 'guest'],
+          ['chat-c2', 'Taps "AC not cooling". Gemini reads it, and the best match comes with the usual price.', 'guest'],
+          ['chat-c3', 'Taps Book. Only now does it ask for her phone number, in the chat.', 'signup'],
+          ['chat-c4', 'Types the 6-digit code from the text.', 'signup'],
+          ['chat-c5', 'Gives her full name, as it is on her ID. That is her account.', 'signup'],
+          ['chat-c6', 'Picks a time with one tap.', ''],
+          ['chat-c8', 'Types or says the address, then checks the booking: ₦10,500 in all.', ''],
+          ['chat-c9', 'Confirms and pays, and the request goes straight to Emeka.', ''],
+        ], bracket: [2, 4, 'SIGN-UP: 3 ANSWERS, IN THE CHAT'] },
+        { label: 'ARTISAN', who: 'Emeka joins to find work', steps: [
+          ['chat-a1', 'Opens Employi. The welcome tells artisans to tap "I\'m an artisan" or say their trade.', 'guest'],
+          ['chat-a2', 'Taps "I\'m an artisan", then types or says his trade in his own words.', 'guest'],
+          ['chat-a3', '"I fix ACs and fridges": Gemini picks AC repair, and he sees the jobs.', 'guest'],
+          ['chat-a4', 'Taps Join free: his phone number, in the chat.', 'signup'],
+          ['chat-a5', 'Types the 6-digit code from the text.', 'signup'],
+          ['chat-a6', 'Gives his full name, as it is on his ID. His trade is already known.', 'signup'],
+          ['chat-a7', 'Joined, and it says what to do next, out loud.', ''],
+          ['chat-a8', 'His home: the four steps to get booked, the next one a red button, and what clients pay.', ''],
+        ], bracket: [3, 5, 'SIGN-UP: 3 ANSWERS, IN THE CHAT'] },
+      ],
+      stats: [['3', 'answers to join: phone, code, name'], ['0', 'forms, passwords or emails'], ['1', 'chat, from "hi" to booked'], ['Every', 'message read aloud']],
+      panelCols: 2,
+      panels: [
+        { title: 'Why the <em>client</em> side is simple', items: [
+          '<b>Sign-up comes last.</b> As a guest she asks, sees who can help and what it usually costs. The account is made only when she books, when she has a reason to give her number.',
+          '<b>It happens in the same chat.</b> No sheet or form opens: the conversation asks for the phone, the code and her name, one at a time, and goes straight on to the time.',
+          '<b>Nothing is asked twice.</b> The area is read from her address ("Wuse 2"), and the code is checked as soon as the sixth digit is in.',
+        ] },
+        { title: 'Why the <em>artisan</em> side is simple', items: [
+          '<b>The welcome speaks to him too.</b> Under the client lines it says: "Are you an artisan looking for work? Tap \'I\'m an artisan\' below, or just tell me your trade." That line is read aloud, so he doesn\'t need to read it.',
+          '<b>Work first.</b> He says his trade in his own words and sees the jobs for it before Employi asks him for anything.',
+          '<b>His words are his trade.</b> Gemini matches "I fix ACs and fridges" to AC repair, so there is no list to pick from. He only picks when it can\'t match his work to a trade Employi covers.',
+          '<b>Joining is the same three answers,</b> in the chat. Then his home lists the four steps to get booked, the next one as a red button, beside what clients usually pay for his trade.',
+        ] },
+        { title: 'For people who <em>can\'t read well</em>', items: [
+          '<b>It talks.</b> Every message is read aloud, in a Nigerian English voice on Android, followed by what to tap: "To book Emeka, tap the black button."',
+          '<b>Talk instead of typing.</b> The red microphone works at every step: the problem, the trade, the name and the address.',
+          '<b>Say it your way.</b> "I\'m a plumber" or "I be plumber, I dey find work" on the first screen goes straight to joining. In our test, Gemini told 10 artisan phrasings from 9 client ones with no mistakes.',
+          '<b>Out of the way for readers.</b> Typing a problem turns the voice off and a voice note turns it back on. The speaker button turns it off for good.',
+        ] },
+        { cls: 'honest', title: 'Is it really simple? <em>Yes, with what\'s left</em>', items: [
+          '<b>Digits are still typed.</b> The phone number and the 6-digit code use the number pad. Filling the code in from the text by itself is the next step.',
+          '<b>Only the chat talks.</b> The artisan\'s home and its checklist aren\'t read aloud yet.',
+          '<b>Replies are in English.</b> Gemini understands Pidgin, but answers in English. Replies in Pidgin, Yoruba, Hausa and Igbo would come next.',
+          '<b>iPhones have no Nigerian voice,</b> so they read aloud in British English.',
+        ] },
+      ],
+    },
+    kyc: {
+      size: [3720, 2520], eyebrow: 'ID CHECK (KYC), ARTISANS',
+      title: 'A NIN and <em>a selfie.</em>',
+      sub: 'Clients only book ID-checked artisans, so the check has to be quick enough that nobody gives up. It asks for two things and answers at once.',
+      rows: [
+        { label: 'ARTISAN', who: 'Emeka checks his ID', y: 470, steps: [
+          ['artisan-125.3', 'On his checklist: "Check your ID", about 2 minutes.', ''],
+          ['kyc-intro', 'What it needs, before it starts: his NIN and a selfie.', ''],
+          ['kyc-nin', 'Types the 11-digit NIN. Forgot it? Dial *346#.', ''],
+          ['kyc-selfie', 'Takes one selfie, with three tips on screen.', ''],
+          ['kyc-verified', 'Checked against the national record in seconds: verified.', ''],
+        ] },
+      ],
+      stats: [['2', 'things asked: NIN and selfie'], ['3', 'screens'], ['Seconds', 'for the answer'], ['4', 'digits of the NIN kept']],
+      panels: [
+        { title: 'Why it\'s <em>simple</em>', items: [
+          '<b>Two things, nothing else.</b> No photos of ID cards, no forms, no address or date of birth to type.',
+          '<b>An answer in seconds, by itself.</b> Dojah matches the selfie with the photo on his NIN record, and the name on the record must match his profile, so nobody can use someone else\'s ID.',
+          '<b>A failure says why, in plain words</b> ("try again in good light, without glasses or a cap"), and he can try again, up to 5 times a day.',
+          '<b>Private.</b> The NIN and selfie go to Dojah and are never stored. Employi keeps the last 4 digits. Clients see the badge, never the NIN.',
+        ] },
+        { cls: 'honest', title: 'Is it really simple? <em>Yes, with two trade-offs</em>', items: [
+          '<b>NIN only.</b> An artisan without an NIN can\'t be verified yet. Dojah also checks voter\'s cards, driver\'s licences and passports. Offering one as a fallback would cover them, at the cost of one choice on the first screen.',
+          '<b>A photo, not a liveness check.</b> One picture is easier to fake than a live video check. Dojah\'s liveness screen is already wired into the server: switching to it adds about 20 seconds and makes faking much harder. I\'d switch once the first artisans are through.',
+          'In the walkthrough video Employi\'s team approved the check by hand, because the demo uses a made-up NIN. Real NINs are answered automatically.',
+        ] },
+      ],
+    },
+  };
+
+  const S = SHEETS[new URLSearchParams(location.search).get('sheet') || 'signup'];
+  window.SIZE = S.size;
+  window.NAME = `flow-${new URLSearchParams(location.search).get('sheet') || 'signup'}`;
+  window.MARGIN = 60;
+  CANVAS.style.setProperty('--W', `${S.size[0]}px`); CANVAS.style.setProperty('--H', `${S.size[1]}px`);
+
+  window.layout = () => {
+    el('eyebrow', S.eyebrow).dataset.box = 'eyebrow';
+    el('title', S.title, CANVAS, 'h1').dataset.box = 'title';
+    el('sub', S.sub).dataset.box = 'sub';
+    const lock = el('lockup', null, CANVAS, 'img'); lock.src = '../assets/brand/lockup.png'; lock.dataset.box = 'lockup';
+    const W = 360, GAP = 56, X0 = 120;
+    let bottom = 0;
+    S.rows.forEach((row, r) => {
+      // Each row starts below the last one's tallest caption.
+      const y = r === 0 ? row.y : bottom + 110;
+      const label = el('row-label', `${row.label}<i>${row.who}</i>`); css(label, { top: `${y}px` }); label.dataset.box = `label${r}`;
+      const top = y + 140;
+      row.steps.forEach(([src, text, kind], i) => {
+        const cx = X0 + W / 2 + i * (W + GAP);
+        const dev = device(`../assets/flows/${src}.png`, 'android');
+        const box = placeDevice(dev, cx, top + (W * 2480 / 1160) / 2, W);
+        const cap = el(`cap ${kind}`, `<b>${i + 1}</b>${text}${kind === 'guest' ? '<br><span class="tag guest">No account yet</span>' : kind === 'signup' ? '<br><span class="tag">Signing up</span>' : ''}`);
+        css(cap, { left: `${box.x}px`, top: `${box.y + box.h + 34}px` });
+        cap.dataset.box = `cap${r}-${i}`;
+        bottom = Math.max(bottom, box.y + box.h + 34 + cap.offsetHeight);
+        if (row.bracket && i === row.bracket[0]) {
+          const last = X0 + row.bracket[1] * (W + GAP) + W;
+          const b = el('bracket', `<span>${row.bracket[2]}</span>`);
+          css(b, { left: `${box.x}px`, top: `${box.y - 34}px`, width: `${last - box.x}px` });
+        }
+      });
+    });
+    // Counts, then the reasons.
+    const stats = el('stats', S.stats.map(([n, t]) => `<div class="stat"><b>${n}</b><span>${t}</span></div>`).join(''));
+    css(stats, { left: `${X0}px`, top: `${bottom + 80}px` }); stats.dataset.box = 'stats';
+    // The reasons, [panelCols] to a row; a row's panels share its height.
+    let py = bottom + 80 + stats.offsetHeight + 60;
+    const cols = S.panelCols || S.panels.length;
+    const pw = (S.size[0] - 2 * X0 - 60 * (cols - 1)) / cols;
+    let row = [];
+    const endRow = () => {
+      const h = Math.max(...row.map((n) => n.offsetHeight));
+      row.forEach((n) => css(n, { height: `${h}px` }));
+      py += h + 60;
+      row = [];
+    };
+    S.panels.forEach((p, i) => {
+      const n = el(`panel ${p.cls || ''}`, `<h3>${p.title}</h3><ul>${p.items.map((t) => `<li>${t}</li>`).join('')}</ul>`);
+      css(n, { left: `${X0 + (i % cols) * (pw + 60)}px`, top: `${py}px`, width: `${pw}px` });
+      n.dataset.box = `panel${i}`;
+      row.push(n);
+      if (row.length === cols) endRow();
+    });
+    if (row.length) endRow();
+    window.CONTENT_BOTTOM = py - 60;
+  };
+</script>
+</body></html>

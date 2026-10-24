@@ -1,0 +1,9 @@
+[
+  {"name": "ask", "wait": 22, "launch": {"as": "client", "route": "/home", "ask": "My AC is not cooling"}},
+  {"name": "profile", "wait": 18, "launch": {"as": "client", "route": "/artisan/6adb9f1ffa80c500093de747"}},
+  {"name": "book", "wait": 34, "launch": {"as": "client", "route": "/home", "ask": "My AC is not cooling", "askScript": ["Book Emeka", "Tomorrow", "12 Aminu Kano Crescent, Wuse 2"]}},
+  {"name": "on-the-way", "wait": 18, "launch": {"as": "client", "route": "/booking/6adbc3debdccaceb51f88343"}},
+  {"name": "chat", "wait": 18, "launch": {"as": "client", "route": "/chat/6adba02d4b520acd3a036cc7"}},
+  {"name": "artisan-home", "wait": 20, "launch": {"as": "artisan", "route": "/home"}},
+  {"name": "artisan-wallet", "wait": 20, "launch": {"as": "artisan", "route": "/account/wallet"}}
+]

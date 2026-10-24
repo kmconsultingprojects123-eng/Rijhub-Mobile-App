@@ -1,0 +1,8 @@
+{
+  "name": "reel-engine",
+  "private": true,
+  "description": "Renders the reel: headless Chrome draws each sub-frame of scene.js",
+  "dependencies": {
+    "playwright-core": "^1.64.0"
+  }
+}

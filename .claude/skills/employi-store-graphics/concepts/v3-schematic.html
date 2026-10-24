@@ -1,0 +1,101 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<title>V3 Schematic</title>
+<link rel="stylesheet" href="../kit/base.css">
+<style>
+  /* A technician's drawing of the app: a drafting grid on a deep crimson
+     black, the real screen called out like a part in a service manual, and a
+     title block in the corner. Craft, precision, nothing hidden. */
+  #canvas { background: radial-gradient(120% 75% at 55% 38%, #2C0A13 0%, #1A060B 52%, #0E0306 100%); }
+  .grid { position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, .075) 2px, transparent 2px),
+      linear-gradient(90deg, rgba(255, 255, 255, .075) 2px, transparent 2px),
+      linear-gradient(rgba(255, 255, 255, .032) 1.5px, transparent 1.5px),
+      linear-gradient(90deg, rgba(255, 255, 255, .032) 1.5px, transparent 1.5px);
+    background-size: 220px 220px, 220px 220px, 44px 44px, 44px 44px;
+    background-position: 0 -2px, -2px 0, 0 -2px, -2px 0; }
+  .mark { position: absolute; width: 64px; height: 64px; border: 0 solid rgba(255, 255, 255, .45); }
+  .mark.tl { left: 40px; top: 40px; border-left-width: 3px; border-top-width: 3px; }
+  .mark.tr { right: 40px; top: 40px; border-right-width: 3px; border-top-width: 3px; }
+  .mark.bl { left: 40px; bottom: 40px; border-left-width: 3px; border-bottom-width: 3px; }
+  .mark.br { right: 40px; bottom: 40px; border-right-width: 3px; border-bottom-width: 3px; }
+
+  .eyebrow { position: absolute; left: 96px; top: 132px; font-size: 30px; font-weight: 700; letter-spacing: .2em; color: var(--c300); white-space: nowrap; }
+  .hl { position: absolute; left: 92px; top: 196px; color: #FFF; letter-spacing: -0.03em; }
+  .hl .b { color: var(--c300); }
+
+  .note { position: absolute; left: 96px; width: 300px; }
+  .note b { display: flex; align-items: baseline; gap: 14px; font-size: 42px; white-space: nowrap; font-weight: 800; letter-spacing: -0.02em; color: #FFF; line-height: 1.1; }
+  .note b i { font-style: normal; font-size: 28px; font-weight: 700; color: var(--c300); letter-spacing: .06em; font-variant-numeric: tabular-nums; }
+  .note p { margin: 10px 0 0 0; font-size: 31px; line-height: 1.3; color: rgba(255, 255, 255, .66); font-weight: 500; }
+  svg.leads { position: absolute; left: 0; top: 0; overflow: visible; }
+
+  .block { position: absolute; left: 96px; right: 96px; bottom: 120px; height: 150px; display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr;
+    border: 2.5px solid rgba(255, 255, 255, .38); }
+  .block div { border-left: 2.5px solid rgba(255, 255, 255, .38); padding: 22px 26px; display: flex; flex-direction: column; justify-content: space-between; }
+  .block div:first-child { border-left: 0; flex-direction: row; align-items: center; justify-content: flex-start; }
+  .block small { font-size: 21px; letter-spacing: .2em; color: rgba(255, 255, 255, .5); font-weight: 600; }
+  .block span { font-size: 32px; font-weight: 700; color: #FFF; letter-spacing: .02em; white-space: nowrap; }
+  .block img { height: 84px; display: block; }
+</style></head>
+<body><div id="canvas">
+  <div class="grid"></div>
+  <div class="mark tl"></div><div class="mark tr"></div><div class="mark bl"></div><div class="mark br"></div>
+  <div class="eyebrow" data-box="eyebrow">FIG. 01 · HOW EMPLOYI WORKS</div>
+  <h1 class="hl"><span data-box="l1">Say what’s wrong.</span><span class="b" data-box="l2">Get a trusted artisan.</span></h1>
+  <div class="block" data-box="block">
+    <div><img src="../assets/brand/logo-on-dark.png"></div>
+    <div><small>SHEET</small><span>01 of 05</span></div>
+    <div><small>CITY</small><span>Abuja</span></div>
+    <div><small>FOR</small><span>Clients</span></div>
+  </div>
+</div>
+<script src="../kit/kit.js"></script>
+<script>
+  const SRC = '../assets/screens/iphone-ask.png';
+  const ph = phone(SRC);
+  const W = 830, H = W * BODY.h / BODY.w, TOP = 580, CX = 1320 - 56 - W / 2;
+  place(ph, CX, TOP + H / 2, W);
+
+  // Each note points at the part of the real screen it describes.
+  const NOTES = [
+    { n: '01', t: 'Say it', p: 'Type it, or snap a photo.', at: [671, 499] },
+    { n: '02', t: 'The price', p: 'What it usually costs, before anyone comes.', at: [68, 700] },
+    { n: '03', t: 'Who', p: 'ID-checked, rated and near you.', at: [112, 1690] },
+    { n: '04', t: 'Book', p: 'Right here, and pay through Employi.', at: [68, 2467] },
+  ];
+  window.layout = () => {
+    const hl = document.querySelector('.hl');
+    const [a, b] = hl.querySelectorAll('span');
+    // Both lines at one size: the size at which the longer one fits.
+    let size = 150;
+    hl.style.fontSize = `${size}px`;
+    const widest = Math.max(a.getBoundingClientRect().width, b.getBoundingClientRect().width);
+    size = Math.floor(size * (1320 - 2 * 96) / widest);
+    hl.style.fontSize = `${size}px`;
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'leads'); svg.setAttribute('width', 1320); svg.setAttribute('height', 2868);
+    let paths = '';
+    let floor = 0;  // each note sits level with its part, or just below the note above
+    NOTES.forEach((note, i) => {
+      const n = el('note', `<b><i>${note.n}</i>${note.t}</b><p>${note.p}</p>`);
+      const [, py] = onCanvas(ph, ...note.at);
+      const y = Math.max(py - 26, floor);
+      n.style.top = `${y}px`;
+      floor = y + n.getBoundingClientRect().height + 56;
+      n.dataset.box = `note${i}`;
+      const r = n.getBoundingClientRect();
+      const [tx, ty] = onCanvas(ph, ...note.at);
+      const sx = 96 + 300 + 4, sy = r.top + 26;              // from the title line
+      const ex = Math.max(sx + 60, Math.min(tx - 4, CX - W / 2 + 40)); // elbow at the phone's edge
+      paths += `<path d="M${sx} ${sy} H${sx + 30} L${ex - 30} ${ty} H${tx - 14}" fill="none" stroke="#E595A6" stroke-width="3.5" stroke-linejoin="round"/>`
+        + `<circle cx="${sx}" cy="${sy}" r="7" fill="#E595A6"/>`
+        + `<circle cx="${tx}" cy="${ty}" r="13" fill="#FFF" stroke="#D25A75" stroke-width="5"/>`;
+    });
+    svg.innerHTML = paths;
+    CANVAS.appendChild(svg);
+  };
+</script>
+</body></html>

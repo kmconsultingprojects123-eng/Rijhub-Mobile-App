@@ -1,0 +1,98 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<title>V5 Map</title>
+<link rel="stylesheet" href="../kit/base.css">
+<style>
+  /* Abuja, drawn in the app's own map colours. A route runs from you to the
+     artisan who can fix it and on off the right edge: across the five
+     graphics it would carry on, one step of the job per screen. */
+  #canvas { background: #EAE6DF; }
+  svg.map { position: absolute; left: 0; top: 0; }
+  .wash { position: absolute; left: 0; right: 0; top: 0; height: 900px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, .97) 0%, rgba(255, 255, 255, .93) 52%, rgba(255, 255, 255, .5) 78%, rgba(255, 255, 255, 0) 100%); }
+  .hl { position: absolute; left: 92px; top: 150px; letter-spacing: -0.03em; }
+  .hl .b { color: var(--crimson); }
+  .bigpin { position: absolute; display: block; filter: drop-shadow(0 26px 22px rgba(80, 10, 25, .35)); }
+  .label { position: absolute; font-size: 30px; font-weight: 700; letter-spacing: .2em; color: #9A948B; white-space: nowrap; }
+  .you { position: absolute; padding: 12px 24px; border-radius: 40px; background: #FFF; font-size: 32px; font-weight: 700; color: var(--ink);
+    box-shadow: 0 10px 24px -8px rgba(0, 0, 0, .25); white-space: nowrap; }
+  .face { position: absolute; width: 128px; height: 128px; border-radius: 50%; background: #FCF2F4; border: 9px solid var(--crimson); box-sizing: border-box;
+    display: flex; align-items: center; justify-content: center; font-size: 44px; font-weight: 700; color: var(--crimson); box-shadow: 0 16px 30px -10px rgba(80, 0, 20, .45); }
+  .face::after { content: ''; position: absolute; right: -6px; bottom: -2px; width: 30px; height: 30px; border-radius: 50%; background: var(--green); border: 6px solid #FFF; }
+  .dot { position: absolute; width: 180px; height: 180px; border-radius: 50%; background: rgba(31, 111, 235, .16); }
+  .dot::after { content: ''; position: absolute; left: 62px; top: 62px; width: 56px; height: 56px; border-radius: 50%; background: #1F6FEB; box-shadow: 0 0 0 10px #FFF, 0 8px 20px 4px rgba(0, 0, 0, .25); }
+</style></head>
+<body><div id="canvas">
+  <svg class="map" width="1320" height="2868"></svg>
+  <div class="wash"></div>
+  <h1 class="hl"><span data-box="l1">Say what’s wrong.</span><span class="b" data-box="l2">Get a trusted</span><span class="b" data-box="l3">artisan.</span></h1>
+</div>
+<script src="../kit/kit.js"></script>
+<script>
+  const SRC = '../assets/screens/iphone-ask.png';
+
+  // ── the map: districts of streets at their own angles, expressways, Jabi
+  // Lake and a stream, parks. Seeded, so it draws the same every time.
+  function drawMap() {
+    const svg = document.querySelector('svg.map');
+    const D = [
+      [300, 640, 1000, 900, 12, 104], [1060, 520, 900, 900, -9, 96], [240, 1560, 900, 1100, 24, 118],
+      [1100, 1500, 820, 1100, -16, 102], [380, 2480, 1100, 900, 6, 112], [1120, 2500, 820, 900, 19, 98],
+    ];
+    let defs = '', body = '';
+    D.forEach(([cx, cy, w, h, a, gap], i) => {
+      defs += `<clipPath id="d${i}"><rect x="${cx - w / 2}" y="${cy - h / 2}" width="${w}" height="${h}" transform="rotate(${a} ${cx} ${cy})"/></clipPath>`;
+      let lines = '';
+      for (let x = cx - w / 2 - 400; x < cx + w / 2 + 400; x += gap * (0.85 + rnd() * 0.3)) lines += `M${x.toFixed(1)} ${cy - h} V${cy + h} `;
+      for (let y = cy - h / 2 - 400; y < cy + h / 2 + 400; y += gap * (0.8 + rnd() * 0.4)) lines += `M${cx - w} ${y.toFixed(1)} H${cx + w} `;
+      body += `<g clip-path="url(#d${i})"><path d="${lines}" transform="rotate(${a} ${cx} ${cy})" stroke="#FFF" stroke-width="15" fill="none"/></g>`;
+    });
+    const parks = `<path d="M1130 610 C1210 560 1300 600 1310 690 C1320 790 1210 820 1150 780 C1090 740 1070 650 1130 610 Z" fill="#D6E7CD"/>
+      <path d="M40 2560 C120 2500 260 2520 280 2620 C300 2720 170 2780 90 2740 C10 2700 -20 2610 40 2560 Z" fill="#D6E7CD"/>
+      <path d="M1120 2060 C1180 2020 1270 2040 1280 2110 C1290 2190 1200 2220 1150 2190 C1100 2160 1080 2090 1120 2060 Z" fill="#D6E7CD"/>`;
+    const water = `<path d="M-40 1880 C110 1800 270 1840 310 1960 C350 2100 210 2210 50 2196 C-40 2188 -70 1990 -40 1880 Z" fill="#C8DFEC"/>
+      <path d="M-60 1460 C160 1500 300 1380 520 1430 C760 1490 880 1360 1100 1390 C1220 1410 1300 1380 1380 1350" stroke="#C8DFEC" stroke-width="26" fill="none" stroke-linecap="round"/>`;
+    const road = (d) => `<path d="${d}" stroke="#D9D3C9" stroke-width="50" fill="none" stroke-linecap="round"/><path d="${d}" stroke="#FFF" stroke-width="38" fill="none" stroke-linecap="round"/>`;
+    const roads = road('M-60 1180 C300 1070 720 1170 1380 930') + road('M520 -60 C610 620 470 1420 700 2930')
+      + road('M-60 430 C420 300 900 370 1380 170') + road('M-60 2230 C420 2110 900 2370 1380 2150') + road('M1010 -60 C980 900 1120 1700 1040 2930');
+    svg.innerHTML = `<defs>${defs}</defs>${body}${parks}${water}${roads}`;
+  }
+
+  window.layout = () => {
+    drawMap();
+    const hl = document.querySelector('.hl');
+    hl.style.fontSize = '150px';
+    const widest = Math.max(...[...hl.querySelectorAll('span')].map((s) => s.getBoundingClientRect().width));
+    hl.style.fontSize = `${Math.floor(150 * (1320 - 2 * 96) / widest)}px`;
+
+    // Districts, roughly where they are.
+    const L = [['MAITAMA', 700, 760], ['WUSE II', 64, 1300], ['UTAKO', 64, 1660], ['JABI', 64, 2300], ['CENTRAL AREA', 820, 1060], ['GARKI', 1086, 2330], ['ASOKORO', 1066, 2700]];
+    L.forEach(([t, x, y], i) => { const n = el('label', t); n.style.left = `${x}px`; n.style.top = `${y}px`; n.dataset.box = `area${i}`; });
+
+    // The route: from you to the artisan, then on, dashed, to the next graphic.
+    const you = [196, 1010], him = [1160, 930];
+    const route = `M${you[0]} ${you[1]} C420 760 880 1120 ${him[0]} ${him[1]}`;
+    const on = `M${him[0]} ${him[1]} C1220 900 1280 860 1380 790`;
+    const svg = document.querySelector('svg.map');
+    svg.insertAdjacentHTML('beforeend',
+      `<path d="${route}" stroke="#FFF" stroke-width="34" fill="none" stroke-linecap="round"/>`
+      + `<path d="${route}" stroke="#A20025" stroke-width="18" fill="none" stroke-linecap="round"/>`
+      + `<path d="${on}" stroke="#A20025" stroke-width="14" fill="none" stroke-linecap="round" stroke-dasharray="2 34" opacity=".9"/>`);
+    const dot = el('dot'); dot.style.left = `${you[0] - 90}px`; dot.style.top = `${you[1] - 90}px`;
+    const yl = el('you', 'You'); yl.style.left = `${you[0] - 50}px`; yl.style.top = `${you[1] + 70}px`; yl.dataset.box = 'you';
+    const face = el('face', 'EN'); face.style.left = `${him[0] - 64}px`; face.style.top = `${him[1] - 64}px`; face.dataset.box = 'face';
+
+    // Employi's own pin, dropped on the city beside the short last line.
+    const l3 = document.querySelectorAll('.hl span')[2].getBoundingClientRect();
+    const pin = el('bigpin', null, CANVAS, 'img'); pin.src = '../assets/brand/mark.png';
+    const pw = 232, phh = 300, px = 1320 - 110 - pw, py = l3.top - 70;
+    css(pin, { left: `${px}px`, top: `${py}px`, height: `${phh}px` });
+    obox('pin', px + pw / 2, py + phh / 2, pw, phh, 0);
+
+    const ph = phone(SRC);
+    const W = 800, H = W * BODY.h / BODY.w;
+    place(ph, 660, 1150 + H / 2, W);
+    obox('phone', 660, 1150 + H / 2, W, H, 0, { bleed: true });
+  };
+</script>
+</body></html>

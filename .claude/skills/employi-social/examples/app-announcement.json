@@ -1,0 +1,21 @@
+{
+  "name": "app-announcement",
+  "format": "feed",
+  "eyebrow": "ID-checked artisans in Abuja",
+  "headline": "What needs *fixing?*",
+  "subline": [
+    "Book and chat in the app. Your money is held",
+    "safely until you confirm the job is done."
+  ],
+  "screenshots": [
+    {
+      "path": "~/Downloads/employi-screens/i2_booking.png"
+    },
+    {
+      "path": "~/Downloads/employi-screens/i3_chat.png"
+    }
+  ],
+  "tilt": 6.0,
+  "overlap": -24,
+  "badges": true
+}

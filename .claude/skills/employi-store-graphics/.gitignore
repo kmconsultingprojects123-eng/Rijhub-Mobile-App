@@ -1,0 +1,7 @@
+node_modules/
+package-lock.json
+out/
+demo.local.json
+# Review-sheet captures from test runs: they show test phone numbers and a
+# demo NIN, so they stay on this machine (the public repo never gets them).
+assets/flows/

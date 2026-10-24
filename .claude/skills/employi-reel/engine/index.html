@@ -1,0 +1,293 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- The stage. Brand-neutral: colours, type, logo and copy arrive from
+     brand.json and reel.json (injected by stage.mjs as window.BRAND and
+     window.REEL); scene.js turns them into CSS variables and elements. -->
+<style>
+  html, body { margin: 0; background: #000; }
+  #stage {
+    position: relative; width: 1080px; height: 1920px; overflow: hidden;
+    font-family: P, sans-serif; color: var(--ink); background: var(--stage-bg);
+    -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision;
+  }
+  .abs { position: absolute; left: 0; top: 0; }
+  .full { width: 1080px; height: 1920px; }
+  .hide { display: none !important; }
+
+  /* ── grounds ────────────────────────────────────────────────────────── */
+  #bg { background: var(--bg); }
+  .dots {
+    background-image: radial-gradient(circle, rgba(255,255,255,.085) 2.3px, transparent 2.8px);
+    background-size: 36px 36px; background-position: 18px 18px;
+    -webkit-mask-image: radial-gradient(75% 60% at 50% 45%, #000 0%, rgba(0,0,0,.55) 55%, transparent 100%);
+  }
+  #glow {
+    width: 1300px; height: 1300px; left: -110px; top: 420px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(var(--accent-rgb),.55) 0%, rgba(var(--accent-rgb),.18) 38%, transparent 68%);
+    filter: blur(20px);
+  }
+  /* The wall: one surface the app scenes play on, set in perspective.
+     Its pattern comes from brand.json "wall": "pegboard" is the store's
+     own shelving, "drafting" a draughtsman's grid. */
+  .peg {
+    position: absolute; left: -760px; top: -560px; width: 2600px; height: 3040px;
+    -webkit-mask-image: radial-gradient(62% 56% at 50% 46%, #000 0%, rgba(0,0,0,.75) 52%, transparent 100%);
+  }
+  #pegDark { opacity: .55; }
+  /* the end card keeps the wall, faintly, clear behind the copy */
+  #pegEnd { -webkit-mask-image: radial-gradient(60% 46% at 50% 36%, transparent 0%, rgba(0,0,0,.25) 45%, #000 100%); }
+
+  .wall-pegboard .peg {
+    background:
+      radial-gradient(circle at 50% 40%, rgba(1,18,32,.62) 0 4.4px, transparent 5.4px),
+      radial-gradient(circle at 50% 64%, rgba(255,255,255,.22) 0 4.8px, transparent 5.8px);
+    background-size: 46px 46px;
+  }
+  .wall-pegboard #pegEnd {
+    background:
+      radial-gradient(circle at 50% 40%, rgba(var(--accent-rgb),.20) 0 4.4px, transparent 5.4px),
+      radial-gradient(circle at 50% 64%, rgba(255,255,255,.9) 0 4.8px, transparent 5.8px);
+    background-size: 46px 46px;
+  }
+  .wall-drafting .peg {
+    background:
+      linear-gradient(rgba(255,255,255,.16) 1.5px, transparent 1.5px),
+      linear-gradient(90deg, rgba(255,255,255,.16) 1.5px, transparent 1.5px),
+      linear-gradient(rgba(255,255,255,.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.07) 1px, transparent 1px);
+    background-size: 230px 230px, 230px 230px, 46px 46px, 46px 46px;
+  }
+  .wall-drafting #pegEnd {
+    background:
+      linear-gradient(rgba(var(--accent-rgb),.16) 1.5px, transparent 1.5px),
+      linear-gradient(90deg, rgba(var(--accent-rgb),.16) 1.5px, transparent 1.5px),
+      linear-gradient(rgba(var(--accent-rgb),.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(var(--accent-rgb),.07) 1px, transparent 1px);
+    background-size: 230px 230px, 230px 230px, 46px 46px, 46px 46px;
+  }
+  #s3bg .base { position: absolute; inset: 0; background: var(--wall-lit); }
+  #s3bg .lamp { position: absolute; left: 140px; top: -380px; width: 800px; height: 1100px; border-radius: 50%;
+                background: radial-gradient(closest-side, var(--lamp-a), var(--lamp-b) 55%, transparent); }
+  #s3bg .sweep { position: absolute; left: -600px; top: -400px; width: 700px; height: 2800px;
+                 background: linear-gradient(90deg, transparent, rgba(255,255,255,.16) 45%, rgba(255,255,255,.28) 50%, rgba(255,255,255,.16) 55%, transparent); }
+  #s3bg .bokeh { position: absolute; border-radius: 50%; filter: blur(16px); }
+  #litEdge { position: absolute; left: 0; top: -300px; width: 26px; height: 2600px; background: linear-gradient(90deg, transparent, var(--lit-edge), transparent);
+             filter: blur(6px); box-shadow: 0 0 60px 30px var(--lit-glow); }
+  #flood {
+    opacity: 0;
+    background: radial-gradient(circle, rgba(255,255,255,.13) 2.3px, transparent 2.8px) 18px 18px / 36px 36px, var(--flood);
+  }
+  #white { background: var(--end-bg); opacity: 0; }
+
+  /* ── the photo strip (hook) ─────────────────────────────────────────── */
+  .ph img { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; object-fit: cover; }
+  .tag {
+    position: absolute; left: 58px; top: 1236px; display: flex; flex-direction: column;
+    padding: 20px 36px 22px 84px; background: var(--accent); color: #fff; border-radius: 22px;
+    box-shadow: 0 22px 46px rgba(1,15,28,.28), 0 2px 0 rgba(255,255,255,.18) inset;
+    transform-origin: 46px 50%;
+  }
+  .tag .hole {
+    position: absolute; left: 30px; top: 50%; width: 26px; height: 26px; margin-top: -13px; border-radius: 50%;
+    background: #fff; box-shadow: 0 0 0 5px rgba(255,255,255,.35), inset 0 3px 4px rgba(0,0,0,.25);
+  }
+  .tag .tl { font-weight: 600; font-size: 31px; line-height: 1.15; opacity: .92; letter-spacing: -.01em; white-space: nowrap; }
+  .tag .tl s { opacity: .8; margin-left: 12px; font-weight: 500; }
+  .tag .tp { font-weight: 800; font-size: 84px; line-height: 1.02; letter-spacing: -.025em; }
+  .tag.sale { background: var(--tag-sale); }
+  .tag .unit { font-size: .42em; font-weight: 600; opacity: .85; margin-left: 6px; letter-spacing: 0; }
+  .tag .off { display: inline-block; position: relative; top: -14px; margin-left: 20px; padding: 8px 18px 9px; border-radius: 999px; background: #fff; color: var(--accent-deep);
+              font-weight: 800; font-size: 28px; line-height: 1.2; letter-spacing: .02em; vertical-align: middle; box-shadow: 0 10px 22px rgba(1,15,28,.28); }
+
+  /* a currency sign the typeface lacks (Poppins has no ₦): the font's own N with two bars */
+  .cur { position: relative; display: inline-block; margin-right: .03em; }
+  .cur i { position: absolute; left: -.07em; right: -.07em; height: .066em; background: currentColor; border-radius: .02em; }
+  .cur i:nth-of-type(1) { top: .445em; }
+  .cur i:nth-of-type(2) { top: .585em; }
+
+  /* ── captions ───────────────────────────────────────────────────────── */
+  .caps { position: absolute; left: 0; width: 1080px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .cap {
+    display: inline-block; background: #fff; color: var(--ink); font-weight: 800; font-size: 100px;
+    line-height: 1.04; letter-spacing: -.03em; padding: 6px 30px 14px; border-radius: 24px;
+    box-shadow: 0 14px 34px rgba(1,15,28,.22);
+  }
+  .cap.acc { color: var(--accent); }
+  .cap .acc-t { color: var(--accent); }
+  .head { position: absolute; left: 0; width: 1080px; text-align: center; color: #fff; }
+  .head .l1 { font-weight: 600; font-size: 54px; letter-spacing: -.01em; opacity: .92; }
+  .head .l2 { font-weight: 800; font-size: 86px; letter-spacing: -.03em; line-height: 1.05; }
+  .head .l3 { font-weight: 800; font-size: 100px; letter-spacing: -.035em; line-height: 1.02; text-shadow: 0 10px 40px rgba(0,0,0,.25); }
+  .hl { color: var(--hl); }
+  .pt { margin-left: calc(var(--pt) * -1em); }
+
+  /* ── the phone ──────────────────────────────────────────────────────── */
+  #world { perspective: 2800px; perspective-origin: 540px 900px; }
+  #phone { position: absolute; left: 0; top: 0; width: 655px; height: 1350.5px; }
+  /* thickness: a plain rounded plate (no image mask: Chrome won't load
+     masks from file://, and an unmasked plate showed as a grey rectangle) */
+  #side {
+    position: absolute; left: 4.5px; top: 0; width: 646px; height: 1350.5px; border-radius: 98px;
+    background: linear-gradient(90deg, #55565c, #232428 20%, #1b1c20 80%, #55565c);
+  }
+  #face { position: absolute; left: 0; top: 0; width: 655px; height: 1350.5px; }
+  #screen {
+    position: absolute; left: 27.5px; top: 23px; width: 600px; height: 1304.5px; border-radius: 78px;
+    overflow: hidden; background: #fff;
+  }
+  #scr { position: absolute; left: 0; top: 0; width: 600px; height: 1304.5px; }
+  #glare {
+    position: absolute; left: -300px; top: 0; width: 1200px; height: 1304.5px; mix-blend-mode: screen; opacity: .55;
+    background: linear-gradient(112deg, transparent 38%, rgba(255,255,255,.10) 46%, rgba(255,255,255,.22) 50%, rgba(255,255,255,.08) 54%, transparent 62%);
+  }
+  #frameImg { position: absolute; left: 0; top: 0; width: 655px; height: 1350.5px; }
+  #pglow {
+    position: absolute; width: 900px; height: 1500px; border-radius: 50%;
+    background: radial-gradient(closest-side, rgba(var(--accent-rgb),.42), rgba(var(--accent-rgb),.12) 60%, transparent);
+    filter: blur(30px);
+  }
+
+  #morph { overflow: hidden; }
+
+  /* ── floating UI: category cards, chips, the bubble ─────────────────── */
+  .catcard {
+    position: absolute; width: 230px; background: #fff; border-radius: 28px; overflow: hidden;
+    box-shadow: 0 30px 60px rgba(0,0,0,.38), 0 0 0 1px rgba(255,255,255,.6) inset;
+  }
+  .catcard img { display: block; width: 230px; height: 200px; object-fit: cover; }
+  .catcard .lab { display: flex; align-items: center; gap: 12px; padding: 16px 18px 18px; }
+  .catcard .ic { width: 46px; height: 46px; border-radius: 14px; background: var(--tint); display: grid; place-items: center; flex: none; }
+  .catcard .ic svg { width: 28px; height: 28px; }
+  .catcard .tx { font-weight: 700; font-size: 25px; letter-spacing: -.015em; color: var(--ink); line-height: 1.1; }
+
+  .fchip {
+    position: absolute; display: flex; align-items: center; gap: 16px; padding: 18px 30px 18px 18px;
+    background: rgba(255,255,255,.96); color: var(--ink); border-radius: 999px; white-space: nowrap;
+    font-weight: 700; font-size: 38px; letter-spacing: -.015em;
+    box-shadow: 0 24px 50px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.7) inset;
+  }
+  .fchip .ic { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; flex: none; }
+  .fchip .ic svg { width: 32px; height: 32px; }
+  .fchip small { display: block; font-weight: 500; font-size: 24px; color: var(--muted); letter-spacing: 0; line-height: 1.1; }
+  .fchip .two { display: flex; flex-direction: column; line-height: 1.08; }
+  .fchip .two .pr { display: block; }
+  .fchip .unit { font-size: .6em; font-weight: 600; margin-left: 4px; }
+
+  .hang { position: absolute; width: 0; height: 0; }
+  .hang .wire { position: absolute; left: -1.5px; top: 0; width: 3px; height: 48px; background: linear-gradient(var(--wire-a), var(--wire-b)); border-radius: 2px; }
+  .hang .fchip { left: 0; top: 46px; }
+  .pegpin { position: absolute; width: 20px; height: 20px; margin: -10px; border-radius: 50%;
+            background: radial-gradient(circle at 35% 30%, #FFFFFF, var(--pin-mid) 55%, var(--pin-lo)); box-shadow: 0 4px 8px rgba(0,0,0,.35); }
+  .ghost { position: absolute; width: 170px; height: 170px; border-radius: 30px; overflow: hidden; }
+  .ghost img { width: 100%; height: 100%; object-fit: cover; }
+  #cartb {
+    position: absolute; width: 150px; height: 150px; border-radius: 50%; background: #fff;
+    display: grid; place-items: center; box-shadow: 0 26px 56px rgba(0,0,0,.4), 0 0 0 10px rgba(255,255,255,.18);
+  }
+  #cartb svg { width: 76px; height: 76px; }
+  #badge {
+    position: absolute; right: -6px; top: -6px; width: 58px; height: 58px; border-radius: 50%;
+    background: var(--badge); color: #fff; font-weight: 800; font-size: 32px; display: grid; place-items: center;
+    box-shadow: 0 8px 18px rgba(var(--accent-rgb),.55), 0 0 0 5px #fff;
+  }
+  #flyer { position: absolute; width: 170px; height: 170px; border-radius: 30px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,.4); }
+  #flyer img { width: 100%; height: 100%; object-fit: cover; }
+  .spark { position: absolute; width: 16px; height: 16px; margin: -8px; border-radius: 50%; }
+
+  /* ── effects ────────────────────────────────────────────────────────── */
+  .ripple { position: absolute; border-radius: 50%; border: 6px solid rgba(255,255,255,.95); box-shadow: 0 0 0 3px rgba(var(--accent-rgb),.55); }
+  .dot { position: absolute; width: 34px; height: 34px; margin: -17px; border-radius: 50%; background: rgba(255,255,255,.92); box-shadow: 0 6px 18px rgba(1,15,28,.35); }
+  #flash { background: #fff; opacity: 0; }
+
+  /* ── value / place ──────────────────────────────────────────────────── */
+  .big { position: absolute; left: 0; width: 1080px; text-align: center; color: #fff; font-weight: 800; letter-spacing: -.035em; line-height: .98; }
+  .word { display: inline-block; margin: 0 .07em; transform-origin: 50% 80%; }
+  .chip {
+    position: absolute; display: flex; align-items: center; gap: 18px; padding: 22px 40px 22px 26px;
+    background: #fff; color: var(--ink); border-radius: 999px; font-weight: 700; font-size: 46px; letter-spacing: -.015em;
+    box-shadow: 0 20px 44px rgba(1,15,28,.25); white-space: nowrap;
+  }
+  .chip svg { width: 58px; height: 58px; }
+  #card {
+    position: absolute; width: 860px; height: 1010px; left: 110px; top: 610px; border-radius: 44px; overflow: hidden;
+    box-shadow: 0 40px 90px rgba(0,0,0,.45); background: #222;
+  }
+  #card img { position: absolute; width: 100%; height: 100%; object-fit: cover; }
+  #card .shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 55%, rgba(0,0,0,.35)); }
+  #loc {
+    position: absolute; display: flex; align-items: center; gap: 22px; padding: 26px 40px 26px 30px; background: #fff;
+    border-radius: 30px; box-shadow: 0 26px 60px rgba(1,15,28,.35); white-space: nowrap;
+  }
+  #loc .t1 { font-weight: 800; font-size: 46px; letter-spacing: -.02em; color: var(--ink); line-height: 1.1; }
+  #loc .t2 { font-weight: 500; font-size: 34px; color: var(--muted-2); line-height: 1.2; }
+  #pin { position: absolute; width: 92px; height: 120px; }
+
+  /* ── end card ───────────────────────────────────────────────────────── */
+  #logo { position: absolute; left: 0; top: 250px; width: 1080px; display: flex; justify-content: center; }
+  #endHead { position: absolute; left: 0; top: 505px; width: 1080px; text-align: center; font-weight: 800; font-size: 134px; line-height: 1.0; letter-spacing: -.035em; color: var(--ink); }
+  #endHead .t { color: var(--accent); }
+  .echip {
+    position: absolute; display: flex; align-items: center; gap: 12px; padding: 12px 22px 12px 12px; white-space: nowrap;
+    background: #fff; border-radius: 999px; font-weight: 600; font-size: 27px; color: var(--ink); letter-spacing: -.01em;
+    box-shadow: 0 10px 26px rgba(1,15,28,.10), 0 0 0 1.5px var(--chip-ring) inset;
+  }
+  .echip .ic { width: 46px; height: 46px; border-radius: 50%; background: var(--tint); display: grid; place-items: center; }
+  .echip .ic svg { width: 26px; height: 26px; }
+  .badge { position: absolute; height: 132px; }
+
+  /* the HomeLands-style lockup: mark + name set in the brand's own type */
+  .lockup { display: flex; align-items: center; }
+  .lockup span { font-weight: 800; white-space: nowrap; line-height: 1; }
+
+  #vig { background: radial-gradient(130% 90% at 50% 45%, transparent 60%, rgba(0,0,0,.28) 100%); pointer-events: none; }
+  #safe { pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bg" class="abs full"></div>
+  <div id="dots" class="abs full dots"></div>
+  <div id="glow" class="abs"></div>
+  <div id="pegDark" class="peg"></div>
+  <div id="s3bg" class="abs full"><div class="base"></div><div class="lamp"></div><div id="pegLit" class="peg"></div><div class="sweep"></div></div>
+  <div id="litEdge"></div>
+  <div id="flood" class="abs full"></div>
+  <div id="white" class="abs full"><div id="pegEnd" class="peg"></div></div>
+
+  <div id="shelf" class="abs full"></div>
+
+  <div id="cardWrap" class="abs full">
+    <div id="card"><img id="placeImg" data-slot="place photo"><div class="shade"></div></div>
+  </div>
+
+  <div id="world" class="abs full">
+    <div id="pglow"></div>
+    <div id="phone">
+      <div id="side"></div>
+      <div id="face">
+        <div id="screen"><img id="scr"><div id="glare"></div></div>
+        <img id="frameImg" src="assets/brand/phone_frame.png">
+      </div>
+    </div>
+  </div>
+
+  <div id="morph" class="abs"></div>
+  <div id="float" class="abs full"></div>
+  <div id="text" class="abs full"></div>
+
+  <div id="end" class="abs full" style="pointer-events:none">
+    <div id="logo"></div>
+    <div id="endHead"></div>
+    <img id="bA" class="badge">
+    <img id="bG" class="badge">
+  </div>
+
+  <div id="flash" class="abs full"></div>
+  <div id="vig" class="abs full"></div>
+  <canvas id="safe" class="abs" width="1080" height="1920"></canvas>
+</div>
+<script src="scene.js"></script>
+</body>
+</html>

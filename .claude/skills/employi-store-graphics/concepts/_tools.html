@@ -1,0 +1,22 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Tools</title>
+<link rel="stylesheet" href="../kit/base.css">
+<style>
+  #canvas { background: radial-gradient(120% 80% at 50% 40%, #F2EEE9 0%, #EAE5DE 60%, #DED8D0 100%); display: flex; flex-wrap: wrap; align-content: flex-start; gap: 34px; padding: 40px; box-sizing: border-box; }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .cell .t { filter: drop-shadow(0 20px 16px rgba(70, 45, 25, .2)) drop-shadow(0 4px 3px rgba(70, 45, 25, .22)); }
+  .cell span { font: 600 22px Inter; color: #6B6B6B; }
+</style></head>
+<body><div id="canvas"></div>
+<script src="../kit/kit.js"></script><script src="../kit/tools.js"></script><script src="../kit/tools2.js"></script>
+<script>
+  window.SIZE = [2400, 2200];
+  CANVAS.style.setProperty('--W', '2400px'); CANVAS.style.setProperty('--H', '2200px');
+  window.layout = () => {
+    for (const [k, f] of Object.entries(TOOLS)) {
+      const c = el('cell', `<div class="t">${f()}</div><span>${k}</span>`);
+      const s = c.querySelector('svg'); const h = +s.getAttribute('height');
+      const sc = Math.min(1, 360 / h); s.style.width = `${+s.getAttribute('width') * sc}px`; s.style.height = `${h * sc}px`;
+    }
+  };
+</script></body></html>

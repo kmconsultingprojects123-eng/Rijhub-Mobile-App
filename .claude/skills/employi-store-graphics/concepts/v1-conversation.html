@@ -1,0 +1,55 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<title>V1 Conversation</title>
+<link rel="stylesheet" href="../kit/base.css">
+<style>
+  /* The graphic is an Employi chat at poster scale: the app's own header,
+     the headline as the two bubbles, and the real answer lifting off the
+     phone. */
+  #canvas { background: linear-gradient(180deg, #FFFFFF 0%, #FDF9FA 38%, #F8EEF1 100%); }
+  .dots { position: absolute; inset: 0; background-image: radial-gradient(circle, rgba(162, 0, 37, .11) 2.6px, transparent 3.1px); background-size: 52px 52px; background-position: 26px 30px; }
+  .fade { position: absolute; inset: 0; background: linear-gradient(180deg, #FFF 0%, rgba(255, 255, 255, .94) 30%, rgba(255, 255, 255, .55) 52%, rgba(255, 255, 255, 0) 72%); }
+  .glow { position: absolute; left: 60px; top: 1250px; width: 1200px; height: 1500px; border-radius: 50%; background: radial-gradient(closest-side, rgba(162, 0, 37, .17), rgba(162, 0, 37, 0)); }
+
+  .head { position: absolute; left: 96px; top: 118px; display: flex; align-items: center; gap: 30px; }
+  .avatar { width: 128px; height: 128px; border-radius: 50%; background: var(--crimson); display: flex; align-items: center; justify-content: center; box-shadow: 0 14px 30px -10px rgba(162, 0, 37, .55); }
+  .avatar img { height: 76px; display: block; }
+  .who b { display: block; font-size: 60px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.05; }
+  .who i { font-style: normal; font-size: 38px; font-weight: 500; color: var(--muted); display: flex; align-items: center; gap: 14px; margin-top: 6px; }
+  .who i::before { content: ''; width: 20px; height: 20px; border-radius: 50%; background: var(--green); }
+
+  .bubble { position: absolute; font-weight: 800; letter-spacing: -0.026em; line-height: 1; white-space: nowrap; padding: 42px 60px 50px; }
+  .me { right: 96px; top: 330px; background: var(--crimson); color: #FFF; border-radius: 88px 88px 24px 88px; font-size: 106px;
+        box-shadow: 0 30px 60px -24px rgba(162, 0, 37, .6); }
+  .bot { left: 96px; top: 578px; background: #FFF; color: var(--ink); border-radius: 88px 88px 88px 24px; font-size: 96px;
+         box-shadow: 0 30px 70px -30px rgba(70, 0, 18, .32), inset 0 0 0 2px #F1E6E9; }
+  .bot em { font-style: normal; color: var(--crimson); }
+</style></head>
+<body><div id="canvas">
+  <div class="glow"></div>
+  <div class="dots"></div>
+  <div class="fade"></div>
+  <div class="head" data-box="head">
+    <div class="avatar"><img src="../assets/brand/mark-white.png"></div>
+    <div class="who"><b>Employi</b><i>Here to help</i></div>
+  </div>
+  <div class="bubble me" data-box="me">Say what’s wrong.</div>
+  <div class="bubble bot" data-box="bot">Get a <em>trusted artisan.</em></div>
+</div>
+<script src="../kit/kit.js"></script>
+<script>
+  const SRC = '../assets/screens/iphone-ask.png';
+  const ph = phone(SRC);
+  place(ph, 660, 912 + 1887 / 2, 900);
+  // The best match, lifted off the screen at the capture's own resolution
+  // (1.0 is about 1.5x its size in the phone), centred where it sits.
+  window.layout = () => {
+    fit(document.querySelector('.me'), 1320 - 2 * 96);
+    fit(document.querySelector('.bot'), 1320 - 2 * 96);
+    const row = [68, 1496, 1185, 395];
+    const [cx, cy] = onCanvas(ph, row[0] + row[2] / 2, row[1] + row[3] / 2);
+    pop(SRC, row, { x: cx - row[2] / 2, y: cy - row[3] / 2 + 40, rot: -2.2, radius: 54, name: 'match',
+      shadow: '0 60px 110px -30px rgba(90, 0, 25, .45), 0 16px 34px -12px rgba(0, 0, 0, .2)' });
+  };
+</script>
+</body></html>

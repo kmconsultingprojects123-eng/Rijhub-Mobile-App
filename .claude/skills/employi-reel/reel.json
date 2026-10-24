@@ -1,0 +1,253 @@
+{
+  "name": "employi-reel",
+  "hook": {
+    "photos": [
+      {
+        "file": "media/hook-01.jpg",
+        "label": "Sink or toilet leak",
+        "price": 5000,
+        "unit": "to ₦10,000"
+      },
+      {
+        "file": "media/hook-02.jpg",
+        "label": "Socket or switch replacement",
+        "price": 3000,
+        "unit": "to ₦6,000"
+      },
+      {
+        "file": "media/hook-03.jpg",
+        "label": "Generator servicing, up to 10 kVA",
+        "price": 10000,
+        "unit": "to ₦18,000"
+      },
+      {
+        "file": "media/hook-04.jpg",
+        "label": "Deep cleaning, 2-bedroom flat",
+        "price": 25000,
+        "unit": "to ₦40,000"
+      },
+      {
+        "file": "media/hook-05.jpg",
+        "label": "Inverter and battery check",
+        "price": 15000,
+        "unit": "to ₦40,000"
+      },
+      {
+        "file": "media/hook-06.jpg",
+        "label": "Paint one room, labour",
+        "price": 25000,
+        "unit": "to ₦80,000"
+      },
+      {
+        "file": "media/hook-07.jpg",
+        "label": "Fumigation",
+        "price": 15000,
+        "unit": "to ₦35,000"
+      },
+      {
+        "file": "media/hook-08.jpg",
+        "label": "Carpentry repair",
+        "price": 8000,
+        "unit": "to ₦25,000"
+      },
+      {
+        "file": "media/hook-09.jpg",
+        "label": "TV and decoder setup",
+        "price": 5000,
+        "unit": "to ₦15,000"
+      },
+      {
+        "file": "media/hook-10.jpg",
+        "label": "Garden care",
+        "price": 4000,
+        "unit": "to ₦12,000"
+      },
+      {
+        "file": "media/hook-11.jpg",
+        "label": "Car repair",
+        "price": 10000,
+        "unit": "to ₦30,000"
+      },
+      {
+        "file": "media/hook-12.jpg",
+        "label": "AC servicing, 1 unit",
+        "price": 8000,
+        "unit": "to ₦12,000"
+      }
+    ],
+    "captions": [
+      [
+        "What needs",
+        "*fixing?*"
+      ],
+      [
+        "Type it,",
+        "*snap it*",
+        "or say it."
+      ]
+    ]
+  },
+  "reveal": {
+    "morph": "media/hook-12-full.jpg",
+    "card": {
+      "x0": 0.05,
+      "y0": 0.42,
+      "x1": 0.95,
+      "y1": 0.68
+    },
+    "headline": [
+      "Artisans near you.",
+      "*All ID-checked.*"
+    ],
+    "categories": [
+      {
+        "img": "media/cat-ac.jpg",
+        "label": "AC repair",
+        "icon": "snow",
+        "x": 24,
+        "y": 640,
+        "rot": -7
+      },
+      {
+        "img": "media/cat-plumbing.jpg",
+        "label": "Plumbing",
+        "icon": "drop",
+        "x": 826,
+        "y": 730,
+        "rot": 6
+      },
+      {
+        "img": "media/cat-electrical.jpg",
+        "label": "Electrical",
+        "icon": "plug",
+        "x": 44,
+        "y": 1170,
+        "rot": 5
+      },
+      {
+        "img": "media/cat-generator.jpg",
+        "label": "Generator",
+        "icon": "wrench",
+        "x": 800,
+        "y": 1240,
+        "rot": -6
+      }
+    ]
+  },
+  "shop": {
+    "headlines": [
+      "Prices up front.",
+      "Book in the app."
+    ],
+    "taps": [
+      {
+        "at": "card"
+      },
+      {
+        "x": 0.5,
+        "y": 0.93
+      },
+      {
+        "x": 0.5,
+        "y": 0.93
+      }
+    ],
+    "chips": [
+      {
+        "icon": "pin",
+        "text": "Wuse 2, Abuja"
+      },
+      {
+        "icon": "tag",
+        "price": 10000,
+        "sub": "AC service and gas top-up"
+      },
+      {
+        "icon": "check",
+        "text": "Booking requested",
+        "solid": true
+      }
+    ],
+    "bubble": {
+      "icon": "chat",
+      "badge": "1"
+    },
+    "flyer": "media/hook-12-full.jpg"
+  },
+  "value": {
+    "lines": [
+      [
+        "Held"
+      ],
+      [
+        "safely."
+      ]
+    ],
+    "chip": "Until you confirm the job is done"
+  },
+  "place": {
+    "photo": "media/place.jpg",
+    "headline": [
+      "An artisan?",
+      "*Get booked.*"
+    ],
+    "location": [
+      "Free to join",
+      "Just your phone number."
+    ]
+  },
+  "end": {
+    "headline": [
+      "Download",
+      "*Employi*"
+    ],
+    "chips": [
+      [
+        "shield",
+        "ID-checked"
+      ],
+      [
+        "tag",
+        "Prices up front"
+      ],
+      [
+        "chat",
+        "Chat in the app"
+      ]
+    ]
+  },
+  "recordings": {
+    "shop": {
+      "dir": "assets/rec/shop",
+      "source": "recordings/shop.mp4",
+      "segments": [
+        [
+          0,
+          1,
+          0
+        ],
+        [
+          "rec.grid",
+          1,
+          1
+        ]
+      ]
+    },
+    "end": {
+      "dir": "assets/rec/end",
+      "source": "recordings/end.mp4",
+      "segments": [
+        [
+          0,
+          1,
+          0
+        ],
+        [
+          "endPhone.0",
+          1,
+          1
+        ]
+      ]
+    }
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "name": "Employi",
+  "font": {
+    "family": "Inter",
+    "files": {
+      "400": "fonts/Inter-Regular.ttf",
+      "500": "fonts/Inter-Medium.ttf",
+      "600": "fonts/Inter-SemiBold.ttf",
+      "700": "fonts/Inter-Bold.ttf",
+      "800": "fonts/Inter-ExtraBold.ttf"
+    }
+  },
+  "currency": {
+    "symbol": "₦",
+    "draw": false
+  },
+  "logo": {
+    "type": "image",
+    "src": "assets/brand/logo.png",
+    "width": 640
+  },
+  "badges": {
+    "appStore": "assets/brand/app-store.png",
+    "googlePlay": "assets/brand/google-play.png"
+  },
+  "wall": "pegboard",
+  "colors": {
+    "ink": "#171717",
+    "accent": "#A20025",
+    "accentDeep": "#87001F",
+    "accentRGB": "162,0,37",
+    "hl": "#F2C4CE",
+    "tint": "#FCF2F4",
+    "icon": "#A20025",
+    "muted": "#6B6B6B",
+    "muted2": "#525252",
+    "chipRing": "#F9E3E8",
+    "stageBg": "#0D0D0D",
+    "bg": "radial-gradient(120% 80% at 50% 38%, #4E0A1B 0%, #230A10 44%, #0D0D0D 80%)",
+    "wallLit": "radial-gradient(112% 76% at 50% 30%, #D25A75 0%, #BB1C43 30%, #87001F 60%, #3A0710 100%)",
+    "flood": "radial-gradient(120% 75% at 28% 18%, #D25A75 0%, #A20025 46%, #6C0019 100%)",
+    "endBg": "radial-gradient(90% 60% at 50% 42%, #FCF2F4 0%, #FEF9FA 55%, #FFFFFF 100%)",
+    "tagSale": "linear-gradient(135deg, #520013, #87001F 60%, #A20025)",
+    "badge": "linear-gradient(135deg, #D25A75, #A20025)",
+    "lamp": [
+      "rgba(255,226,233,.42)",
+      "rgba(242,196,206,.12)"
+    ],
+    "litEdge": [
+      "rgba(255,236,240,.95)",
+      "rgba(229,149,166,.45)"
+    ],
+    "wire": [
+      "#FCF2F4",
+      "#D8BCC3"
+    ],
+    "peg": [
+      "#EBCFD6",
+      "#A8707E"
+    ],
+    "pin": [
+      "#D25A75",
+      "#87001F"
+    ],
+    "sparks": [
+      "#FFFFFF",
+      "#FCF2F4",
+      "#F2C4CE",
+      "#E595A6",
+      "#A20025",
+      "#D25A75"
+    ],
+    "bokeh": [
+      "rgba(255,226,233,.26)",
+      "rgba(255,255,255,.20)",
+      "rgba(242,196,206,.24)",
+      "rgba(255,255,255,.16)",
+      "rgba(249,227,232,.20)",
+      "rgba(255,255,255,.18)"
+    ],
+    "trailFilter": "brightness(1.2) saturate(.7)"
+  }
+}

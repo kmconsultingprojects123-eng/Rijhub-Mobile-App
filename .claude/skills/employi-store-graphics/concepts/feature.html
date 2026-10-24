@@ -1,0 +1,40 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<title>Feature graphic</title>
+<link rel="stylesheet" href="../kit/base.css">
+<style>
+  /* Google Play's feature graphic, 1024x500, in the house style: the bench,
+     the name and one line, and the kit laid out square beside them. Play
+     can lay a button over its middle when there's a video, so the words sit
+     left and nothing important touches an edge. */
+  #canvas { --W: 1024px; --H: 500px; background: radial-gradient(120% 120% at 40% 45%, #F2EEE9 0%, #EAE5DE 60%, #DED8D0 100%); }
+  .grain { position: absolute; inset: 0; mix-blend-mode: multiply; opacity: .55; }
+  .tool { filter: drop-shadow(0 10px 8px rgba(70, 45, 25, .2)) drop-shadow(0 2px 2px rgba(70, 45, 25, .22)); }
+  .lockup { position: absolute; left: 64px; top: 92px; height: 62px; display: block; }
+  .hl { position: absolute; left: 60px; top: 196px; font-size: 62px; letter-spacing: -0.03em; }
+  .hl .b { color: var(--crimson); }
+</style></head>
+<body><div id="canvas">
+  <svg class="grain" width="1024" height="500"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="3" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 .55  0 0 0 0 .5  0 0 0 0 .45  0 0 0 .35 0"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>
+  <img class="lockup" src="../assets/brand/lockup.png" data-box="lockup">
+  <h1 class="hl"><span data-box="l1">Book ID-checked</span><span class="b" data-box="l2">artisans in Abuja.</span></h1>
+</div>
+<script src="../kit/kit.js"></script>
+<script src="../kit/tools.js"></script>
+<script src="../kit/tools2.js"></script>
+<script src="../kit/knoll.js"></script>
+<script>
+  window.SIZE = [1024, 500];
+  window.NAME = 'feature-graphic';
+  window.MARGIN = 40;
+  window.layout = () => {
+    // The kit, standing in a row: long tools upright, square to the bench.
+    pack({ x: 580, y: 44, w: 400, h: 300 }, [
+      { t: 'screwdriver' }, { t: 'spanner' }, { t: 'level' }, { t: 'pencil' }, { t: 'brush' },
+    ], 'row', 0.34, 'top');
+    pack({ x: 580, y: 360, w: 400, h: 100 }, [
+      { t: 'tape', s: 0.8 }, { t: 'nut', n: 3, s: 1.6 },
+    ], 'row', 0.34, 'low');
+  };
+</script>
+</body></html>

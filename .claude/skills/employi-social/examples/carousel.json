@@ -1,0 +1,52 @@
+[
+  {
+    "name": "slide-1-ask",
+    "format": "feed",
+    "eyebrow": "ID-checked artisans in Abuja",
+    "headline": "What needs *fixing?*",
+    "subline": [
+      "Type it, send a photo",
+      "or record a voice note."
+    ],
+    "screenshots": [
+      {
+        "path": "~/Downloads/employi-screens/ask.png"
+      }
+    ],
+    "tilt": 0,
+    "badges": false
+  },
+  {
+    "name": "slide-2-book",
+    "format": "feed",
+    "eyebrow": "Prices up front",
+    "headline": "Book it. *Chat it through.*",
+    "headline_size": 112,
+    "subline": [
+      "See the price before you book, then",
+      "chat with your artisan in the app."
+    ],
+    "screenshots": [
+      {
+        "path": "~/Downloads/employi-screens/i2_booking.png"
+      },
+      {
+        "path": "~/Downloads/employi-screens/i3_chat.png"
+      }
+    ],
+    "overlap": -24,
+    "badges": false
+  },
+  {
+    "name": "slide-3-download",
+    "format": "feed",
+    "headline": "Get the app",
+    "headline_size": 140,
+    "subline": [
+      "On the App Store",
+      "and Google Play."
+    ],
+    "screenshots": [],
+    "badges": true
+  }
+]

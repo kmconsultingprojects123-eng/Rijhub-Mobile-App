@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- The smallest page the kit supports, in Employi's house style: the logo,
+     a tracked crimson eyebrow, a two-tone headline in Inter Bold at the
+     app's display tracking, one phone on a real capture, the store badges.
+     No QR and no URL: both stay out until Employi's website is confirmed.
+     Copy this page (or this folder) to start a new post. -->
+<link rel="stylesheet" href="common.css">
+<style>
+  #poster { background: radial-gradient(72% 46% at 50% 62%, #F9E3E8 0%, rgba(249,227,232,.45) 45%, rgba(255,255,255,0) 76%), #fff; }
+  .eyebrow { position: absolute; font-weight: 600; font-size: 20px; letter-spacing: .24em; margin-right: -.24em; color: var(--crimson); white-space: nowrap; }
+  .h1 { position: absolute; font-weight: 700; font-size: 84px; letter-spacing: -.027em; line-height: 1.05; white-space: nowrap; }
+  .h1 .b { color: var(--crimson); }
+  .sub { position: absolute; font-weight: 400; font-size: 29px; line-height: 1.4; color: var(--muted); text-align: center; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div id="poster"></div>
+<script src="assets/icons.js"></script>
+<script src="common.js"></script>
+<script>
+'use strict';
+const lg = box('logo', logo(72));
+const eb = box('eyebrow', el('eyebrow', 'ID-CHECKED ARTISANS IN ABUJA'));
+const h1 = box('headline', el('h1', 'What needs <span class="b">fixing?</span>'));
+const sub = box('subline', el('sub', 'Book an ID-checked artisan<br>and chat in the app.'));
+const ph = phone(screen('i3_chat.png'));
+ph.style.filter = 'drop-shadow(0 40px 48px rgba(40,14,20,.28)) drop-shadow(0 8px 14px rgba(40,14,20,.14))';
+const bd = box('badges', badges(false, 64, 16));
+
+window.layout = () => {
+  const cx = (n) => (W - n.getBoundingClientRect().width) / 2;
+  fit(h1, W - 2 * 64);
+  at(lg, cx(lg), 52);
+  at(eb, cx(eb), 168);
+  at(h1, cx(h1), 204);
+  at(sub, cx(sub), 316);
+  const pw = 330, tilt = -4, cy = 822;
+  placePhone(ph, W / 2, cy, pw, tilt);
+  obox('phone', W / 2, cy, pw, pw * 1354 / 640, tilt);
+  at(bd, cx(bd), 1232);
+};
+</script>
+</body>
+</html>

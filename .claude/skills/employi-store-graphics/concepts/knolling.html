@@ -1,0 +1,140 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<title>Knolling</title>
+<link rel="stylesheet" href="../kit/base.css">
+<style>
+  /* The house style (chosen 23 Oct 2026): a tradesman's kit laid out flat at
+     right angles round the device, on a workshop bench, shot from above.
+     One kit per graphic, each matching its headline. */
+  #canvas { background: radial-gradient(120% 80% at 50% 40%, #F2EEE9 0%, #EAE5DE 60%, #DED8D0 100%); }
+  .grain { position: absolute; inset: 0; mix-blend-mode: multiply; opacity: .55; }
+  .tool { filter: drop-shadow(0 calc(var(--u) * 20px) calc(var(--u) * 16px) rgba(70, 45, 25, .2)) drop-shadow(0 calc(var(--u) * 4px) calc(var(--u) * 3px) rgba(70, 45, 25, .22)); }
+  .lockup { position: absolute; display: block; }
+  .hl { position: absolute; letter-spacing: -0.03em; }
+  .hl .b { color: var(--crimson); }
+</style></head>
+<body><div id="canvas"></div>
+<script src="../kit/kit.js"></script>
+<script src="../kit/tools.js"></script>
+<script src="../kit/tools2.js"></script>
+<script src="../kit/knoll.js"></script>
+<script>
+  // ── store slots ──────────────────────────────────────────────────────────
+  // u: the format's unit against the iPhone master; k: the kit's scale;
+  // lines: 'narrow' (three short lines) or 'wide' (two).
+  const FORMATS = {
+    iphone:  { W: 1320, H: 2868, m: 96,  dev: 'iphone',  screens: 'iphone', devMax: 820,  devMid: 730,  u: 1,    k: 0.84, lines: 'narrow', bottomMin: 380 },
+    ipad:    { W: 2064, H: 2752, m: 150, dev: 'ipad',    screens: 'ipad',   devMax: 1300, devMid: 1200, u: 1.4,  k: 1.15, lines: 'wide',   bottomMin: 340 },
+    android: { W: 1080, H: 1920, m: 72,  dev: 'android', screens: 'android', devMax: 520,  devMid: 470,  u: 0.72, k: 0.6,  lines: 'narrow', bottomMin: 250 },
+    // Google Play's 7- and 10-inch tablets: the iPad frame and captures, with
+    // an Android status bar (scripts/android_bar.py), on Play's 9:16.
+    tablet:  { W: 1440, H: 2560, m: 96,  dev: 'ipad',    screens: 'tablet', devMax: 960,  devMid: 900,  u: 1,    k: 0.75, lines: 'wide',   bottomMin: 360 },
+  };
+
+  // ── the six graphics ─────────────────────────────────────────────────────
+  // Lines are [text, accent]; the second sentence is crimson. A kit item is
+  // {t: tool, s: scale, turn: ±1 (on its side), n: repeats}. `beside` sits
+  // next to the short headline lines it names, or joins a column.
+  const SLIDES = {
+    1: { screen: 'ask', pos: 'center',
+         narrow: [['Say what’s wrong.', 0], ['Get a trusted', 1], ['artisan.', 1]],
+         wide: [['Say what’s wrong.', 0], ['Get a trusted artisan.', 1]],
+         left: [{ t: 'screwdriver' }, { t: 'remote' }, { t: 'nut', n: 3 }],
+         right: [{ t: 'spanner' }, { t: 'level' }],
+         bottom: [{ t: 'hammer', turn: -1 }, { t: 'bulb' }, { t: 'brush', turn: -1 }],
+         beside: { t: 'tape', s: 0.8 } },
+    2: { screen: 'profile', pos: 'left',
+         narrow: [['ID-checked', 0], ['artisans.', 0], ['Prices up front.', 1]],
+         wide: [['ID-checked artisans.', 0], ['Prices up front.', 1]],
+         right: [{ t: 'idCard' }, { t: 'magnifier' }, { t: 'stamp' }],
+         bottom: [{ t: 'stampMark' }, { t: 'pencil', turn: -1 }, { t: 'clip', n: 2 }],
+         beside: { t: 'priceTag', narrow: [0, 1], wide: [1] } },
+    3: { screen: 'book', pos: 'center',
+         narrow: [['Book in minutes.', 0], ['Pay safely.', 1]],
+         wide: [['Book in minutes.', 0], ['Pay safely.', 1]],
+         left: [{ t: 'stopwatch' }, { t: 'key' }],
+         right: [{ t: 'receipt' }, { t: 'coin', n: 3 }],
+         bottom: [{ t: 'calendar' }, { t: 'pen', turn: -1 }, { t: 'card' }],
+         beside: { t: 'padlock' } },
+    4: { screen: 'on-the-way', pos: 'right',
+         narrow: [['Follow every step.', 0], ['Right to the end.', 1]],
+         wide: [['Follow every step.', 0], ['Right to the end.', 1]],
+         left: [{ t: 'clipboard' }, { t: 'torch' }],
+         bottom: [{ t: 'gloves' }, { t: 'tapeRoll' }, { t: 'zipTie', n: 3 }],
+         beside: { t: 'hardHat' } },
+    5: { screen: 'chat', pos: 'center',
+         narrow: [['Chat with', 0], ['your artisan.', 0], ['Right in the app.', 1]],
+         wide: [['Chat with your artisan.', 0], ['Right in the app.', 1]],
+         left: [{ t: 'walkieCrimson' }], right: [{ t: 'walkieBlack' }],
+         bottom: [{ t: 'notepad' }, { t: 'pencil', turn: -1 }, { t: 'stickyNotes' }],
+         beside: { t: 'tape', s: 0.8, narrow: [0, 1], wide: [1] } },
+    6: { screen: 'artisan-wallet', pos: 'left',
+         narrow: [['Artisan?', 0], ['Get booked.', 1], ['Get paid.', 1]],
+         wide: [['Artisan?', 0], ['Get booked. Get paid.', 1]],
+         right: [{ t: 'toolbox', turn: 1 }, { t: 'multimeter' }],
+         bottom: [{ t: 'pliers', turn: -1, s: 1.25 }, { t: 'coin', n: 3, s: 1.5 }],
+         beside: { t: 'wallet' } },
+  };
+
+  const q = new URLSearchParams(location.search);
+  const F = FORMATS[q.get('format') || 'iphone'], S = SLIDES[q.get('slide') || '1'];
+  window.SIZE = [F.W, F.H];
+  window.NAME = `${q.get('format') || 'iphone'}-0${q.get('slide') || '1'}`;
+  window.MARGIN = Math.round(F.m * 0.66);
+  CANVAS.style.setProperty('--W', `${F.W}px`); CANVAS.style.setProperty('--H', `${F.H}px`); CANVAS.style.setProperty('--u', F.u);
+  CANVAS.insertAdjacentHTML('beforeend', `<svg class="grain" width="${F.W}" height="${F.H}"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="${0.75 / F.u}" numOctaves="3" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 .55  0 0 0 0 .5  0 0 0 0 .45  0 0 0 .35 0"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>`);
+
+  window.layout = () => {
+    const u = F.u, m = F.m, gutter = 44 * u;
+    // The lockup, then the headline, both from the left margin.
+    const lock = el('lockup', null, CANVAS, 'img');
+    lock.src = '../assets/brand/lockup.png'; lock.dataset.box = 'lockup';
+    css(lock, { left: `${m}px`, top: `${104 * u}px`, height: `${108 * u}px` });
+    const hl = el('hl', null, CANVAS, 'h1');
+    hl.classList.add('hl');
+    const lines = S[F.lines];
+    lines.forEach(([t, accent], i) => { const s = el(accent ? 'b' : '', t, hl, 'span'); s.dataset.box = `line${i}`; });
+    css(hl, { left: `${m - 4 * u}px`, top: `${262 * u}px`, fontSize: '200px' });
+    const spans = [...hl.querySelectorAll('span')];
+    const widest = Math.max(...spans.map((s) => s.getBoundingClientRect().width));
+    const size = Math.min(Math.floor(200 * (F.W - 2 * m) / widest), Math.round(170 * u));
+    hl.style.fontSize = `${size}px`;
+    const rects = spans.map((s) => s.getBoundingClientRect());
+    const hlBottom = rects[rects.length - 1].bottom;
+
+    // The device: as large as the space allows, leaving a bottom row.
+    const d = DEVICES[F.dev], bodyW = d.w + 2 * d.border, bodyH = d.h + 2 * d.border;
+    const top = hlBottom + 96 * u;
+    const avail = F.H - top - gutter - F.bottomMin - 70 * u;
+    const devW = Math.min(S.pos === 'center' ? F.devMid : F.devMax, avail * bodyW / bodyH), devH = devW * bodyH / bodyW;
+    const cx = S.pos === 'left' ? m + devW / 2 : S.pos === 'right' ? F.W - m - devW / 2 : F.W / 2;
+    const dev = device(`../assets/screens/${F.screens}-${S.screen}.png`, F.dev);
+    const box = placeDevice(dev, cx, top + devH / 2, devW);
+
+    // Regions round it.
+    const L = { x: m, y: box.y, w: box.x - gutter - m, h: box.h };
+    const R = { x: box.x + box.w + gutter, y: box.y, w: F.W - m - (box.x + box.w + gutter), h: box.h };
+    const B = { x: m, y: box.y + box.h + gutter, w: F.W - 2 * m, h: F.H - 70 * u - (box.y + box.h + gutter) };
+    const left = [...(S.left || [])], right = [...(S.right || [])];
+    if (S.beside) {
+      // Lines [from, to]: every line between counts, so it never sits over
+      // a longer one. Beside the last line it may use the space down to the
+      // device.
+      const [from, to = from] = S.beside[F.lines] || [lines.length - 1];
+      const rs = rects.slice(from, to + 1);
+      const x0 = Math.max(...rs.map((r) => r.right)) + gutter * 1.4;
+      const y0 = rs[0].top + 6 * u, y1 = to === lines.length - 1 ? box.y - gutter : rs[rs.length - 1].bottom - 6 * u;
+      const spot = { x: x0, y: y0, w: F.W - m - x0, h: y1 - y0 };
+      // Beside the words when it fits there near its own size, or it joins
+      // the wider column.
+      const [bw, bh] = dims(TOOLS[S.beside.t]()).map((v) => v * F.k * (S.beside.s || 1));
+      if (spot.w >= bw * 0.8 + 20 * u && spot.h >= bh * 0.7) pack(spot, [S.beside], 'row', F.k, 'beside');
+      else (L.w >= R.w ? left : right).push(S.beside);
+    }
+    pack(L, left, 'col', F.k, 'left');
+    pack(R, right, 'col', F.k, 'right');
+    pack(B, S.bottom, 'row', F.k, 'bottom');
+    obox('device', box.x + box.w / 2, box.y + box.h / 2, box.w, box.h, 0);
+  };
+</script>
+</body></html>

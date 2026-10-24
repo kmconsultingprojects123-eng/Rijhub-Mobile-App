@@ -1,0 +1,66 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<title>V4 Knolling</title>
+<link rel="stylesheet" href="../kit/base.css">
+<style>
+  /* Knolling: a tradesman's kit laid out flat at right angles, and the phone
+     is the newest tool in it. Shot from above on a workshop bench. */
+  #canvas { background: radial-gradient(120% 80% at 50% 40%, #F2EEE9 0%, #EAE5DE 60%, #DED8D0 100%); }
+  .grain { position: absolute; inset: 0; mix-blend-mode: multiply; opacity: .55; }
+  .tool { position: absolute; left: 0; top: 0; transform-origin: 0 0; filter: drop-shadow(0 20px 16px rgba(70, 45, 25, .2)) drop-shadow(0 4px 3px rgba(70, 45, 25, .22)); }
+  .tool svg { display: block; }
+  .phone .p-shadow { transform: translateY(46px); filter: blur(46px); background: rgba(60, 35, 15, .42); }
+
+  .logo { position: absolute; left: 96px; top: 104px; height: 108px; display: block; }
+  .hl { position: absolute; left: 92px; top: 262px; letter-spacing: -0.03em; }
+  .hl .b { color: var(--crimson); }
+</style></head>
+<body><div id="canvas">
+  <svg class="grain" width="1320" height="2868"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency=".75" numOctaves="3" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 .55  0 0 0 0 .5  0 0 0 0 .45  0 0 0 .35 0"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>
+  <img class="logo" src="../assets/brand/lockup.png" data-box="logo">
+  <h1 class="hl"><span data-box="l1">Say what’s wrong.</span><span class="b" data-box="l2">Get a trusted</span><span class="b" data-box="l3">artisan.</span></h1>
+</div>
+<script src="../kit/kit.js"></script>
+<script src="../kit/tools.js"></script>
+<script>
+  const SRC = '../assets/screens/iphone-ask.png';
+  const ph = phone(SRC);
+  const W = 760, H = W * BODY.h / BODY.w, TOP = 836;
+  place(ph, 660, TOP + H / 2, W);
+
+  // Lays a tool with its top left corner at (x, y), scaled, optionally turned
+  // a quarter (knolling allows nothing else).
+  function lay(svgText, x, y, s, quarter = 0, name = null) {
+    const n = el('tool', svgText);
+    const svg = n.querySelector('svg');
+    const w = +svg.getAttribute('width'), h = +svg.getAttribute('height');
+    const t = quarter ? `translate(${x + h * s}px, ${y}px) rotate(90deg) scale(${s})` : `translate(${x}px, ${y}px) scale(${s})`;
+    if (quarter === -1) n.style.transform = `translate(${x}px, ${y + w * s}px) rotate(-90deg) scale(${s})`;
+    else n.style.transform = t;
+    const bw = (quarter ? h : w) * s, bh = (quarter ? w : h) * s;
+    if (name) obox(name, x + bw / 2, y + bh / 2, bw, bh, 0);
+    return n;
+  }
+  window.layout = () => {
+    const hl = document.querySelector('.hl');
+    hl.style.fontSize = '150px';
+    const widest = Math.max(...[...hl.querySelectorAll('span')].map((s) => s.getBoundingClientRect().width));
+    hl.style.fontSize = `${Math.floor(150 * (1320 - 2 * 96) / widest)}px`;
+
+    // A grid, as knolling wants: the left column, the right column and a
+    // bottom row, all at right angles and evenly spaced.
+    lay(TOOLS.screwdriver(), 127, 880, 0.9, 0, 'screwdriver');
+    lay(TOOLS.remote(), 100, 1650, 0.76, 0, 'remote');
+    for (let i = 0; i < 3; i++) lay(TOOLS.nut(), 140, 2128 + i * 96, 0.9, 0, `nut${i}`);
+    lay(TOOLS.spanner(), 1052, 872, 0.84, 0, 'spanner');
+    lay(TOOLS.level(), 1096, 1700, 0.8, 0, 'level');
+    const row = 2655, s = 0.52;
+    lay(TOOLS.hammer(), 96, row - (330 * s) / 2, s, -1, 'hammer');
+    lay(TOOLS.bulb(), 96 + 880 * s + 46, row - (210 * s) / 2, s, 0, 'bulb');
+    lay(TOOLS.brush(), 1320 - 96 - 760 * s, row - (130 * s) / 2, s, -1, 'brush');
+    // The tape, pulled out under the headline's short last line.
+    const l3 = hl.querySelectorAll('span')[2].getBoundingClientRect();
+    lay(TOOLS.tape(), l3.right + 70, l3.top + 10, 0.56, 0, 'tape');
+  };
+</script>
+</body></html>

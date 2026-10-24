@@ -1,0 +1,30 @@
+/* Inter, the app's only typeface: the skill's own files, one per weight. */
+@font-face { font-family: P; src: url("../../assets/fonts/Inter-Regular.ttf"); font-weight: 400; }
+@font-face { font-family: P; src: url("../../assets/fonts/Inter-Medium.ttf"); font-weight: 500; }
+@font-face { font-family: P; src: url("../../assets/fonts/Inter-SemiBold.ttf"); font-weight: 600; }
+@font-face { font-family: P; src: url("../../assets/fonts/Inter-Bold.ttf"); font-weight: 700; }
+@font-face { font-family: P; src: url("../../assets/fonts/Inter-ExtraBold.ttf"); font-weight: 800; }
+
+/* lib/core/theme/palette.dart */
+:root { --ink: #171717; --crimson: #A20025; --crimson-50: #FCF2F4; --crimson-100: #F9E3E8; --crimson-200: #F2C4CE;
+  --crimson-300: #E595A6; --crimson-700: #87001F; --muted: #6B6B6B; --ground: #F7F7F7; --success: #16A34A; }
+html, body { margin: 0; background: #000; }
+#poster { position: relative; width: 1080px; height: 1350px; overflow: hidden; font-family: P, sans-serif; color: var(--ink);
+  -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision; }
+.abs { position: absolute; }
+.nowrap { white-space: nowrap; }
+.logo { position: absolute; }
+.logo img { display: block; }
+/* the phone: dark body, lit hairline edge (the house rule: a light rail reads as a sticker border on white) */
+.phone { position: absolute; left: 0; top: 0; width: 640px; height: 1354px; transform-origin: 0 0; }
+.pbody { position: absolute; inset: 0; border-radius: 100px; background: linear-gradient(140deg, #76767a 0%, #2a2a2c 16%, #19191a 48%, #2b2b2d 84%, #78787c 100%);
+  box-shadow: 0 0 0 2px rgba(255,255,255,.22), inset 0 0 0 2px rgba(255,255,255,.2), inset 0 0 0 8px #0c0b0b; }
+.pbtn { position: absolute; width: 7px; border-radius: 3px; background: linear-gradient(90deg, #58585c, #1d1d1f); }
+.pbtn.l1 { left: -5px; top: 262px; height: 64px; } .pbtn.l2 { left: -5px; top: 372px; height: 112px; } .pbtn.l3 { left: -5px; top: 506px; height: 112px; } .pbtn.r1 { right: -5px; top: 420px; height: 176px; }
+.pscreen { position: absolute; left: 16px; top: 16px; width: 608px; height: 1322px; border-radius: 84px; overflow: hidden; background: #fff; }
+.pscreen img { position: absolute; left: 0; top: 0; width: 608px; height: 1322px; }
+.pisland { position: absolute; left: 223px; top: 36px; width: 194px; height: 57px; border-radius: 29px; background: #000; }
+.pglare { position: absolute; left: 16px; top: 16px; width: 608px; height: 1322px; border-radius: 84px; background: linear-gradient(118deg, rgba(255,255,255,.12) 0%, rgba(255,255,255,.03) 24%, rgba(255,255,255,0) 40%); }
+.qr svg { position: absolute; display: block; shape-rendering: crispEdges; }
+.badges { position: absolute; display: flex; }
+.badges img { display: block; }
